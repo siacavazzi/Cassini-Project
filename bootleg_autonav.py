@@ -45,10 +45,55 @@ def load_kernels(start_year, end_year):
         if (year >= start_year) and (year <= end_year):
             print(f"Loading {year} kernels...")       
             ds.furnsh_metakernel(f"{Kernel_index_path}/{kernel_index}")
-            
- 
-            
+    # loaded after the year's kernels so their segments win over the mission (and c-smithed) ones
+    for kernel in extra_kernels():
+        sp.furnsh(kernel)
     print("Done!")
+
+"""
+USGS bundle-adjusted pointing for 6,896 Titan NAC frames (Weller, Karkoschka et al., USGS data release
+2026, doi:10.5066/P14FAEKS; spice_extra/usgs_titan/README.md). A CK of Cassini's attitude (-82000) and
+an SPK of Cassini relative to Titan, one segment per image covering only its exposure, so every other
+moment of the mission keeps the mission kernels. Tie points fit to about 1.1 px. CASSINI_USGS_TITAN=0
+leaves them out.
+"""
+USGS_TITAN_DIR = os.environ.get("CASSINI_USGS_TITAN_DIR") or \
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "spice_extra", "usgs_titan")
+# in load order: the correction carried over to the other frames of the same passes (make_neighbours_ck.py),
+# then USGS's own CK and SPK, which win where they overlap
+USGS_TITAN_KERNELS = ["Titan_neighbours_ck.bc", "Titan_CISS_2024_ck.bc", "Titan_CISS_2024_spk.bsp"]
+# written next to a geometry cache answer worked out with these kernels loaded
+USGS_TITAN_TAG = "usgs-titan-2024"
+_usgs_frames = None
+
+
+def usgs_titan_on():
+    return os.environ.get("CASSINI_USGS_TITAN", "1").lower() not in ("0", "false", "no") and \
+        os.path.exists(os.path.join(USGS_TITAN_DIR, "Titan_CISS_2024_ck.bc"))
+
+
+def extra_kernels():
+    if not usgs_titan_on():
+        return []
+    return [os.path.join(USGS_TITAN_DIR, k) for k in USGS_TITAN_KERNELS if os.path.exists(os.path.join(USGS_TITAN_DIR, k))]
+
+
+"""
+Frame ids (N1467471504_2) the USGS kernels change: the release's image list, and the WAC frames shuttered at the
+same moment as one of its NAC frames (concurrent.lis), which take the corrected spacecraft attitude too, and the
+other Titan frames of the same passes the correction is carried over to (neighbours.lis)
+"""
+def usgs_titan_frames():
+    global _usgs_frames
+    if _usgs_frames is None:
+        _usgs_frames = set()
+        if usgs_titan_on():
+            for name in ("images.lis", "concurrent.lis", "neighbours.lis"):
+                if not os.path.exists(os.path.join(USGS_TITAN_DIR, name)):
+                    continue
+                with open(os.path.join(USGS_TITAN_DIR, name)) as f:
+                    _usgs_frames |= {line.strip() for line in f if line.strip()}
+    return _usgs_frames
 
 """
 Extracts the SPICE kernels for one year from the zip without loading them
@@ -233,6 +278,9 @@ def _geometry_db():
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("CREATE TABLE IF NOT EXISTS target (frame TEXT PRIMARY KEY, version INTEGER, x REAL, y REAL, "
                    "z REAL, angle REAL, et REAL, camera TEXT, target TEXT, scale REAL, error TEXT)")
+        # frames whose answer came from extra pointing kernels (USGS_TITAN_TAG); a USGS frame without
+        # its tag here was cached before those kernels were added and is worked out again
+        db.execute("CREATE TABLE IF NOT EXISTS pointing (frame TEXT PRIMARY KEY, kernels TEXT)")
         _geometry_local.db = db
     return db
 
@@ -249,6 +297,8 @@ could not centre.
 def cached_target(label):
     if not GEOMETRY_CACHE:
         return None
+    if _needs_usgs(frame_id(label)):
+        return None
     row = _geometry_db().execute("SELECT x, y, z, angle, et, camera, target, scale, error FROM target "
                                  "WHERE frame = ? AND version = ?", (frame_id(label), GEOMETRY_VERSION)).fetchone()
     if row is None:
@@ -259,6 +309,13 @@ def cached_target(label):
         raise ValueError(row[8])
     label.geometry = {"et": row[4], "camera": row[5], "target": row[6], "center": CCD_CENTER, "scale": row[7]}
     return list(row[:4])
+
+
+def _needs_usgs(frame):
+    if frame not in usgs_titan_frames():
+        return False
+    return _geometry_db().execute("SELECT 1 FROM pointing WHERE frame = ? AND kernels = ?",
+                                  (frame, USGS_TITAN_TAG)).fetchone() is None
 
 
 def _known(target):
@@ -273,6 +330,9 @@ def _store_rows(rows):
     db = _geometry_db()
     db.execute("BEGIN")
     db.executemany("INSERT OR REPLACE INTO target VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    usgs = usgs_titan_frames()
+    db.executemany("INSERT OR REPLACE INTO pointing VALUES (?, ?)",
+                   [(row[0], USGS_TITAN_TAG) for row in rows if row[0] in usgs])
     db.execute("COMMIT")
 
 
@@ -284,13 +344,49 @@ def _row(frame, target_loc=None, geometry=None, error=None):
 
 
 """
+How much a shift worked out at the scale scale (find_target's pixel_scale, SPICE's pinhole camera) grows on a frame
+of camera (a NAIF frame name) as the pipeline draws it: a WAC frame corrected by CISSCAL's geometric correction
+(geometric_correction.py, the "geom" step) is a pinhole camera of focal length F_LINEAR (200.956 mm) where the
+instrument kernel has 200.77 mm, so its pixels are LINEAR_SCALE / scale of SPICE's. 1 for the NAC, and for a WAC frame
+the request leaves uncorrected. info = the frame's label (its shutter state), or None to ask only the request's steps.
+"""
+def linear_ratio(camera, scale, info=None):
+    if camera != CAMERA_FRAMES["WAC"] or not scale:
+        return 1.0
+    import geometric_correction as gc
+    if info is not None:
+        on = gc.active(info)
+    else:
+        import calibration as cal
+        on = cal.step("calibrate") and cal.step("geom")
+    return gc.LINEAR_SCALE / float(scale) if on else 1.0
+
+
+"""
+find_target's answer [x, y, z, angle] for label on the frame as the pipeline draws it (linear_ratio): the shift and
+label.geometry's scale grown for a corrected WAC frame. The cache keeps SPICE's own answer, so it stays good with the
+"geom" step on or off.
+"""
+def linearized(label, target_loc):
+    g = getattr(label, "geometry", None)
+    if target_loc is None or not g:
+        return target_loc
+    ratio = linear_ratio(g.get("camera"), g.get("scale"), label.info)
+    if ratio == 1.0:
+        return target_loc
+    label.geometry = dict(g, scale=float(g["scale"]) * ratio)
+    return [target_loc[0] * ratio, target_loc[1] * ratio, *target_loc[2:]]
+
+
+"""
 find_target through the cache: the cached answer, or find_target's (kernels for the frame's
-year must be loaded then; load_year is called first to load them) added to the cache
+year must be loaded then; load_year is called first to load them) added to the cache, on the frame
+as the pipeline draws it (linearized)
 """
 def find_target_cached(label, load_year=None):
     target_loc = cached_target(label)
     if target_loc is not None:
-        return target_loc
+        return linearized(label, target_loc)
     if load_year:
         load_year()
     try:
@@ -301,16 +397,17 @@ def find_target_cached(label, load_year=None):
         raise
     if GEOMETRY_CACHE:
         _store_rows([_row(frame_id(label), target_loc, label.geometry)])
-    return target_loc
+    return linearized(label, target_loc)
 
 
 """
 Fills the geometry cache for every frame in Image_index.csv, a year at a time: the year's
 kernels are loaded once, then find_target runs on each of its frames from the index's
 IMAGE_MID_TIME, camera and target (the same fields find_target reads from a label).
-Frames already cached are skipped, so it can be stopped and run again.
+Frames already cached are skipped, so it can be stopped and run again; frames the USGS Titan
+kernels cover are worked out again once after those kernels are added (--usgs-titan does only them).
 """
-def build_geometry_cache(years=None, target=None):
+def build_geometry_cache(years=None, target=None, usgs_only=False):
     import contextlib
     import io
     import time
@@ -330,6 +427,12 @@ def build_geometry_cache(years=None, target=None):
     # frames that failed because SPICE didn't know their target's name, which is registered now (CATALOG_NAMES)
     retry = set(index.loc[index["TARGET_NAME"].isin(CATALOG_NAMES), "frame"]) & {
         frame for frame, error in cached if error and UNKNOWN_NAME in error}
+    # frames the USGS Titan kernels cover that were worked out before they were added
+    usgs = usgs_titan_frames()
+    retry |= usgs - {frame for frame, in _geometry_db().execute("SELECT frame FROM pointing WHERE kernels = ?",
+                                                               (USGS_TITAN_TAG,))}
+    if usgs_only:
+        index = index[index["frame"].isin(usgs)]
     done = {frame for frame, _ in cached} - retry
     for year, rows in index.groupby("year"):
         if years and year not in years:
@@ -428,17 +531,21 @@ def bodies_in_frame(et, frame, target):
 
 def bodies_of(ids):
     """{frame id: [(body, x, y, r, km)]} from the bodies table, for the frames ids that were worked out ([] for one
-    with no other body in it); a frame not worked out is left out."""
+    with no other body in it); a frame not worked out is left out. On the frame as it is drawn, as stacking.places
+    reads the target's shift: a WAC frame's x, y and r grown by its geometric correction (linear_ratio)."""
     if not GEOMETRY_CACHE or not os.path.exists(GEOMETRY_CACHE):
         return {}
     db, out = _bodies_db(), {}
     for k in range(0, len(ids), 900):
         part = ids[k:k + 900]
-        for frame, body, x, y, r, km in db.execute(f"SELECT frame, body, x, y, r, km FROM bodies WHERE version = ? AND frame IN "
-                                               f"({','.join('?' * len(part))})", (BODIES_VERSION, *part)):
+        for frame, body, x, y, r, km, camera, scale in db.execute(
+                f"SELECT b.frame, b.body, b.x, b.y, b.r, b.km, t.camera, t.scale FROM bodies b LEFT JOIN target t "
+                f"ON t.frame = b.frame AND t.version = ? WHERE b.version = ? AND b.frame IN ({','.join('?' * len(part))})",
+                (GEOMETRY_VERSION, BODIES_VERSION, *part)):
             got = out.setdefault(frame, [])
             if body:
-                got.append((body, x, y, r, km))
+                k_ = linear_ratio(camera, scale)
+                got.append((body, x * k_, y * k_, r * k_, km))
     return out
 
 
@@ -498,6 +605,7 @@ if __name__ == "__main__":
     ap.add_argument("--years", help="e.g. 2005 or 2004-2017 (default: every year)")
     ap.add_argument("--target", help="only frames of this target, e.g. ENCELADUS")
     ap.add_argument("--observations", nargs="*", help="bodies: only the frames of these OBSERVATION_IDs")
+    ap.add_argument("--usgs-titan", action="store_true", help="only the frames the USGS Titan kernels cover")
     args = ap.parse_args()
     if not GEOMETRY_CACHE:
         ap.error("set CASSINI_GEOMETRY_CACHE to the cache file, e.g. /Volumes/LaCie/claude_scratch_spk/geometry.sqlite")
@@ -508,4 +616,6 @@ if __name__ == "__main__":
     if args.what == "bodies":
         build_bodies_cache(years, args.observations)
     else:
-        build_geometry_cache(years, args.target)
+        if args.usgs_titan and not usgs_titan_frames():
+            ap.error(f"no USGS Titan kernels in {USGS_TITAN_DIR} (or CASSINI_USGS_TITAN=0)")
+        build_geometry_cache(years, args.target, args.usgs_titan)
