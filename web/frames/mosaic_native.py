@@ -165,7 +165,7 @@ def drawn(u, made):
     base goes under the picture, the tag of a set of tiles with a name of its own, the filter the seams are solved on)."""
     p, tiles, rect, count, used, name = made
     plain, _, tuned = name.partition("-tune")
-    tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + ("-tune" + tuned if tuned else "")
+    tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + om.sweep_tag(plain) + ("-tune" + tuned if tuned else "")
     base = om.lum_base(u, p, tiles, used)
     colour = used if len(used) == 3 else None
     filters = (list(colour) if colour else []) + ([om.LUM] if base else [] if colour else [used[0]])

@@ -1701,7 +1701,8 @@ def lum_fills(u, p, tiles):
     frames = u["frames"]
     made = {t["n"]: t for t in tiles}
     last = max(made) if made else -1
-    if not any(t["filter"] == grey and _lossy(t) for t in tiles):
+    swept = sweeps(u) is not None
+    if not swept and not any(t["filter"] == grey and _lossy(t) for t in tiles):
         return set()   # (the usual pass: every grey frame whole and placed)
 
     def at(fr):
@@ -1719,6 +1720,10 @@ def lum_fills(u, p, tiles):
         there = [j for j, g in greys if math.hypot(q[0] - g[0], q[1] - g[1]) <= SAME_PLACE * FRAME]
         if there and all(j <= last and j in made and _lossy(made[j]) for j in there):
             out.add(n)
+        elif swept and there and not any(_same_sweep(u, j, n) for j in there):
+            # (a pass drawn a sweep at a time, sweeps: the grey frames at its place are all another sweep's, which
+            # this sweep's picture does not draw)
+            out.add(n)
     return out
 
 
@@ -1726,7 +1731,7 @@ def _mine(u, p, tiles, f):
     """The placed tiles filter_mosaic draws for f: the filter's own, or for LUM the luminance base's (lum_frames),
     a band other than the grey filter carrying its gain (applied by _shade, times a mosaic movie copy's own lap gain)."""
     if f != LUM:
-        return [t for t in tiles if t["filter"] == f and "offset" in t]
+        return [t for t in tiles if t["filter"] == f and "offset" in t and not t.get("aside")]
     lum = _luminance(p)
     # (a mosaic movie's picture marks its own base, rolling_base)
     rolling = any("base" in t for t in tiles)
@@ -1738,7 +1743,8 @@ def _mine(u, p, tiles, f):
         if "offset" in t and (t["n"] in frames or t["n"] in fills):
             g = lum["gains"].get(t["filter"], 1.0)
             t = dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t
-            out.append(dict(t, fill=True) if t["n"] in fills else t)
+            # (another sweep's tile, layout's aside: gray under the drawn sweep, only where it has nothing)
+            out.append(dict(t, fill=True) if t["n"] in fills or t.get("aside") else t)
     return out
 
 
@@ -1771,10 +1777,10 @@ def lum_base(u, p, tiles, used, base=None):
         return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
     if base is None:
         frames = lum_frames(u, p) | lum_fills(u, p, tiles)
-        base = [t for t in tiles if "offset" in t and t["n"] in frames]
+        base = [t for t in tiles if "offset" in t and (t["n"] in frames or t.get("aside"))]
     if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
-    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
+    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t and not t.get("aside")] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
     # (or a colour tile with lines lost in downlink: the colour is only where all its filters are, so its lost lines were
     # a black strip, Dione ISS_016DI_TARGFLYBY001's GRN N1507742100_3; or a frame filling in under a lossy grey one)
@@ -1881,7 +1887,7 @@ def mixes(u, p, tiles, colour):
         return False
     if len(visit_tiles(u, tiles, colour)) < len(tiles):
         return True   # (a partial visit left out of the colour: the gray shows there)
-    mine = [t for t in tiles if t["filter"] in colour and "offset" in t]
+    mine = [t for t in tiles if t["filter"] in colour and "offset" in t and not t.get("aside")]
     if not all(any(t["filter"] == f for t in mine) for f in colour):
         return False
     box = lambda t: (t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1],
@@ -1939,6 +1945,90 @@ def visit_tiles(u, tiles, colour):
     keep = visit_frames(u, colour)
     out = [t for t in tiles if t["filter"] not in colour or t["n"] in keep]
     return tiles if len(out) == len(tiles) else out
+
+
+SWEEP_GAP = 1200    # s: frames of a clouded body's mosaic further apart than this start a new sweep over it
+SWEEP_TURN = 10.0   # degrees: the least the body turns between two sweeps for them to be drawn apart (SPIN)
+SWEEP_COVER = 0.8   # of the ground the pass covers: a sweep covering this much of it is whole
+SWEEP_CELL = 64     # reference px: the grid ground is counted on (_ground)
+SWEEP_TAG = "-sw"   # in a layout's name, with the first frame of the sweep it draws (sweep_of)
+
+
+def _ground(u, js):
+    """The SWEEP_CELL cells of the body's disk (reference canvas, centred on the body) frames js of pass u cover, from
+    the geometry cache."""
+    out = set()
+    spin = SPIN.get(u["key"][0])
+    if not spin or not u.get("z"):
+        return out
+    r = spin[0] / (u["z"] * IFOV[u["key"][2]]) / SWEEP_CELL
+    for j in js:
+        fr = u["frames"][j]
+        if not fr[7] or not u.get("z"):
+            continue
+        x, y, h = -fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"], FRAME * fr[7] / u["z"] / 2
+        for cx in range(math.floor((x - h) / SWEEP_CELL), math.ceil((x + h) / SWEEP_CELL)):
+            for cy in range(math.floor((y - h) / SWEEP_CELL), math.ceil((y + h) / SWEEP_CELL)):
+                if math.hypot(cx + 0.5, cy + 0.5) <= r:
+                    out.add((cx, cy))
+    return out
+
+
+def sweeps(u):
+    """The sweep each frame of pass u is in (0, 1, ...), or None for a pass drawn whole. A clouded body's mosaic (not
+    a mosaic movie) taken in sweeps over the same ground, more than SWEEP_GAP apart, while the body turns SWEEP_TURN
+    or more between them, at least two of them whole (SWEEP_COVER): Jupiter ISS_C23JU NSMAP101 rides along a CIRS
+    north-south map four times, 55 minutes apart, the camera a little to one side each time (so its places are not
+    taken again and it is no mosaic movie); Jupiter turns 33 degrees between sweeps, and drawn together, newest on
+    top, the four sweeps put storms side by side that were a third of the disk apart: a collage. Its picture draws
+    one sweep (sweep_of). Decided on the pass's frames from the geometry cache, kept with the pass."""
+    if "_sweeps" in u:
+        return u["_sweeps"]
+    frames, spin, out = u["frames"], SPIN.get(u["key"][0]), None
+    if frames and clouded(u) and spin and u.get("kind") == "mosaic" and u.get("z"):
+        idx = [0]
+        for a, b in zip(frames, frames[1:]):
+            idx.append(idx[-1] + (b[3] - a[3] > SWEEP_GAP))
+        if idx[-1]:
+            by = [[j for j, k in enumerate(idx) if k == s] for s in range(idx[-1] + 1)]
+            turn = min(360.0 * (frames[b[0]][3] - frames[a[-1]][3]) / (spin[1] * 3600) for a, b in zip(by, by[1:]))
+            cells = [_ground(u, js) for js in by]
+            union = set().union(*cells)
+            if turn >= SWEEP_TURN and union and sum(len(c) >= SWEEP_COVER * len(union) for c in cells) >= 2:
+                out = idx
+    u["_sweeps"] = out
+    return out
+
+
+def sweep_of(u, n, colour):
+    """The sweep (sweeps) pass u's picture at frame n draws, or None for every tile up to n: of the sweeps begun by
+    then, the one covering the most ground in frames up to n, the ground of its whole colour visits (visit_frames)
+    counted again, so a sweep in colour wins over a grey one as big; the newest of equals. A sweep grows into the
+    picture once it covers more than the one before it did."""
+    idx = sweeps(u)
+    if idx is None or not idx[min(n, len(idx) - 1)]:
+        return None
+    n = min(n, len(idx) - 1)
+    whole = visit_frames(u, colour) if colour else frozenset()
+    best = None
+    for s in range(idx[n] + 1):
+        js = [j for j in range(n + 1) if idx[j] == s]
+        score = len(_ground(u, js)) + len(_ground(u, [j for j in js if u["frames"][j][2] in colour and j in whole]))
+        if best is None or score >= best[0]:
+            best = (score, s)
+    return best[1]
+
+
+def _same_sweep(u, a, b):
+    """True when frames a and b of pass u are in one sweep (sweeps), or the pass is drawn whole."""
+    idx = sweeps(u)
+    return idx is None or idx[a] == idx[b]
+
+
+def sweep_tag(name):
+    """The sweep part of a layout's name (SWEEP_TAG and its frame), '' for a layout of every tile."""
+    m = re.search(re.escape(SWEEP_TAG) + r"\d+", name)
+    return m.group(0) if m else ""
 
 
 def set_times(shape, placed):
@@ -3324,12 +3414,14 @@ def dim_under(u, p, f, mine, cache):
             a = np.asarray(Image.open(pic).convert("RGBA").resize((max(1, round(bw * DIM_K)), max(1, round(bh * DIM_K))),
                                                                   Image.BILINEAR)).astype(np.float32)
             x0, y0 = round((t["offset"][0] + bx) * DIM_K), round((t["offset"][1] + by) * DIM_K)
-            me = (x0, y0, a)
+            me = (x0, y0, a, t["n"])
             if t["n"] in kept:
                 ratio = kept[t["n"]]
             else:
                 logs, weights = [], []
-                for xi, yi, b in drawn:
+                for xi, yi, b, m in drawn:
+                    if not _same_sweep(u, m, t["n"]):
+                        continue   # (a pass drawn a sweep at a time, sweeps: measured on its own sweep's tiles)
                     X0, Y0 = max(x0, xi), max(y0, yi)
                     X1, Y1 = min(x0 + a.shape[1], xi + b.shape[1]), min(y0 + a.shape[0], yi + b.shape[0])
                     if X1 <= X0 or Y1 <= Y0:
@@ -3433,7 +3525,7 @@ def seams(u, p, tiles, rect, ref, cache):
     the filters drawn) on linear values, with the gains anchored (mosaic.seams, none pinned), for every filter's
     tile at that pointing, so the filters at one spot start from the same correction and keep their colour.
     {tile n: (gain, offset)}; a tile with no tile of ref at its pointing gets none. Kept in the cache."""
-    mine = [t for t in tiles if t["filter"] == ref and "offset" in t]
+    mine = [t for t in tiles if t["filter"] == ref and "offset" in t and not t.get("aside")]
     name = f"{ref.replace('/', '_')}-{len(mine)}-{'_'.join(str(round(v)) for v in rect)}.json"
     path = os.path.join(folder(u, cache), "seams", name)
 
@@ -3666,6 +3758,10 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     mine = _mine(u, p, tiles, f)
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
+    # (one sweep of a pass drawn a sweep at a time, sweeps: its tiles go under as the pass's do, each decided on the
+    # tiles of its sweep before it, but the sweep is not grown from the pictures of the tiles before it)
+    sweep = sweep_tag(plain)
+    plain = plain.replace(sweep, "")
     whole = plain in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)
     if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
         # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
@@ -3687,7 +3783,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
         # (and not a base with fills, lum_fills: one joins it under the tiles before it, not as the newest on top)
-        if not balanced and whole and len(mine) > GROW_FROM and not any(t.get("fill") for t in mine):
+        if not balanced and whole and not sweep and len(mine) > GROW_FROM and not any(t.get("fill") for t in mine):
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -3829,15 +3925,23 @@ def layout(u, n, cache):
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
                  if t["n"] in moved and "offset" in t else t for t in tiles]
+    # a clouded body's mosaic taken in sweeps far apart draws one sweep (sweep_of), on the canvas of them all
+    swept, s = "", sweep_of(u, n, p["colour"] or [])
+    if s is not None:
+        idx = sweeps(u)
+        mine = [t for t in tiles if idx[t["n"]] == s]
+        if len(mine) < len(tiles):
+            # (the other sweeps' tiles stay aside: their gray goes under the sweep, where it has no tile, _mine)
+            tiles, swept = mine + [dict(t, aside=True) for t in tiles if idx[t["n"]] != s], f"{SWEEP_TAG}{idx.index(s)}"
     count = {}
     for t in tiles:
-        if "offset" in t:
+        if "offset" in t and not t.get("aside"):
             count[t["filter"]] = count.get(t["filter"], 0) + 1
     if not count:
         return None
     colour = p["colour"]
     frames = lum_frames(u, p) | lum_fills(u, p, tiles)
-    base = [t["filter"] for t in tiles if "offset" in t and t["n"] in frames]
+    base = [t["filter"] for t in tiles if "offset" in t and (t["n"] in frames or t.get("aside"))]
     if colour and all(count.get(f) for f in colour):
         used = colour
     elif count.get(p["grey"]):
@@ -3849,7 +3953,7 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "") + swept
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
@@ -4008,7 +4112,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + \
-        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
+        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG) if x in plain) + sweep_tag(plain) + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's
