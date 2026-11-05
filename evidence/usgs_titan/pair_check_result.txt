@@ -1,0 +1,2 @@
+6067 pairs; |content - SPICE| px: before median 6.9 p90 28.9 | after median 4.5 p90 25.8; after closer in 4074, before closer in 1993
+pairs whose content jumped > 10 px: 569; before median miss 45.7, after 45.5

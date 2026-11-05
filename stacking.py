@@ -54,9 +54,12 @@ def places(ids):
     db, out = ba._geometry_db(), {}
     for k in range(0, len(ids), 900):
         part = ids[k:k + 900]
-        for frame, x, y, z in db.execute(f"SELECT frame, x, y, z FROM target WHERE version = ? AND error IS NULL "
-                                         f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
-            out[frame] = (x, y, z)
+        for frame, x, y, z, camera, scale in db.execute(
+                f"SELECT frame, x, y, z, camera, scale FROM target WHERE version = ? AND error IS NULL "
+                f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
+            # on the frame as it is drawn: a WAC frame's shift grown by its geometric correction (ba.linear_ratio)
+            r = ba.linear_ratio(camera, scale)
+            out[frame] = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
     return out
 
 

@@ -81,6 +81,36 @@ GARBLE_FAR = 8
 GARBLE_SHARE = 0.5
 
 
+
+"""
+The lines of a frame (codes, lines x samples) that are one value from end to end, in runs of FLAT_RUN or more, other
+than the camera's saturation (255) and the frame's own sky (its 1st percentile, or the code most of the rest of it
+reads: a dark sky can come out one code along whole lines, test_science_tiff's sky at the bias): no picture is that even above its sky, so they are lines the
+downlink lost that the decompressor filled with one value. A lossy frame whose last packets never came (N1468700888_1, AURORAA003 2004:
+lines 752-1023 all code 128, its prefix counting every pixel valid, MISSING_LINES "N/A") was drawn with a flat grey
+block over Saturn. Returns a bool per line.
+"""
+FLAT_RUN = 8
+def flat_lines(img):
+    img = np.asarray(img)
+    flat = (img.min(axis=1) == img.max(axis=1)) & (img[:, 0] < 255) & (img[:, 0] > np.percentile(img, 1))
+    if flat.any() and not flat.all():
+        # nor the code most of the rest of the frame reads (a dark sky a code or so above a few darker columns)
+        flat &= img[:, 0] != np.bincount(img[~flat].ravel(), minlength=256).argmax()
+    out = np.zeros(flat.shape, bool)
+    y = 0
+    while y < len(flat):
+        if flat[y]:
+            e = y
+            while e < len(flat) and flat[e]:
+                e += 1
+            if e - y >= FLAT_RUN:
+                out[y:e] = True
+            y = e
+        else:
+            y += 1
+    return out
+
 """
 The garbled ends of a frame's lines (True = garbled), from its stored image (img) and the valid mask the line prefix
 gives (mask). When a compressed line loses a packet, the decompressor can lose its place: from there to the end of
@@ -304,10 +334,14 @@ class label:
                 tail = np.where(nonzero.any(1), np.argmax(nonzero, 1), samples)
                 tail = np.where(tail >= 16, tail, 0)
                 mask &= np.arange(samples) < (samples - tail)[:, None]
+        img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
+        if img is not None and img.shape == mask.shape:
+            # lines the decompressor filled with one value where the data never came, whatever the prefix and
+            # label say (flat_lines)
+            mask &= ~flat_lines(img)[:, None]
         if self.info.get("MISSING_PACKET_FLAG") == "YES" or not mask.all():
             # where a packet was lost the decompressor can lose its place in the line too: the rest of that line
             # (and now and then a whole one) is garbage the prefix counts as valid, drawn as bright streaks
-            img = ds.imread(base + ".png", cv2.IMREAD_GRAYSCALE)
             if img is not None and img.shape == mask.shape:
                 mask &= ~garbled_lines(img, mask)
         if lines < 1024:
@@ -316,7 +350,10 @@ class label:
             # turns into a bright line down each side: those columns count as lost, so they are filled and left out
             mask[:, [0, -1]] = False
             mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
-        return mask
+        # moved as the WAC's calibrated frames are by the geometric correction (the "geom" step), so it still falls
+        # on their pixels; the edge the correction reached past is not valid
+        import geometric_correction as gc
+        return gc.correct_mask(mask, self.info)
 
     """
     Traslates image
