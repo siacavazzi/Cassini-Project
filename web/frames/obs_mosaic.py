@@ -1869,35 +1869,37 @@ MIX_LEAST = 0.15   # of a frame: a mixed patch narrower than this keeps its colo
 
 
 def mixes(u, p, tiles, colour):
-    """True when a clouded pass's colour mosaic of these tiles mixes visits: two tiles of different colour filters
-    overlap (their boxes) and were taken more than MIX_SPAN apart, neither with a newer tile of its filter at its place. Decided on where the tiles are, so the luminance
-    base (lum_base) is drawn for the gray set_mask leaves."""
+    """True when a clouded pass's colour mosaic of these tiles mixes visits: set_mask's rule on the tiles' boxes, on a
+    grid of MIX_CELL reference px, each filter's newest tile on top (a coarse set_times), so the luminance base
+    (lum_base) is drawn for the gray set_mask leaves. Where tiles of one filter overlap, the newest shows: the laps of
+    a repeated mosaic (Saturn ISS_003SA_3X3MOVIEB001's eleven, each a whole set at the same places) and neighbouring
+    pointings at their seams (the newer pointing's filters all on top) do not mix; a pairwise test of the boxes counted
+    both, and the 3x3 took the luminance of its MT2 base (drawn mid-grey)."""
     # (a mosaic movie's picture shows each place's newest lap by design: rolling_layout, its tiles marked "base")
     if not colour or len(colour) < 2 or not clouded(u) or _rolling.get() or any("base" in t for t in tiles):
         return False
     if len(visit_tiles(u, tiles, colour)) < len(tiles):
         return True   # (a partial visit left out of the colour: the gray shows there)
-    mine = []
-    # (a tile with a newer one of its filter at its place is under it, and shows nowhere: the laps of a repeated
-    # mosaic, Saturn ISS_003SA_3X3MOVIEB001's eleven, are each a whole set, and only the newest is seen)
-    for t in sorted((t for t in tiles if t["filter"] in colour and "offset" in t), key=lambda t: -t["n"]):
-        if not any(q["filter"] == t["filter"] and math.hypot(q["offset"][0] - t["offset"][0],
-                                                             q["offset"][1] - t["offset"][1]) <= SAME_PLACE * FRAME
-                   for q in mine):
-            mine.append(t)
-    if len(mine) < 2:
+    mine = [t for t in tiles if t["filter"] in colour and "offset" in t]
+    if not all(any(t["filter"] == f for t in mine) for f in colour):
         return False
-    f = np.array([colour.index(t["filter"]) for t in mine])
-    when = np.array([set_time(u, t["n"]) for t in mine], float)
-    x0 = np.array([t["offset"][0] + t["box"][0] for t in mine], float)
-    y0 = np.array([t["offset"][1] + t["box"][1] for t in mine], float)
-    x1, y1 = x0 + np.array([t["box"][2] for t in mine]), y0 + np.array([t["box"][3] for t in mine])
-    for i in range(len(mine) - 1):
-        j = slice(i + 1, None)
-        if ((f[j] != f[i]) & (np.abs(when[j] - when[i]) > MIX_SPAN) & (x0[j] < x1[i]) & (x0[i] < x1[j])
-                & (y0[j] < y1[i]) & (y0[i] < y1[j])).any():
-            return True
-    return False
+    box = lambda t: (t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1],
+                     t["offset"][0] + t["box"][0] + t["box"][2], t["offset"][1] + t["box"][1] + t["box"][3])
+    edges = np.array([box(t) for t in mine], float)
+    gx, gy = edges[:, 0].min(), edges[:, 1].min()
+    shape = (int(math.ceil((edges[:, 3].max() - gy) / MIX_CELL)) + 1, int(math.ceil((edges[:, 2].max() - gx) / MIX_CELL)) + 1)
+    times = []
+    for f in colour:
+        grid = np.full(shape, np.nan)
+        for t in sorted((t for t in mine if t["filter"] == f), key=lambda t: t["n"]):
+            x0, y0, x1, y1 = box(t)
+            grid[int(round((y0 - gy) / MIX_CELL)):int(round((y1 - gy) / MIX_CELL)),
+                 int(round((x0 - gx) / MIX_CELL)):int(round((x1 - gx) / MIX_CELL))] = set_time(u, t["n"])
+        times.append(grid)
+    return set_mask(times, 1 / MIX_CELL) is not None
+
+
+MIX_CELL = 16   # reference px: the grid mixes() lays the tiles' boxes on
 
 
 def visit_frames(u, colour):
