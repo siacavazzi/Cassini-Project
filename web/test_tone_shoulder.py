@@ -99,3 +99,18 @@ gb, gd = pass_gamma(bright), pass_gamma(dim)
 print("pass gamma: bright moon %.2f, dim %.2f" % (gb, gd))
 assert cal.EASE_PASS <= gb < 2.6 and gd == 3.0
 print("ok")
+
+# a channel saturated over much of the frame (Saturn 2011, 150SA NHEMMOVIE001: RED saturated over a third of it): the
+# ratio the fill reads is measured where it did not saturate, its dimmer part, so the fill came out under the
+# channel's own clipping and flat patches of the other channels' colour showed, ragged along their clipping. Filled
+# no darker than the top of what the channel read where it did not saturate
+x = np.linspace(0.1, 1.0, 400, dtype=np.float32)
+blue = np.tile(x, (100, 1))
+red = blue * (0.6 + blue)   # redder where brighter
+clip = red >= 0.75
+measured = [np.where(clip, np.float32(0.75), red), blue]          # (read at its clipping)
+filled, every = cal.fill_saturated(measured, [clip, None])
+top = float(red[~clip].max())
+assert every is None and float(filled[0][clip].min()) >= top * 0.99, (float(filled[0][clip].min()), top)
+print("a channel saturated over much of the frame is filled no darker than its clipping (%.3f >= %.3f); ok"
+      % (float(filled[0][clip].min()), top))
