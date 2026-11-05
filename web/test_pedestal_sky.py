@@ -4,7 +4,7 @@ an even 5e-5 to 4e-4 I/F, 8 to 21% of their 99.9th percentile, so the old test (
 counted under 1% of them as sky, the pass's sky step never ran, and every band's black stayed at its 1st percentile,
 under the sky: a blue-grey sky behind the moon (N1465550027_1: RED 2, GRN 18, BL1 32 levels).
 - _dark_sky: measured from the frame's floor (its 1st percentile, at least 0), an offset sky is sky; a sky at 0 is
-  found as before
+  found as before, and so is a body filling the frame (its floor a lit surface, over SKY_OFFSET_MOST: no sky)
 - pass_scale: frames of such a sky get the sky step (sky_tops) and a black over the sky's level in every band
 Run: python web/test_pedestal_sky.py"""
 import os, sys  # noqa: E401
@@ -33,6 +33,11 @@ for offset, name in ((6e-5, "offset sky (Phoebe's RED)"), (0.0, "sky at 0")):
         assert abs(new - old) < 0.01, (old, new)
     else:
         assert old < om.SKY_MIN, old
+
+# a moon filling the frame, evenly lit (0.95 to 1.2 I/F): its darkest part is no sky, now as before
+lit = (0.95 + 0.25 * np.random.default_rng(2).random((256, 256))).astype(np.float32)
+assert not om._dark_sky(lit).any()
+print("a body filling the frame: no sky")
 
 # a pass of RED, GRN and BL1 frames whose RED and BL1 skies sit over 0 (as Phoebe's): the sky step runs, and each
 # band's black is over its own sky's level

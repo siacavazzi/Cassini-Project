@@ -2163,15 +2163,22 @@ def small_body(u, frame):
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
+SKY_OFFSET_MOST = 0.25   # _dark_sky: a frame's floor up to this share of its 99.9th percentile is an offset in its sky
+
+
 def _dark_sky(q):
     """pass_scale's dark sky of a frame (quarter size, I/F): under 5% of the way from its floor (1st percentile, at
     least 0) to its 99.9th percentile. Measured from 0, a sky the calibration left a small even offset in failed the
     test wherever the body was too small to set the 99.9th percentile far above that offset: Phoebe in 2004
     (ISS_000PH_FULROTIN001_PRIME) is 30 px across, its RED, IR1 and UV3 skies sit at 8 to 21% of their 99.9th
     percentile, under 1% of them counted as sky, and every band's black stayed at its 1st percentile, under the sky. On
-    the gamma 3 scale the offsets came out as a blue-grey sky behind the moon (RED 2, GRN 18, BL1 32 levels)."""
-    floor = max(float(np.percentile(q, 1)), 0.0)
-    return q - floor < 0.05 * (float(np.percentile(q, 99.9)) - floor)
+    the gamma 3 scale the offsets came out as a blue-grey sky behind the moon (RED 2, GRN 18, BL1 32 levels). A floor
+    over SKY_OFFSET_MOST of the 99.9th percentile is a lit body, not an offset sky (a moon or Titan's haze filling the
+    frame, whose darkest part is no sky): measured from 0 then, as before."""
+    top = float(np.percentile(q, 99.9))
+    floor = float(np.percentile(q, 1))
+    floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
+    return q - floor < 0.05 * (top - floor)
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
