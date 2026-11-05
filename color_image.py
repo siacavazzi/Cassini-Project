@@ -296,9 +296,14 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
         # when two others calibrate, so the set is a calibrated two-filter picture instead of every
         # channel falling back to its own stretch (Phoebe day, 2004-06-11: every NAC BL1 frame is 8LSB)
-        if 2 <= len(keep) < len(lbls):
+        # ... and when fewer than two calibrate, the set is drawn grey from one filter (the one that calibrates, or the
+        # first, the longest wavelength, when none does) instead of each channel stretched on its own: the Moon's
+        # IR1/UV3/UV1 set of 1999-08-18 (two 8LSB members) came out with a blue sky and its disks side by side
+        if len(keep) < 2:
+            keep = keep or [0]
+        if len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
-            print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
+            print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
             lbls, imgs, iofs, masks, stacked, clips = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips))
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])

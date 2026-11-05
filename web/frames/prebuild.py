@@ -357,7 +357,7 @@ def make_planes(u, cache, centre=True):
     steady=0, exposure=0), at 1024, Auto center as the window has it; and for a filled pass (Titan, Jupiter), the
     same before its detail filter (sharpen False, detail=0, files _d0), which the page sharpens itself after its
     exposure, trail or colour mix. Returns 0: make_pass has counted the pass's frames."""
-    filled = bool(obs_mosaic.plan(u, cache)["display_scale"].get("filled"))
+    filled = obs_mosaic.sharpens(obs_mosaic.plan(u, cache)["display_scale"])
     for f in u["frames"]:
         for sharpen in ((True, False) if filled else (True,)):
             obs_mosaic.movie_webp(f[1], 1024, cache, 0, False, wait=True, ahead=0, centre=centre, sharpen=sharpen)
