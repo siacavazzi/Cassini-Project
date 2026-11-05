@@ -241,6 +241,22 @@ assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kin
 assert om._filters({"key": ("TITAN", "X", "N", 0), "frames": wnd, "z": 1e6, "kind": "mosaic"})[3] is None   # mosaics: as before
 two = [(f"p{i}", f"W{1486330000 + i}_1", ["CB2", "CB2", "CB2", "MT2"][i % 4], 1000.0 + 37 * i, NMS["CB2"], 0, 0, 1e6) for i in range(9)]
 assert om._filters({"key": ("SATURN", "X", "W", 0), "frames": two, "z": 1e6, "kind": "movie"})[3] is None     # two-filter sets: grey
+# a movie whose counts make it true colour, though no set of its takes RED, GRN and BL1 together, plays its sets' colours:
+# Janus ISS_059JA_GEOLOG001_PRIME (2008-02-20) takes RED and BL1 once, side by side, and GRN in its UV3/GRN/IR1/IR3 sets
+JNM = {"CL1/CL2": 651, "UV3": 338, "GRN": 568, "IR1": 750, "IR3": 928, "P0/GRN": 568, "P60/GRN": 568, "P120/GRN": 568,
+       "BL1": 451, "RED": 650, "IR2": 862, "IR4": 1002, "UV1": 258, "UV2": 298}
+jan = [("CL1/CL2", 0), ("UV3", 32), ("GRN", 88), ("IR1", 121), ("IR3", 153), ("P0/GRN", 188), ("P60/GRN", 221),
+       ("P120/GRN", 254), ("BL1", 498), ("RED", 531), ("IR2", 564), ("IR4", 602), ("CL1/CL2", 659), ("UV1", 745),
+       ("UV2", 844), ("CL1/CL2", 2070), ("UV3", 2102), ("GRN", 2158), ("IR1", 2191), ("IR3", 2223), ("P0/GRN", 2258)]
+jan = [(f"p{i}", f"N{1582238183 + dt}_1", f, 1582238183.0 + dt, JNM[f], 0, 0, 1e6) for i, (f, dt) in enumerate(jan)]
+jc = {f: sum(fr[2] == f for fr in jan) for f in JNM}
+assert om.colour_of({f: c for f, c in jc.items() if c}, JNM) == ["RED", "GRN", "BL1"]   # its counts alone: true colour
+ju = {"key": ("JANUS", "X", "N", 0), "frames": jan, "z": 1e6, "kind": "movie"}
+got = om._filters(ju)[3]
+assert got == ["IR1", "GRN", "UV3"] and ju["set_colour"], got
+assert om.plays_colour(dict(ju, _sets=om.colour_sets(jan)), got, "CL1/CL2")
+assert om._filters(dict(ju, kind="mosaic"))[3] == ["RED", "GRN", "BL1"]   # mosaics: as before
+print("Janus: a movie plays the colours its sets take,", got)
 # ... and the lone filters' cosmic rays (no frame of their filter either side to take them out against) are cleaned
 # from the set's planes as a still composite's channels are (_despiked): only the hits change, a star in every filter stays
 sp_rng = np.random.default_rng(1)

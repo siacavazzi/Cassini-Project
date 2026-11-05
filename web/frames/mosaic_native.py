@@ -53,7 +53,7 @@ CROP_MAX = int(os.environ.get("CASSINI_NATIVE_CROP", "2048"))       # longest si
 BLOCK = int(os.environ.get("CASSINI_NATIVE_BLOCK", "1024"))        # canvas px drawn at a time
 KEEP_MB = int(os.environ.get("CASSINI_FULLRES_MB", "5120"))         # most the native pictures' cache holds
 JPEG_QUALITY = 92
-VERSION = "native-v8"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
+VERSION = "native-v9"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
 # bytes per pixel, roughly, of a saved native mosaic (sky is most of a mosaic's canvas and costs almost nothing)
 EST_BYTES = {"jpg": (0.08, 0.005), "png": (2.0, 0.02)}   # (per pixel of picture, per pixel of empty canvas)
 
@@ -355,7 +355,7 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     p, tiles, rect, count, used, name = made
     filters, colour, base, _, _ = drawn(u, made)
     blend = calibration.step("blend")
-    filled = p["display_scale"].get("filled")
+    filled = om.sharpens(p["display_scale"])
     sigma = om.DETAIL_SIGMA * om.FRAME * k
     pad = max(8, round(64 * k / 0.5)) + 2 + (math.ceil(4 * sigma) + 2 if filled else 0)
     # the block's frames start on the blend step's grid (mosaic.GRID) of the whole canvas, so blocks side by side lay
