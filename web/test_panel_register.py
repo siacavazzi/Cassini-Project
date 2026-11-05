@@ -124,3 +124,34 @@ with cal.stepping("panels"):
 assert plain[5] == made[5][:-len(om.PANEL_TAG)], (plain[5], made[5])
 assert [t for t in plain[1] if t["n"] == 1][0]["offset"] == reports[1]["offset"]
 print("panel registration: ok")
+
+# a pointing further off than PANEL_MAX (Rhea 018RH's first pointing, 19 px off the other three): moved when its
+# surface is redrawn (the tiles carry their redrawn picture, "pic") and every match agrees with it, at least
+# PANEL_FAR_MATCHES of them; kept at SPICE's place without the redraw (the match could be the body's turning)
+plan_[:] = [(0, "CB2"), (0, "MT2"), (0, "UV1"), (1, "CB2")]
+err[1] = (19.0, 3.0)
+fr[:] = [(f"p{i}", f"N{1500000100 + i}_1", f, 1000.0 + 40 * i, 600, -true[q][0], -true[q][1], 1e6) for i, (q, f) in enumerate(plan_)]
+u["key"] = ("RHEA", "OBS_FAR", "N", 0)
+u["last"] = 1000 + 40 * len(fr)
+p["key"] = list(u["key"])
+for k_ in ("_lum", "_sets"):
+    u.pop(k_, None)
+far_reports = [{"n": i, "id": fr[i][1], "filter": f, "t": fr[i][3], "offset": [true[q][0] + err[q][0], true[q][1] + err[q][1]],
+                "box": [-T / 2, -T / 2, T, T]} for i, (q, f) in enumerate(plan_)]
+om.tile = lambda u_, j, c, s=None: far_reports[j]
+cache6 = tempfile.mkdtemp()
+TD6 = tiles_in(cache6)
+r6 = {}
+assert 3 not in om.panel_places(u, cache6, p, far_reports, report=r6), r6
+cache7 = tempfile.mkdtemp()
+TD7 = tiles_in(cache7)
+r7 = {}
+m7 = om.panel_places(u, cache7, p, [dict(t, pic=f"{TD7}/{t['n']}.png") for t in far_reports], report=r7)
+print("far, surface redrawn:", m7.get(3), r7.get(3, {}).get("matches"))
+assert 3 in m7 and abs(m7[3][0] + 19.0) < 0.5 and abs(m7[3][1] + 3.0) < 0.5, (m7, r7)
+# ... but much further than PANEL_FAR is still not believed
+far_reports[3] = dict(far_reports[3], offset=[true[1][0] + 60, true[1][1] - 10])
+cache8 = tempfile.mkdtemp()
+TD8 = tiles_in(cache8)
+assert 3 not in om.panel_places(u, cache8, p, [dict(t, pic=f"{TD8}/{t['n']}.png") for t in far_reports])
+print("far pointing: ok")
