@@ -65,8 +65,8 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v61", "raw": "obs-v44", "eye": "obs-v61-eye", "false": "obs-v61-false", "classic": "obs-v31-classic"}
+# obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v64", "raw": "obs-v47", "eye": "obs-v64-eye", "false": "obs-v64-false", "classic": "obs-v34-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -167,9 +167,18 @@ SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA"
                 "SUTTUNGR": 3.5, "SUTTUNG": 3.5, "MUNDILFARI": 3.5, "NARVI": 3.5, "BESTLA": 3.5, "KARI": 3.5,
                 "TARQEQ": 3.5, "BEBHIONN": 3, "BERGELMIR": 3, "FORNJOT": 3, "HATI": 3, "LOGE": 3, "SKOLL": 3, "SURTUR": 3,
                 "JARNSAXA": 3, "GREIP": 3, "S13_2004": 3, "S12_2004": 2.5}
+# bodies only ever seen as specks, under a pixel (Earth from Saturn, equatorial radius: Day the Earth Smiled, 195RI
+# HIPHASEC001, 2013-07-19, 0.7 NAC px at 1.45e9 km; 269RI HIPHASEFB001, 2017): a disk for the pass's display scale
+# only (small_body, pass_scale's white), so the movie's white is set on the body and each frame's black over its
+# stray-light veil. Without one the 99.9th percentile of the pass was the veil, stretched black to white, which showed
+# its leftover 2 Hz line bands (0.3% of the sky, columns once turned north up) and each filter's sky level as gray,
+# yellow and cyan frames. Not in RADIUS: centred on SPICE's place its movie's filters landed 10-20 px apart, and its
+# colour sets' sky off the disk drew Earth gray ("moved")
+SPECKS = {"EARTH": 6378}
 FILL_RADIUS = dict(RADIUS)
 RADIUS.update(SMALL_RADIUS)
-IFOV = {"N": 6.0e-6, "W": 60e-6}   # radians per full resolution pixel
+IFOV = {"N": 6.0e-6, "W": 0.012 / 200.956}   # radians per full resolution pixel; the WAC's at the focal length its frames
+                                             # are resampled to (geometric_correction.F_LINEAR), 59.7 microradians
 # radius (km) and rotation period (hours) of the bodies a camera can follow a feature on (_judge's track): a feature
 # the body's turning carries along. The moons turn with their orbits (Phoebe and Hyperion on their own)
 SPIN = {"SATURN": (60268, 10.66), "JUPITER": (71492, 9.925), "EARTH": (6378, 23.93), "VENUS": (6052, 5832.5),
@@ -1898,6 +1907,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         m = q < top_of_sky
         veiled = False
+        if disk is not None and disk[2] < SPECK_PX:
+            # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
+            # sky found under 5% of its brightest is still the veil's lower part, whose line bands and other filters'
+            # levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over its set)
+            m = np.zeros(q.shape, bool)
         if m.mean() <= SKY_MIN:
             if disk is None:
                 return None
@@ -1972,6 +1986,7 @@ def _disk_mask(qshape, shape, x, y, radius):
     return (rows - cy) ** 2 + (cols - cx) ** 2 < r * r
 
 
+SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
 SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is small (small_body): a speck, not
                    # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame
@@ -1988,9 +2003,10 @@ def small_body(u, frame):
     is small on it (under SMALL_BODY of a frame in radius: a small moon, a speck), else None: the sky round it is
     the whole frame but the disk (tile_scale)."""
     *_, x, y, z = frame
-    if not z or u["key"][0] not in RADIUS:
+    km = RADIUS.get(u["key"][0]) or SPECKS.get(u["key"][0])
+    if not z or not km:
         return None   # (a target with no disk of its own, rings or sky, is not one)
-    radius = RADIUS[u["key"][0]] / (z * IFOV[u["key"][2]])
+    radius = km / (z * IFOV[u["key"][2]])
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
@@ -2012,7 +2028,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             q = iof[::4, ::4].astype(np.float32)
             by.setdefault(f, []).append(q)
             if z:
-                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, RADIUS.get(u["key"][0], 0) / (z * IFOV[u["key"][2]])))
+                km = RADIUS.get(u["key"][0]) or SPECKS.get(u["key"][0], 0)
+                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, km / (z * IFOV[u["key"][2]])))
     if not by:
         return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
     scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
@@ -4441,9 +4458,9 @@ def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
     pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
     ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales.
-    centre: a square view centred on the body (radius: its disk, reference pixels), wide enough for the whole
-    footprint round it (a stare's rings stay in) and at least a frame or the disk with CENTRE_MARGIN round it, up
-    to MOVIE_FIT frames, when centre_half centres the pass (seen: its frames, pass_seen): the body sits in the
+    centre: a square view centred on the body (radius: its disk, reference pixels), at least a frame or the disk with
+    CENTRE_MARGIN round it and wide enough for what the frames show round it (fitted_half: a stare's rings stay in,
+    a frame's corners turned north up do not widen it), up to MOVIE_FIT frames, when centre_half centres the pass (seen: its frames, pass_seen): the body sits in the
     middle of every frame, north up. A body bigger than that, one no frame looks at (a ring movie on both ansae, a
     plume stare above the limb) or a pass the square would cut (a mosaic or retarget reaching further) keeps the
     view above. All of it decided once for the pass (fp, radius and seen are the pass's)."""
@@ -4466,15 +4483,42 @@ def centre_half(fp, radius, seen):
     look at the body, not only round it, as a ring movie on both ansae does, whose footprint fp takes in Saturn's
     centre though no frame shows it); and the square, round the whole footprint up to MOVIE_FIT frames, keeps
     CENTRE_KEEP of the frames' area and part of every frame (a mosaic or retarget reaching further than that is not
-    cut down to it, nor a stray frame dropped from the picture)."""
+    cut down to it, nor a stray frame dropped from the picture). The view is then drawn no bigger than what the
+    frames show needs (fitted_half)."""
     x0, y0, x1, y1 = fp
     side = MOVIE_FIT * FRAME
     around = max(FRAME, 2 * radius * (1 + CENTRE_MARGIN))
     if not (radius > 0 and around <= side and seen and seen[0]):
         return None
-    half = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
-    inside = kept(seen, half)
-    return half if inside.mean() >= CENTRE_KEEP and inside.any(1).all() else None
+    wide = min(side, max(around, 2 * max(-x0, x1, -y0, y1))) / 2
+    inside = kept(seen, wide)
+    if not (inside.mean() >= CENTRE_KEEP and inside.any(1).all()):
+        return None
+    return fitted_half(seen, around / 2, wide)
+
+
+def fitted_half(seen, least, most):
+    """How big a centred view is drawn (Sam 2026-11-03: the pictures looked zoomed out, the body a quarter of the
+    window): half the side of the smallest square round the body's centre, from least (a frame, or the disk with
+    CENTRE_MARGIN round it) to most (the whole footprint, centre_half's test), that keeps CENTRE_KEEP of what the
+    frames show within the circle across each frame (SEEN_DISK of its seen points) and part of every frame. The
+    corners of a frame turned north up swing out past a frame-wide square however the camera points (a frame turned
+    45 degrees spans 1.41 frames), and MOVIE_MARGIN pads the footprint for the frames between its samples: sized to
+    the footprint, a one-place moon movie was drawn about 1.9 frames across, half the size its single pictures
+    (one frame, centre_view) show it at. The circle is the same however the frame is turned, so the view is a
+    frame wide for frames on the body, and wider only as far as the pointing wanders off it."""
+    pts = seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2)[:, SEEN_DISK]
+    need = np.abs(pts).max(2)   # the half side of the square round the body's centre each point needs to be in
+    if not need.size:
+        return most
+    # the CENTRE_KEEP share of the points, and the nearest point of every frame
+    share = float(np.quantile(need, CENTRE_KEEP, method="inverted_cdf"))
+    return float(min(most, max(least, share, need.min(1).max())))
+
+
+_g = (np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5
+SEEN_DISK = (np.add.outer(_g ** 2, _g ** 2) <= 0.25).ravel()   # a frame's seen points within the circle across it
+del _g
 
 
 def kept(seen, half):
