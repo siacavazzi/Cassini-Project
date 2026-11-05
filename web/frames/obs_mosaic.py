@@ -175,8 +175,14 @@ SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA"
 # yellow and cyan frames. Not in RADIUS: centred on SPICE's place its movie's filters landed 10-20 px apart, and its
 # colour sets' sky off the disk drew Earth gray ("moved")
 SPECKS = {"EARTH": 6378}
+# the bodies of the cruise (mean radius): Jupiter's moons in 2000-2001 and the Moon at the Earth flyby in 1999, so Auto
+# center has a disk to centre their pictures on (Io and Europa in eclipse, Himalia, the Moon: "no disk of a known
+# body", the picture left where the camera had it). Like the small moons, not in FILL_RADIUS: far off they are disks
+# of a few dozen pixels in the sky, which the filled scale would blow out
+CRUISE_RADIUS = {"IO": 1822, "EUROPA": 1561, "GANYMEDE": 2634, "CALLISTO": 2410, "HIMALIA": 70, "MOON": 1737}
 FILL_RADIUS = dict(RADIUS)
 RADIUS.update(SMALL_RADIUS)
+RADIUS.update(CRUISE_RADIUS)
 IFOV = {"N": 6.0e-6, "W": 0.012 / 200.956}   # radians per full resolution pixel; the WAC's at the focal length its frames
                                              # are resampled to (geometric_correction.F_LINEAR), 59.7 microradians
 # radius (km) and rotation period (hours) of the bodies a camera can follow a feature on (_judge's track): a feature
