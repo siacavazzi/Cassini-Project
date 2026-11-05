@@ -37,4 +37,13 @@ assert black_of(dark) is None, "a frame with dark sky keeps the pass's black"
 veil = (2.3e-4 * (1 + 0.3 * yy / N) + rng.normal(0, 2e-6, (N, N))).astype(np.float32)
 veil[500:520, 500:520] = 2e-3
 assert black_of(veil) is None, "a glow that fills the frame with no flat floor keeps the pass's black"
+
+# review 11-05: a frame whose middle is on the body's disk (Titan ISS_021TI's full-frame movie: haze all over, a flat
+# floor like the glow's) keeps the pass's black: tile_scale gives no black of its own there
+assert "black_of" not in om.tile_scale(scale, "RED", True, on_body=True), "a frame of the body keeps the pass's black"
+# on_disk: the frame's middle on the body's disk (SPICE)
+u = {"key": ("TITAN", "x", "N", 0)}
+assert om.on_disk(u, (None, None, "CB3", 0, 938, 100.0, 50.0, 200000.0))       # Titan 2575 km at 200,000 km: 2146 px
+assert not om.on_disk(u, (None, None, "CB3", 0, 938, 3000.0, 0.0, 200000.0))
 print("ok")
+

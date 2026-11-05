@@ -1884,7 +1884,7 @@ def _sky_fine(iofs, masks):
                            for i, l, m in zip(iofs, local, masks)])
 
 
-def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
+def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -1894,14 +1894,15 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
     body's disk on the frame (x, y, radius: _disk_mask's, full resolution pixels) when it is small: a frame lit all
     over by stray light round a moon a few pixels across (Pallene, Hati, Kiviuq) has no dark sky to find, so its sky
     is everything off the disk, and its own black takes the veil away (it went from white to black over the pass
-    as the stray light faded). seen: a dict the raised black is put in."""
+    as the stray light faded). seen: a dict the raised black is put in. on_body: the frame's middle is on the body's
+    disk (on_disk), so a frame with no dark sky is the body, never a glow."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     top = scale.get("sky_tops", {}).get(f)
-    if not own_sky:
-        return out
+    if not own_sky or (top is None and disk is None and on_body):
+        return out   # (a frame of the body, in a pass with no sky height of its own: the pass's black, as before #279)
     # (a pass with no sky height of its own and no small body: only a frame lit all over by a glow gets a black of its
     # own, every other frame keeps the pass's)
-    glow_only = top is None and disk is None
+    glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
 
     def black_of(iof):
@@ -1917,7 +1918,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
             m = np.zeros(q.shape, bool)
         if glow_only and m.mean() > SKY_MIN:
             return None
-        if m.mean() <= SKY_MIN and disk is None:
+        if m.mean() <= SKY_MIN and disk is None and not on_body:
             # no dark sky under 5% of the top: a frame lit all over by a glow (the forward-scattered light round a
             # backlit plume, ISS_155EN_PLMHPHR001_PIE's jet frames: their sky at a sixth of the jets' root, every one
             # of them a flat gray square in the movie) has a flat floor, its sky; a frame a lit body fills (its darkest
@@ -2028,6 +2029,15 @@ def small_body(u, frame):
         return None   # (a target with no disk of its own, rings or sky, is not one)
     radius = km / (z * IFOV[u["key"][2]])
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
+
+
+def on_disk(u, frame):
+    """True when frame's middle is on pass u's body's disk (SPICE): the frame shows the body, so a frame of it with no
+    dark sky is not lit by a glow (tile_scale). Titan ISS_021TI's full-frame movie frames are its haze all over, a
+    flat floor like the 155EN jets' glow, and 66 to 100% of each went black."""
+    *_, x, y, z = frame
+    km = RADIUS.get(u["key"][0])
+    return bool(z and km and math.hypot(x, y) < km / (z * IFOV[u["key"][2]]))
 
 
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
@@ -2249,7 +2259,8 @@ def _tile_made(u, n, cache, scale, base):
     seen = {}
     disk = small_body(u, u["frames"][n])
     try:
-        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk),
+        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
+                                                                                       on_disk(u, u["frames"][n])),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                     around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
     except Exception as e:
