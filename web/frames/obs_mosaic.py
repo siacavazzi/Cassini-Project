@@ -2573,7 +2573,7 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     search round no shift), and each tile's edge (REGISTER_INSET) is left out of both, so neither tile's border is
     matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it.
     sure = least phase correlation peaks (REGISTER_SURE) for REGISTER_FAR's wider search, over the whole overlap
-    (_phase): a match is believed when its peak is high, or when the edges' match agrees with it."""
+    (image_correction.find_shift_whole): a match is believed when its peak is high, or when the edges' match agrees with it."""
     corners = []
     for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
         corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
@@ -2601,8 +2601,8 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     # the rounding of each crop's corner to whole pixels, put back on the shift found
     rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
     if sure is not None:
-        pa = _phase(imgs[0], imgs[1], within, sure[0])
-        pe = _phase(image_correction.edges(imgs[0]), image_correction.edges(imgs[1]), within, sure[1]) \
+        pa = image_correction.find_shift_whole(imgs[0], imgs[1], within, sure[0])
+        pe = image_correction.find_shift_whole(image_correction.edges(imgs[0]), image_correction.edges(imgs[1]), within, sure[1]) \
             if pa is not None else None
         if pa is not None and pa[2] >= sure[2]:
             got, how = pa[:2], "phase"
@@ -2619,19 +2619,6 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     if shifts[1] is None:
         return None, how[1]
     return (shifts[1][0] + rest[0][1] - rest[0][0], shifts[1][1] + rest[1][1] - rest[1][0]), how[1]
-
-
-def _phase(a, b, within, least):
-    """b's shift from a by phase correlation over the whole of both (BGR pictures, the same size) and its peak,
-    (dx, dy, peak), when the peak is least at least and the shift within px of none; else None. Not image_correction.find_shift, which correlates only
-    round the brightest part of a: on a ring tile that is a sliver of a bright ringlet or the limb's glow, and the
-    match found there was noise (195RI HIPHASEC001 W1752967654_1, a 0.74 peak over the whole overlap, 0.02 there)."""
-    ga = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    gb = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    (dx, dy), peak = cv2.phaseCorrelate(ga, gb, cv2.createHanningWindow((ga.shape[1], ga.shape[0]), cv2.CV_32F))
-    if peak < least or abs(dx) > within or abs(dy) > within:
-        return None
-    return dx, dy, peak
 
 
 # of a frame: the largest correction to SPICE's place of a pointing that registration is believed for. SPICE's pointing

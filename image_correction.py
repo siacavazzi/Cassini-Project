@@ -611,6 +611,19 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
     return dx, dy
 
 
+def find_shift_whole(im1, im2, max_shift, min_response):
+    """find_shift over the whole of both frames (BGR, the same size) rather than round im1's brightest part, with the
+    peak: (dx, dy, response), or None when the response is under min_response or the shift past max_shift. For a
+    frame whose brightest part is a sliver (a bright ringlet or a limb's glow on a ring tile), where find_shift's crop
+    matched noise (195RI HIPHASEC001 W1752967654_1: a 0.74 peak over the whole overlap, 0.02 round its brightest part)."""
+    a = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    b = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    (dx, dy), response = cv2.phaseCorrelate(a, b, cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F))
+    if response < min_response or abs(dx) > max_shift or abs(dy) > max_shift:
+        return None
+    return dx, dy, response
+
+
 FIND_MARGIN = 100   # px: the least margin round the target that find_shift correlates over (a 12 px margin put the limb
                     # under the window's taper and biased a small search by half a pixel)
 DARK_SHARE = 0.02   # of the frame: a reference lit over less than this is a black scene (find_shift)
