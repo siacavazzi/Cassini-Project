@@ -54,6 +54,16 @@ assert "registered" not in out and out["offset"] == [0.0, 0.0]
 assert obs_mosaic._register_to(u, 0) is None and obs_mosaic._register_to(u, 1) == 0
 print("ok")
 
+# a Titan cycle through many filters at one pointing (215TI M90R1CLD125: ... MT3, RED, GRN, BL1): each filter is
+# registered to the frame nearest it in wavelength, so GRN lands on RED and BL1 on GRN, not both on MT3 (where
+# Titan's haze looks nothing like the visible, and the two matches landed 4 px apart: a magenta and green rim)
+cyc = {"frames": [("m", "N1809549745_1", "MT3", 0.0, 889, 10.0, 10.0, 100000.0),
+                  ("r", "N1809549801_1", "RED", 83.0, 649, 10.0, 10.0, 100000.0),
+                  ("g", "N1809549856_1", "GRN", 138.0, 568, 10.0, 10.0, 100000.0),
+                  ("b", "N1809549926_1", "BL1", 205.0, 451, 10.0, 10.0, 100000.0)], "z": 100000.0, "key": u["key"]}
+assert [obs_mosaic._register_to(cyc, n) for n in range(4)] == [None, 0, 1, 2], [obs_mosaic._register_to(cyc, n) for n in range(4)]
+print("nearest band: ok")
+
 # a registered pass still moves by exactly what tune= asks (Cassini Studio, tuned_layout): the move is laid over the
 # registered place, and the filters of the pointing keep the registration between them
 reg = {"n": 1, "id": "N1500000020_1", "filter": "GRN", "offset": [97.0, 52.0], "spice_offset": [100.25, 50.6],
