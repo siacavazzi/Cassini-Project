@@ -31,7 +31,7 @@ farm/stop-<machine>    touch it: that machine finishes its unit and stops
 | input | env var | size | hub (T7) | laptop (internal disk) |
 |---|---|---|---|---|
 | raw frames `cassini_lut8.zip` | `CASSINI_DATA` | 73 GB | `archives/` | local copy (random reads: never over the network) |
-| zip index | `CASSINI_INDEX_CACHE` | small | `archives/zip_index` | copy the hub's folder (named by zip size + mtime: keep the mtime with `rsync -a`) |
+| zip index | `CASSINI_INDEX_CACHE` | small | `archives/zip_index` | copy the hub's folder (named by zip size + mtime, `cassini_lut8.zip-72996893446-1792490844`: copy the zip and the index with `rsync -a` so the mtime matches, or it re-indexes) |
 | geometry `geometry-usgs.sqlite` (the USGS-refilled one main needs, never `geometry.sqlite`) | `CASSINI_GEOMETRY_CACHE` | 54 MB | `archives/` | local copy (written to: never share one file) |
 | extracted SPICE cache (copy of `usgs_render_spice_cache`) | `CASSINI_SPICE_CACHE` | 16.4 GiB | `archives/spice_cache` | local copy |
 | CISSCAL calibration | `CASSINI_CISSCAL` | 1.4 GiB | `archives/cisscal` | local copy |
