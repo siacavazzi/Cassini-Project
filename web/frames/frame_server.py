@@ -511,9 +511,10 @@ COLOR_VERSIONS = {"balanced": "color-v43", "raw": "color-v26", "eye": "color-v43
 PROC_VERSIONS = {"balanced": "proc-v18", "raw": "proc-v18", "eye": "proc-v18", "false": "proc-v18", "classic": "proc-v12"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr6"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+CENTRE_VERSION = "ctr7"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
-                          # ctr6: a small moon centred on the moon the picture shows (find_small_body)
+                          # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
+                          # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -594,8 +595,9 @@ def centred(ids, view):
     side = int(view["side"])
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
-    if view.get("centre"):
-        # a small moon: centred on the moon the picture shows near SPICE's place (color_image.find_small_body), as
+    if view.get("centre") and lbl is not None and str(lbl.info.get("TARGET_NAME", "")).replace('"', "").strip() in obs_mosaic.SMALL_RADIUS:
+        # a small moon (obs_mosaic.SMALL_RADIUS; the big moons' ephemerides are good): centred on the moon the picture
+        # shows near SPICE's place (color_image.find_small_body), as
         # SPICE is tens to hundreds of pixels off for some flybys (Pan 2017-03-07, Atlas 2017-04-12)
         found = color_image.find_small_body(image, cx, cy, body_radius(lbl))
         if found is not None:
