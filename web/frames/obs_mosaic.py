@@ -2224,7 +2224,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         white = max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]) - blacks[f], 99.5))
                     for f, iofs in by.items())
         gamma = 1.5
-    if filled and on and sum(v.size for v in on.values()) < FILL_DISK * sum(i.size for iofs in by.values() for i in iofs):
+    small = filled and on and sum(v.size for v in on.values()) < FILL_DISK * sum(i.size for iofs in by.values() for i in iofs)
+    if small:
         # a body in the middle of the frames but small in them (Titan 40 px across in 000TI's movie, Dione in 038DI's, an
         # Enceladus plume movie): the 99.5th percentile of the frames is on the sky or in the body's middle, and the
         # body clipped white. White at least the DISK_WHITE percentile of its disk, as a body against the sky has (a
@@ -2264,7 +2265,11 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         lit = max(calibration.lit_median((np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white)
                   for f, iofs in by.items())
         gamma = calibration.eased_gamma(gamma, lit, calibration.EASE_PASS)
-    out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3)}
+    # the local contrast (detail) only where the body fills the frames: on a small disk against the sky (Dione 180 px
+    # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
+    # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
+    out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
+           "detail": bool(filled and not small)}
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
     mine = [f for f in (drawn or []) if f in by]
@@ -3828,6 +3833,12 @@ def _part(path, w, h):
     return part
 
 
+def sharpens(scale):
+    """True when pictures on the display scale end in detail(): a pass whose body fills its frames (pass_scale's
+    "detail"; a scale made before it had one, its "filled")."""
+    return bool(scale.get("detail", scale.get("filled")))
+
+
 def detail(rgba, sigma):
     """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
     against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
@@ -4081,7 +4092,7 @@ def so_far(u, n, cache, made=None, out=OUT):
         rgba = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
     else:
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
-    if p["display_scale"].get("filled"):
+    if sharpens(p["display_scale"]):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
@@ -4576,7 +4587,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
-            "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": bool(p["display_scale"].get("filled")),
+            "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}
 
 
@@ -5354,7 +5365,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             acc[..., 3:] = np.maximum(acc[..., 3:], rgba[..., 3:])
             rgba = (acc + 0.5).astype(np.uint8)
             rep["trail"] = len(older)
-    if p["display_scale"].get("filled") and sharpen:
+    if sharpens(p["display_scale"]) and sharpen:
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     return Image.fromarray(rgba, "RGBA"), rep
@@ -5423,7 +5434,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
-    filled = not sharpen and bool(plan(u, cache)["display_scale"].get("filled"))
+    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
     path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
                         f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
                         f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
@@ -6460,7 +6471,7 @@ def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=
         rgba = np.dstack([(tinted(planes[0], tint, p["display_scale"]["gamma"]) + 0.5).astype(np.uint8), planes[0][..., 3]])
     else:
         rgba = planes[0]
-    if p["display_scale"].get("filled"):
+    if sharpens(p["display_scale"]):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
     # (not cut to its picture: the tiles are cut to theirs, and the canvas is where pointing_box says it is)
     return np.ascontiguousarray(rgba), (x0, y0, k)
