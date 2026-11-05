@@ -1586,13 +1586,28 @@ little near it says), for a picture whose colour changes across it: a mosaic of 
 gold lower latitudes, where the one typical ratio gave the clipped gold the pole's green.
 """
 FILL_NEAR = 0.05   # (fill_saturated's reach) the share of the pixels round one measured, from which their ratio is used whole
+FILL_FLOOR = 99.9  # (fill_saturated) percentile of a channel's unsaturated lit pixels a pixel it saturated is filled no darker than
+FILL_MOST = 0.5    # (fill_saturated) a channel saturated over more than this share of the lit picture is filled from the others alone, not floored
+
+
+def lit_of(channels):
+    """The lit pixels of a picture's channels (linear): where the brightest channel is a fifth of its top or more."""
+    top = np.max([np.asarray(c, np.float32) for c in channels], axis=0)
+    return top > 0.2 * np.percentile(top, 99)
+
+
+def mostly_saturated(mask, lit):
+    """Whether a channel saturated (mask) over most of the lit picture (FILL_MOST): too little of it is left to say how
+    bright it was, so its fill takes the others' colour whole. The North Pole map movie (175SA NPOLMAP001: RED
+    saturated over about 70% of the disk) drew salmon floored, the pale gold its neighbours give it filled."""
+    n = int(lit.sum())
+    return n > 0 and float((np.asarray(mask, bool) & lit).sum()) > FILL_MOST * n
 
 
 def fill_saturated(channels, masks, reach=None):
     masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
     x = [np.asarray(c, np.float32) for c in channels]
-    top = np.max(x, axis=0)
-    lit = top > 0.2 * np.percentile(top, 99)
+    lit = lit_of(x)
     out = []
     for i, (c, m) in enumerate(zip(x, masks)):
         if not m.any():
@@ -1625,6 +1640,17 @@ def fill_saturated(channels, masks, reach=None):
         filled = c.copy()
         some = count > 0
         filled[some] = total[some] / count[some]
+        # never under the channel's clipping: a saturated pixel is at least as bright as the brightest the channel
+        # read where it did not saturate (the top of its unsaturated lit pixels, just under where it clipped). The
+        # ratio is measured where the channel did not clip, its dimmer part, so a channel that clipped over much of
+        # the frame was filled under its own clipping and the other's colour took over: Saturn 2011 (150SA
+        # NHEMMOVIE001, RED saturated over a third of the frame, GRN over a tenth) drew flat yellow-green patches
+        # with ragged edges along GRN's clipping. Not for a channel saturated over most of the picture
+        # (mostly_saturated), whose fill keeps the others' colour.
+        under = lit & ~m
+        if some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
+            floor = np.float32(np.percentile(c[under], FILL_FLOOR))
+            filled[some] = np.maximum(filled[some], floor)
         out.append(filled)
     every = np.logical_and.reduce(masks)
     return out, (every if every.any() else None)

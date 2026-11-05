@@ -41,3 +41,26 @@ old = without(planes(r2, g2, b2)).astype(float)[100, 170, :3]
 now, then = np.abs(hue(left) - hue(right)).max(), np.abs(hue(left) - hue(old)).max()
 assert now < then / 2 and now < 0.06, (left, right, old)
 print("a band clipped where another is not keeps the colour round it (%s, %s; before %s); ok" % (left, right, old))
+
+# a third of the picture clipped (Saturn 2011, 150SA NHEMMOVIE001): the only place every band reads is the dim part,
+# so the ratio the fill reads there drew the clipped part under the bands' own clipped values, green where red alone
+# clipped. A clipped band is never drawn under what it read: the bright part stays warm, as bright as its red and
+# green read, and meets green's clipping edge without a step
+r3 = np.full((200, 200), 150.0); g3 = np.full((200, 200), 150.0); b3 = np.full((200, 200), 165.0)
+r3[:, 140:] = 255; g3[:, 140:] = 255; b3[:, 140:] = 215
+g3[:, 140:170] = 235   # green just under its clipping here
+a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r3, g3, b3)).astype(int)
+for x in (150, 160, 190):
+    c = a[100, x, :3]
+    assert c[0] >= 240 and c[0] >= c[1] >= c[2], (x, c)
+assert np.abs(a[100, 168, :3] - a[100, 172, :3]).max() < 25, (a[100, 168, :3], a[100, 172, :3])
+print("a picture partly clipped stays as bright as its clipped bands read (%s, %s); ok" % (a[100, 150, :3], a[100, 190, :3]))
+
+# most of the picture clipped (the North Pole map movie, 175SA NPOLMAP001: RED saturated over about 70% of the disk):
+# too little of red is left to say how bright it was, so its fill takes the colour round it whole, as before the floor
+r4 = r3.copy(); g4 = g3.copy(); b4 = b3.copy()
+r4[:, 60:] = 255; g4[:, 60:] = 255; b4[:, 60:] = 215; g4[:, 60:110] = 235
+a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r4, g4, b4)).astype(int)
+c = a[100, 100, :3]
+assert c[0] < c[1], c
+print("a band clipped over most of the picture is filled from the others alone (%s); ok" % (c,))
