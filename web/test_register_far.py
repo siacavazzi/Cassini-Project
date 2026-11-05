@@ -2,8 +2,9 @@
 (obs_mosaic._register, moon colour fixes 2026-11-05). In Dione's 038DI ZEROPHASE001 SPICE puts consecutive frames 19 s
 apart 20 to 45 px apart (N1549196942_1 sits 42 px from the frames either side of it): UV3's 38 px match was believed,
 GRN's 44 px match was not (REGISTER_MAX, 41 px), so one set's channels were drawn at two places, three Diones in a
-column (N1549197025_1). A match past REGISTER_MAX, up to REGISTER_BODY_MAX, is believed when the lit area's centroid
-of the two tiles moves with it (within REGISTER_AGREE); otherwise SPICE's place is kept, as before.
+column (N1549197025_1; Hyperion 153HY and Helene 149HE the same). A match past REGISTER_MAX, up to REGISTER_BODY_MAX, is
+believed when another measure finds the same move: the whole overlap's phase correlation with REGISTER_SURE's bars, or
+the lit area's centroid of the two tiles; otherwise SPICE's place is kept, as before.
 Synthetic tiles: a cratered disk 180 px across, the whole body inside both tiles.
 Run: python web/test_register_far.py"""
 import os, sys  # noqa: E401
@@ -51,19 +52,26 @@ def register(true, other=None):
     return out, np.array(out["offset"]) + true - np.array(q["offset"])
 
 
-# SPICE 44 px off (past REGISTER_MAX): believed, the centroid moves with the match
+# SPICE 44 px off (past REGISTER_MAX): believed, the wide search finds the same move
 out, left = register((1.6, -43.9))
 print("44 px off:", out["registered"], "left", left.round(2))
-assert "kept" not in out["registered"] and "centroid agrees" in out["registered"]["how"] and np.abs(left).max() < 0.5, out
-# 3.4 px off (under REGISTER_MAX): as before, no centroid asked for
+assert "kept" not in out["registered"] and "agrees" in out["registered"]["how"] and np.abs(left).max() < 0.5, out
+# 3.4 px off (under REGISTER_MAX): as before, nothing else asked
 out, left = register((3.4, -2.2))
-assert "centroid" not in out["registered"]["how"] and np.abs(left).max() < 0.5, out
-# 44 px off, but another lit body in the GRN tile pulls its centroid away: SPICE's place kept, as before
+assert "agrees" not in out["registered"]["how"] and np.abs(left).max() < 0.5, out
+# the wide search's bars out of reach: the centroid alone confirms the move ...
+sure = obs_mosaic.REGISTER_SURE
+obs_mosaic.REGISTER_SURE = (2.0, 2.0, 2.0)
+out, left = register((1.6, -43.9))
+print("44 px off, by the centroid:", out["registered"])
+assert "centroid agrees" in out["registered"]["how"] and np.abs(left).max() < 0.5, out
+# ... and with another lit body in the GRN tile pulling its centroid away, nothing does: SPICE's place kept, as before
 out, left = register((1.6, -43.9), other=(150, 150))
-print("44 px off, a second body in one tile:", out["registered"])
+print("44 px off, nothing agrees:", out["registered"])
 assert out["registered"].get("kept") == "SPICE's place" and out["offset"] == [100.0, 50.0], out
-# 130 px off: past REGISTER_BODY_MAX, kept
-out, left = register((0.0, 130.0))
-print("130 px off:", out.get("registered"))
+obs_mosaic.REGISTER_SURE = sure
+# 200 px off: past REGISTER_BODY_MAX, kept
+out, left = register((0.0, 200.0))
+print("200 px off:", out.get("registered"))
 assert out["offset"] == [100.0, 50.0], out
 print("ok")

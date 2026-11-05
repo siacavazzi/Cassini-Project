@@ -2473,8 +2473,9 @@ def _same_pointing(u, n):
 
 REGISTER_GAP = 180   # s: a tile of another filter taken this soon before, at the same pointing, is what it is registered to
 REGISTER_MAX = 0.04  # of a frame: the largest correction to SPICE's placement that is believed
-REGISTER_BODY_MAX = 0.1   # ... or up to this much, when the lit area's centroid agrees with it (_register)
-REGISTER_AGREE = 3.0      # px: how near the centroid's move must be to the match's
+REGISTER_BODY_MAX = 0.15  # ... or up to this much, when another measure agrees with it (_register)
+REGISTER_AGREE = 3.0      # px: how near another measure's move must be to the match's ...
+REGISTER_SHARE = 0.05     # ... or this share of the move, the larger
 # of a frame, per camera: a camera whose tiles are searched only this near SPICE's place (and their edges left out,
 # REGISTER_INSET), a larger move being a false match. The WAC: between the filters of one pointing it drifts 3 to 5 px
 # more than SPICE shows (stars of W1752982634_1..722_16), and a whole search let false matches on a black scene move
@@ -2563,17 +2564,25 @@ def _register(u, n, out, crop, cache, scale):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return
     if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
-        # SPICE's pointing jumps 20 to 45 px between frames 19 s apart in Dione's 038DI ZEROPHASE001 (N1549196942_1 sits
-        # 42 px from the frames either side of it): GRN's 44 px match was past REGISTER_MAX while UV3's 38 px one was
-        # not, so one set's channels were split between two places, three Diones in a column. A match past
-        # REGISTER_MAX is believed, up to REGISTER_BODY_MAX, when the lit area's centroid in the two tiles (the whole
-        # body in both) moves within REGISTER_AGREE of it
-        c = _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
-        if c is not None and math.hypot(c[0] - shift[0], c[1] - shift[1]) <= REGISTER_AGREE:
-            how = f"{how}, centroid agrees ({c[0]:+.1f},{c[1]:+.1f})"
+        # SPICE's pointing of a moon can jump tens of px between frames seconds apart: Dione's 038DI ZEROPHASE001 20 to
+        # 45 px (N1549196942_1 sits 42 px from the frames either side), Hyperion's 153HY 70 to 110 px, Helene's 149HE
+        # 30 to 45 px. A set's channels whose match was just under REGISTER_MAX were moved and those just over it were
+        # not, so one set's channels were drawn at two places: three Diones in a column (N1549197025_1), a second
+        # Hyperion beside the first, a yellow and blue Helene. A match past REGISTER_MAX is believed, up to
+        # REGISTER_BODY_MAX, when another measure finds the same move (within REGISTER_AGREE, or REGISTER_SHARE of the
+        # move): the whole overlap's phase correlation with REGISTER_SURE's bars (the WAC's wide search below), or the
+        # lit area's centroid when the whole body is in both tiles
+        agree = max(REGISTER_AGREE, REGISTER_SHARE * math.hypot(*shift))
+        same = lambda m: m is not None and math.hypot(m[0] - shift[0], m[1] - shift[1]) <= agree
+        wide, _ = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=REGISTER_BODY_MAX * FRAME, sure=REGISTER_SURE)
+        if same(wide):
+            how = f"{how}, wide search agrees ({wide[0]:+.1f},{wide[1]:+.1f})"
         else:
-            out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-            return
+            c = _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
+            if not same(c):
+                out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
+                return
+            how = f"{how}, centroid agrees ({c[0]:+.1f},{c[1]:+.1f})"
     elif shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
         if how is not None:
             out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
