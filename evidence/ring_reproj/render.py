@@ -22,6 +22,8 @@ def main():
     ap.add_argument("--cache", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", choices=("before", "after"))
+    ap.add_argument("--crop", action="append", default=[],
+                    help="x0,y0,x1,y1 fractions of the mosaic: that part drawn at native resolution (mosaic_native) too")
     ap.add_argument("frames", nargs="+")
     a = ap.parse_args()
     import cv2
@@ -56,6 +58,16 @@ def main():
             if im is not None:
                 im.save(os.path.join(a.out, f"{name}_{label}.png"))
                 rec[label]["size"] = im.size
+            for i, c in enumerate(a.crop):
+                import mosaic_native
+                import shutil
+                box = tuple(float(v) for v in c.split(","))
+                with calibration.stepping(off):
+                    found = mosaic_native.picture(u["frames"][n][1], a.cache, crop=box, fmt="png")
+                if found:
+                    shutil.copy(found[0], os.path.join(a.out, f"{name}_{label}_crop{i}.png"))
+                    rec[label].setdefault("crops", []).append({"crop": box, **{k: v for k, v in found[1].items() if k in ("width", "height", "scale")}})
+                    print("   crop", i, found[1], flush=True)
             print(" ", label, json.dumps({k: v for k, v in rec[label].items() if k != "moves"}), flush=True)
             print("   moves", json.dumps(rec[label]["moves"])[:3000], flush=True)
         with open(os.path.join(a.out, f"{name}.json"), "w") as fh:
