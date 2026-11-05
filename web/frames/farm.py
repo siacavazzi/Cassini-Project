@@ -15,6 +15,10 @@ The farm is a folder ("shared") on the hub, the machine that holds the data driv
                             one prebuild log per phase and unit
   <shared>/stop-<machine>   touch it: that machine finishes its current unit and stops
 
+Each unit is registered with the Mini's job list (farm.json "job"; ~/agents/bin/job, shown on the dashboard's
+Active jobs panel) as farm-<machine>-<unit>: started when claimed, updated per phase, done or failed at the end.
+A helper machine registers its units on the hub over SSH.
+
 A machine other than the hub reaches the shared folder over SSH (machine "shared": "ssh://lazarus@mini/<path>"), so
 no SMB mount or saved password is needed. It builds into its own cache on its own disk and ships each finished unit
 back to the hub (rsync over SSH), into <hub cache>/../incoming/<machine>, optionally freeing its disk as it goes.
@@ -245,6 +249,33 @@ def estimate(plan, farm):
     return {"machines": free, "share": {n: s / total for n, s in share.items()}, "hours": max(free.values())}
 
 
+# ---------- the Mini dashboard's job list (~/agents/bin/job; minidash :8787 "Active jobs") ----------
+
+def job(shared, farm, *args):
+    """Registers a unit with the hub's job helper (farm.json "job": {"cmd", "thread"}), on the hub itself or over
+    SSH from a helper machine, so every slice shows on the Mini's dashboard. Best effort: never stops the build."""
+    cfg = farm.get("job")
+    if not cfg:
+        return
+    cmd = [cfg.get("cmd", "~/agents/bin/job"), *map(str, args)]
+    try:
+        if shared.ssh:
+            subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", shared.ssh,
+                            " ".join(shlex.quote(c) if i else c for i, c in enumerate(cmd))],
+                           capture_output=True, timeout=60)
+        else:
+            subprocess.run([os.path.expanduser(cmd[0]), *cmd[1:]], capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def unit_eta(farm, machine, unit):
+    """Local "YYYY-MM-DD HH:MM" this unit should end by, from farm.json's s_per_picture and the machine's speed."""
+    hours = unit.get("hours") or unit.get("weight", 0) * float(farm.get("s_per_picture", 0.8)) / 3600 / \
+        float(machine.get("speed", 1))
+    return (datetime.datetime.now() + datetime.timedelta(hours=max(hours, 0.25))).strftime("%Y-%m-%d %H:%M")
+
+
 # ---------- run: take units and build them ----------
 
 def prebuild_cmd(machine, unit, phase, python):
@@ -423,7 +454,17 @@ def cmd_run(args):
             print("no unit left")
             break
         result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
-        for phase in unit.get("phases", plan.get("phases", PHASES)):
+        phases = unit.get("phases", plan.get("phases", PHASES))
+        name = f"farm-{me}-{unit['unit']}"
+        if not args.dry_run:
+            extra = ["--tmux", machine["tmux"]] if machine.get("tmux") and not shared.ssh else []
+            extra += ["--pid", str(os.getpid())] if not shared.ssh else []
+            extra += ["--thread", farm["job"]["thread"]] if farm.get("job", {}).get("thread") else []
+            job(shared, farm, "start", name, f"cache build: unit {unit['unit']} on {me} ({unit.get('pictures', 0):,} pictures)",
+                "--eta", unit_eta(farm, machine, unit), *extra)
+        for k, phase in enumerate(phases):
+            if not args.dry_run:
+                job(shared, farm, "update", name, f"{phase} ({k + 1}/{len(phases)})", "--pct", int(100 * k / len(phases)))
             cmd = prebuild_cmd(machine, unit, phase, python)
             if args.dry_run:
                 print(" ".join(map(shlex.quote, cmd)))
@@ -442,6 +483,12 @@ def cmd_run(args):
             break
         result["finished"] = now()
         shared.write(json.dumps(result, indent=1), "done", f"{unit['unit']}.json")
+        bad = [p for p, r in result["phases"].items() if r["exit"]]
+        secs = sum(r["seconds"] for r in result["phases"].values())
+        if bad:
+            job(shared, farm, "fail", name, f"{', '.join(bad)} failed after a retry (see farm status)")
+        else:
+            job(shared, farm, "done", name, f"all {len(phases)} phases in {secs / 3600:.1f} h")
         shipper.boundary()
     if not args.dry_run:
         shipper.boundary(final=True)

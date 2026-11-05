@@ -80,6 +80,12 @@ packages' hash against the plan, and (for the laptop) that SSH to the hub works.
    power):
    `python web/frames/farm.py run --shared /Volumes/SAM_IAC_PHOTO/cassini-work/farm --machine mini`
    `python web/frames/farm.py run --shared ssh://mini/Volumes/SAM_IAC_PHOTO/cassini-work/farm --machine mbp`
+   Each unit shows on the Mini dashboard (minidash :8787, Active jobs) as `farm-<machine>-<unit>`: `run` calls
+   `~/agents/bin/job start/update/done/fail` itself (farm.json `"job"`), the laptop's units over SSH on the hub.
+   The runs themselves are long jobs too: register each tmux session once,
+   `~/agents/bin/job start farm-mini "cache build, Mini share" --tmux farm-mini --thread "<thread>" --eta +34h`
+   (the laptop's: `ssh mini ~/agents/bin/job start farm-mbp "cache build, MacBook share" --thread "<thread>" --eta +34h`),
+   and `job done` it when `run` ends.
 9. **Watch**: `farm.py status --shared farm` (units done, building, waiting, each machine's last phase line). A
    failed phase is retried once; a unit still failing shows `FAILED <phase>` there and in `done/<unit>.json`: rerun
    it by deleting its `done/` file (keep the claim) and restarting that machine's `run`, which resumes its own claim

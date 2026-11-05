@@ -3,13 +3,14 @@
  "python": "~/dev/Cassini-Project/.venv/bin/python",
  "phases": ["composites", "processed", "mosaics", "movies", "strips", "chains"],
  "whole_mission": [{"phase": "frames", "only": "mini", "hours": 1.5}],
+ "job": {"cmd": "~/agents/bin/job", "thread": "Cache build"},
  "s_per_picture": 0.8,
  "year_cost": {"2015": 1.25, "2016": 1.05, "2017": 0.6},
  "split_share": 0.06,
  "machines": {
   "mini": {
    "_about": "the hub: holds the T7 and the shared folder; I/O-heavy and the lightest units",
-   "speed": 1.0, "end": "light", "procs": 9, "max_load": 60, "min_free": 50, "need_gb": 300,
+   "speed": 1.0, "end": "light", "tmux": "farm-mini", "procs": 9, "max_load": 60, "min_free": 50, "need_gb": 300,
    "cache": "/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/cache",
    "status": "/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/status-mini",
    "logs": "/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/logs-mini",

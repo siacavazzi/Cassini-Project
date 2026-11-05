@@ -146,6 +146,25 @@ def test_merge_compare_verify(tmp):
     return 1
 
 
+def test_job(tmp):
+    """Units register with the Mini's job helper; a missing or failing helper never stops the build."""
+    log = os.path.join(tmp, "job.log")
+    fake = os.path.join(tmp, "job")
+    write(fake, f"#!/bin/sh\necho \"$@\" >> {log}\n")
+    os.chmod(fake, 0o755)
+    shared = farm.Shared(os.path.join(tmp, "jobfarm"))
+    f = {"job": {"cmd": fake}, "s_per_picture": 1.0}
+    farm.job(shared, f, "start", "farm-mini-2004", "cache build: unit 2004", "--pct", 0)
+    farm.job(shared, f, "done", "farm-mini-2004", "all 6 phases")
+    lines = open(log).read().splitlines()
+    assert lines == ["start farm-mini-2004 cache build: unit 2004 --pct 0", "done farm-mini-2004 all 6 phases"], lines
+    farm.job(shared, {"job": {"cmd": os.path.join(tmp, "missing")}}, "start", "x", "y")   # no helper: no error
+    farm.job(shared, {}, "start", "x", "y")                                               # no "job": nothing
+    eta = farm.unit_eta(f, {"speed": 2}, {"weight": 7200})
+    assert len(eta) == 16 and eta[4] == "-" and eta[13] == ":", eta
+    return 1
+
+
 def test_cli_plan(tmp):
     """plan writes plan.json from farm.json and a catalogue, and prints an estimate."""
     sh = os.path.join(tmp, "cli")
@@ -176,6 +195,7 @@ def main():
         ok += test_commands()
         ok += test_ship_and_free(tmp)
         ok += test_merge_compare_verify(tmp)
+        ok += test_job(tmp)
         ok += test_cli_plan(tmp)
     print(f"farm: {ok} tests passed")
 
