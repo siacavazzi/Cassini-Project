@@ -316,7 +316,10 @@ class label:
             # turns into a bright line down each side: those columns count as lost, so they are filled and left out
             mask[:, [0, -1]] = False
             mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
-        return mask
+        # moved as the WAC's calibrated frames are by the geometric correction (the "geom" step), so it still falls
+        # on their pixels; the edge the correction reached past is not valid
+        import geometric_correction as gc
+        return gc.correct_mask(mask, self.info)
 
     """
     Traslates image
