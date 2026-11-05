@@ -405,6 +405,7 @@ the edges up best (_agreement) stands and the third follows from it; and a chann
 place from the other one through their own match. shifts and hows (per channel, None for the reference) are changed.
 """
 LOOP_CLOSE = 1.0   # px
+AS_TAKEN = 0.6     # edge agreement (_agreement) a channel as the camera took it needs to stand unshifted
 
 
 def _loop(orig, masks, ref, shifts, hows, guess):
@@ -420,10 +421,19 @@ def _loop(orig, masks, ref, shifts, hows, guess):
         return
     if sa is None or sb is None:
         # the channel that matched nothing lands through the other one
-        if sa is None:
-            shifts[a], hows[a] = (sb[0] - sab[0], sb[1] - sab[1]), f"{how} via the other channel"
-        else:
-            shifts[b], hows[b] = (sa[0] + sab[0], sa[1] + sab[1]), f"{how} via the other channel"
+        c = a if sa is None else b
+        landing = (sb[0] - sab[0], sb[1] - sab[1]) if sa is None else (sa[0] + sab[0], sa[1] + sab[1])
+        shifts[c], hows[c] = landing, f"{how} via the other channel"
+        # a landing is no better than the match it came through (SPICE's offset alone, where the two other channels
+        # matched nothing either): one that lines the edges up worse than the channel as the camera took it does not
+        # stand. The channel stays as taken where that lines up well (AS_TAKEN), else it is not aligned (175TI
+        # N1733045482_1: SPICE 24 px off between the filters, the landing put a magenta rim round Titan; as taken the
+        # edges agree 0.84, the landing 0.63)
+        here = _agreement(orig[ref], orig[c], masks[ref], masks[c], landing)
+        still = _agreement(orig[ref], orig[c], masks[ref], masks[c], (0.0, 0.0))
+        if still > here:
+            shifts[c], hows[c] = ((0.0, 0.0), "as taken (the landing via the other channel worse)") if still >= AS_TAKEN \
+                else (None, "not aligned")
         return
     rx, ry = sab[0] - (sb[0] - sa[0]), sab[1] - (sb[1] - sa[1])
     if np.hypot(rx, ry) <= LOOP_CLOSE:

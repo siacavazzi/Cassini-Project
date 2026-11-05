@@ -537,7 +537,9 @@ def calibrate(png, info, image=None, smooth=True):
         if flat is not None:
             per_second *= flat
     if step("hotpix"):
-        dc.repair_hot(per_second, info, spots)
+        # (the pixels lost in downlink, raw 0 as the fill step takes them, left out of the repair's medians)
+        raw = np.asarray(png if np.asarray(png).ndim == 2 else pixels)
+        dc.repair_hot(per_second, info, spots, raw == 0 if raw.ndim == 2 else None)
     if smooth:
         per_second = deblock(per_second, pixels, info)
         if sky is not None and step("skysmooth"):
@@ -601,6 +603,10 @@ def deblock(iof, pixels, info):
 SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
 SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
 SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
+SKY_RAMP = 60              # ... and over SKY_GLOW where its level rises half a code to a code or more over this many pixels
+SKY_GLOW = 16              # ... (sigma, at full resolution): a glow's own slope
+SKY_LEVEL = 20             # ... that level the stored codes blurred over this many pixels (sigma, at full resolution)
+SKY_GLOW_TOP = 24          # ... and beyond the dark sky, where that glow is up to this many codes over the sky (fading out by twice it)
 
 
 """
@@ -634,6 +640,33 @@ def smooth_sky(iof, png, sky):
     area = cv2.morphologyEx(np.asarray(sky, dtype=np.uint8), cv2.MORPH_CLOSE,
                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (SKY_HOLE, SKY_HOLE)))
     weight = step * cv2.GaussianBlur(area.astype(np.float32), (0, 0), sigma)
+    # a glow that rises a code within SKY_RAMP pixels (a plume's fan, a moon's halo) is smoothed over SKY_GLOW pixels
+    # instead: its one-code steps are its brightness contours, tens of pixels apart, and smoothed over SKY_SMOOTH between
+    # them it was drawn as flat terraces whose edges the 2 Hz bands scalloped (spot check 7: ISS_279EN_PLUME001_PIE
+    # N1876460140_1, Enceladus's plume a stack of blocks); over SKY_GLOW they blend into its slope. A stray light
+    # gradient across the frame, a few codes over its width, is smoothed as the rest of the sky
+    # (each line's median taken off first, so the 2 Hz bands themselves are no rise)
+    level = cv2.GaussianBlur(codes - np.median(codes, axis=1, keepdims=True), (0, 0), SKY_LEVEL * iof.shape[1] / 1024)
+    rise = np.hypot(*np.gradient(level)) * SKY_RAMP * 1024 / iof.shape[1]
+    glow = np.clip(2.0 * rise - 1.0, 0, 1).astype(np.float32)
+    if glow.any():
+        # (only from and onto pixels whose codes are within a code of that wider blur's, found as step is: the moon's
+        # night side beside a plume's root, a few codes darker, kept its own level; blurred with the plume it went gray)
+        wide = SKY_GLOW * iof.shape[1] / 1024
+        near = step.copy()
+        for _ in range(2):
+            spread = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+            near = step * np.clip(1 - (np.abs(codes - spread) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
+        spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        blur = blur + glow * near * (spread - blur)
+        # and on past the dark sky into the glow's bright part, up to SKY_GLOW_TOP codes over the sky: a plume's root
+        # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
+        # fan was a hard grainy ring (Sam, 11-04: "hard looking artifacts"); a moon's lit side, far brighter, and its
+        # texture (more than a code off the wider blur, near) stay as they are
+        over = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6) \
+            - np.median(codes, axis=1, keepdims=True)
+        faint = np.clip(2.0 - over / SKY_GLOW_TOP, 0, 1).astype(np.float32)
+        weight = np.maximum(weight, glow * near * faint)
     return iof + weight * (blur - iof)
 
 
@@ -647,8 +680,14 @@ def saturated(codes, info, image=None):
     image = np.asarray(codes if image is None else image)
     if ds.lut8() and conversion in ("TABLE", "12BIT"):
         top = 4095 if conversion == "12BIT" else 255
-        if stored_range(codes, info)[1] < top:
+        low, high = stored_range(codes, info)
+        if high < top:
             return np.zeros(image.shape, bool)
+        if low >= top:
+            # every pixel at the top: the display stretch has no range to spread and draws the frame black (0), so a
+            # display image marks none of it (080EN PLMHINCL001's 82-220 s WAC frames near the Sun, saturated all
+            # over, drew as flat tiles in the flat field's pattern instead of being left out of the mosaic)
+            return np.ones(image.shape, bool)
         # the display stretch puts the top at 254; a resized frame's partly full pixels count too
         return gc.correct_mask(image >= 250, info)
     return gc.correct_mask(image >= 254, info)
@@ -1549,13 +1588,28 @@ little near it says), for a picture whose colour changes across it: a mosaic of 
 gold lower latitudes, where the one typical ratio gave the clipped gold the pole's green.
 """
 FILL_NEAR = 0.05   # (fill_saturated's reach) the share of the pixels round one measured, from which their ratio is used whole
+FILL_FLOOR = 99.9  # (fill_saturated) percentile of a channel's unsaturated lit pixels a pixel it saturated is filled no darker than
+FILL_MOST = 0.5    # (fill_saturated) a channel saturated over more than this share of the lit picture is filled from the others alone, not floored
+
+
+def lit_of(channels):
+    """The lit pixels of a picture's channels (linear): where the brightest channel is a fifth of its top or more."""
+    top = np.max([np.asarray(c, np.float32) for c in channels], axis=0)
+    return top > 0.2 * np.percentile(top, 99)
+
+
+def mostly_saturated(mask, lit):
+    """Whether a channel saturated (mask) over most of the lit picture (FILL_MOST): too little of it is left to say how
+    bright it was, so its fill takes the others' colour whole. The North Pole map movie (175SA NPOLMAP001: RED
+    saturated over about 70% of the disk) drew salmon floored, the pale gold its neighbours give it filled."""
+    n = int(lit.sum())
+    return n > 0 and float((np.asarray(mask, bool) & lit).sum()) > FILL_MOST * n
 
 
 def fill_saturated(channels, masks, reach=None):
     masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
     x = [np.asarray(c, np.float32) for c in channels]
-    top = np.max(x, axis=0)
-    lit = top > 0.2 * np.percentile(top, 99)
+    lit = lit_of(x)
     out = []
     for i, (c, m) in enumerate(zip(x, masks)):
         if not m.any():
@@ -1588,6 +1642,17 @@ def fill_saturated(channels, masks, reach=None):
         filled = c.copy()
         some = count > 0
         filled[some] = total[some] / count[some]
+        # never under the channel's clipping: a saturated pixel is at least as bright as the brightest the channel
+        # read where it did not saturate (the top of its unsaturated lit pixels, just under where it clipped). The
+        # ratio is measured where the channel did not clip, its dimmer part, so a channel that clipped over much of
+        # the frame was filled under its own clipping and the other's colour took over: Saturn 2011 (150SA
+        # NHEMMOVIE001, RED saturated over a third of the frame, GRN over a tenth) drew flat yellow-green patches
+        # with ragged edges along GRN's clipping. Not for a channel saturated over most of the picture
+        # (mostly_saturated), whose fill keeps the others' colour.
+        under = lit & ~m
+        if some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
+            floor = np.float32(np.percentile(c[under], FILL_FLOOR))
+            filled[some] = np.maximum(filled[some], floor)
         out.append(filled)
     every = np.logical_and.reduce(masks)
     return out, (every if every.any() else None)
