@@ -3726,7 +3726,10 @@ def colour_picture(u, p, colour, planes):
         # it came out under the band's own reading and turned the tile green, blue or flat yellow with ragged edges
         # along each band's clipping (289SA SHEMMAP001, a VIMS ride-along map: RED saturated over 17-90% of every
         # frame, GRN up to 66%, BL1 up to 67%). Floored, a band meets its own clipping edge without a step.
-        filled = [np.maximum(f, c) for f, c in zip(filled, x)]
+        # Not for a band clipped over most of the picture (calibration.mostly_saturated), whose fill keeps the others'
+        # colour, as the camera window's fill does.
+        lit = calibration.lit_of(x)
+        filled = [f if calibration.mostly_saturated(m, lit) else np.maximum(f, c) for f, c, m in zip(filled, x, clipped)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
