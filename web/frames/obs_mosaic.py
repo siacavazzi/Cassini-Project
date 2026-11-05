@@ -1439,9 +1439,15 @@ def _filters(u):
     count = {f: c for f, c in count.items() if f not in aside} or count
     colour = colour_of(count, nms)
     u["set_colour"] = False
-    if colour is None and u.get("kind") == "movie":
-        colour = _set_colour(frames, count, nms)
-        u["set_colour"] = colour is not None
+    # a movie plays only a colour set holding every colour filter (set_of): colours that no set of its holds together
+    # never play, and it stayed grey. Janus ISS_059JA_GEOLOG001_PRIME takes RED and BL1 once each, side by side, and
+    # GRN only in its two UV3, GRN, IR1, IR3 sets: its counts made it true colour, and none of its 49 frames was in
+    # colour. Such a movie takes the colours of its sets (_set_colour), as a movie its counts make grey does
+    if u.get("kind") == "movie" and (colour is None or not any(set(colour) <= {f for f, _ in run} for run in colour_sets(frames))):
+        mine = _set_colour(frames, count, nms)
+        if mine is not None or colour is None:
+            colour = mine
+            u["set_colour"] = colour is not None
     return count, nms, aside, colour
 
 
