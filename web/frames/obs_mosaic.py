@@ -2578,7 +2578,8 @@ def _register(u, n, out, crop, cache, scale):
         if same(wide):
             how = f"{how}, wide search agrees ({wide[0]:+.1f},{wide[1]:+.1f})"
         else:
-            c = _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
+            # (a match that is itself the centroid's is not confirmed by it: Atlas N1870697837_1's 112 px)
+            c = None if how.startswith("centroid") else _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
             if not same(c):
                 out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
                 return
