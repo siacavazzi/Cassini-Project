@@ -2011,6 +2011,8 @@ DETAIL = 2.0       # filled passes: how much the local contrast is raised (detai
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
 
 
+GLOW_TOE = 3.0     # ... and its soft toe above that black, this many times the rise wide
+GLOW_TOE_MAX = 1.0  # ... but at most the white wide (all of the glow on the toe: a pure quadratic fade, no hard edge)
 GLOW_WHITE = 0.1   # a pass of lit sky (pass_scale): its white keeps at least this share when its blacks rise to the glow
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
 # ... measured on the darker half of the sky: the noise floor at this percentile above its median (a single
@@ -2277,9 +2279,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         if lifts and max(lifts.values()) > 0:
             blacks = {f: blacks[f] + lifts.get(f, 0.0) for f in blacks}
             white = max(white - max(lifts.values()), GLOW_WHITE * white)
-            # with the soft toe a sky's black has (SKY_TOE times its height over the sky), so the glow's noise fades
-            # into the black instead of breaking into speckle at it
-            glow_toe = SKY_TOE * max(lifts.values())
+            # with a soft toe GLOW_TOE times the lift wide, so the glow's faint edge (a plume's outer jets, 141EN
+            # PLMHPHR001) tapers into the black instead of ending at a hard, speckled contour where its noise crosses it
+            # (at most GLOW_TOE_MAX of the white, the white then lowered by the half of the toe display takes off
+            # above it, so the glow's brightest part stays as bright)
+            glow_toe = min(GLOW_TOE * max(lifts.values()), GLOW_TOE_MAX * white)
+            white -= glow_toe / 2
     if calibration.look() == "balanced" and white > 0:
         # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
         # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
