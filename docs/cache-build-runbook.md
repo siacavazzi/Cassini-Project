@@ -31,12 +31,16 @@ farm/stop-<machine>    touch it: that machine finishes its unit and stops
 | input | env var | size | hub (T7) | laptop (internal disk) |
 |---|---|---|---|---|
 | raw frames `cassini_lut8.zip` | `CASSINI_DATA` | 73 GB | `archives/` | local copy (random reads: never over the network) |
-| zip index | `CASSINI_INDEX_CACHE` | small | built once | copy the hub's folder (named by zip size + mtime: keep the mtime with `rsync -a`) |
-| geometry `geometry-usgs.sqlite` | `CASSINI_GEOMETRY_CACHE` | 54 MB | `archives/` | local copy (written to: never share one file) |
-| extracted SPICE cache | `CASSINI_SPICE_CACHE` | 2.5-15 GB | `archives/spice_cache` | local copy |
-| CISSCAL calibration | `CASSINI_CISSCAL` | 1.4 GB | `archives/cisscal` | local copy |
+| zip index | `CASSINI_INDEX_CACHE` | small | `archives/zip_index` | copy the hub's folder (named by zip size + mtime: keep the mtime with `rsync -a`) |
+| geometry `geometry-usgs.sqlite` (the USGS-refilled one main needs, never `geometry.sqlite`) | `CASSINI_GEOMETRY_CACHE` | 54 MB | `archives/` | local copy (written to: never share one file) |
+| extracted SPICE cache (copy of `usgs_render_spice_cache`) | `CASSINI_SPICE_CACHE` | 16.4 GiB | `archives/spice_cache` | local copy |
+| CISSCAL calibration | `CASSINI_CISSCAL` | 1.4 GiB | `archives/cisscal` | local copy |
 | kernels `cassiniprojectJAN05.zip` | `CASSINI_KERNELS` | 131 GB | `archives/` | not copied; the rehearsal checks the build doesn't need it |
 | repo at the plan's commit + `.venv` | | 0.8 GB | worktree | clone, `pip install` the hub's `pip freeze` |
+
+`run` always sets `CASSINI_KEEP_SPICE_CACHE=1`.
+
+T7 layout (all under `/Volumes/SAM_IAC_PHOTO/cassini-work/`): `archives/` (the inputs above, plus `cassiniprojectJAN05.zip` and the plain `geometry.sqlite`, which the farm doesn't use), `build-cache/` (the hub's cache, the frame server's `--cache`; `frames-q95` lands in it from the live prebuild), `build-cache-incoming-mbp/` (the laptop's shipped units, merged into `build-cache` by a move), `farm/` (the shared folder), `farm-mini/` (the Mini's status and logs).
 
 `farm.py doctor --shared S --machine NAME` checks every input, the free space against `need_gb`, the commit and the
 packages' hash against the plan, and (for the laptop) that SSH to the hub works.
@@ -56,8 +60,8 @@ packages' hash against the plan, and (for the laptop) that SSH to the hub works.
    `farm/requirements-freeze.txt`.
 2. **Hub inputs**: confirm the T7 copies of both zips and the geometry file are verified (size, member count, `cmp`
    of the ends). Copy `spice_cache` and `cisscal` into `archives/`. Build or copy the zip index for the T7 path.
-   `frames-q95` didn't change (`FRAME_VERSION`), so copy `~/server/cache/cassini-prebuild/frames-q95` into the new
-   cache first: the frames unit then only fills gaps.
+   `frames-q95` didn't change (`FRAME_VERSION`): the lead copies the live prebuild's into `build-cache/frames-q95`,
+   so the frames unit only fills gaps.
 3. **SSH from the laptop to the hub**: on the laptop `ssh-keygen -t ed25519 -N '' -f ~/.ssh/cassini_farm`; on the
    Mini append the `.pub` line to `~/.ssh/authorized_keys`; on the laptop add a `Host mini` block (HostName
    192.168.68.54, User lazarus, IdentityFile ~/.ssh/cassini_farm). Remote Login is already on.
@@ -67,8 +71,8 @@ packages' hash against the plan, and (for the laptop) that SSH to the hub works.
    Ethernet (1 GbE, ~110 MB/s) or a Thunderbolt cable between the two Macs (Thunderbolt Bridge, several hundred
    MB/s), each a cable plugged in, no setting changed.
 5. **Laptop inputs**: `rsync -a --partial mini:/Volumes/SAM_IAC_PHOTO/cassini-work/archives/{cassini_lut8.zip,geometry-usgs.sqlite,cisscal,spice_cache,zip_index} ~/cassini-build/inputs/`
-   (~92 GB: ~15-25 min at Wi-Fi's ~60-110 MB/s). Clone the repo at the commit; make the venv from the freeze.
-6. **Config**: write `farm/farm.json` from `web/frames/farm.example.json` (replace `COMMIT`; `procs`: Mini 9, laptop
+   (~91 GB: ~15-25 min at Wi-Fi's ~60-110 MB/s). Clone the repo at the commit; make the venv from the freeze.
+6. **Config**: write `farm/farm.json` from `web/frames/farm.example.json` (`procs`: Mini 9, laptop
    16 to start). `farm.py plan --shared farm` writes plan.json and prints the estimate.
 7. **Rehearsal (~1 h)**: both machines build the same short stretch into scratch caches:
    `prebuild.py processed --from 2004-06-01 --until 2004-06-03 --cache <scratch> --procs N --balanced` and
@@ -92,14 +96,14 @@ packages' hash against the plan, and (for the laptop) that SSH to the hub works.
    first. To pause a machine: touch its `pause` file (prebuild waits); to stop it after the current unit: touch
    `farm/stop-<machine>`.
 10. **Finish**: when `status` says all done and the laptop's last ship has ended:
-    `farm.py merge --into <cache> --move <cache>/../incoming-mbp` (moves files, keeps the hub's where both built one,
-    e.g. a New Year pass, and lists any that differ), then `farm.py verify --cache <cache> --shared farm` (every
+    `farm.py merge --into build-cache --move build-cache-incoming-mbp` (moves files, keeps the hub's where both built one,
+    e.g. a New Year pass, and lists any that differ), then `farm.py verify --cache build-cache --shared farm` (every
     unit, every phase recorded under this commit's versions, no errors). Then the pipeline's own completeness
     checks, before the cache is pointed at.
 
 ## Re-running later
 
-A rebuild after a version bump is the same steps with a new commit and a new `caches/build-<commit>/`: a new
+A rebuild after a version bump is the same steps with a new commit and a fresh `build-cache/` (move the old one aside): a new
 `farm/` folder (or empty `claims/`, `done/`, `logs/`), `plan`, rehearsal, `run`. Adding a machine is one more entry
 in `machines` with its own `end`, `speed` and `ship_to`; the units and the claims don't change. A rebuild of a few
 years only: `plan`, then delete from plan.json the units you don't want (or `verify --units`).

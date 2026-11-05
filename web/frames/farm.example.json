@@ -11,9 +11,9 @@
   "mini": {
    "_about": "the hub: holds the T7 and the shared folder; I/O-heavy and the lightest units",
    "speed": 1.0, "end": "light", "tmux": "farm-mini", "procs": 9, "max_load": 60, "min_free": 50, "need_gb": 300,
-   "cache": "/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/cache",
-   "status": "/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/status-mini",
-   "logs": "/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/logs-mini",
+   "cache": "/Volumes/SAM_IAC_PHOTO/cassini-work/build-cache",
+   "status": "/Volumes/SAM_IAC_PHOTO/cassini-work/farm-mini/status",
+   "logs": "/Volumes/SAM_IAC_PHOTO/cassini-work/farm-mini/logs",
    "pause": "/Volumes/SAM_IAC_PHOTO/cassini-work/farm/mini.pause",
    "live": "",
    "env": {
@@ -35,7 +35,7 @@
    "logs": "~/cassini-build/logs",
    "pause": "~/cassini-build/pause",
    "live": "",
-   "ship_to": "mini:/Volumes/SAM_IAC_PHOTO/cassini-work/caches/build-COMMIT/incoming-mbp",
+   "ship_to": "mini:/Volumes/SAM_IAC_PHOTO/cassini-work/build-cache-incoming-mbp",
    "free": true,
    "env": {
     "CASSINI_DATA": "~/cassini-build/inputs/cassini_lut8.zip",

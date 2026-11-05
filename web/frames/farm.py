@@ -21,7 +21,7 @@ A helper machine registers its units on the hub over SSH.
 
 A machine other than the hub reaches the shared folder over SSH (machine "shared": "ssh://lazarus@mini/<path>"), so
 no SMB mount or saved password is needed. It builds into its own cache on its own disk and ships each finished unit
-back to the hub (rsync over SSH), into <hub cache>/../incoming/<machine>, optionally freeing its disk as it goes.
+back to the hub (rsync over SSH), into a folder beside the hub's cache (build-cache-incoming-<machine>), optionally freeing its disk as it goes.
 
 Who takes what: units are taken from one ordered list, so the build balances itself whatever each machine's real
 speed turns out to be. A machine with "end": "heavy" takes the heaviest unit left, one with "end": "light" the
@@ -435,7 +435,7 @@ def cmd_run(args):
     python = machine.get("python", farm.get("python", sys.executable))
     if not args.dry_run:
         check_code(plan, machine, python)
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1",
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
                **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
     for k in ("cache", "status", "pause", "logs"):
         if machine.get(k):
