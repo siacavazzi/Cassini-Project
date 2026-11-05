@@ -2054,7 +2054,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
         top_of_sky = 0.05 * np.percentile(q, 99.9)
-        m = q < top_of_sky
+        m = _dark_sky(q)
         veiled = False
         if disk is not None and disk[2] < SPECK_PX:
             # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
@@ -2163,6 +2163,17 @@ def small_body(u, frame):
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
+def _dark_sky(q):
+    """pass_scale's dark sky of a frame (quarter size, I/F): under 5% of the way from its floor (1st percentile, at
+    least 0) to its 99.9th percentile. Measured from 0, a sky the calibration left a small even offset in failed the
+    test wherever the body was too small to set the 99.9th percentile far above that offset: Phoebe in 2004
+    (ISS_000PH_FULROTIN001_PRIME) is 30 px across, its RED, IR1 and UV3 skies sit at 8 to 21% of their 99.9th
+    percentile, under 1% of them counted as sky, and every band's black stayed at its 1st percentile, under the sky. On
+    the gamma 3 scale the offsets came out as a blue-grey sky behind the moon (RED 2, GRN 18, BL1 32 levels)."""
+    floor = max(float(np.percentile(q, 1)), 0.0)
+    return q - floor < 0.05 * (float(np.percentile(q, 99.9)) - floor)
+
+
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
@@ -2235,7 +2246,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
         # noise, so the sky came out a gray, scan-lined veil around the body once the tiles were put together
-        masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
+        masks = {f: [_dark_sky(i) for i in iofs] for f, iofs in by.items()}
         if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
             levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
             # How far each band's black sits over its sky is measured on the sky's fine structure only: the sky
