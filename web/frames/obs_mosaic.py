@@ -2492,11 +2492,16 @@ REGISTER_SURE = (0.2, 0.1, 0.5)   # least peaks: phase, edges with it, phase alo
 
 
 def _register_to(u, n):
-    """The tile tile n is registered to (_register): the first frame of the pass in another filter at its pointing
-    (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it, so every filter of a pointing lands on
-    that pointing's first frame; None for a pointing's first frame, or one SPICE (the geometry cache) has no place for."""
+    """The tile tile n is registered to (_register): of the frames of the pass in another filter at its pointing
+    (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it (only the colour filters' when n is in a
+    colour filter and there are some, below), the one nearest it in wavelength (the first of those as near), so each
+    filter lands on the one most like it and through it on that pointing's first frame; None for a pointing's first frame, or one SPICE (the geometry cache) has no place for. Nearest in
+    wavelength, not simply the first: a Titan cycle through many filters (215TI M90R1CLD125: CB3, MT1, MT3, RED, GRN,
+    BL1, ...) put RED and GRN each on MT3, where Titan's haze looks nothing like it does in the visible, and the two
+    matches (edges, centroid) landed 4 px apart, a magenta and green rim round Titan in the movie; GRN now lands on
+    RED and BL1 on GRN."""
     frames = u["frames"]
-    _, _, f, t, _, x, y, z = frames[n]
+    _, _, f, t, nm, x, y, z = frames[n]
     if not z:
         return None
     k = z / u["z"] if u["z"] else 1.0
@@ -2504,16 +2509,15 @@ def _register_to(u, n):
              and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME]
     if not there:
         return None
-    # a colour filter's frame lands on the pointing's first frame in a colour filter, when there is one: the others
+    # a colour filter's frame lands on a frame in a colour filter, when there is one: the others
     # (a violet or infrared frame taken first) can look nothing like it (195RI HIPHASEC001's VIO frames near the limb
     # are black, its IR3 frames another scene), so the match failed and RED and GRN kept SPICE's places, 5 to 12 px off
     # BL1: red and green rims on every ring edge
     colour = _colour_filters(u)
     if f in colour:
-        mine = [j for j in there if frames[j][2] in colour]
-        if mine:
-            return mine[0]
-    return there[0]
+        there = [j for j in there if frames[j][2] in colour] or there
+    # of those, the one nearest in wavelength (the first of those as near)
+    return min(there, key=lambda j: abs((frames[j][4] or 0) - (nm or 0)))
 
 
 def _colour_filters(u):
@@ -2933,8 +2937,8 @@ def clouded(u):
 
 
 def _pointing_root(u, n, roots):
-    """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, the first frame of its
-    pointing in another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
+    """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, a frame of its pointing in
+    another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
     j = _register_to(u, n)
     return roots.get(j, j) if j is not None else n
 
