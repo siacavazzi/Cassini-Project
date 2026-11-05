@@ -1232,6 +1232,7 @@ own soft edge (_edge_width), so the same share of a frame at any scale: gaps up 
 width, are filled whole (a closing along rows and along columns): about 4% of a frame's side. None when there is none.
 """
 GAP_REACH = 1 / 2
+GAP_LONG = 1.0    # (_narrow_gap) a gap is at least this many times as long as it is wide across
 
 
 def _narrow_gap(has, reach, owner=None):
@@ -1244,7 +1245,17 @@ def _narrow_gap(has, reach, owner=None):
         # a closing along rows, and one along columns: a gap narrower than the line is filled whole, never in part, and
         # one open to a side (past the array's border too) is not
         closed = cv2.erode(cv2.dilate(on, k), k, borderType=cv2.BORDER_CONSTANT, borderValue=0)
-        gap |= closed > 0
+        # (only a gap that runs on along its length at least as far as it is wide across: frames side by side that do
+        # not meet leave a long thin gap, but where their staggered edges end at the mosaic's outer edge, a shallow
+        # notch between two of them is open to the outside and stays that edge; filled, it was drawn opaque, with
+        # the frames' faint soft edge round it, a flat box standing out past the soft edge (spot check 7:
+        # ISS_00ARI_RADCOLOR001_PRIME N1477311408_4 at full resolution, a white box above the C ring where
+        # pointing 2's CL1/CL2 frame N1477307779_2 starts))
+        n, lab, stats, _ = cv2.connectedComponentsWithStats(((closed > 0) & ~has).astype(np.uint8), connectivity=8)
+        across, along = (cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT) if k.shape[0] == 1 else (cv2.CC_STAT_HEIGHT, cv2.CC_STAT_WIDTH)
+        long_ = stats[:, along] >= GAP_LONG * stats[:, across]
+        long_[0] = False
+        gap |= long_[lab]
     gap &= ~has
     # (not the pixel or two a slanted outer edge steps by from row to row)
     gap = cv2.morphologyEx(gap.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0
