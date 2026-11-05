@@ -711,6 +711,9 @@ MAX_STRETCH = 1.4    # balanced: white at most this many times darker than the c
                      # pixel), so a picture is never stretched far enough to show its scan lines, compression
                      # blocks and 8-bit steps
 SPIKE = 6.0          # balanced composites: a one-channel spike this many times the sky's grain is cleaned (_clean_spikes)
+STREAK = 7           # balanced composites: in the sky, one-channel streaks (a cosmic ray's track) narrower than this many
+                     # pixels are cleaned too (_clean_streaks)
+STREAK_BODY = 2000    # _clean_streaks: a patch of this many pixels not sky is a body, and the sky within 2 STREAK px of it is left
 SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
@@ -1503,6 +1506,8 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
     if len(channels) > 1 and (measured or false):
         # without sky (a body filling the frame) the grain is measured on the whole picture
         channels = _clean_spikes(channels, sky, false)
+        if measured:
+            channels = _clean_streaks(channels, sky, false)
     return channels, margin, mix
 
 
@@ -1526,6 +1531,48 @@ def _clean_spikes(channels, sky, natural=False):
         # natural color: not where every other channel peaks too (a star or a moon); raw: where none does
         spike &= ~np.logical_and.reduce(others) if natural else ~np.logical_or.reduce(others)
         out.append(np.where(spike, m, c))
+    return out
+
+
+"""
+Cosmic ray tracks in one channel of a composite's sky: a streak 2 to 6 pixels wide, which a 3x3 median
+(_clean_spikes) takes for the sky itself, so it came out as a blue, green or red dash. In the sky (its holes closed,
+since _sky leaves the bright track out), a pixel far above its channel's STREAK x STREAK opening (what is left once
+every bright patch narrower than that is taken off: SPIKE times the channel's sky grain, measured as _clean_spikes
+does) where no other channel peaks within 2 pixels (natural: not every other one), with the faint pixels round it, is
+set to the mean of the sky round it. A star is in every channel, so it stays; the body is not sky, and the sky
+within 2 STREAK px of a body (STREAK_BODY) is left as it is (a limb's haze or a plume can be brighter in one filter).
+channels = linear channels, not yet aligned; sky = the measured sky mask
+"""
+def _clean_streaks(channels, sky, natural=False):
+    near = cv2.morphologyEx(sky.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((2 * STREAK + 1,) * 2, np.uint8)) > 0
+    # nor next to a body (STREAK_BODY px or more not sky): a limb's haze or a plume's root may be in one filter only
+    count, labels, stats, _ = cv2.connectedComponentsWithStats((~sky).astype(np.uint8), connectivity=8)
+    big = np.isin(labels, 1 + np.flatnonzero(stats[1:, cv2.CC_STAT_AREA] >= STREAK_BODY))
+    near &= ~(cv2.dilate(big.astype(np.uint8), np.ones((4 * STREAK + 1,) * 2, np.uint8)) > 0)
+    if not near.any():
+        return channels
+    box = np.ones((STREAK, STREAK), np.uint8)
+    res = [c - cv2.morphologyEx(c, cv2.MORPH_OPEN, box) for c in channels]
+    # the opening of grain sits below the sky, so its residual is measured above its own typical value
+    res = [r - np.float32(np.median(r[sky])) for r in res]
+    noises = [float(np.percentile(np.abs(c - cv2.medianBlur(c, 3))[sky], 99)) / 2.6 for c in channels]
+    peaks = [cv2.dilate(r, np.ones((5, 5), np.uint8)) > SPIKE * n for r, n in zip(res, noises)]
+    out = []
+    for i, (c, r, n) in enumerate(zip(channels, res, noises)):
+        streak = near & (r > SPIKE * n)
+        others = [p for j, p in enumerate(peaks) if j != i]
+        streak &= ~np.logical_and.reduce(others) if natural else ~np.logical_or.reduce(others)
+        if not streak.any():
+            out.append(c)
+            continue
+        # and its faint edge
+        streak |= near & (cv2.dilate(streak.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & (r > 2 * n)
+        keep = (sky & ~streak).astype(np.float32)
+        win = (4 * STREAK + 1,) * 2
+        fill = cv2.blur(c * keep, win) / np.maximum(cv2.blur(keep, win), 1e-6)
+        fill = np.where(cv2.blur(keep, win) > 0.05, fill, cv2.morphologyEx(c, cv2.MORPH_OPEN, box))
+        out.append(np.where(streak, fill, c).astype(c.dtype))
     return out
 
 
