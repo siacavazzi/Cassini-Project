@@ -3050,7 +3050,8 @@ def surface_pictures(u, cache, p, tiles):
         return out
     fr = u["frames"]
     mid = fr[len(fr) // 2]
-    ets = _ets([mid[1]] + [t["id"] for t in todo] + [w for w in map(_redraw_from, todo) if w])
+    by_id = {t["id"]: t for t in tiles}
+    ets = _ets([mid[1]] + [t["id"] for t in todo] + [w for w in (_redraw_from(t, by_id) for t in todo) if w])
     if mid[1] not in ets:
         return out
     km_px = IFOV[u["key"][2]] * u["z"]
@@ -3084,7 +3085,7 @@ def surface_pictures(u, cache, p, tiles):
             if t["id"] not in ets or not _with_kernels(t["t"]):
                 continue
             # (from the time of the tile it is registered to, when it was moved onto it: REDRAW_AT_REFERENCE)
-            when = _redraw_from(t) or t["id"]
+            when = _redraw_from(t, by_id) or t["id"]
             if when not in ets:
                 continue
             try:
@@ -3126,11 +3127,23 @@ def surface_pictures(u, cache, p, tiles):
     return out
 
 
-def _redraw_from(t):
+def _redraw_from(t, by_id=None):
     """The frame whose time tile t's surface is redrawn from instead of its own (REDRAW_AT_REFERENCE): the tile C8
-    moved it onto (_register: its "registered" shift), else None."""
-    reg = t.get("registered") or {}
-    return reg.get("to") if REDRAW_AT_REFERENCE and reg.get("shift") else None
+    moved it onto (_register: its "registered" shift), followed back through tiles that were themselves moved onto
+    another (by_id: the pass's tiles by frame id; a chain of filters, each registered to the one before it, lands on
+    the first's surface), else None."""
+    if not REDRAW_AT_REFERENCE:
+        return None
+    when, seen = None, set()
+    while True:
+        reg = t.get("registered") or {}
+        if not reg.get("shift") or reg.get("to") in seen:
+            return when
+        when = reg["to"]
+        seen.add(when)
+        t = (by_id or {}).get(when)
+        if t is None:
+            return when
 
 
 def surface_field(rp, epoch, view, shape, t, km_px):
