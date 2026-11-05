@@ -2945,8 +2945,14 @@ def _pointing_root(u, n, roots):
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
-SURFACE_DIR = "surface5"
-SURFACE_TAG = "-s5"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+SURFACE_DIR = "surface6"
+SURFACE_TAG = "-s6"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+# a tile registered to another filter's (C8, _register) is redrawn from the time of the tile it was registered to,
+# not its own: the registration's shift already took out the surface's motion between the two frames (the body turning
+# and Cassini moving, ~17 px a filter on Rhea's mapping mosaics), so redrawn from its own time it moved that far twice.
+# On Rhea ISS_162RH_REGMAP001 the GRN tiles landed 14 px and the IR1 tiles 30 px off the UV3 and the gray base under
+# them: doubled craters and rainbow edges all over the mosaic (surface6; surface5 redrew from the tile's own time)
+REDRAW_AT_REFERENCE = True
 # a redrawn tile's picture is drawn on its box grown by the furthest its surface moves (and cut to what is on it): the
 # ground the redrawing moves past the tile's own box stays in the picture. Drawn inside the box as taken (surface4),
 # that ground was cut off, and the strip it left on the other side lay empty: where a neighbor's ground had moved in
@@ -3047,7 +3053,8 @@ def surface_pictures(u, cache, p, tiles):
         return out
     fr = u["frames"]
     mid = fr[len(fr) // 2]
-    ets = _ets([mid[1]] + [t["id"] for t in todo])
+    by_id = {t["id"]: t for t in tiles}
+    ets = _ets([mid[1]] + [t["id"] for t in todo] + [w for w in (_redraw_from(t, by_id) for t in todo) if w])
     if mid[1] not in ets:
         return out
     km_px = IFOV[u["key"][2]] * u["z"]
@@ -3080,8 +3087,12 @@ def surface_pictures(u, cache, p, tiles):
                 continue
             if t["id"] not in ets or not _with_kernels(t["t"]):
                 continue
+            # (from the time of the tile it is registered to, when it was moved onto it: REDRAW_AT_REFERENCE)
+            when = _redraw_from(t, by_id) or t["id"]
+            if when not in ets:
+                continue
             try:
-                view = rp.sky_view(u["key"][0], ets[t["id"]])
+                view = rp.sky_view(u["key"][0], ets[when])
             except Exception as e:
                 print(f"no surface for {t['id']}: {type(e).__name__}: {e}"[:200], flush=True)
                 continue
@@ -3117,6 +3128,25 @@ def surface_pictures(u, cache, p, tiles):
             except OSError as e:
                 print(f"cannot keep {kept} in the cache ({e})", flush=True)
     return out
+
+
+def _redraw_from(t, by_id=None):
+    """The frame whose time tile t's surface is redrawn from instead of its own (REDRAW_AT_REFERENCE): the tile C8
+    moved it onto (_register: its "registered" shift), followed back through tiles that were themselves moved onto
+    another (by_id: the pass's tiles by frame id; a chain of filters, each registered to the one before it, lands on
+    the first's surface), else None."""
+    if not REDRAW_AT_REFERENCE:
+        return None
+    when, seen = None, set()
+    while True:
+        reg = t.get("registered") or {}
+        if not reg.get("shift") or reg.get("to") in seen:
+            return when
+        when = reg["to"]
+        seen.add(when)
+        t = (by_id or {}).get(when)
+        if t is None:
+            return when
 
 
 def surface_field(rp, epoch, view, shape, t, km_px):
