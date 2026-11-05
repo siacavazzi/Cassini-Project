@@ -44,6 +44,15 @@ assert "via the other channel" in hows[1], hows
 shifts, hows = [None, None, (-6.0, 2.5)], [None, "not aligned", "phase"]
 ic._loop([ref, a, b], [ones(), ones(), ones()], 0, shifts, hows, None)
 assert np.hypot(shifts[1][0] - 4.0, shifts[1][1] + 3.0) < 0.5, shifts
+# ... but a landing that lines the edges up worse than the channel as taken does not stand (175TI N1733045482_1:
+# the other two channels' own match was SPICE's offset alone, 24 px off): the channel stays as taken
+still = body(0.0, 0.0, 150)
+keep = ic._match
+ic._match = lambda im1, im2, g, m1, m2, within=None: ((-27.5, 12.9), "SPICE")
+shifts, hows = [None, None, (-6.0, 2.5)], [None, "not aligned", "phase"]
+ic._loop([ref, still, b], [ones(), ones(), ones()], 0, shifts, hows, None)
+assert shifts[1] == (0.0, 0.0) and hows[1].startswith("as taken"), (shifts, hows)
+ic._match = keep
 # a closed loop shares the error: the three agree, each within a tenth of a pixel of the truth
 rep, found = [], []
 ic.align_with_masks([ref.copy(), a.copy(), b.copy()], [ones(), ones(), ones()], 0, rep, found=found)

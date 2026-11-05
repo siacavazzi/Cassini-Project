@@ -65,8 +65,8 @@ import stacking  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v64", "raw": "obs-v47", "eye": "obs-v64-eye", "false": "obs-v64-false", "classic": "obs-v34-classic"}
+# obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v67", "raw": "obs-v50", "eye": "obs-v67-eye", "false": "obs-v67-false", "classic": "obs-v37-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2086,7 +2086,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         if veiled:
             # (the veil is all stray light, smooth, brighter on one side: black over the top of it, SKY_SMOOTH pixels
             # round, so none of it shows; stars and the moon are sharp and stay over it)
-            level = float(np.percentile(cv2.blur(q, (SKY_SMOOTH, SKY_SMOOTH))[m], VEIL_TOP))
+            # The mean is taken along the lines and along the columns, each on its own, and black goes over the higher:
+            # a round box spread the veil's 2 Hz line bands and column stripes over their neighbours, so the bands
+            # rose over a black set under them (195RI, Day the Earth Smiled: thin lines up to 23 of 255 on the first
+            # colour set, N1752968916_1's and N1752969019_1's line bands)
+            level = max(float(np.percentile(cv2.blur(q, k)[m], VEIL_TOP)) for k in ((SKY_SMOOTH, 1), (1, SKY_SMOOTH)))
         # the band's height over the sky at least this frame's own (its sky's fine structure, as pass_scale measures
         # the pass's): a frame lit by stray light has a grainier sky than the pass's typical one, and in the Jupiter
         # approach movie its red and green grain rose over a black set by the pass's height, a faint red cast
@@ -2573,7 +2577,7 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     search round no shift), and each tile's edge (REGISTER_INSET) is left out of both, so neither tile's border is
     matched as if it were the scene (_register); None: the whole alignment, as the stabilization chains use it.
     sure = least phase correlation peaks (REGISTER_SURE) for REGISTER_FAR's wider search, over the whole overlap
-    (_phase): a match is believed when its peak is high, or when the edges' match agrees with it."""
+    (image_correction.find_shift_whole): a match is believed when its peak is high, or when the edges' match agrees with it."""
     corners = []
     for s, at, im in ((q, at_q, ref), (t, at_t, crop)):
         corners.append((at[0] + s["box"][0], at[1] + s["box"][1], im))
@@ -2601,8 +2605,8 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     # the rounding of each crop's corner to whole pixels, put back on the shift found
     rest = [(cx - x0) - round(cx - x0) for cx, _, _ in corners], [(cy - y0) - round(cy - y0) for _, cy, _ in corners]
     if sure is not None:
-        pa = _phase(imgs[0], imgs[1], within, sure[0])
-        pe = _phase(image_correction.edges(imgs[0]), image_correction.edges(imgs[1]), within, sure[1]) \
+        pa = image_correction.find_shift_whole(imgs[0], imgs[1], within, sure[0])
+        pe = image_correction.find_shift_whole(image_correction.edges(imgs[0]), image_correction.edges(imgs[1]), within, sure[1]) \
             if pa is not None else None
         if pa is not None and pa[2] >= sure[2]:
             got, how = pa[:2], "phase"
@@ -2621,19 +2625,6 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None):
     return (shifts[1][0] + rest[0][1] - rest[0][0], shifts[1][1] + rest[1][1] - rest[1][0]), how[1]
 
 
-def _phase(a, b, within, least):
-    """b's shift from a by phase correlation over the whole of both (BGR pictures, the same size) and its peak,
-    (dx, dy, peak), when the peak is least at least and the shift within px of none; else None. Not image_correction.find_shift, which correlates only
-    round the brightest part of a: on a ring tile that is a sliver of a bright ringlet or the limb's glow, and the
-    match found there was noise (195RI HIPHASEC001 W1752967654_1, a 0.74 peak over the whole overlap, 0.02 there)."""
-    ga = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    gb = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    (dx, dy), peak = cv2.phaseCorrelate(ga, gb, cv2.createHanningWindow((ga.shape[1], ga.shape[0]), cv2.CV_32F))
-    if peak < least or abs(dx) > within or abs(dy) > within:
-        return None
-    return dx, dy, peak
-
-
 # of a frame: the largest correction to SPICE's place of a pointing that registration is believed for. SPICE's pointing
 # is 3 to 5 px off on the moons' mapping mosaics once the surface's motion between panels is taken out (median; 11 at
 # most, panel_motion); a larger match is the surface's own motion, or a planet's clouds turning (Jupiter's matched 35
@@ -2646,9 +2637,17 @@ PANEL_NCC = 0.25     # the least the two overlaps must agree (normalized cross-c
 PANEL_GAIN = 0.02    # ... and how much better than at SPICE's places they must agree, for a move of over half a pixel
 PANEL_LEAST = 0.3    # px: a smaller move is the measure's own noise, and the pointing stays where SPICE put it
 PANEL_AGREE = 2.0    # px: matches further than this from the others' median are left out
+# ... a pointing further off than PANEL_MAX is moved too, up to PANEL_FAR, when its surface is redrawn (surface_pictures:
+# the body's turning is taken out, so what is left is SPICE's pointing) and at least PANEL_FAR_MATCHES matches, each
+# agreeing at PANEL_FAR_NCC once moved, all agree (PANEL_AGREE). Rhea ISS_018RH_REGCOL001's first pointing is 19 px off
+# its other three (6 matches +18.6 to +21.2, ncc 0.86 once moved; the other three agree with each other within a
+# pixel), so its limb stepped at both of its joins (spot check 7, panel_probe on the Mini)
+PANEL_FAR = 32 / 1024
+PANEL_FAR_MATCHES = 3
+PANEL_FAR_NCC = 0.6
 # a pass's panel registration (panel_places), kept with it; renamed whenever the rule changes
-PANEL_FILE = "panels1-" + PLAN_FILE
-PANEL_TAG = "-p1"    # in the name of a layout whose tiles registration moved (layout), so its pictures are its own
+PANEL_FILE = "panels2-" + PLAN_FILE   # (2: PANEL_FAR)
+PANEL_TAG = "-p2"    # in the name of a layout whose tiles registration moved (layout), so its pictures are its own
 # a clouded body's (SURFACE_CLOUDED: Saturn, Titan, the rings) pointings are measured on edges only (edge_shift): its
 # clouds turn with it and drift on its winds between panels (on Saturn's disk the turning alone is tens to hundreds of
 # px in a few minutes), so its detail matches that motion, never SPICE's pointing, and #169 kept SPICE's places there,
@@ -2712,7 +2711,7 @@ def _agree(a, b, mask):
     return float((x * y).sum()) / d if d > 0 else 0.0
 
 
-def panel_shift(q, ref, at_q, t, crop, at_t):
+def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q), where
     two pointings of a mosaic overlap: (dx, dy) reference pixels that t's place moves back by to land on q (as
     _shift_onto), and what was measured {"ncc": [at SPICE's places, moved], "area", "response"}; (None, why) when
@@ -2755,7 +2754,7 @@ def panel_shift(q, ref, at_q, t, crop, at_t):
     after = _agree(ds[0], moved, inner)
     seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3)}
     shift = (dx + rx[1] - rx[0], dy + ry[1] - ry[0])
-    if math.hypot(*shift) > PANEL_MAX * FRAME:
+    if math.hypot(*shift) > (most or PANEL_MAX) * FRAME:
         return None, f"too far {shift[0]:+.1f},{shift[1]:+.1f}"
     if after < PANEL_NCC or (math.hypot(*shift) > 0.5 and after < before + PANEL_GAIN):
         return None, f"not believed {shift[0]:+.1f},{shift[1]:+.1f} ncc {before:.2f}->{after:.2f}"
@@ -3264,7 +3263,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 h = min(a[1] + s["box"][1] + s["box"][3], b[1] + t["box"][1] + t["box"][3]) - max(a[1] + s["box"][1], b[1] + t["box"][1])
                 if w >= PANEL_NARROW and h >= PANEL_NARROW:
                     cands.append((s["filter"] != t["filter"], -w * h, s["n"]))
-            found, seen = [], {}
+            found, seen, far = [], {}, []
             mine = picture(n)
             for _, _, j in sorted(cands)[:PANEL_MATCHES]:
                 ref = picture(j)
@@ -3273,18 +3272,28 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 s = by_n[j]
                 # measured where SPICE put both (the overlap SPICE says, the same however far the earlier one has
                 # been moved), and taken from where the earlier one now is
-                shift, how = (edge_shift if edges else panel_shift)(s, ref, s["offset"], t, mine, here)
+                shift, how = (edge_shift(s, ref, s["offset"], t, mine, here) if edges else
+                              panel_shift(s, ref, s["offset"], t, mine, here, PANEL_FAR if surfaced else None))
                 seen[j] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
                 if shift is not None:
                     was = kept.get(j, [0, 0])
                     found.append(((was[0] - shift[0], was[1] - shift[1]), how.get("normal")) if edges else
                                  (was[0] - shift[0], was[1] - shift[1]))
+                    if not edges:
+                        far.append(how["ncc"][1] if math.hypot(*shift) > PANEL_MAX * FRAME else None)
             move = [0.0, 0.0]
             if found and edges:
                 fit = _combine(found)
                 if fit is not None and math.hypot(*fit) >= PANEL_LEAST:
                     move = [round(float(v), 2) for v in fit]
             elif found:
+                beyond = [v for v in far if v is not None]
+                if beyond and not (len(found) >= PANEL_FAR_MATCHES and min(beyond) >= PANEL_FAR_NCC
+                                   and (np.hypot(*(np.array(found) - np.median(found, axis=0)).T) <= PANEL_AGREE).all()):
+                    # (a match past PANEL_MAX is believed only when every match agrees with it: otherwise the near
+                    # ones decide, as before)
+                    found = [xy for xy, v in zip(found, far) if v is None]
+            if found and not edges:
                 f = np.array(found)
                 mid = np.median(f, axis=0)
                 ok = f[np.hypot(*(f - mid).T) <= PANEL_AGREE]
@@ -3986,6 +3995,15 @@ def colour_picture(u, p, colour, planes):
         g = scale["gamma"]
         x = calibration.decode(np.moveaxis(rgb.astype(np.float32) / 255, -1, 0), g).astype(np.float32)
         filled, every = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]))
+        # never under what the band read: a clipped band is at least as bright as its clipped value, and the ratio
+        # the fill reads is measured where the band did not clip, its dimmer part, so where most of a frame clipped
+        # it came out under the band's own reading and turned the tile green, blue or flat yellow with ragged edges
+        # along each band's clipping (289SA SHEMMAP001, a VIMS ride-along map: RED saturated over 17-90% of every
+        # frame, GRN up to 66%, BL1 up to 67%). Floored, a band meets its own clipping edge without a step.
+        # Not for a band clipped over most of the picture (calibration.mostly_saturated), whose fill keeps the others'
+        # colour, as the camera window's fill does.
+        lit = calibration.lit_of(x)
+        filled = [f if calibration.mostly_saturated(m, lit) else np.maximum(f, c) for f, c, m in zip(filled, x, clipped)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
@@ -4896,6 +4914,7 @@ OVER_LEAST = 0.05    # ... and so is one saturated this much of the frame, where
 OVER_STEP = 3.0      # (unfit) a frame saturated OVER_LEAST or more, and this many times as much as its filter's frames
 #                      before and after it, is a long exposure among short ones
 SATURATED_ALL = 0.95   # ... and one saturated this much of carries no picture (left out of mosaics, never shown in movies)
+BLOWN = 0.5            # (unfit) a filter more than this share of whose frames in a movie are over-exposed or saturated all over
 SATURATED_LIT = 0.9    # ... and in a mosaic, one saturated over this much of its lit part (and OVER_LEAST of the frame)
 LIT_LEVEL = 16       # levels: the tile's pixels at least this bright are its lit part (its report's "lit", _tile_made)
 
@@ -5000,6 +5019,17 @@ def unfit(frames, n, tile_of):
     if s >= SATURATED_ALL:
         return True   # (saturated all over: nothing of the picture, whatever is round it)
     f = frames[n][2]
+    # a filter the pass over-exposed through: when most of its frames are over-exposed, saturated all over, blank or lit nowhere
+    # (one saturated all over calibrates to one flat level), its
+    # frames saturated OVER_LEAST or more are held too, as the rest of them are, so its least saturated one is not
+    # left to play alone, half white (SPOLEDYN001 2009: clear frames 92-100% saturated round W1609834686_1, 39%,
+    # which played twice, held in the 65% one's place, late in the dark south pole movie). A run in a pass whose
+    # filter is mostly well exposed still plays (a bright limb coming in)
+    mine = [j for j in range(len(frames)) if frames[j][2] == f and "offset" in tile_of(j)]
+    blown = sum(1 for j in mine if over_exposed(tile_of(j)) or tile_of(j).get("saturated", 0.0) >= SATURATED_ALL
+                or patchy(tile_of(j)) or blank_frame(frames, j, tile_of))
+    if len(mine) >= 3 and blown > BLOWN * len(mine):
+        return True
     # its filter's nearest frames either side that show a picture: one saturated all over is held itself, so it is no
     # run of over-exposed frames to play with (SPOLEDYN001 2009: a clear frame 92% saturated between two 99-100%
     # saturated ones played as a white slab; its filter's frames shown round it are dark)

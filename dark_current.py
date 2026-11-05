@@ -504,6 +504,11 @@ dark model over-predicts some of those in the pictures: WAC hot pixels whose lis
 stronger than the pixel has since become, and the WAC parameter maps' own hot spots (the NAC's are smoothed out,
 SMOOTH_MAP_CAMERAS). They land below the sky round them, black pinholes (dozens to hundreds across a 2010 or 2016
 WAC sky), and are repaired too where they stand REPAIR_SIGMAS below.
+lost: the pixels with no data (the raw image's zeros, as the fill step takes them, at the frame's own size), left out of the 3x3 median a pixel is
+measured against and put back to: a summed frame that lost the ends of every other line in downlink (Rhea
+ISS_162RH_REGMAP001's 512 px colour frames) had its hot pixels there put back to the lost pixels' level, black, and the
+fill step, which fills only the lost pixels, left them as black dots across the mosaic. Where every pixel round one is lost the plain median
+is kept.
 """
 REPAIR_SIGMAS = 3.0
 DARK_SPOT_DN = 2.0     # a pixel whose dark is this many DN above the 3x3 median of the dark round it is a spot
@@ -518,7 +523,7 @@ def dark_spots(info):
     return (d - cv2.medianBlur(np.ascontiguousarray(d, np.float32), 3)) > DARK_SPOT_DN
 
 
-def repair_hot(image, info, spots=None):
+def repair_hot(image, info, spots=None, lost=None):
     lines = int(ff._number(_value(info, "LINES", "1024"), 1024) or 1024)
     h, w = image.shape[:2]
     if image.ndim != 2 or h % lines or w % lines or h != w:
@@ -539,9 +544,33 @@ def repair_hot(image, info, spots=None):
     k = h // lines
     native = np.ascontiguousarray(image[::k, ::k], np.float32)
     level = cv2.medianBlur(native, 3)
-    # only where it stands out from the frame's grain (the spread of the frame minus its 3x3 median, from every 4th
-    # pixel), so a listed pixel that is just noise in this frame is left as it is
-    rest = (native - level)[::4, ::4]
+    gone = lost is not None and lost.shape == native.shape and lost.any()
+    if gone:
+        # the median of the real pixels round a pixel, leaving out the lost ones (NaN where all are), worked out only
+        # for the listed pixels and the grain's sample
+        pad = np.pad(np.where(lost, np.nan, native), 1, constant_values=np.nan)
+
+        def round_real(ys, xs):
+            win = np.stack([pad[ys + dy, xs + dx] for dy in range(3) for dx in range(3) if (dy, dx) != (1, 1)], axis=1)
+            out = np.full(len(ys), np.nan, np.float32)
+            some = np.isfinite(win).any(axis=1)
+            if some.any():
+                out[some] = np.nanmedian(win[some], axis=1)
+            return out
+
+        ys, xs = np.nonzero((sign != 0) | below)
+        got = round_real(ys, xs)
+        keep = np.isfinite(got)
+        level[ys[keep], xs[keep]] = got[keep]
+        sign = np.where(lost, 0, sign).astype(np.int8)
+        below = below & ~lost
+        gy, gx = np.mgrid[0:lines:4, 0:lines:4]
+        gy, gx = gy[~lost[::4, ::4]], gx[~lost[::4, ::4]]
+        rest = native[gy, gx] - round_real(gy, gx)
+    else:
+        # only where it stands out from the frame's grain (the spread of the frame minus its 3x3 median, from every 4th
+        # pixel), so a listed pixel that is just noise in this frame is left as it is
+        rest = (native - level)[::4, ::4]
     rest = rest[np.isfinite(rest)]
     grain = 1.4826 * float(np.median(np.abs(rest))) if rest.size else 0.0
     fix = (((sign > 0) & (native > level + REPAIR_SIGMAS * grain))

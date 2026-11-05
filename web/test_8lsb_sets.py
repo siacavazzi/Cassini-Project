@@ -1,5 +1,6 @@
 """C9: a color set with a frame that can't be calibrated (8LSB: only the low 8 bits were sent) keeps its other two
-channels calibrated as a two-filter picture, instead of every channel falling back to its own stretch.
+channels calibrated as a two-filter picture, instead of every channel falling back to its own stretch; with one or none
+calibrated, the set is drawn grey from one filter.
 Synthetic frames through color_image.load_aligned. Run: python web/test_8lsb_sets.py"""
 import sys; import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import numpy as np
@@ -55,6 +56,7 @@ def run(conversions):
     cal.calibrate = lambda png, info, image=None: None if info["DATA_CONVERSION_TYPE"] == "8LSB" else \
         next(v[2] for v in made.values() if v[0].info is info)
     cal.ds.imread = lambda path, flags=None: made[path][1]
+    cal.ds.lut8 = lambda: True
     return color_image.load_aligned(list(made))
 
 
@@ -69,7 +71,14 @@ for look in ("balanced", "classic"):
         r, g = (float(np.mean(im[disk][..., 0] if im.ndim == 3 else im[disk])) for im in imgs)
         print(look, "body red", round(r, 1), "green", round(g, 1))
         assert r > g * 1.1
-        # one good channel left is not a color picture: the old fallback (each frame its own stretch)
+        # one good channel left is not a color picture: the set is drawn grey from it, calibrated, instead of each
+        # frame stretched on its own (the Moon's IR1/UV3/UV1 set of 1999-08-18: a blue sky, its disks side by side)
         imgs, valid, lbl, report = run(["TABLE", "8LSB", "8LSB"])
-        assert len(imgs) == 3 and not report["calibrated"] and "dropped" not in report
+        assert len(imgs) == 1 and report["calibrated"] and report["dropped"] == ["N1_1", "N2_1"], report
+        assert lbl.band == "RED"
+        imgs, valid, lbl, report = run(["8LSB", "TABLE", "8LSB"])
+        assert len(imgs) == 1 and report["calibrated"] and report["dropped"] == ["N0_1", "N2_1"] and lbl.band == "GRN"
+        # none calibrates: grey from the first (longest wavelength) frame, on its own stretch
+        imgs, valid, lbl, report = run(["8LSB", "8LSB", "8LSB"])
+        assert len(imgs) == 1 and not report["calibrated"] and report["dropped"] == ["N1_1", "N2_1"] and lbl.band == "RED"
 print("ok")
