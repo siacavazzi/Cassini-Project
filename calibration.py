@@ -537,7 +537,9 @@ def calibrate(png, info, image=None, smooth=True):
         if flat is not None:
             per_second *= flat
     if step("hotpix"):
-        dc.repair_hot(per_second, info, spots)
+        # (the pixels lost in downlink, raw 0 as the fill step takes them, left out of the repair's medians)
+        raw = np.asarray(png if np.asarray(png).ndim == 2 else pixels)
+        dc.repair_hot(per_second, info, spots, raw == 0 if raw.ndim == 2 else None)
     if smooth:
         per_second = deblock(per_second, pixels, info)
         if sky is not None and step("skysmooth"):
