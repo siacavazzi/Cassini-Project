@@ -2235,14 +2235,20 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
         # noise, so the sky came out a gray, scan-lined veil around the body once the tiles were put together
+        # The bands measured are those with dark sky, so long as every band drawn has it: a band the pass takes but
+        # does not draw, whose sky is lit (the 2006 ring movie 032RI's IR2, under 1% dark sky beside the rings while
+        # RED, GRN and BL1 have 80%), keeps its own black and no longer takes the sky step from the bands drawn,
+        # which left their sky a brown veil
         masks = {f: [i < 0.05 * np.percentile(i, 99.9) for i in iofs] for f, iofs in by.items()}
-        if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
-            levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
+        dark = [f for f, ms in masks.items() if sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms)]
+        drawn_in = [f for f in (drawn or by) if f in by] or list(by)
+        if dark and all(f in dark for f in drawn_in):
+            levels, margin = calibration.sky_levels([by[f] for f in dark], [masks[f] for f in dark])
             # How far each band's black sits over its sky is measured on the sky's fine structure only: the sky
             # less its own mean over SKY_SMOOTH pixels (its row and column stray-light stripes, compression
             # blocks and noise), on the darker half of the sky. Smooth faint light (Saturn's Shadow's haze and E
             # ring, a haze limb, the body's glow) is not in it, so it stays above black
-            fine = {f: _sky_fine(iofs, masks[f]) for f, iofs in by.items()}
+            fine = {f: _sky_fine(by[f], masks[f]) for f in dark}
             # with a noise floor (the noisiest band's SKY_FLOOR_PCT percentile above the median): the pixel-difference
             # noise is about 0 on frames stored in 8 bits
             margin = max(margin, calibration.noise_floor(list(fine.values()), SKY_FLOOR_PCT))
@@ -2256,7 +2262,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     top = float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
-            blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+            blacks = {**blacks, **{f: max(blacks[f], level + tops[f]) for f, level in zip(dark, levels)}}
     if calibration.look() == "balanced" and white > 0:
         # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
         # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
