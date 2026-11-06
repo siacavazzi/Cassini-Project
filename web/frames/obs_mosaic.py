@@ -3135,8 +3135,8 @@ def _pointing_root(u, n, roots):
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
-SURFACE_DIR = "surface6"
-SURFACE_TAG = "-s6"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+SURFACE_DIR = "surface7"
+SURFACE_TAG = "-s7"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
 # a tile registered to another filter's (C8, _register) is redrawn from the time of the tile it was registered to,
 # not its own: the registration's shift already took out the surface's motion between the two frames (the body turning
 # and Cassini moving, ~17 px a filter on Rhea's mapping mosaics), so redrawn from its own time it moved that far twice.
@@ -3157,6 +3157,12 @@ SURFACE_CLOUDED = frozenset({"SATURN", "JUPITER", "TITAN", "URANUS", "NEPTUNE", 
 # it fades to none at the limb or the terminator) stays as taken: on Rhea's mapping mosaic a limb panel shifted
 # ~40 px squeezed its limb out of the picture and streaked its night side (round 5 of the panel probe)
 SURFACE_STRETCH = 0.5
+# a tile more than this share of whose ground would move further than SURFACE_REACH stays as taken too: its redrawn
+# picture keeps only what lands within SURFACE_REACH of its box, so the rest was cut off. Over a close flyby the ground
+# moves far in the pass's time (Rhea ISS_162RH_REGMAP001, 2012-03-10: up to 1,300 px from the middle frame, a tile is
+# 1,100), and its first pointings' tiles kept 7% of their picture: a hole on the mosaic's right edge, with a thin
+# wedge of ground floating beside it (spot check 7)
+SURFACE_LOST = 0.05
 # the tiles found to stay as taken (SURFACE_STRETCH, or across New Year), kept in SURFACE_DIR beside the redrawn ones:
 # a later layout skips them instead of working each out again (the year's kernels, its picture, its sky field) for
 # every mosaic, tile map and look-ahead of the pass
@@ -3300,6 +3306,11 @@ def surface_pictures(u, cache, p, tiles):
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
                 found.add(t["n"])
                 continue
+            lost = surface_lost(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r])
+            if lost > SURFACE_LOST and (root == t["n"] or root not in out):
+                print(f"surface: tile {t['n']} kept as taken ({lost:.0%} of its ground moves past SURFACE_REACH)", flush=True)
+                found.add(t["n"])
+                continue
             picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
             # (the box first, so a picture never sits there without it)
             with open(path + SURFACE_BOX, "w") as fh:
@@ -3318,6 +3329,15 @@ def surface_pictures(u, cache, p, tiles):
             except OSError as e:
                 print(f"cannot keep {kept} in the cache ({e})", flush=True)
     return out
+
+
+def surface_lost(dx, dy, weight):
+    """The share of a tile's ground (sky_field's grid over its box, on the body) that its redrawing moves further than
+    SURFACE_REACH: surface_redrawn keeps no more than that round the box, so that much of its picture would be cut."""
+    on = weight > 0.5
+    if not on.any():
+        return 0.0
+    return float((np.hypot(dx, dy)[on] > SURFACE_REACH).mean())
 
 
 def _redraw_from(t, by_id=None):
