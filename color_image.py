@@ -980,10 +980,13 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     # Rhea or Dione). What the camera saturated there was the nearer body's, not the far one's: no longer saturated.
     # ... and where some channel has picture of the far body and another moved onto it has none (the far body cut by
     # the frame's edge, a filter moved 70 px onto it: N1694916618_1's top), whose edge fill drew a band of one color
+    # (on the far body: a nearer one cut so is drawn grey there, below, as the fill would give it the far body's color)
     far = at[ref][order[0]]
-    on_far = _disk(shape, far[1] + fx, far[2] + fy, far[3] * (1 + PER_BODY_HAZE) + PER_BODY_GROW) > 0
+    on_far = (_disk(shape, far[1] + fx, far[2] + fy, far[3] * (1 + PER_BODY_HAZE) + PER_BODY_GROW) > 0) & ~nearer_disks
     seen_by = np.logical_or.reduce([np.asarray(m, bool) for m in omasks])
-    edges = [seen_by & ~np.asarray(m, bool) & on_far for m in omasks]
+    unseen = [seen_by & ~np.asarray(m, bool) for m in omasks]
+    edges = [u_ & on_far for u_ in unseen]
+    cut_near = np.logical_or.reduce(unseen) & nearer_disks
     if any(g.any() for g in ghosts) or any(e.any() for e in edges):
         miss = [(g > 0) | e for g, e in zip(ghosts, edges)]
         x = [np.asarray(c, np.float32) for c in out]
@@ -999,7 +1002,7 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
                 ofull[j] = np.where(miss[j], 0, ofull[j]).astype(ofull[j].dtype)
             omasks[j] = np.asarray(omasks[j], bool) | edges[j]
         report["filled"] = round(float(np.mean(np.logical_or.reduce(miss))), 4)
-    ghost = np.zeros(shape, np.float32)
+    ghost = cut_near.astype(np.float32)
     # a nearer body the camera saturated in some filter (over PER_BODY_CLIPPED of its disk) has no color there to
     # draw: the saturated fill would take the color round it, the far body's (an orange Dione over Titan,
     # N1694954493_1), so it is drawn grey from the reference, as its whole disk
@@ -1039,7 +1042,8 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
                 continue
             b = at[ref][name]
             inside = np.maximum(inside, _disk(shape, b[1] + fx, b[2] + fy, b[3] - PER_BODY_FEATHER / 2))
-        region = region * (1 - inside)
+        # (but for what a filter cut off it at the frame's edge)
+        region = np.maximum(region * (1 - inside), cut_near.astype(np.float32))
         if not region.any():
             region = None
     report["_full"] = ofull
