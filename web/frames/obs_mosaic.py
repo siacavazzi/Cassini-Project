@@ -2081,7 +2081,7 @@ def _sky_fine(iofs, masks):
                            for i, l, m in zip(iofs, local, masks)])
 
 
-def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
+def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2091,11 +2091,15 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
     body's disk on the frame (x, y, radius: _disk_mask's, full resolution pixels) when it is small: a frame lit all
     over by stray light round a moon a few pixels across (Pallene, Hati, Kiviuq) has no dark sky to find, so its sky
     is everything off the disk, and its own black takes the veil away (it went from white to black over the pass
-    as the stray light faded). seen: a dict the raised black is put in."""
+    as the stray light faded). seen: a dict the raised black is put in. on_body: the frame's middle is on the body's
+    disk (on_disk), so a frame with no dark sky is the body, never a glow."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     top = scale.get("sky_tops", {}).get(f)
-    if not own_sky or (top is None and disk is None):
-        return out
+    if not own_sky or (top is None and disk is None and on_body):
+        return out   # (a frame of the body, in a pass with no sky height of its own: the pass's black, as before #279)
+    # (a pass with no sky height of its own and no small body: only a frame lit all over by a glow gets a black of its
+    # own, every other frame keeps the pass's)
+    glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
 
     def black_of(iof):
@@ -2103,15 +2107,27 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         q = iof[::4, ::4].astype(np.float32)
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         m = _dark_sky(q)
-        veiled = False
+        veiled = glow = False
         if disk is not None and disk[2] < SPECK_PX:
             # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
             # sky found under 5% of its brightest is still the veil's lower part, whose line bands and other filters'
             # levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over its set)
             m = np.zeros(q.shape, bool)
-        if m.mean() <= SKY_MIN:
-            if disk is None:
+        # (a glow's flat floor is what _dark_sky takes for a sky with an offset in it; whether a frame of a pass with no
+        # sky height of its own has dark sky is measured from 0, as before _dark_sky)
+        unlit = (q < top_of_sky).mean() <= SKY_MIN
+        if glow_only and not unlit:
+            return None
+        if (glow_only or m.mean() <= SKY_MIN) and unlit and disk is None and not on_body:
+            # no dark sky under 5% of the top: a frame lit all over by a glow (the forward-scattered light round a
+            # backlit plume, ISS_155EN_PLMHPHR001_PIE's jet frames: their sky at a sixth of the jets' root, every one
+            # of them a flat gray square in the movie) has a flat floor, its sky; a frame a lit body fills (its darkest
+            # quarter terrain) does not, and keeps the pass's black
+            lo, floor, hi = (float(v) for v in np.percentile(q, [1, GLOW_FLOOR_PCT, 99.9]))
+            if not (hi > floor and floor - lo <= GLOW_FLAT * (hi - floor)):
                 return None
+            m, top_of_sky, glow = q <= floor, floor, True
+        elif m.mean() <= SKY_MIN:
             # no dark sky: a small body's frame lit all over (stray light), its sky everything off the disk
             m = ~_disk_mask(q.shape, iof.shape, *disk)
             top_of_sky, veiled = float(np.percentile(q[m], 99.9)) if m.any() else 0.0, True
@@ -2131,6 +2147,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
             if m.mean() <= SKY_MIN:
                 return None
         (level,), margin = calibration.sky_levels([[q]], [[m]])
+        if glow:
+            # (the glow's floor is its far side, a gentle slope up to the jets' halo: black over the frame's middle,
+            # GLOW_BLACK_PCT of it smoothed, so the frame's edge does not show as a square; the jets and the halo
+            # close round them stay over it)
+            level = float(np.percentile(cv2.blur(q, (SKY_SMOOTH, SKY_SMOOTH)), GLOW_BLACK_PCT))
         if veiled:
             # (the veil is all stray light, smooth, brighter on one side: black over the top of it, SKY_SMOOTH pixels
             # round, so none of it shows; stars and the moon are sharp and stay over it)
@@ -2149,9 +2170,9 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         if raised <= black:
             return None
         # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
-        # (a veiled frame's lit pixels are its veil: the sky, which is what goes black)
+        # (a veiled or glowing frame's lit pixels are its veil or glow: the sky, which is what goes black)
         lit = q[q >= top_of_sky]
-        if not veiled and lit.size and raised >= float(np.median(lit)):
+        if not (veiled or glow) and lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
             seen["black"] = raised
@@ -2189,6 +2210,9 @@ def _disk_mask(qshape, shape, x, y, radius):
 
 SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
+GLOW_FLOOR_PCT = 25  # tile_scale: a movie frame with no dark sky, lit all over by a glow: its sky is under this percentile
+GLOW_BLACK_PCT = 50  # ... and its black over this percentile of the frame, smoothed
+GLOW_FLAT = 0.1      # ... when that floor is flat: from the 1st percentile to it under this share of the way on to the top
 SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is small (small_body): a speck, not
                    # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame
 
@@ -2209,6 +2233,15 @@ def small_body(u, frame):
         return None   # (a target with no disk of its own, rings or sky, is not one)
     radius = km / (z * IFOV[u["key"][2]])
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
+
+
+def on_disk(u, frame):
+    """True when frame's middle is on pass u's body's disk (SPICE): the frame shows the body, so a frame of it with no
+    dark sky is not lit by a glow (tile_scale). Titan ISS_021TI's full-frame movie frames are its haze all over, a
+    flat floor like the 155EN jets' glow, and 66 to 100% of each went black."""
+    *_, x, y, z = frame
+    km = RADIUS.get(u["key"][0])
+    return bool(z and km and math.hypot(x, y) < km / (z * IFOV[u["key"][2]]))
 
 
 SKY_OFFSET_MOST = 0.25   # _dark_sky: a frame's floor up to this share of its 99.9th percentile is an offset in its sky
@@ -2453,7 +2486,8 @@ def _tile_made(u, n, cache, scale, base):
     seen = {}
     disk = small_body(u, u["frames"][n])
     try:
-        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk),
+        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
+                                                                                       on_disk(u, u["frames"][n])),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                     around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
     except Exception as e:
