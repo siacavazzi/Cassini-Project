@@ -2,10 +2,10 @@
 Every picture is a file the repo's pipeline wrote (worktree ~/dev/wt-pipeposter at origin/main):
   raw      frames/<id>_raw.png    archive codes, label_handler export (stages.py)
   I/F      frames/<id>_iof.npy    color_image.science_frame (calibration.calibrate); shown linear, lost px orange
-  centred  steps/<id>__all_on.png color_image.processed_frame (fill, calibrate, SPICE north-up), steps toggled with
+  centered steps/<id>__all_on.png color_image.processed_frame (fill, calibrate, SPICE north-up), steps toggled with
                                   calibration.stepping for the ablation row
   tile     <tiles dir>/<n>.png    obs_mosaic.tile (scaled to the pass, registered)
-  colour   steps/<ir+grn+uv>__all_on.png  processed_frame of the colour set
+  color    steps/<ir+grn+uv>__all_on.png  processed_frame of the color set
   mosaic   mosaic_full.png, filter_<f>.png  obs_mosaic.so_far / filter_mosaic (mosaic_stage.py)
 Layout only (PIL): crops to alpha, resizes, type."""
 import json, sys, numpy as np
@@ -56,7 +56,7 @@ zs = [f[7] for f in frames if f[7]]
 d.text((M, M + 170), CFG['title'], font=F_TITLE, fill=FG, anchor='ls')
 note(W - M, M + 20, [f"{tmap['observation']}  ·  PASS {tmap['pass']}  ·  ISS NAC", CFG['when'],
                      f'RANGE {zs[0]:,.0f} → {zs[-1]:,.0f} km'.replace(',', ' ')], anchor='ra', font=F_M, fill=DIM)
-note(W - M, M + 150, ['RAW  →  I/F  →  CENTRED  →  TILE  →  COLOUR  →  MOSAIC'], anchor='ra', font=F_M, fill=ACC)
+note(W - M, M + 150, ['RAW  →  I/F  →  CENTERED  →  TILE  →  COLOR  →  MOSAIC'], anchor='ra', font=F_M, fill=ACC)
 d.line((M, 420, W - M, 420), fill=DIM2, width=2)
 
 # ---------- 06 mosaic hero (native pixels, 1:1)
@@ -65,7 +65,7 @@ mos = Image.open(O + 'mosaic_full.png').convert('RGBA'); mw, mh = mos.size
 bb = mos.getchannel('A').getbbox()
 rep = json.load(open(O + 'mosaic_report.json'))
 tag(M, TOP - 40, '06', 'MOSAIC')
-note(M + 420, TOP - 70, ['obs_mosaic.so_far', f"{mw} × {mh} px  ·  {rep['mosaic']} colour tiles, {NP} pointings"], font=F_MS)
+note(M + 420, TOP - 70, ['obs_mosaic.so_far', f"{mw} × {mh} px  ·  {rep['mosaic']} color tiles, {NP} pointings"], font=F_MS)
 hx, hy = M - bb[0], TOP + 10 - bb[1]
 img.paste(mos, (hx, hy), mos)
 poly = [(hx + u * mw, hy + v * mh) for u, v in pt['poly']]
@@ -81,7 +81,7 @@ HERO_R = hx + bb[2]
 # ---------- right column: the drill-down into pointing POINT
 RX = HERO_R + 110; RW = W - M - RX
 d.text((W - M, TOP - 40), f'POINTING {POINT + 1:02d}', font=F_LBL, fill=ACC, anchor='rs')
-y = TOP; tag(RX, y - 40, '05', 'COLOUR')
+y = TOP; tag(RX, y - 40, '05', 'COLOR')
 col = alpha_crop(Image.open(O + f'steps/{IR}+{GR}+{UV}__all_on.png'))
 cbox, _ = put(col, RX, y + 10, 500, 500)
 note(cbox[2] + 40, y + 20, ['processed_frame', '', f'R  {FR}  {NM.get(FR, "")} nm', f'G  {FG_}  {NM.get(FG_, "")} nm', f'B  {FB}  {NM.get(FB, "")} nm'], font=F_MS)
@@ -98,7 +98,7 @@ for f, i in ((FR, IR), (FG_, GR), (FB, UV)):
     x += tw + 36
 y = y + 10 + tw + GAP + 45
 tag(RX, y - 40, '03', ''); tag(RX + tw + 36, y - 40, '02', ''); tag(RX + 2 * (tw + 36), y - 40, '01', '')
-for k, L in enumerate(('CENTRED', 'I/F', 'RAW')): d.text((RX + k * (tw + 36) + 92, y - 40), L, font=F_LBL, fill=FG, anchor='ls')
+for k, L in enumerate(('CENTERED', 'I/F', 'RAW')): d.text((RX + k * (tw + 36) + 92, y - 40), L, font=F_LBL, fill=FG, anchor='ls')
 c3, _ = put(alpha_crop(Image.open(O + f'steps/{GR}__all_on.png')), RX, y + 10, tw, tw)
 iof = np.load(O + f'frames/{GR}_iof.npy'); lost = np.isnan(iof); hi = float(np.nanpercentile(iof, 99.9))
 g = (np.clip(np.nan_to_num(iof) / hi, 0, 1) * 255).astype(np.uint8); rgb = np.dstack([g] * 3); rgb[lost] = ACC
@@ -126,10 +126,10 @@ note(M + 560, y - 18, ['obs_mosaic.filter_mosaic  →  colour_picture'], font=F_
 y += 60; n = 4; pw = 720; gap = (W - 2 * M - n * pw) // (n - 1); x = M
 cnt = rep.get('count') or {}
 lay = json.load(open(O + 'layout.json'))['count']
-panels = [(f, f'filter_{f}.png') for f in tmap['filters']] + [('COLOUR', 'mosaic_full.png')]
+panels = [(f, f'filter_{f}.png') for f in tmap['filters']] + [('COLOR', 'mosaic_full.png')]
 for k, (name, path) in enumerate(panels):
     pb, _ = put(Image.open(O + path).crop(bb), x, y, pw, None)
-    num = rep['mosaic'] if name == 'COLOUR' else lay.get(name)
+    num = rep['mosaic'] if name == 'COLOR' else lay.get(name)
     d.text((x, pb[3] + 50), name, font=F_LBL, fill=FG, anchor='ls'); d.text((x + pw, pb[3] + 50), str(num), font=F_LBL, fill=DIM, anchor='rs')
     if k < n - 1: d.text((x + pw + gap / 2, (pb[1] + pb[3]) / 2), '=' if k == n - 2 else '+', font=F_NUM, fill=ACC, anchor='mm')
     x += pw + gap

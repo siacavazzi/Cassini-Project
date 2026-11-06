@@ -13,10 +13,10 @@ to alpha, resizes and sets type.
 |---|---|---|
 | 01 raw, frame wall | `label_handler.label(...).export()` read by `data_source.imread` (archive codes) | `stages.py` |
 | 02 I/F | `color_image.science_frame` (`calibration.calibrate`); lost pixels (NaN) drawn orange | `stages.py` |
-| 03 centred | `color_image.processed_frame` (fill, calibrate, SPICE north-up) | `steps.py`, `centred.py` |
+| 03 centered | `color_image.processed_frame` (fill, calibrate, SPICE north-up) | `steps.py`, `centered.py` |
 | ± one step off | the same call inside `calibration.stepping([step])`, with mean change against every step on | `steps.py` |
 | 04 tiles | `obs_mosaic.tile` (pass scale, registration) | `tiles.py` |
-| 05 colour | `color_image.processed_frame([IR3, GRN, UV3])` | `steps.py` |
+| 05 color | `color_image.processed_frame([IR3, GRN, UV3])` | `steps.py` |
 | per-filter mosaics | `obs_mosaic.filter_mosaic` for IR3, GRN, UV3 and the clear base `L` | `mosaic_stage.py` |
 | 06 mosaic | `obs_mosaic.so_far(..., out=CANVAS)`, 1604 × 2048, pasted 1:1 | `mosaic_stage.py` |
 
@@ -36,7 +36,7 @@ $PY -I scripts/mosaic_stage.py N1500061959_1 $P/out
 $PY -I scripts/stages.py $P/out/frames <every id in out/unit.json>
 $PY -I scripts/steps.py $P/out/steps N1500061303_1
 $PY -I scripts/steps.py $P/out/steps N1500061320_1 N1500061303_1 N1500061286_1
-$PY -I scripts/centred.py $P/out/steps N1500061253_1 N1500061286_1 N1500061320_1
+$PY -I scripts/centered.py $P/out/steps N1500061253_1 N1500061286_1 N1500061320_1
 $PY -I scripts/poster.py; $PY -I scripts/sheet.py
 ```
 
@@ -45,14 +45,14 @@ These figures were made on origin/main 5609624.
 ## Whole-disk version: Rhea, 26 November 2005
 
 Sam asked for a complete mosaic. `scripts/fullscan.py` reads only the geometry cache and Image_index. For each pass it
-compares the frame footprints (1024 px squares at the SPICE centring shift) against the body's disk, and keeps passes
+compares the frame footprints (1024 px squares at the SPICE centering shift) against the body's disk, and keeps passes
 that cover at least 97% of the disk with a disk wider than one frame. That gives 122 passes (`full_mosaics.json`). The
 first one rendered is `ISS_018RH_REGMAP001_PRIME`: 83 frames, 21 pointings, IR3/GRN/UV3 plus clear, with the whole disk
 and the rings behind it. `scripts/poster_full.py rhea/cfg.json` lays out the poster from the same stage scripts.
 
 ![rhea](rhea/poster_preview_1200.jpg)
 
-Known pipeline flaw, visible on the poster: a blurred grey strip at the top limb, in pointing 10.
+Known pipeline flaw, visible on the poster: a blurred gray strip at the top limb, in pointing 10.
 
 ## Whole-disk version: Dione, 7 April 2010
 
@@ -60,6 +60,6 @@ Known pipeline flaw, visible on the poster: a blurred grey strip at the top limb
 pointing 11, over the wispy terrain. Other whole-disk passes that were rendered and left off a poster:
 - Tethys 214TE_TETHYS001: the limb is cut flat on two sides.
 - Dione 158DI: a clear-only mosaic movie.
-- Saturn 00ASA_SATSYSTEM001: a smeared band over the top of the globe and colour fringes on the rings.
+- Saturn 00ASA_SATSYSTEM001: a smeared band over the top of the globe and color fringes on the rings.
 
 ![dione](dione/poster_preview_1200.jpg)
