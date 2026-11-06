@@ -1,0 +1,86 @@
+<!-- Surface sites: places on a body's surface marked in the 3D view with the viewer's own marker dot and label, like
+     the landed Huygens probe (huygens-landing.html), but for places with no spacecraft of their own to draw: a list of
+     { key, body, name, note, lat, lon_e, from, until, color, cls, source }. Each site is one more name in the viewer's
+     marker list (build.py patches objPos, shown, the label and the dot's color to ask window.studySites), so it is
+     placed, faded and kept from overlapping other labels the same way the bodies are.
+
+     A site shows on the same terms as the landed probe: while its body is on stage, the camera is within a dozen of
+     the body's radii, and the site is on the side facing the camera; from/until (UTC) limit it in mission time, and a
+     future site leaves both out. It is drawn quietly: a dim dot, and a dim label with a second line saying what it is.
+     Clicking the label turns the view to its body.
+
+     Sites:
+       Dragonfly, NASA's rotorcraft lander for Titan (launch 2028, arrival 2034). Its first landing site is in the
+       Shangri-La dune fields just south of Selk crater, at 3.7°N, 161.8°E (198.2°W): R. D. Lorenz et al., "Selection
+       and Characteristics of the Dragonfly Landing Site near Selk Crater, Titan", The Planetary Science Journal 2:24
+       (2021), doi:10.3847/PSJ/abd08f. Longitudes are planetocentric east, the viewer's convention (Huygens'
+       10.25°W is -10.25°E). -->
+<style>
+/* dim, but with a dark edge so it still reads over Titan's bright haze */
+.lbl.site { color: #a9d0de; text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.6); font-size: 10px; }
+.lbl.site small { color: rgba(185,215,226,.8); font-size: 9px; text-shadow: 0 0 2px rgba(0,0,0,.9); }
+.lbl.site:not(.focus) { opacity: .78; }
+body.idle .lbl.site:not(.focus) { opacity: .3; }
+.lbl.site:hover { color: #fff; opacity: 1; }
+</style>
+<script>
+(() => {
+  const SITES = [
+    { key: "SITE_DRAGONFLY", body: "TITAN", name: "Dragonfly", note: "Future landing site · 2034",
+      lat: 3.7, lon_e: 161.8, color: [0.4, 0.55, 0.62],
+      source: "Lorenz et al. 2021, PSJ 2:24, doi:10.3847/PSJ/abd08f" },
+  ];
+  const byKey = {}; SITES.forEach(s => { byKey[s.key] = s; });
+  const NEAR = 12, R2D = Math.PI / 180;
+  const t = s => s ? (typeof utcToEt === "function" ? utcToEt(s) : null) : null;
+  // the site on the body's globe as the viewer draws it (the ellipsoid of its radii), in the body frame (km)
+  function bodyFixed(s) {
+    if (s.bf) return s.bf;
+    const b = bodies[s.body], lat = s.lat * R2D, lon = s.lon_e * R2D, r = b.radii;
+    const d = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+    const R = 1 / Math.hypot(d[0] / r[0], d[1] / r[1], d[2] / r[2]);
+    return s.bf = d.map(x => x * R);
+  }
+  // (this script runs before three.js loads: its vectors are made on first use)
+  const J = [0, 0, 0]; let V = null, C = null;
+  window.studySites = {
+    list: SITES,
+    is: n => !!byKey[n],
+    color: n => byKey[n].color,
+    label: n => byKey[n].name,
+    obj: n => byKey[n].obj || (byKey[n].obj = new THREE.Object3D()),
+    radius: () => 0.001,
+    // every frame, after the bodies: each site's place in the scene, turning with its body (and enlarged with it)
+    place() {
+      for (const s of SITES) {
+        const o = this.obj(s.key), b = bodies[s.body];
+        s.on = !!b && !!pos[s.body] && present(s.body);
+        if (!s.on) continue;
+        const R = iauMatrix(b, state.et), f = bodyFixed(s), k = enlargeOf(s.body);
+        for (let i = 0; i < 3; i++) J[i] = pos[s.body][i] - pos[state.focus][i] + k * (R[0][i] * f[0] + R[1][i] * f[1] + R[2][i] * f[2]);
+        toScene(J, o.position).multiplyScalar(1 / KM);
+      }
+    },
+    // the marker and the label: near the body, on its near side, inside the site's own time span
+    marked(n) {
+      const s = byKey[n];
+      if (!s || !s.on) return false;
+      const a = t(s.from), z = t(s.until);
+      if (a != null && state.et < a || z != null && state.et > z) return false;
+      const mesh = meshes[s.body]; if (!mesh) return false;
+      const c = mesh.group.position, p = s.obj.position;
+      if (!V) { V = new THREE.Vector3(); C = new THREE.Vector3(); }
+      if (camera.position.distanceTo(c) * KM > NEAR * Math.max(...bodies[s.body].radii) * enlargeOf(s.body)) return false;
+      return V.copy(p).sub(c).dot(C.copy(camera.position).sub(p)) > 0;
+    },
+    click(n) { setFocus(byKey[n].body); },
+  };
+  // the HUD's second line under a label (head-quiet.html) is the distance from Cassini; a site's says what it is
+  const prev = window.studyLabel;
+  window.studyLabel = (name, el, cx, cy, pr) => {
+    const s = byKey[name];
+    if (!s) return prev && prev(name, el, cx, cy, pr);
+    if (!el.dataset.hud) { el.dataset.hud = "1"; el.innerHTML = `${s.name}<small></small>`; el.lastChild.textContent = s.note; el.title = `${s.name}: ${s.note}. ${s.source}`; }
+  };
+})();
+</script>
