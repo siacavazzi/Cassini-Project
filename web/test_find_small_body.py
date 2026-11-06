@@ -51,4 +51,11 @@ assert color_image.find_small_body(canvas([(700, 700, 9, 1)]), 650, 700, 9) is N
 im = canvas()
 im[700:704, 400:520, :3] = 255
 assert color_image.find_small_body(im, 700, 700, 30) is None
+# review 11-05: a half-lit moon near SPICE's place keeps SPICE's place (its centroid sits 0.42 radius off its centre)
+assert color_image.find_small_body(canvas([(700, 700, 80, 0.5)]), 700, 700, 80) is None
+# another, bigger moon far from SPICE's place is not the body: nothing within reach, SPICE's place
+assert color_image.find_small_body(canvas([(200, 200, 120, 1)]), 1000, 1100, 60) is None
+# two moons within reach: the one nearer SPICE's place, not the bigger
+f = color_image.find_small_body(canvas([(760, 700, 50, 1), (520, 520, 70, 1)]), 700, 700, 55)
+assert f is not None and abs(f[0] - 760) < 1.5 and abs(f[1] - 700) < 1.5, f
 print("ok")

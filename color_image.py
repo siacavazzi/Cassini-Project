@@ -954,12 +954,16 @@ def sharpen(image):
 FIND_SMOOTH = 2.0      # px: the picture is smoothed this much first, so cosmic rays and stars are not bodies
 FIND_AREA = (0.25, 4.0)  # a body's lit area, as a share of the disk SPICE gives it (its mean radius: an irregular moon)
 FIND_SPAN = 3.0        # its width and height are under this many times its disk's diameter (a ring arc is not a moon)
-FIND_LIT = 0.5         # under this share of its disk lit (a crescent, or cut by the frame's edge), its centroid sits
-                       # off its centre, so it is used only where SPICE is off by more than the disk's radius
+FIND_LIT = 0.85        # under this share of its disk lit (half lit, a crescent, or cut by the frame's edge), its centroid
+                       # sits off its centre (a half-lit disk's by 0.42 of its radius), so it is used only where SPICE is
+                       # off by more than the disk's radius
 FIND_MIN_RADIUS = 12.0  # px: smaller bodies look like a cosmic ray's track or a clump of them (Aegaeon N1829224056_1,
                         # 9 px: the blob found was a track 190 px off), so they are left where SPICE puts them
 FIND_ROUND = 0.3       # a body's blob is this round or more (short over long side, and its share of its box)
 FIND_MAX_RADIUS = 256  # px: bigger bodies fill the frame; SPICE places them, as before
+FIND_REACH = 400       # px: the blob is looked for only this near SPICE's place (Atlas N1870699340_2 was 342 px off), and
+                       # of the blobs there, the nearest to it is taken, not the biggest: another moon or a bright
+                       # ring arc elsewhere in the frame is not the body
 
 
 """
@@ -968,7 +972,7 @@ the centroid of the one compact lit blob the size of its disk, or None where the
 kept. image = RGBA uint8, alpha 0 off the frame; cx, cy = where SPICE puts the body's centre; radius = its disk's radius
 (px, obs_mosaic.RADIUS over the range). Returns (x, y) of the body's centre in the picture, or None.
 """
-def find_small_body(image, cx, cy, radius):
+def find_small_body(image, cx, cy, radius, reach=FIND_REACH):
     if not radius or not FIND_MIN_RADIUS <= radius <= FIND_MAX_RADIUS:
         return None
     rgb = image[..., :3].astype(np.float32)
@@ -993,13 +997,14 @@ def find_small_body(image, cx, cy, radius):
             continue
         if min(w, h) < FIND_ROUND * max(w, h) or area < FIND_ROUND * w * h:
             continue   # a track or a ring arc, not a moon
-        if best is None or area > stats[best][4]:
-            best = k
+        d = float(np.hypot(centroids[k][0] - cx, centroids[k][1] - cy))
+        if d <= reach and (best is None or d < best[0]):
+            best = (d, k)
     if best is None:
         return None
+    away, best = best
     x, y, w, h, area = stats[best]
     fx, fy = (float(v) for v in centroids[best])
-    away = float(np.hypot(fx - cx, fy - cy))
     # a blob that reaches the frame's edge is a body the frame cuts: its centroid is off its centre too
     cut = bool((labels[y:y + h, x:x + w] == best)[~inside[y:y + h, x:x + w]].any())
     if (area < FIND_LIT * disk or cut) and away <= radius:
