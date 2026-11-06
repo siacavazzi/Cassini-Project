@@ -2,7 +2,7 @@
 Auto center on the cruise's bodies: Io and Europa in eclipse, Himalia (2000-2001) and the Moon (1999) had no radius,
 so obs_mosaic.centre_view answered "no disk of a known body" and left the picture where the camera had it. They are in
 RADIUS now (obs_mosaic.CRUISE_RADIUS), and, as the small moons, not in FILL_RADIUS (far off, a disk of a few dozen
-pixels the filled scale would blow out). With a geometry cache that places N1356777593_1 (Io), centre_view centres it.
+pixels the filled scale would blow out). With a geometry cache that places N1356777593_1 (Io), centre_view centers it.
 Run: PYTHONPATH=. python web/test_cruise_centre.py
 """
 import os
@@ -22,5 +22,5 @@ if os.environ.get("CASSINI_GEOMETRY_CACHE") and os.path.exists(os.path.join(om.R
     if reel.geometry(["N1356777593_1"]).get("N1356777593_1"):
         view = om.centre_view("N1356777593_1")
         assert view["centre"], view
-        print("Io centred:", view)
+        print("Io centered:", view)
 print("ok")

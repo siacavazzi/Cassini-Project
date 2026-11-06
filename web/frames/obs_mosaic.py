@@ -176,7 +176,7 @@ SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA"
 # colour sets' sky off the disk drew Earth gray ("moved")
 SPECKS = {"EARTH": 6378}
 # the bodies of the cruise (mean radius): Jupiter's moons in 2000-2001 and the Moon at the Earth flyby in 1999, so Auto
-# center has a disk to centre their pictures on (Io and Europa in eclipse, Himalia, the Moon: "no disk of a known
+# center has a disk to center their pictures on (Io and Europa in eclipse, Himalia, the Moon: "no disk of a known
 # body", the picture left where the camera had it). Like the small moons, not in FILL_RADIUS: far off they are disks
 # of a few dozen pixels in the sky, which the filled scale would blow out
 CRUISE_RADIUS = {"IO": 1822, "EUROPA": 1561, "GANYMEDE": 2634, "CALLISTO": 2410, "HIMALIA": 70, "MOON": 1737}
