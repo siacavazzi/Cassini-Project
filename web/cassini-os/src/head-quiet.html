@@ -907,6 +907,19 @@ body.idle .win.full .titlebar { opacity: 0; }
 
 <script>
 // ---------- Cassini OS chrome: window manager, menu bar, HUD layer ----------
+// A frame's target as the captions name it. About 1% of frames (4,336) carry TARGET_NAME UNK in their labels; for
+// those, a camera team observation (ISS_<orbit><code>_..., e.g. ISS_038RI_SPKHRLPLF001_PRIME) still names the body or
+// region it was planned for, said as "Rings (planned)". Anything else is "Unknown target", never "Unk".
+const PLANNED = { RI: "Rings", SA: "Saturn", TI: "Titan", EN: "Enceladus", MI: "Mimas", TE: "Tethys", DI: "Dione",
+  RH: "Rhea", IA: "Iapetus", HY: "Hyperion", PH: "Phoebe", JA: "Janus", EP: "Epimetheus", PR: "Prometheus", PD: "Pandora",
+  PN: "Pan", AT: "Atlas", DA: "Daphnis", TL: "Telesto", CA: "Calypso", HE: "Helene", ME: "Methone", PL: "Pallene",
+  JU: "Jupiter" };
+function targetLabel(k) {
+  const t = catalog.target[k];
+  if (t && t !== "UNK") return titleCase(t);
+  const m = /^ISS_[0-9][0-9A-Z]{2}([A-Z]{2})_/.exec(catalog.obs[k] || "");
+  return m && PLANNED[m[1]] ? `${PLANNED[m[1]]} (planned)` : "Unknown target";
+}
 (function () {
   const $ = id => document.getElementById(id);
   const START = Date.UTC(1997, 9, 15, 8, 43), END = Date.UTC(2017, 8, 15, 10, 32);
@@ -1799,7 +1812,7 @@ body.idle .win.full .titlebar { opacity: 0; }
     if (i < 0) { $("nowcam").textContent = "No frames yet"; $("l24").textContent = "No frames yet"; return; }
     const k = order[i], c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) ? ` · polarizer ${catalog.f1[k]}` : "";
     const si = catalog.setOf[k];
-    $("nowcam").innerHTML = `${catalog.cam[k] === "N" ? "Narrow-angle" : "Wide-angle"} · <span class="swatch" style="background:${CLS[c][1]}"></span>${FNAME[c]}${si >= 0 ? ` · <b>${KIND[catalog.sets[si].kind]} set</b>` : ""}<br><span style="color:#6a6a6a">${titleCase(catalog.target[k] || "Unknown")} · ${catalog.f1[k]}/${catalog.f2[k]}${pol}</span>`;
+    $("nowcam").innerHTML = `${catalog.cam[k] === "N" ? "Narrow-angle" : "Wide-angle"} · <span class="swatch" style="background:${CLS[c][1]}"></span>${FNAME[c]}${si >= 0 ? ` · <b>${KIND[catalog.sets[si].kind]} set</b>` : ""}<br><span style="color:#6a6a6a">${targetLabel(k)} · ${catalog.f1[k]}/${catalog.f2[k]}${pol}</span>`;
     let n = 0, nN = 0, sets = 0;
     for (let j = lastImageIndex(state.et - 86400) + 1; j <= i; j++) { const q = order[j]; n++; if (catalog.cam[q] === "N") nN++; }
     for (const st of catalog.sets) if (st.ready > state.et - 86400 && st.ready <= state.et) sets++;
@@ -2367,7 +2380,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
       if (v.movie || steadying) {
-        field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[v.k] || "Unknown")} · ${catalog.id[v.k]}`); rangeLine(v.k);
+        field("frame").innerHTML = pdsLinks(`${targetLabel(v.k)} · ${catalog.id[v.k]}`); rangeLine(v.k);
         filmstrip(v.k);
       }
       // the caption on the picture names the picture on screen (a stand-in shown while the one wanted loads, a
@@ -2915,7 +2928,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       const up = levels[levels.length - 1].lines || {};
       levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}&channel=${ch}`,
         tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.inMosaic && s.inMosaic() ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
-        lines: { frame: pdsLinks(`${titleCase(catalog.target[q] || "Unknown")} · ${catalog.id[q]}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
+        lines: { frame: pdsLinks(`${targetLabel(q)} · ${catalog.id[q]}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
           colour: s.inMosaic && s.inMosaic() ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
       hold1(levels);
     }
@@ -3105,7 +3118,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       while (base.length && base[base.length - 1].kind !== "mosaic") base.pop();
       // the frame's own info lines (not the live frame's)
       const ks = ids.map(kOf), k0 = ks[0], kp = k0 >= 0 ? catalog.km_per_px[k0] : 0;
-      const lines = { frame: `${titleCase(m.target || (k0 >= 0 && catalog.target[k0]) || "Unknown")} · ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`,
+      const lines = { frame: `${(m.target ? titleCase(m.target) : k0 >= 0 ? targetLabel(k0) : "Unknown target")} · ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`,
         filter: fs.join(" "), details: `${hhmm(q.t)} UTC${kp ? ` · ${kp < 10 ? kp.toFixed(2) : fmt(kp)} km/px` : ""}` };
       // as in the mosaic (the default), the frame is the mosaic's own picture of that spot, larger: its tiles with the
       // mosaic's seam corrections, color mix and detail (/frames/mosaic/<id>/p/<n>, obs_mosaic.pointing_picture), so
@@ -3373,7 +3386,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // card in between. A window that holds (a body window, or in a body's view) keeps its picture until the next
       // one, which dissolves in (bodymode.html)
       if (!holdUp && upEt !== null && well.classList.contains("has-frame") && Math.abs(catalog.et[k] - upEt) > stale * 3600) {
-        const w = want, from = upEt, msg = `<b>Loading</b>${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`;
+        const w = want, from = upEt, msg = `<b>Loading</b>${targetLabel(k)} · ${catalog.id[k]}`;
         clearTimeout(jumpTimer);
         jumpTimer = setTimeout(() => {
           if (want !== w || upEt !== from || !well.classList.contains("has-frame") || hold) return;
@@ -3393,7 +3406,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       // (want.held: a colour set held up while the next is taken, as on opening paused inside a pass)
       if ((obsShown && catalog.obs[k] === obsShown) || ((want.tile || want.held) && (mosaicPass(k) || modeOf(k) === "mosaic" || modeOf(k) === "mosaic_movie"))) mosaicOf(want.held ? { key: want.key, set: -1, k } : want, true);
       const kp = catalog.km_per_px[k];
-      if (!want.movie) { field("frame").innerHTML = pdsLinks(`${titleCase(catalog.target[k] || "Unknown")} · ${catalog.id[k]}`); rangeLine(k); }
+      if (!want.movie) { field("frame").innerHTML = pdsLinks(`${targetLabel(k)} · ${catalog.id[k]}`); rangeLine(k); }
       if (!want.movie) field("filter").innerHTML = filterHtml(k);
       field("colour").textContent = !s ? (colourFilter(k) ? "Single filter" : "Clear, no color") : ready
         ? colourText(s, si) : `${KIND[s.kind]} set, ${s.use.filter(q => catalog.et[q] <= state.et).length} of ${s.use.length} channels taken`;
