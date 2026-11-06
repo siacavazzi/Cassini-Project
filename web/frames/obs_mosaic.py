@@ -2196,6 +2196,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             # median, and the faint stray light round the moon they show in, are under black, as in the frame alone
             # (089MI's 2 s UV3 drew its columns as stripes round the moon on the median alone)
             spread = float(np.percentile(q[m], SKY_SPREAD)) - median
+            if seen is not None:
+                seen["whole_codes"] = True
         if glow:
             # (the glow's floor is its far side, a gentle slope up to the jets' halo: black over the frame's middle,
             # GLOW_BLACK_PCT of it smoothed, so the frame's edge does not show as a square; the jets and the halo
