@@ -982,13 +982,18 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     # the frame's edge, a filter moved 70 px onto it: N1694916618_1's top), whose edge fill drew a band of one color
     # (on the far body: a nearer one cut so is drawn grey there, below, as the fill would give it the far body's color)
     far = at[ref][order[0]]
-    on_far = (_disk(shape, far[1] + fx, far[2] + fy, far[3] * (1 + PER_BODY_HAZE) + PER_BODY_GROW) > 0) & ~nearer_disks
+    far_disk = _disk(shape, far[1] + fx, far[2] + fy, far[3] * (1 + PER_BODY_HAZE) + PER_BODY_GROW) > 0
+    on_far = far_disk & ~nearer_disks
     seen_by = np.logical_or.reduce([np.asarray(m, bool) for m in omasks])
     unseen = [seen_by & ~np.asarray(m, bool) for m in omasks]
     edges = [u_ & on_far for u_ in unseen]
     cut_near = np.logical_or.reduce(unseen) & nearer_disks
-    if any(g.any() for g in ghosts) or any(e.any() for e in edges):
-        miss = [(g > 0) | e for g, e in zip(ghosts, edges)]
+    # (on the far body only: off it, in the sky, a filter's copy of the nearer body's limb and glare is drawn grey from
+    # the reference, below, as before; a fill there from the far body's color drew colored rims round Dione,
+    # N1701985106_1)
+    sky = np.logical_or.reduce([g > 0 for g in ghosts]) & ~far_disk
+    if any((g > 0)[far_disk].any() for g in ghosts) or any(e.any() for e in edges):
+        miss = [((g > 0) & far_disk) | e for g, e in zip(ghosts, edges)]
         x = [np.asarray(c, np.float32) for c in out]
         filled, _ = cal.fill_saturated(x, miss, reach=PER_BODY_FILL_REACH * k, where=~nearer_disks, floor=False)
         for j, c in enumerate(out):
@@ -1003,6 +1008,11 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
             omasks[j] = np.asarray(omasks[j], bool) | edges[j]
         report["filled"] = round(float(np.mean(np.logical_or.reduce(miss))), 4)
     ghost = cut_near.astype(np.float32)
+    if sky.any():
+        grow = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * MOVED_GROW + 1,) * 2)
+        soft = cv2.GaussianBlur(cv2.dilate(sky.astype(np.float32), grow), (0, 0), MOVED_SOFT / 2)
+        # (not over the far body, which the fill keeps in color)
+        ghost = np.maximum(ghost, np.clip(soft * 2, 0, 1) * (1 - far_disk))
     # a nearer body the camera saturated in some filter (over PER_BODY_CLIPPED of its disk) has no color there to
     # draw: the saturated fill would take the color round it, the far body's (an orange Dione over Titan,
     # N1694954493_1), so it is drawn grey from the reference, as its whole disk
