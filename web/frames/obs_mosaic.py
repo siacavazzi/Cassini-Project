@@ -2076,6 +2076,14 @@ FILLED = 0.5       # a pass is all body when the body's disk covers the middle o
 FILL_DISK = 0.5    # ... and its white is its disk's (DISK_WHITE) when the disk covers less than this share of them
 DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
+DETAIL_EDGE = 32.0  # ... and on a difference from that mean of this many levels or more, less and less (d = DETAIL x / (1 + |x| /
+                    # DETAIL_EDGE)): faint texture (Titan's few per cent) is raised in full, a terminator, a limb against bright
+                    # Saturn or a crater's shadow beside its sunlit wall (already all the contrast there is) only up to
+                    # DETAIL x DETAIL_EDGE, so they get no black halo or blown rim (Sam, 11-06: crescent moons, the 165TI transit)
+DETAIL_KNEE = 0.5   # ... and a change toward white or black takes up to this share of the room the pixel has left
+                    # there as it is, the rest rolled off (_soft_detail), so detail never pushes a pixel flat to 0 or 255
+FILLED_TOE = 0.04   # filled passes (balanced look) with no sky toe of their own: a soft toe this share of white wide
+                    # over black (calibration.display), black lowered by half of it so the midtones are where they were
 
 
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
@@ -2444,6 +2452,17 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         out["long"] = long
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
+    if calibration.look() == "balanced":
+        # the brightest of the pass rolls off past the shoulder instead of clipping flat at white, as a single
+        # picture's does (calibration.display): a filled pass's white is its 99.5th percentile, so its sunlit crater
+        # walls and bright limb, half a percent of every tile, were one flat 255 with a hard edge (Sam, 11-06: "hard
+        # lines" on the moons; 164TE's mosaic 5.5% at 255 against 0.03% in its frames drawn alone)
+        out["shoulder"] = calibration.SHOULDER
+        if filled and not toe and white > 0:
+            # and its shadows fade into black over a toe instead of clipping at the 1st percentile: black lowered by
+            # half the toe, so from there up the picture is as before and the darkest percent keeps its shape
+            out["toe"] = FILLED_TOE * white
+            out["blacks"] = {f: b - out["toe"] / 2 for f, b in blacks.items()}
     mine = [f for f in (drawn or []) if f in by]
     if calibration.false_balanced() and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
@@ -4177,11 +4196,36 @@ def detail(rgba, sigma):
         # 2^24 colours), without its slow reduce over three
         lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
-        out = np.clip(rgb + (DETAIL * (lum - mean))[..., None], 0, 255)
+        x = lum - mean
+        d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+        # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
+        # three keeps its color)
+        room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+        out = np.clip(rgb + _soft_detail(d, room)[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
     mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
-    out = np.clip(rgb + DETAIL * (rgb - mean), 0, 255)
+    x = rgb - mean
+    d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+    out = np.clip(rgb + _soft_detail(d, np.where(d > 0, 255 - rgb, rgb)), 0, 255)
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
+
+
+def _soft_detail(d, room):
+    """detail()'s change d (float32, levels) where a pixel has room levels left in its direction: as it is up to
+    DETAIL_KNEE of that room, past it rolled off toward the room's end (over / (over + rest): no step in slope, and
+    slow enough that a strong change keeps its order instead of piling up a level under the end, as tanh did) instead
+    of running into 0 or 255 and clipping. A crater's sunlit wall beside its shadow, already near white and near black, was
+    pushed flat to both ends by DETAIL's tripled contrast: hard white blotches and black holes along every rim."""
+    room = room.astype(np.float32)
+    knee = np.float32(DETAIL_KNEE) * room
+    mag = np.abs(d)
+    past = mag > knee
+    if not past.any():
+        return d
+    rest = room - knee
+    over = mag - knee
+    soft = knee + rest * over / np.maximum(over + rest, np.float32(1e-6))
+    return np.where(past, np.sign(d) * soft, d).astype(np.float32)
 
 
 def layout(u, n, cache):
@@ -5134,7 +5178,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
-            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}
+            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL, "knee": DETAIL_KNEE, "edge": DETAIL_EDGE}
 
 
 def page_evens(u, cache, colour=True, centre=True):
