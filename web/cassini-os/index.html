@@ -5738,7 +5738,7 @@ onmessage = async e => {
       // watched takes seconds), so the window shows today's frame and says the steady one is coming
       const steadying = !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
       well.classList.toggle("steadying", steadying);
-      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : "STEADYING MOVIE…") : "";
+      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : preparing.has(passOf(v.k)) ? `PREPARING MOVIE · ${preparing.get(passOf(v.k))}` : "STEADYING MOVIE…") : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
@@ -5816,9 +5816,16 @@ onmessage = async e => {
           // other answer (SPICE could not place the frame) shows that frame as it is from then on
           const o = passOf(v.k), c0 = catalog, id = catalog.id[v.k];
           coldAt.set(o, performance.now());
-          fetch(v.key, { priority: "low" }).then(r => r.status, () => 503).then(status => {
+          fetch(v.key, { priority: "low" }).then(r => [r.status, r.statusText], () => [503, ""]).then(([status, why]) => {
             if (catalog !== c0) return;
             if (status !== 503 && status !== 200) { movieFailed.add(id); return; }
+            // how far the server is (its 503 says "... 12 of 36 frames"): on the window's tag while the frame stands in
+            const got = status === 503 && /(\d+) of (\d+) frames/.exec(why || "");
+            if (got) {
+              preparing.set(o, `${got[1]} OF ${got[2]} FRAMES`);
+              if (lastK >= 0 && passOf(lastK) === o && well.classList.contains("steadying") && !playsRolling(lastK))
+                card.querySelector(".kindtag").textContent = `PREPARING MOVIE · ${preparing.get(o)}`;
+            } else if (status === 200) preparing.delete(o);
             if (status === 200) coldAt.delete(o);
             setTimeout(() => { if (catalog === c0 && lastK >= 0 && passOf(lastK) === o) update(true); }, status === 200 ? 0 : COLD_RETRY + 50);
           });
@@ -5951,6 +5958,8 @@ onmessage = async e => {
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
     const coldAt = new Map(), COLD_RETRY = 2000;
+    // how far the server has got with each pass it is still working out ("12 OF 36 FRAMES", from its 503)
+    const preparing = new Map();
     const passCold = k => performance.now() - (coldAt.get(passOf(k)) ?? -1e9) < COLD_RETRY;
     // a mosaic movie (the switch's Mosaic movie, or Auto on a pass the server calls one): /frames/movie?mode=rolling,
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
@@ -13223,7 +13232,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"6c47fe03b87d";
+  const BUILD = /*BUILD*/"31e1cf535973";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

@@ -5834,7 +5834,8 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         # rolling picture does without, or this answers "working out the pass" for ever)
         warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None,
                    footprint=True)
-        return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3]}
+        return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3],
+                      **_progress(u, cache, rec)}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
     filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
@@ -5878,6 +5879,17 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     return data, report
 
 
+def _progress(u, cache, rec):
+    """How far a pass being worked out is: {"made": tiles made (as far as memory knows; 0 while its plan is worked
+    out), "of": its frames}, what the window says while it waits ("PREPARING MOVIE · 12 OF 36 FRAMES")."""
+    rec = rec or _record(u, cache)
+    if rec is None:
+        return {"made": 0, "of": len(u["frames"])}
+    with _lock:
+        made = len(set(rec.get("tiles") or ()) | set(rec.get("made") or ()))
+    return {"made": min(made, len(u["frames"])), "of": len(u["frames"])}
+
+
 _movie_ahead = {}   # pass key -> (first, last) tile a movie wants made ahead; MOVIE_WORKERS threads per pass make them
 MOVIE_WORKERS = int(os.environ.get("CASSINI_MOVIE_WORKERS", "2"))
 _movie_background = threading.Semaphore(MOVIE_WORKERS)   # movie frames made ahead, beside the mosaics' one at a time
@@ -5912,6 +5924,21 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False)
                 p = plan(u, cache)
                 if not rolling:
                     movie_footprint(u, cache, p)
+                if (steady and not _steady_ready(u, cache, _record(u, cache))) or \
+                        (exposure and not _exposure_ready(u, cache, _record(u, cache), exposure)):
+                    # a chain draws every tile of the pass, one after another under the pass's lock: on a cold pass
+                    # the workers make them first, side by side, from the frame asked for on (the same tiles, made
+                    # sooner: 67 tiles of 021TI REGMAPNA001 took 67 s one at a time before its first frame)
+                    every = list(range(n, len(u["frames"]))) + list(range(0, n))
+                    while True:
+                        with _lock:
+                            j = next((j for j in every if j not in taking), None)
+                            if j is None:
+                                break
+                            taking.add(j)
+                        if not _has_tile(u, j, cache, p):
+                            _yield()
+                            tile(u, j, cache, p["display_scale"])
                 # (asked for by name, the chains are worked out for any pass: a mosaic movie played as a steady
                 # movie waits on them as any movie does)
                 if steady:
