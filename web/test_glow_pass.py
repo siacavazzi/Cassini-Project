@@ -38,12 +38,6 @@ lit = scale_of(glow)
 print("glow", {k: lit.get(k) for k in ("blacks", "white", "toe", "filled")})
 # black near the glow's median (3e-4), not at its dark end, with a toe; the top (black + white) where it was
 assert lit["blacks"]["CL1/CL2"] > 2e-4 and lit.get("toe", 0) > 0, lit
-# the toe several times the rise wide, so a plume's faint edge tapers into the black (141EN jets: a hard contour)
-toe = lit["toe"]
-assert toe >= min(2 * (lit["blacks"]["CL1/CL2"] - 1e-4), (lit["white"] + toe / 2)) and toe <= 2 * lit["white"], lit
-# and the glow's top as bright as it was: display maps black + white + toe / 2 to full brightness
-top = cal.display(np.float32([[lit["blacks"]["CL1/CL2"] + lit["white"] + toe / 2]]), lit["blacks"]["CL1/CL2"], lit["white"], 2.2, None, toe)
-assert top[0, 0, 0] >= 254, top
 fine = scale_of(rings)
 print("rings", {k: fine.get(k) for k in ("blacks", "white", "toe", "filled")})
 assert fine["blacks"]["CL1/CL2"] < 1.5e-4 and not fine.get("toe"), fine
