@@ -511,8 +511,10 @@ COLOR_VERSIONS = {"balanced": "color-v45", "raw": "color-v28", "eye": "color-v45
 PROC_VERSIONS = {"balanced": "proc-v19", "raw": "proc-v19", "eye": "proc-v19", "false": "proc-v19", "classic": "proc-v13"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr5"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
-                          # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred
+CENTRE_VERSION = "ctr7"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+                          # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
+                          # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
+                          # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -567,12 +569,25 @@ def composite(ids, channel=None, centre=None):
     return Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), report
 
 
+def body_radius(lbl):
+    """The radius (full resolution pixels) of the disk of the body lbl looks at, from its mean radius and SPICE's range,
+    or None (a target with no disk of its own, or no range)."""
+    try:
+        km = obs_mosaic.RADIUS.get(lbl.info.get("TARGET_NAME", "").replace('"', "").strip())
+        z = lbl.target_loc()[2]
+    except Exception:
+        return None
+    if not km or not z:
+        return None
+    return km / (z * obs_mosaic.IFOV["W" if lbl.info.get("INSTRUMENT_ID") == "ISSWA" else "N"])
+
+
 def centred(ids, view):
     """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
     view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
     scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
-    image, _, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     if "frame_offset" not in report:
         raise LookupError(report.get("why", "not placed by SPICE"))
     # processed_frame puts the frame's middle at the canvas middle; the body's centre is frame_offset from it
@@ -580,6 +595,14 @@ def centred(ids, view):
     side = int(view["side"])
     cx = (w - 1) / 2 - report["frame_offset"][0]
     cy = (h - 1) / 2 - report["frame_offset"][1]
+    if view.get("centre") and lbl is not None and str(lbl.info.get("TARGET_NAME", "")).replace('"', "").strip() in obs_mosaic.SMALL_RADIUS:
+        # a small moon (obs_mosaic.SMALL_RADIUS; the big moons' ephemerides are good): centred on the moon the picture
+        # shows near SPICE's place (color_image.find_small_body), as
+        # SPICE is tens to hundreds of pixels off for some flybys (Pan 2017-03-07, Atlas 2017-04-12)
+        found = color_image.find_small_body(image, cx, cy, body_radius(lbl))
+        if found is not None:
+            report["found"] = [round(found[0] - cx, 1), round(found[1] - cy, 1)]
+            cx, cy = found
     # centred means centred (Sam, 2026-10-30): the body's centre goes to the middle however much of the view the
     # frame leaves empty (black, or the page's background, where it does not reach), so it holds still from picture
     # to picture as SPICE places it, even where the frame cuts its disk (Saturn's centre below a WAC stare's frame)
