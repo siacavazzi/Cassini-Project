@@ -8,7 +8,9 @@ neighbouring frames or is past the reach, puts SPICE's places where the pictures
 
 Synthetic tiles: a textured moon (MIMAS, 33 px radius) the camera creeps past. Case 1: SPICE 45 px off and jumping up
 to 30 px between frames: before (SPICE's places) the stabilized moon is far off; after, within a few px. Case 2: SPICE
-3 px off at random (its usual noise): nothing changes (seen_places leaves SPICE's places).
+3 px off at random (its usual noise): nothing changes (seen_places leaves SPICE's places). Case 4: a bigger, brighter
+moon touching it on ten of the tiles (a transit, Rhea over Titan in 154RH MUTUALEVE002, whose movie swung from one
+moon to the other): those tiles are not looked at, so the hold stays on the target.
 Run: python web/test_steady_seen.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, tempfile  # noqa: E402
@@ -31,13 +33,23 @@ om.reel.north_angles = lambda ids: {i: 0.0 for i in ids}
 scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"RED": 1.0, "GRN": 1.0, "BL1": 1.0}}
 
 
+TOUCH = range(10, 20)     # case 4: the tiles another moon touches the target on
+OTHER = (1.9 * R, 0.0, 1.4 * R)   # its place from the target and radius
+other_on = [False]
+
+
 def draw(n):
     yy, xx = np.mgrid[0:S, 0:S] + 0.5
     px, py = S / 2 - truth[n][0], S / 2 - truth[n][1]
     inside = (xx - px) ** 2 + (yy - py) ** 2 <= R * R
     tx = np.clip((xx - px + R).astype(int), 0, tex.shape[1] - 1)
     ty = np.clip((yy - py + R).astype(int), 0, tex.shape[0] - 1)
-    return np.where(inside, (0.4 + 0.6 * tex[ty, tx]) * 160, 0)
+    out = np.where(inside, (0.4 + 0.6 * tex[ty, tx]) * 160, 0)
+    if other_on[0] and n in TOUCH:
+        # (behind the target: a big soft bright disk)
+        d = np.hypot(xx - px - OTHER[0], yy - py - OTHER[1])
+        out = np.where(inside, out, np.clip((OTHER[2] - d) / 4 + 0.5, 0, 1) * 230)
+    return out
 
 
 def make(name, spice):
@@ -93,6 +105,29 @@ with calibration.looking("balanced"):
         assert not json.load(fh).get("held"), "SPICE's places stand"
     print(f"usual SPICE: stabilized max {calm.max():.1f} px", seen)
     assert calm.max() < 6
+# 4. a bigger moon touching the target on ten tiles, SPICE 45 px off all the way (154RH's 18): those tiles take the moon's place from the
+#    tiles either side, so the hold stays on the target; without the rule it swings onto the other moon
+with calibration.looking("balanced"):
+    other_on[0] = True
+    off = [[x + 45 + rng.uniform(-2, 2), y - 10 + rng.uniform(-2, 2)] for x, y in truth]
+    def bodies(ids, spice=off):
+        n_of = {f"N{1700000000 + 30 * n}_1": n for n in range(N)}
+        return {i: [("TITAN", OTHER[0] - spice[n_of[i]][0], OTHER[1] - spice[n_of[i]][1], OTHER[2], 2 * Z)]
+                for i in ids if n_of.get(i) in TOUCH}
+    ba.bodies_of = bodies
+    u4, cache4 = make("TOUCH", off)
+    touch, _, seen = error(u4, cache4, off)
+    print(f"another moon touching it: stabilized off the moon max {touch.max():.1f} px", seen)
+    assert seen["touching"] == len(TOUCH) and touch.max() < 6, (touch.max(), seen)
+    keep = om.other_bodies
+    om.other_bodies = lambda u: {}
+    u5, cache5 = make("TOUCH0", off)
+    swung, _, _ = error(u5, cache5, off)
+    om.other_bodies = keep
+    print(f"  before (the touching tiles looked at): max {swung.max():.1f} px")
+    assert swung.max() > 10, swung.max()
+    other_on[0] = False
+    ba.bodies_of = lambda ids: {}
 # 3. a bright blob the moon's size against a tile's edge (a cut corner's wedge) is not taken for the moon
 u3, cache3 = make("EDGE", bad)
 p3 = om.plan(u3, cache3)
