@@ -5829,7 +5829,7 @@ def shown_of(u, p, n, not_shown, tile_of):
     """(the frame whose picture frame n of a movie shows, the colour set it shows or None, True when the set is drawn
     as the colour of that frame's picture), as movie_frame draws it with colour on: the set (set_shown) when the pass
     plays in colour (plays_colour); else the frame held_of holds, put through step_frame when the pass plays its grey
-    filter. A frame held for another (held_of: unfit) shows the set, never tinted."""
+    filter."""
     frames, want = u["frames"], p.get("colour")
     placed = lambda j: "offset" in tile_of(j)
     colours = bool(want) and plays_colour(u, want, p["grey"])
@@ -5841,8 +5841,9 @@ def shown_of(u, p, n, not_shown, tile_of):
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got, tint = set_shown(u, n, want, not_shown, placed, covers)
-        if got and tint and s == n:
-            # its own moment in the set's colour, its picture from lum_of (one look for the movie)
+        if got and tint:
+            # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
+            # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
             if j is not None:
                 return j, got, True
