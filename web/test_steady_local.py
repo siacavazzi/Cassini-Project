@@ -327,7 +327,7 @@ def node_filled(table, cases):
           "C.forEach(([how, k, W, H], i) => { const P = []; for (let q = 0; q < k; q++) P.push(new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + i + '_' + q + '.bin')));"
           " let px = how === 'mix' ? M.mix(P, t.sets) : how === 'trail' ? M.blendTrail(P.slice(0, -1), P[k - 1]) : P[0];"
           " const g = M.gaussKernel(t.sigma), d = M.detailInputs(px);"
-          " px = M.detailFinish(px, d.lum, M.blurCPU(d.a, W, H, g), M.blurCPU(d.la, W, H, g), t.amount, t.knee);"
+          " px = M.detailFinish(px, d.lum, M.blurCPU(d.a, W, H, g), M.blurCPU(d.la, W, H, g), t.amount, t.knee, t.edge);"
           " fs.writeFileSync('" + tmp + "/' + i + '.out', px); });")
     with open(f"{tmp}/filled.js", "w") as fh:
         fh.write(js)

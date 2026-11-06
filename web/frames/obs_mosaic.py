@@ -2076,6 +2076,10 @@ FILLED = 0.5       # a pass is all body when the body's disk covers the middle o
 FILL_DISK = 0.5    # ... and its white is its disk's (DISK_WHITE) when the disk covers less than this share of them
 DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
+DETAIL_EDGE = 32.0  # ... and on a difference from that mean of this many levels or more, less and less (d = DETAIL x / (1 + |x| /
+                    # DETAIL_EDGE)): faint texture (Titan's few per cent) is raised in full, a terminator, a limb against bright
+                    # Saturn or a crater's shadow beside its sunlit wall (already all the contrast there is) only up to
+                    # DETAIL x DETAIL_EDGE, so they get no black halo or blown rim (Sam, 11-06: crescent moons, the 165TI transit)
 DETAIL_KNEE = 0.5   # ... and a change toward white or black takes up to this share of the room the pixel has left
                     # there as it is, the rest rolled off (_soft_detail), so detail never pushes a pixel flat to 0 or 255
 FILLED_TOE = 0.04   # filled passes (balanced look) with no sky toe of their own: a soft toe this share of white wide
@@ -4192,14 +4196,16 @@ def detail(rgba, sigma):
         # 2^24 colours), without its slow reduce over three
         lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
-        d = DETAIL * (lum - mean)
+        x = lum - mean
+        d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
         # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
         # three keeps its color)
         room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
         out = np.clip(rgb + _soft_detail(d, room)[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
     mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
-    d = DETAIL * (rgb - mean)
+    x = rgb - mean
+    d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
     out = np.clip(rgb + _soft_detail(d, np.where(d > 0, 255 - rgb, rgb)), 0, 255)
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
@@ -5094,7 +5100,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
-            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL, "knee": DETAIL_KNEE}
+            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL, "knee": DETAIL_KNEE, "edge": DETAIL_EDGE}
 
 
 def page_evens(u, cache, colour=True, centre=True):

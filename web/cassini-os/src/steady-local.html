@@ -265,13 +265,13 @@
       }
       return { a, la, lum };
     }
-    // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change rolled off past knee
-    // of the room the pixel has left (obs_mosaic._soft_detail), clip, round half to even
-    function detailFinish(px, lum, ga, gla, amount, knee = 0.5) {
-      const f = Math.fround, floor = f(1e-3), D = f(amount), K = f(knee), tiny = f(1e-6);
+    // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change (less on big differences,
+    // DETAIL_EDGE) rolled off past knee of the room the pixel has left (obs_mosaic._soft_detail), clip, round half to even
+    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32) {
+      const f = Math.fround, floor = f(1e-3), D = f(amount), K = f(knee), E = f(edge), tiny = f(1e-6);
       for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
-        const mean = f(gla[p] / Math.max(ga[p], floor));
-        let d = f(D * f(lum[p] - mean));
+        const mean = f(gla[p] / Math.max(ga[p], floor)), x = f(lum[p] - mean);
+        let d = f(f(D * x) / f(1 + f(Math.abs(x) / E)));
         const room = d > 0 ? f(255 - Math.max(px[i], px[i + 1], px[i + 2])) : f(Math.min(px[i], px[i + 1], px[i + 2]));
         const k = f(K * room), mag = Math.abs(d);
         if (mag > k) {
@@ -383,7 +383,7 @@ const sharpen = (px, W, H, t) => {
   if (blur === undefined) blur = (${STEADY_GPU.toString()})();
   const k = M.gaussKernel(t.sigma), d = M.detailInputs(px);
   const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
-  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee);
+  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge);
 };
 const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {
