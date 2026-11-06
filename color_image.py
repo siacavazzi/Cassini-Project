@@ -995,7 +995,10 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     if any((g > 0)[far_disk].any() for g in ghosts) or any(e.any() for e in edges):
         miss = [((g > 0) & far_disk) | e for g, e in zip(ghosts, edges)]
         x = [np.asarray(c, np.float32) for c in out]
-        filled, _ = cal.fill_saturated(x, miss, reach=PER_BODY_FILL_REACH * k, where=~nearer_disks, floor=False)
+        # (the ratio measured inside the far body's limb: its haze ring past the limb is bluer, and a fill near the
+        # limb took that blue, N1686941052_1)
+        inner = _disk(shape, far[1] + fx, far[2] + fy, far[3] - PER_BODY_GROW - PER_BODY_HAZE * far[3]) > 0
+        filled, _ = cal.fill_saturated(x, miss, reach=PER_BODY_FILL_REACH * k, where=inner & ~nearer_disks, floor=False)
         for j, c in enumerate(out):
             if not miss[j].any():
                 continue
