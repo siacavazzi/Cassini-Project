@@ -216,6 +216,68 @@ def garbled_lines(img, mask):
     return out & good
 
 
+"""
+The blocks of a lossy frame that the decompressor wrote again and again after its packets stopped (True = repeated),
+from its stored image (img) and the valid mask so far (mask). A lossy frame (INST_CMPRS_TYPE LOSSY) is coded in BLOCK x BLOCK blocks; where its
+packets stop coming the decompressor can go on writing the last block's detail in every block after it, its level
+stepping a little each time: a stair of one tile repeated to the end of the frame, which the prefix counts as valid
+(N1507734025_2, 016DI REGMAPA001 GRN, 253 of 346 packets: lines 848-1023, drawn as a magenta stair-edged stripe across
+Dione). A block repeats when, its own mean and slope taken off, it differs from the next block along the line by less than
+BLOCK_REPEAT of its own detail, and it has detail (more than BLOCK_DETAIL codes off that: flat sky and smooth glare repeat too).
+A row of blocks is repeated where BLOCK_SHARE of its blocks are; in a run of BLOCK_RUN or more such rows, everything
+from the first block of the first row that starts BLOCK_RUN repeated blocks in a row, to the end of the run, is lost.
+"""
+BLOCK = 8
+BLOCK_REPEAT = 0.35
+BLOCK_DETAIL = 1.0
+BLOCK_SHARE = 0.5
+BLOCK_RUN = 2
+def repeated_blocks(img, mask=None):
+    c = np.asarray(img, np.float32)
+    h, w = c.shape
+    out = np.zeros((h, w), bool)
+    nb, nk = h // BLOCK, w // BLOCK
+    if nb < BLOCK_RUN or nk < 2:
+        return out
+    blocks = c[:nb * BLOCK, :nk * BLOCK].reshape(nb, BLOCK, nk, BLOCK).transpose(0, 2, 1, 3)
+    # (its mean and slope taken off: a smooth slope, the glare across a frame, is the same in every block)
+    g = np.arange(BLOCK, dtype=np.float32) - (BLOCK - 1) / 2
+    gy, gx = g[:, None] * np.ones(BLOCK, np.float32), np.ones(BLOCK, np.float32)[:, None] * g
+    detail = blocks - blocks.mean(axis=(2, 3), keepdims=True)
+    for grid in (gy, gx):
+        detail = detail - (detail * grid).sum(axis=(2, 3), keepdims=True) / float((grid * grid).sum()) * grid
+    own = np.abs(detail).mean(axis=(2, 3))                                  # (nb, nk)
+    step = np.abs(detail[:, 1:] - detail[:, :-1]).mean(axis=(2, 3))        # (nb, nk - 1): block k against k + 1
+    both = (own[:, 1:] + own[:, :-1]) / 2
+    pair = (step < BLOCK_REPEAT * both) & (both > BLOCK_DETAIL)
+    if mask is not None:
+        # (only blocks the prefix counts whole: a lost line of zeros across a row of blocks is the same in each)
+        whole = mask[:nb * BLOCK, :nk * BLOCK].reshape(nb, BLOCK, nk, BLOCK).all(axis=(1, 3))
+        pair &= whole[:, 1:] & whole[:, :-1]
+    rep = np.zeros((nb, nk), bool)
+    rep[:, :-1] |= pair
+    rep[:, 1:] |= pair
+    rows = rep.mean(axis=1) >= BLOCK_SHARE
+    b = 0
+    while b < nb:
+        if not rows[b]:
+            b += 1
+            continue
+        e = b
+        while e < nb and rows[e]:
+            e += 1
+        if e - b >= BLOCK_RUN:
+            # (from the first block that starts BLOCK_RUN repeated ones along the first row of the run)
+            starts = np.convolve(rep[b].astype(int), np.ones(BLOCK_RUN, int), "valid") >= BLOCK_RUN
+            k = int(np.argmax(starts)) if starts.any() else 0
+            out[b * BLOCK:(b + 1) * BLOCK, k * BLOCK:] = True
+            out[(b + 1) * BLOCK:e * BLOCK] = True
+            if e == nb:
+                out[e * BLOCK:] = True     # (the lines past the last whole row of blocks)
+        b = e
+    return out
+
+
 def _median_of_codes(counts, n):
     """np.median of n whole numbers 0-255 from their histogram: the middle one, or the mean of the middle two"""
     below = np.cumsum(counts)
@@ -344,6 +406,9 @@ class label:
             # (and now and then a whole one) is garbage the prefix counts as valid, drawn as bright streaks
             if img is not None and img.shape == mask.shape:
                 mask &= ~garbled_lines(img, mask)
+            if self.info.get("INST_CMPRS_TYPE") == "LOSSY" and img is not None and img.shape == mask.shape:
+                # (a lossy frame can repeat its last block to the end instead: repeated_blocks)
+                mask &= ~repeated_blocks(img, mask)
         if lines < 1024:
             # a summed frame (512 or 256 lines) has a first and last column brighter than their neighbours in the
             # archive (3-7 levels in the 256 px ring frames of ISS_034RI_SPKDKFORM001), which the display stretch

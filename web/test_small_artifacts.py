@@ -5,6 +5,8 @@
   (judged only where the trial had enough of the run to try on, and never on a run one of the frame's lines tall)
 - label.garbled_lines: the garbage the decompressor writes after losing its place in a line is found, a thin feature
   lying along a line is not
+- label.repeated_blocks: a lossy frame's last block written again and again to the end is found, from the block it
+  starts at; a textured picture, smooth glare and a lost line of zeros are not
 - spikes: a movie frame's cosmic rays are found, a star (drifting) and a small moon (moving) are not
 Run: python web/test_small_artifacts.py"""
 import sys; import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -138,6 +140,31 @@ found = lh.garbled_lines(ringlet, np.ones((H, H), bool))
 assert found[60, 110:].all() and found[62, 120:].all() and found[97, 210:].all(), found[[60, 62, 97]].sum(axis=1)
 assert not found[61].any() and found.any(axis=1).sum() == 3, np.nonzero(found.any(axis=1))[0]
 print("garbled lines ok")
+
+# ---------- repeated_blocks ----------
+# a cloud deck's texture; past its packets (from block row 30, block 12) the decompressor repeats one block's detail
+# with its level stepping down by 3 a block (N1507734025_2: lines 848-1023 of the 016DI Dione map's GRN frame)
+deck = 120 + 25 * np.sin(xx / 7.0) * np.cos(yy / 11.0) + np.random.default_rng(21).normal(0, 2, (H, H))
+deck = bgr(deck)[..., 0]
+lossy = deck.copy()
+tile = deck[8:16, 8:16].astype(np.float32) - deck[8:16, 8:16].mean()
+tile[:, 0] -= 6                                                     # (the garbage's own detail, a dark first column)
+k = 0
+for b in range(30, H // 8):
+    for c in range(12 if b == 30 else 0, H // 8):
+        lossy[b * 8:b * 8 + 8, c * 8:c * 8 + 8] = np.clip(tile + 200 - 3 * (k % 40), 0, 255).astype(np.uint8)
+        k += 1
+found = lh.repeated_blocks(lossy)
+assert found[240:248, 96:].all() and not found[240:248, :96].any() and found[248:].all() and not found[:240].any()
+assert not lh.repeated_blocks(deck).any()
+glare = bgr(30 + 0.4 * xx + 0.3 * yy + np.random.default_rng(22).normal(0, 0.7, (H, H)))[..., 0]
+assert not lh.repeated_blocks(glare).any()                          # (the same slope in every block)
+lost = deck.copy()
+lost[100::40] = 0                                                   # (lost lines of zeros, the same in every block)
+m = lost.astype(bool) | True
+m[100::40] = False
+assert not lh.repeated_blocks(lost, m).any()
+print("repeated blocks ok")
 
 # ---------- spikes ----------
 spots = [(rng.uniform(20, H - 20), rng.uniform(20, H - 20), 10 ** rng.uniform(1.2, 2.3)) for _ in range(40)]
