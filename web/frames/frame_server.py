@@ -961,6 +961,11 @@ def picture_versions():
     return slices.versions(frame_server=sys.modules[__name__], obs_mosaic=obs_mosaic, reel=reel, calibration=calibration)
 
 
+# full resolution mosaics a save asked for while their tiles were still being made: (frame, force, tune, hide) -> the
+# format, made once the tiles are (the full.json route; the save menu keeps asking until it is ready)
+_native_lock = threading.Lock()
+_native_wanted = {}
+
 SERVER_VERSION = git_version(REPO)   # the code this server runs: read once, as it starts
 
 
@@ -1667,13 +1672,32 @@ def make_handler(site, cache, flags=None):
                 try:
                     if kind == "json":
                         made = mosaic_native.info(m.group(1), cache, force, tune)
-                        if made and not any(made["ready"].values()):
+                        if made and made["behind"] > 0:
+                            # tiles up to this frame are still to be made: what is on disk is part of the mosaic, so
+                            # it is never offered as made (a save then waited for nothing and got 1 of 21 tiles)
+                            made["partial"] = True
+                            made["ready"] = {f: False for f in made["ready"]}
+                        if made and not any(made["ready"].values()) and not made.get("partial"):
                             in_background(mosaic_native.warm(m.group(1), cache, force, tune))
-                        if made and query.get("make", [""])[0] in ("jpg", "png"):
-                            fmt = query["make"][0]
-                            if not made["ready"][fmt] and fmt not in made["making"]:
-                                in_background(mosaic_native.start(m.group(1), cache, fmt, force, tune, _mosaic_slots))
-                                made["making"][fmt] = 0.0
+                        wanted = (m.group(1), force, query.get("tune", [""])[0], query.get("hide", [""])[0])
+                        fmt = query.get("make", [""])[0]
+                        if fmt not in ("jpg", "png"):
+                            with _native_lock:
+                                fmt = _native_wanted.get(wanted, "")
+                        if made and fmt in ("jpg", "png"):
+                            if made["behind"] > 0:
+                                # the save asked first: make the pass's tiles up to this frame (as a window playing
+                                # it does), and the picture once they are all made (a later look at this .json)
+                                obs_mosaic.warm_frame(m.group(1), cache)
+                                with _native_lock:
+                                    _native_wanted[wanted] = fmt
+                                made["making"].setdefault(fmt, 0.0)
+                            else:
+                                with _native_lock:
+                                    _native_wanted.pop(wanted, None)
+                                if not made["ready"][fmt] and fmt not in made["making"]:
+                                    in_background(mosaic_native.start(m.group(1), cache, fmt, force, tune, _mosaic_slots))
+                                    made["making"][fmt] = 0.0
                         return self.send_json(made) if made else self.send_json({"error": "not a mosaic pass"}, 404)
                     if kind == "webp" and crop is None:
                         return self.send_error(400, "a crop= of the native mosaic, or .jpg / .png for all of it")
