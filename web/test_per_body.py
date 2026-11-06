@@ -120,7 +120,7 @@ for j in (0, 2):
     # (just past the near disk, on the side the near body sat in channel j once it is aligned on the far body, on
     # the far disk)
     side = 1 if j == 0 else -1
-    beside = (np.abs(yy - (NEAR["y"] + 36)) < 2) & (np.abs(xx - (NEAR["x"] + side * 35)) < 2)
+    beside = (np.abs(yy - (NEAR["y"] + 48)) < 2) & (np.abs(xx - (NEAR["x"] + side * 15)) < 2)
     got_ratio = float(np.median(out[j][beside] / np.maximum(out[ref][beside], 1e-6)))
     want = LEVEL[j] / LEVEL[ref]
     assert abs(got_ratio - want) < 0.1 * want, (j, got_ratio, want)

@@ -127,4 +127,17 @@ assert pick(["MT3", "CB2", "MT2", "BL1"]) == ["CB2", "MT2", "BL1"]           # o
 assert pick(["CB3", "CB1", "MT1", "UV1", "UV3"]) == ["CB3", "CB1", "UV3"]       # a Titan wind stare
 assert pick(["IR3", "UV3", "UV1"]) == ["IR3", "UV3", "UV1"]                  # three: all of them, longest first
 assert sets_passes.channels(["IR3", "GRN", "UV3", "UV1"], nm(["IR3", "GRN", "UV3", "UV1"])) == ("false", [0, 1, 2])
+# a storm watch filed under a moon that rode along (or UNK) is drawn in its observation's body's color, not the moon's
+# gray (calibration.mix_target): W1689643086_1 (HELENE, ISS_158SA_STORMW...); a moon's own observation keeps its target
+storm = ["MT3", "CB2", "MT2"]
+with cal.coloring("balanced"):
+    rode = cal.color_mix("W", storm, "JANUS", obs="ISS_160SA_STORMW029_RIDER")
+    assert np.allclose(rode, cal.eye_mix("W", storm, "SATURN")), rode
+    assert np.allclose(cal.color_mix("W", storm, "UNK", obs="ISS_159SA_WIND5HR003_PRIME"), cal.eye_mix("W", storm, "SATURN"))
+    gray = cal.color_mix("W", storm, "JANUS")
+    assert np.allclose(gray[0], gray[1]) and np.allclose(gray[1], gray[2])          # no observation: as before
+    assert np.allclose(cal.color_mix("W", storm, "JANUS", obs="ISS_160JA_JANUS001_PRIME"), gray)
+    assert np.allclose(cal.color_mix("W", storm, "SATURN", obs="ISS_160TI_X"), cal.eye_mix("W", storm, "SATURN"))
+    assert cal.mix_target("TITAN", storm, "W", "ISS_159SA_STORMW") == "TITAN"
+
 print("ok")

@@ -66,8 +66,8 @@ import label_handler  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v77", "raw": "obs-v60", "eye": "obs-v77-eye", "false": "obs-v77-false", "classic": "obs-v47-classic"}
+# obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v78", "raw": "obs-v61", "eye": "obs-v78-eye", "false": "obs-v78-false", "classic": "obs-v48-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2076,6 +2076,14 @@ FILLED = 0.5       # a pass is all body when the body's disk covers the middle o
 FILL_DISK = 0.5    # ... and its white is its disk's (DISK_WHITE) when the disk covers less than this share of them
 DETAIL = 2.0       # filled passes: how much the local contrast is raised (detail())
 DETAIL_SIGMA = 0.05  # ... over this much of a frame
+DETAIL_EDGE = 32.0  # ... and on a difference from that mean of this many levels or more, less and less (d = DETAIL x / (1 + |x| /
+                    # DETAIL_EDGE)): faint texture (Titan's few per cent) is raised in full, a terminator, a limb against bright
+                    # Saturn or a crater's shadow beside its sunlit wall (already all the contrast there is) only up to
+                    # DETAIL x DETAIL_EDGE, so they get no black halo or blown rim (Sam, 11-06: crescent moons, the 165TI transit)
+DETAIL_KNEE = 0.5   # ... and a change toward white or black takes up to this share of the room the pixel has left
+                    # there as it is, the rest rolled off (_soft_detail), so detail never pushes a pixel flat to 0 or 255
+FILLED_TOE = 0.04   # filled passes (balanced look) with no sky toe of their own: a soft toe this share of white wide
+                    # over black (calibration.display), black lowered by half of it so the midtones are where they were
 
 
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
@@ -2444,6 +2452,17 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         out["long"] = long
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
+    if calibration.look() == "balanced":
+        # the brightest of the pass rolls off past the shoulder instead of clipping flat at white, as a single
+        # picture's does (calibration.display): a filled pass's white is its 99.5th percentile, so its sunlit crater
+        # walls and bright limb, half a percent of every tile, were one flat 255 with a hard edge (Sam, 11-06: "hard
+        # lines" on the moons; 164TE's mosaic 5.5% at 255 against 0.03% in its frames drawn alone)
+        out["shoulder"] = calibration.SHOULDER
+        if filled and not toe and white > 0:
+            # and its shadows fade into black over a toe instead of clipping at the 1st percentile: black lowered by
+            # half the toe, so from there up the picture is as before and the darkest percent keeps its shape
+            out["toe"] = FILLED_TOE * white
+            out["blacks"] = {f: b - out["toe"] / 2 for f, b in blacks.items()}
     mine = [f for f in (drawn or []) if f in by]
     if calibration.false_balanced() and len(mine) == 3 and not true_colour:
         # false color: each band's gain to bring the body's lit median (above that band's black) to the bands'
@@ -2467,7 +2486,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             v = np.concatenate([i.ravel() for i in by[f]]) - blacks[f]
             lit = v[v > 0.2 * np.percentile(v, 99)]
             levels.append(float(np.median(lit)) if lit.size else 0.0)
-        mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels]) \
+        mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels], obs=u["key"][1]) \
             if min(levels) > 0 else None
         if isinstance(mix, calibration.FalseMix):
             out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
@@ -4177,11 +4196,36 @@ def detail(rgba, sigma):
         # 2^24 colours), without its slow reduce over three
         lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
-        out = np.clip(rgb + (DETAIL * (lum - mean))[..., None], 0, 255)
+        x = lum - mean
+        d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+        # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
+        # three keeps its color)
+        room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+        out = np.clip(rgb + _soft_detail(d, room)[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
     mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
-    out = np.clip(rgb + DETAIL * (rgb - mean), 0, 255)
+    x = rgb - mean
+    d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+    out = np.clip(rgb + _soft_detail(d, np.where(d > 0, 255 - rgb, rgb)), 0, 255)
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
+
+
+def _soft_detail(d, room):
+    """detail()'s change d (float32, levels) where a pixel has room levels left in its direction: as it is up to
+    DETAIL_KNEE of that room, past it rolled off toward the room's end (over / (over + rest): no step in slope, and
+    slow enough that a strong change keeps its order instead of piling up a level under the end, as tanh did) instead
+    of running into 0 or 255 and clipping. A crater's sunlit wall beside its shadow, already near white and near black, was
+    pushed flat to both ends by DETAIL's tripled contrast: hard white blotches and black holes along every rim."""
+    room = room.astype(np.float32)
+    knee = np.float32(DETAIL_KNEE) * room
+    mag = np.abs(d)
+    past = mag > knee
+    if not past.any():
+        return d
+    rest = room - knee
+    over = mag - knee
+    soft = knee + rest * over / np.maximum(over + rest, np.float32(1e-6))
+    return np.where(past, np.sign(d) * soft, d).astype(np.float32)
 
 
 def layout(u, n, cache):
@@ -4306,6 +4350,8 @@ TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame e
 #                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
 TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per channel: a set's colour fringes (a body
 #                         moving between its filters: red and blue edges on Titan's limb) are not carried into the frame
+TINT_FEATHER = 0.012   # of the picture's side: how far a tinted frame eases over to the set where it clipped
+TINT_LOCAL = 0.06      # of the picture's side: the reach of the local brightness match that fill is brought to
 TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
 TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
 TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
@@ -4352,9 +4398,26 @@ def tinted_frame(colour, grey, gamma=2.2):
     out = np.clip(h * (g * match)[..., None], 0, 1)
     # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
     # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
-    clip = np.clip(cv2.GaussianBlur(near, (0, 0), 4 * TINT_BLUR), 0, 1) * ca
+    side = max(colour.shape[:2])
+    clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * TINT_BLUR, TINT_FEATHER * side)), 0, 1) * ca
     if clip.any():
-        out = out * (1 - clip[..., None]) + np.clip(rgb, 0, 1) * clip[..., None]
+        # the set's picture brought to the frame's brightness round it, so the fill meets the frame without a seam
+        # (the set was taken at another time and exposure: drawn as it is it made a patch of another brightness and
+        # contrast over Saturn, cut along the frame's clipping, behind the 2012 Titan transit)
+        valid = lit.astype(np.float32)
+        sigma = TINT_LOCAL * side
+        # (normalized convolution: the ratio of the blurred frame to the blurred set over where both are measured, at
+        # two reaches, the wide one where the near one has nothing to go on deep inside the clipped part)
+        local = np.ones(g.shape, np.float32)
+        for reach in (4 * sigma, sigma):
+            num = cv2.GaussianBlur(g * match * valid, (0, 0), reach)
+            den = cv2.GaussianBlur(y * valid, (0, 0), reach)
+            cover = cv2.GaussianBlur(valid, (0, 0), reach)
+            known = np.clip(cover / 0.05, 0, 1)
+            local = local * (1 - known) + np.where(den > 1e-9, num / np.maximum(den, 1e-9), 1.0) * known
+        local = np.clip(local, *TINT_MATCH).astype(np.float32)
+        fill = np.clip(rgb * local[..., None], 0, 1)
+        out = out * (1 - clip[..., None]) + fill * clip[..., None]
     rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)
     return np.dstack([rgb8, grey[..., 3]])
 
@@ -4375,7 +4438,7 @@ def colour_picture(u, p, colour, planes):
     else:
         rgb = np.dstack([a[..., 0] for a in planes])
     bal = scale.get("balance")
-    mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
+    mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None, obs=u["key"][1])
     typical = scale.get("typical")
     if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
@@ -5134,7 +5197,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
-            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}
+            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL, "knee": DETAIL_KNEE, "edge": DETAIL_EDGE}
 
 
 def page_evens(u, cache, colour=True, centre=True):
@@ -5161,7 +5224,7 @@ def _colour_recipes(u, p, cache, ns, tiles):
     want = p["colour"]
     scale = p["display_scale"]
     bal = scale.get("balance")
-    mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
+    mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None, obs=u["key"][1])
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
@@ -5195,7 +5258,7 @@ def _eye_recipes(u, p, ns, tiles):
     if len(want) not in (2, 3):
         return None
     with calibration.coloring("eye"):
-        mix = calibration.color_mix(u["key"][2], want, u["key"][0])
+        mix = calibration.color_mix(u["key"][2], want, u["key"][0], obs=u["key"][1])
     if mix is None:
         return None
     by = _colour_by(u, want, ns, tiles, p["grey"])
