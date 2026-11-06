@@ -2830,9 +2830,14 @@ function targetLabel(k) {
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn grey from one filter" : ""}` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn gray from one filter" : ""}` :
+          rep.grey === "moved" ? "a body moved between the filters, drawn gray from one filter" :
+          rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
           rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
+        // a set drawn gray is not a color picture: the window says so rather than its set's kind (True color, ...)
+        if (rep.grey && shownKey === w.key) card.querySelector(".kindtag").textContent =
+          `BLACK AND WHITE · ${rep.grey === "moved" ? "BODY MOVED BETWEEN FILTERS" : "FILTERS COULD NOT BE ALIGNED"}`;
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
       });
     }
