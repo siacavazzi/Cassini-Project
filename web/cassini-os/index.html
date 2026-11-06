@@ -3684,6 +3684,8 @@ onmessage = async e => {
       const recipes = eye ? e.table.eye : e.table.sets;
       const set = o.color && recipes ? recipes.by[e.n] : null;
       if (o.color && e.table.colour && !recipes) return null;
+      // a frame drawn in its colour set's colour (obs_mosaic.set_shown, the table's "tint"): the server draws it
+      if (o.color && (e.table.tint || []).includes(e.n)) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
       const tr = set ? 0 : Math.min(trail, e.table.trail_most);
       if (!steady && !exposure && !tr && !set) return null;
@@ -13264,7 +13266,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"8a016af91d08";
+  const BUILD = /*BUILD*/"49f3c5b93294";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
