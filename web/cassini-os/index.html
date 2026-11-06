@@ -423,9 +423,11 @@ body.idle .win.full .orbitcorner { opacity: .55; }
 .capline a.pds:hover { color: var(--q-accent); text-decoration: underline solid; }
 .capline a.pds:hover::after { opacity: 1; }
 /* a quiet camera: a short strip in place of the square, with the camera's next picture and a button that goes
-   there (cameraFeed quiet; Sam 2026-11-04: a small countdown, out of the way, only while there is no picture) */
-.well:has(.idlecard), .camwin.zoomed .well:has(.idlecard) { aspect-ratio: auto; height: 58px; }
-.well .wellmsg:has(.idlecard) { position: absolute; inset: 0; }
+   there (cameraFeed quiet; Sam 2026-11-04: a small countdown, out of the way, only while there is no picture).
+   The card stays in the hidden message after a picture goes up, so the strip shape holds only without one: with
+   it, a frame that came in after a quiet spell sat squashed in a wide 58px strip that resizing could not undo */
+.well:not(.has-frame):has(.idlecard), .camwin.zoomed .well:not(.has-frame):has(.idlecard) { aspect-ratio: auto; height: 58px; }
+.well:not(.has-frame) .wellmsg:has(.idlecard) { position: absolute; inset: 0; }
 .idlecard { position: absolute; inset: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; text-transform: none; letter-spacing: normal; text-align: left; font: 11px/1.3 var(--ui); color: var(--q-dim); }
 .idletext { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 1px 7px; }
 .idlek { grid-column: 1 / -1; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--q-dim); }
@@ -13264,7 +13266,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"8a016af91d08";
+  const BUILD = /*BUILD*/"ef7e877616b4";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
