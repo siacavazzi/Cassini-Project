@@ -53,3 +53,13 @@ and the rings behind it. `scripts/poster_full.py rhea/cfg.json` lays out the pos
 ![rhea](rhea/poster_preview_1200.jpg)
 
 Known pipeline flaw, visible on the poster: a blurred grey strip at the top limb, in pointing 10.
+
+## Whole-disk version: Dione, 7 April 2010
+
+`ISS_129DI_REGMAP001_PRIME` pass 0: 80 frames over 20 pointings in IR1/GRN/UV3 plus clear. The drill-down goes into
+pointing 11, over the wispy terrain. Other whole-disk passes that were rendered and left off a poster:
+- Tethys 214TE_TETHYS001: the limb is cut flat on two sides.
+- Dione 158DI: a clear-only mosaic movie.
+- Saturn 00ASA_SATSYSTEM001: a smeared band over the top of the globe and colour fringes on the rings.
+
+![dione](dione/poster_preview_1200.jpg)

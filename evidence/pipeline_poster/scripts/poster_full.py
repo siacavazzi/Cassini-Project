@@ -44,7 +44,8 @@ def arrow(x0, y0, x1, y1, w=4):
 
 unit = json.load(open(O + 'unit.json')); frames = unit['frames']; tiles = json.load(open(O + 'tiles.json'))
 tmap = json.load(open(O + 'tile_map.json')); meta = json.load(open(O + 'frames/meta.json'))
-pt = tmap['pointings'][POINT]; ids = pt['ids']; IR, GR, UV = ids['IR3'], ids['GRN'], ids['UV3']
+pt = tmap['pointings'][POINT]; ids = pt['ids']; FR, FG_, FB = tmap['filters']; IR, GR, UV = ids[FR], ids[FG_], ids[FB]
+NM = {'IR3': '930', 'IR1': '752', 'RED': '649', 'GRN': '568', 'BL1': '451', 'UV3': '338'}
 steps = json.load(open(O + f'steps/{GR}__steps.json')); csteps = json.load(open(O + f'steps/{IR}+{GR}+{UV}__steps.json'))
 tile_of = {t['id']: t for t in tiles}
 NP = len(tmap['pointings']); NF = len(frames)
@@ -64,7 +65,7 @@ mos = Image.open(O + 'mosaic_full.png').convert('RGBA'); mw, mh = mos.size
 bb = mos.getchannel('A').getbbox()
 rep = json.load(open(O + 'mosaic_report.json'))
 tag(M, TOP - 40, '06', 'MOSAIC')
-note(M + 420, TOP - 70, ['obs_mosaic.so_far', f"{mw} × {mh} px  ·  {rep['mosaic']} colour tiles, {rep['places']} pointings"], font=F_MS)
+note(M + 420, TOP - 70, ['obs_mosaic.so_far', f"{mw} × {mh} px  ·  {rep['mosaic']} colour tiles, {NP} pointings"], font=F_MS)
 hx, hy = M - bb[0], TOP + 10 - bb[1]
 img.paste(mos, (hx, hy), mos)
 poly = [(hx + u * mw, hy + v * mh) for u, v in pt['poly']]
@@ -83,14 +84,14 @@ d.text((W - M, TOP - 40), f'POINTING {POINT + 1:02d}', font=F_LBL, fill=ACC, anc
 y = TOP; tag(RX, y - 40, '05', 'COLOUR')
 col = alpha_crop(Image.open(O + f'steps/{IR}+{GR}+{UV}__all_on.png'))
 cbox, _ = put(col, RX, y + 10, 500, 500)
-note(cbox[2] + 40, y + 20, ['processed_frame', '', 'R  IR3  930 nm', 'G  GRN  568 nm', 'B  UV3  338 nm'], font=F_MS)
+note(cbox[2] + 40, y + 20, ['processed_frame', '', f'R  {FR}  {NM.get(FR, "")} nm', f'G  {FG_}  {NM.get(FG_, "")} nm', f'B  {FB}  {NM.get(FB, "")} nm'], font=F_MS)
 d.text((cbox[2] + 40, cbox[3] - 70), f"{csteps['diff']['align']:.2f}", font=hn(120), fill=FG, anchor='ls')
 note(cbox[2] + 40, cbox[3] - 45, ['change with align off'], font=F_MS)
 GAP = 150
 y = cbox[3] + GAP; tag(RX, y - 40, '04', 'TILES')
 note(RX + 320, y - 62, ['obs_mosaic.tile'], font=F_MS)
 tw = (RW - 2 * 36) // 3; x = RX
-for f, i in (('IR3', IR), ('GRN', GR), ('UV3', UV)):
+for f, i in ((FR, IR), (FG_, GR), (FB, UV)):
     t = tile_of[i]; tb, _ = put(Image.open(TD + f"{t['n']}.png"), x, y + 10, tw, tw)
     sh = (t.get('registered') or {}).get('shift')
     note(x, tb[3] + 16, [f"{f}  tile {t['n']:02d}", (f'{sh[0]:+.2f}, {sh[1]:+.2f} px' if sh else 'reference')], font=F_MS)
@@ -125,7 +126,7 @@ note(M + 560, y - 18, ['obs_mosaic.filter_mosaic  →  colour_picture'], font=F_
 y += 60; n = 4; pw = 720; gap = (W - 2 * M - n * pw) // (n - 1); x = M
 cnt = rep.get('count') or {}
 lay = json.load(open(O + 'layout.json'))['count']
-panels = [('IR3', 'filter_IR3.png'), ('GRN', 'filter_GRN.png'), ('UV3', 'filter_UV3.png'), ('COLOUR', 'mosaic_full.png')]
+panels = [(f, f'filter_{f}.png') for f in tmap['filters']] + [('COLOUR', 'mosaic_full.png')]
 for k, (name, path) in enumerate(panels):
     pb, _ = put(Image.open(O + path).crop(bb), x, y, pw, None)
     num = rep['mosaic'] if name == 'COLOUR' else lay.get(name)
@@ -151,7 +152,7 @@ y += 280
 d.line((M, y - 20, W - M, y - 20), fill=DIM2, width=2); y += 60
 tag(M, y, '01', 'EVERY RAW FRAME')
 y += 50
-order = CFG.get('rows', ['UV3', 'GRN', 'IR3', 'CL1/CL2'])
+order = CFG.get('rows', list(tmap['filters'][::-1]) + ['CL1/CL2'])
 LW = 150; cg = 10; cw = (W - 2 * M - LW - (NP - 1) * cg) // NP; ch = cw + 30
 def frame_of(p, f):
     return p['ids'].get(f) or p.get('luminance', {}).get(f) or p.get('also', {}).get(f)
