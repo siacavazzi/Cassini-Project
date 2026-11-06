@@ -313,7 +313,7 @@ def warp_sky(image, dx, dy, weight, step, fine_weight=None):
 
 """
 Ring reprojection for Saturn's passes, on the same sky places as sky_field (x = -east, y = -north on the sky plane at
-Saturn's centre, reference pixels of km_px km). A ring mosaic's panels are taken minutes apart while Cassini moves, so
+Saturn's center, reference pixels of km_px km). A ring mosaic's panels are taken minutes apart while Cassini moves, so
 one place on the sky looks at a different radius of the rings in each panel; and SPICE's pointing is a few pixels off
 for each pointing, so the ringlets step radially at the panels' seams. ring_field redraws a picture's ring pixels as
 the epoch sees them: each sky place at the epoch is traced to the point of the ring plane under it (Saturn's equator
@@ -335,7 +335,7 @@ def ring_view(et):
 
 
 def _ellipsoid_hit(view, origin, ray):
-    """Where rays (J2000, from origin points relative to Saturn's centre) first meet Saturn's ellipsoid: (hit, t)."""
+    """Where rays (J2000, from origin points relative to Saturn's center) first meet Saturn's ellipsoid: (hit, t)."""
     o = (origin @ view["rot"].T) / view["radii"]
     d = (ray @ view["rot"].T) / view["radii"]
     a = (d * d).sum(-1)
@@ -348,7 +348,7 @@ def _ellipsoid_hit(view, origin, ray):
 
 
 def sky_to_ring(view, x, y, km_px):
-    """The ring-plane points (J2000 km from Saturn's centre) under sky places x, y, their radius (km), and which are
+    """The ring-plane points (J2000 km from Saturn's center) under sky places x, y, their radius (km), and which are
     lit rings seen: in front of the camera, Saturn not in front of them nor they in front of Saturn (its disk shows
     through the thinner rings), out of Saturn's shadow, and within RING_RADII."""
     d = view["c"] + (-x * km_px)[..., None] * view["east"] + (-y * km_px)[..., None] * view["north"]
@@ -367,7 +367,7 @@ def sky_to_ring(view, x, y, km_px):
 
 
 def ring_to_sky(view, points, km_px):
-    """Sky places (reference pixels from Saturn's centre) of ring-plane points, and which this view sees (in front of
+    """Sky places (reference pixels from Saturn's center) of ring-plane points, and which this view sees (in front of
     the camera, Saturn not in front of them)."""
     v = view["c"] + points
     along = v @ view["ch"]
@@ -380,7 +380,7 @@ def ring_field(epoch, view, x, y, km_px, step=16):
     """sky_field for the rings: for sky places x, y (a grid of step reference px) at the epoch's view, where the
     picture taken at view shows the same ring point (its shift dx, dy from x, y), and weight 1 on the lit rings both
     see, 0 elsewhere. Unlike the moons' surface the shift does not fade toward the mask's edge: Cassini's motion over a
-    ring mosaic moves the rings 10 to 40 px against Saturn's centre, a fade over a few tens of px squeezed the rings by
+    ring mosaic moves the rings 10 to 40 px against Saturn's center, a fade over a few tens of px squeezed the rings by
     half there, and the limb and the shadow's edge are where the rings truly end (Saturn's disk is kept as taken). The
     shift is worked out off the mask too (on the ring plane behind Saturn and past the rings), so the grid's
     interpolation across the mask's edge does not pull it toward none; ring_weight draws the edge itself, per pixel."""

@@ -79,7 +79,7 @@ _, _, lit = rp.sky_to_ring(view(sun=(1.0, 0.0, 0.05)), gx, gy, km_px)
 _, _, lit1 = rp.sky_to_ring(view(sun=(0.0, 1.0, 0.6)), gx, gy, km_px)
 print(f"ring pixels lit: sun overhead {lit1.sum()}, sun behind Saturn {lit.sum()}")
 assert lit1.sum() > lit.sum() + 500, "a shadow on the rings takes some of them out"
-# the redraw: a view a degree higher moves the rings against Saturn's centre; the weight is the lit rings only
+# the redraw: a view a degree higher moves the rings against Saturn's center; the weight is the lit rings only
 gx, gy = np.meshgrid(np.arange(-2400, 2400, 16.0), np.arange(-1600, 1600, 16.0))
 dx, dy, wt = rp.ring_field(v, view(elev_deg=21.0), gx, gy, km_px)
 _, _, ok = rp.sky_to_ring(v, gx, gy, km_px)
