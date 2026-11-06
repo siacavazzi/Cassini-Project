@@ -780,14 +780,6 @@ def _frame_bodies(lbl):
     return [b for b in out if 2 * b[3] >= PER_BODY_LEAST]
 
 
-def _warped_bodies(bodies, warp):
-    """_frame_bodies' bodies of a frame as warp_frame moves its picture (full resolution px, about warp's centre)"""
-    x, y, scale, turn = warp
-    M = cv2.getRotationMatrix2D((x, y), turn, scale)
-    return [(n, float(M[0, 0] * bx + M[0, 1] * by + M[0, 2]), float(M[1, 0] * bx + M[1, 1] * by + M[1, 2]), r * scale, z)
-            for n, bx, by, r, z in bodies]
-
-
 def _disk(shape, x, y, r, soft=0.0):
     """A disk at (x, y) of radius r on a picture of shape (rows, columns) at the full resolution grid's scale, as
     float32 0 to 1, feathered over soft px about r (a hard disk when soft is 0)"""
@@ -871,10 +863,11 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     each = [_frame_bodies(l) for l in lbls]
     if any(b is None for b in each):
         return None
-    if warps:
-        # a channel scaled and turned onto the reference (spice_warps, a close flyby's range changing between the
-        # filters): its bodies are where the warp put them (W1714693733_1, Dione over Saturn)
-        each = [b if w is None else _warped_bodies(b, w) for b, w in zip(each, warps)]
+    if warps and any(w is not None for w in warps):
+        # (not a set scaled and turned onto the reference, spice_warps: a close flyby's WAC, where a small moon on
+        # Saturn that is no body of SPICE's took Saturn's move and split in three, W1561727638_2, and Saturn's clipped
+        # limb at the frame's edge came out in fringes, W1521653816_1)
+        return None
     names = [b[0] for b in each[ref]]
     if len(names) < 2 or len(names) > PER_BODY_MOST or any({b[0] for b in e} != set(names) for e in each):
         return None
@@ -992,13 +985,15 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     # (on the far body only: off it, in the sky, a filter's copy of the nearer body's limb and glare is drawn grey from
     # the reference, below, as before; a fill there from the far body's color drew colored rims round Dione,
     # N1701985106_1)
-    sky = np.logical_or.reduce([g > 0 for g in ghosts]) & ~far_disk
-    if any((g > 0)[far_disk].any() for g in ghosts) or any(e.any() for e in edges):
-        miss = [((g > 0) & far_disk) | e for g, e in zip(ghosts, edges)]
+    # (the ratio measured inside the far body's limb: its haze ring past the limb is bluer, and a fill near the limb
+    # took that blue, N1686941052_1; a hazy body's limb ring itself is not filled either but grey as off it: its own
+    # color there is neither the inside's nor the sky's, and a fill drew a green band under Rhea, N1702246291_1)
+    inner = _disk(shape, far[1] + fx, far[2] + fy, far[3] - PER_BODY_GROW - PER_BODY_HAZE * far[3]) > 0
+    fill_zone = inner if order[0] in PER_BODY_HAZY else far_disk
+    sky = np.logical_or.reduce([g > 0 for g in ghosts]) & ~fill_zone
+    if any((g > 0)[fill_zone].any() for g in ghosts) or any(e.any() for e in edges):
+        miss = [((g > 0) & fill_zone) | e for g, e in zip(ghosts, edges)]
         x = [np.asarray(c, np.float32) for c in out]
-        # (the ratio measured inside the far body's limb: its haze ring past the limb is bluer, and a fill near the
-        # limb took that blue, N1686941052_1)
-        inner = _disk(shape, far[1] + fx, far[2] + fy, far[3] - PER_BODY_GROW - PER_BODY_HAZE * far[3]) > 0
         filled, _ = cal.fill_saturated(x, miss, reach=PER_BODY_FILL_REACH * k, where=inner & ~nearer_disks, floor=False)
         for j, c in enumerate(out):
             if not miss[j].any():
@@ -1015,8 +1010,8 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     if sky.any():
         grow = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * MOVED_GROW + 1,) * 2)
         soft = cv2.GaussianBlur(cv2.dilate(sky.astype(np.float32), grow), (0, 0), MOVED_SOFT / 2)
-        # (not over the far body, which the fill keeps in color)
-        ghost = np.maximum(ghost, np.clip(soft * 2, 0, 1) * (1 - far_disk))
+        # (not over the far body's inside, which the fill keeps in color)
+        ghost = np.maximum(ghost, np.clip(soft * 2, 0, 1) * (1 - fill_zone))
     # a nearer body the camera saturated in some filter (over PER_BODY_CLIPPED of its disk) has no color there to
     # draw: the saturated fill would take the color round it, the far body's (an orange Dione over Titan,
     # N1694954493_1), so it is drawn grey from the reference, as its whole disk
