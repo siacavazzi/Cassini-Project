@@ -2700,7 +2700,7 @@ def _register(u, n, out, crop, cache, scale):
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
 
 
-def _overlap(q, ref, at_q, t, crop, at_t, around=None, where=None):
+def _tile_overlap(q, ref, at_q, t, crop, at_t, around=None, where=None):
     """The part of the view tiles q (picture ref, middle at at_q) and t (picture crop, middle at at_t) both cover:
     ([q's, t's] grey BGR crops, [their alpha masks], the rounding of each crop's corner to whole pixels as
     ([x of q, x of t], [y of q, y of t])), or None when they overlap by under 64 px either way. around = (x, y, half):
@@ -2741,7 +2741,7 @@ def _centroid_onto(q, ref, at_q, t, crop, at_t):
     """How far tile t is from tile q by the lit area's centroid (image_correction.centroid_shift) over the part of
     the view both cover, as _shift_onto measures (reference pixels t's place moves back by); None when the body is
     not wholly inside that part in both."""
-    got = _overlap(q, ref, at_q, t, crop, at_t)
+    got = _tile_overlap(q, ref, at_q, t, crop, at_t)
     if got is None:
         return None
     imgs, _, rest = got
@@ -2766,7 +2766,7 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None, around=None
     kept = (x, y, r), the target's own disk, which is in front of it; a hole over the square round a small target
     (around) matches nothing: (None, "other body"). All in the coordinates of at_q and at_t."""
     where = {}
-    got = _overlap(q, ref, at_q, t, crop, at_t, around, where)
+    got = _tile_overlap(q, ref, at_q, t, crop, at_t, around, where)
     if got is None:
         return None, None
     imgs, masks, rest = got
