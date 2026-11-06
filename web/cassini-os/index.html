@@ -716,8 +716,9 @@ body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 .openmosaic[hidden] { display: none; }
 body.idle .openmosaic { opacity: .35; } body.idle .openmosaic:hover { opacity: 1; }
 .well.fullres .savepic { color: var(--q-accent); }
-/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync) */
-.finishmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync); under the corner labels
+   (the mosaic tag, and NAC/WAC on a phone), which it covered in a narrow window */
+.finishmosaic { all: unset; position: absolute; left: 6px; top: 26px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
   font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
 .finishmosaic:hover { color: #fff; border-color: var(--q-accent); }
 .finishmosaic:focus-visible { outline: 1px solid var(--q-accent); }
@@ -884,6 +885,8 @@ body.phone .srow input[type=range] { width: 96px; }
 body.phone { --phs: 1; --menu: calc(env(safe-area-inset-top, 0px) + 30px); --gap: 6px; --side: max(6px, env(safe-area-inset-left, 0px)); --sider: max(6px, env(safe-area-inset-right, 0px)); }
 /* menu bar: taller targets for fingers; the date is on the replay controls already */
 body.phone #menubar { height: var(--menu); padding-left: var(--side); padding-right: var(--sider); }
+body.phone #menubar .menu.app > button { white-space: nowrap; }   /* "Cassini OS" on one line at 390 px */
+body.phone .camwin .kindtag { left: 34px; text-align: right; }   /* clear of the NAC/WAC corner label */
 body.phone .menu > button { height: 30px; line-height: 30px; padding: 0 9px; }
 body.phone .menu.app > button { padding-left: 4px; }
 body.phone .menu ul { top: 30px; max-width: calc(100vw - 12px); max-height: calc(100dvh - 40px); overflow-y: auto; }
@@ -13213,7 +13216,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3c380d50c73f";
+  const BUILD = /*BUILD*/"90b9dfea786c";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

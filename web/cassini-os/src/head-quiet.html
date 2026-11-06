@@ -694,8 +694,9 @@ body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 .openmosaic[hidden] { display: none; }
 body.idle .openmosaic { opacity: .35; } body.idle .openmosaic:hover { opacity: 1; }
 .well.fullres .savepic { color: var(--q-accent); }
-/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync) */
-.finishmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync); under the corner labels
+   (the mosaic tag, and NAC/WAC on a phone), which it covered in a narrow window */
+.finishmosaic { all: unset; position: absolute; left: 6px; top: 26px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
   font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
 .finishmosaic:hover { color: #fff; border-color: var(--q-accent); }
 .finishmosaic:focus-visible { outline: 1px solid var(--q-accent); }
