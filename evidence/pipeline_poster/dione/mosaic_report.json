@@ -1,0 +1,20 @@
+{
+ "kind": "mosaic",
+ "lap": 2,
+ "laps": 1,
+ "places": 19,
+ "mosaic": 60,
+ "filters": 3,
+ "filter_names": [
+  "IR1",
+  "GRN",
+  "UV3"
+ ],
+ "observation": "ISS_129DI_REGMAP001_PRIME",
+ "pass": 0,
+ "of": 60,
+ "fixed": true,
+ "luminance": false,
+ "width": 1947,
+ "height": 2048
+}
