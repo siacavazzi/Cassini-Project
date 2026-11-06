@@ -4301,6 +4301,64 @@ CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipp
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
 
 
+TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
+TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame eases over to the set's own picture (the
+#                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
+TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per channel: a set's colour fringes (a body
+#                         moving between its filters: red and blue edges on Titan's limb) are not carried into the frame
+TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
+TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
+TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
+#                            display scale already, and a set showing another scene (the rings a moon was framed on, the
+#                            frame on Saturn's night side) would otherwise set it (221EN PLMHPMR003 came out near black)
+
+
+def tinted_frame(colour, grey, gamma=2.2):
+    """A movie frame's own picture (grey: RGBA, its first channel the frame on the pass's display scale) drawn in the
+    colour of a colour set (colour: colour_picture's RGBA on the same canvas): in linear light, the set's hue (each
+    channel over its luminance) times the frame's brightness, brought to the set's over the lit part both cover. Where
+    the set has no picture, or is dark, the hue is the set's mean over its lit part, so the frame keeps its whole
+    place in one colour. The frame's alpha. (set_shown: the frames between sets play their own moment in colour.)"""
+    lin = lambda v: calibration.decode(v.astype(np.float32) / 255, gamma)
+    ca = colour[..., 3].astype(np.float32) / 255
+    ga = grey[..., 3].astype(np.float32) / 255
+    rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None] / 1.0)
+    rgb = np.clip(rgb, 0, None)
+    if TINT_BLUR > 0:
+        rgb = cv2.GaussianBlur(rgb, (0, 0), TINT_BLUR)
+        ca = cv2.GaussianBlur(ca, (0, 0), TINT_BLUR)
+    y = rgb @ np.asarray([0.2126, 0.7152, 0.0722], np.float32)
+    g = lin(grey[..., 0])
+    # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
+    near = np.clip((grey[..., 0].astype(np.float32) - TINT_CLIP) / max(1.0, CLIP_FROM - TINT_CLIP), 0, 1)
+    clipped = near > 0
+    both = (ca > 0.99) & (ga > 0.99) & ~clipped
+    top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
+    top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
+    lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g)
+    if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
+        match = float(np.median(y[lit]) / np.median(g[lit]))
+        hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
+    else:
+        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
+        hue = np.ones(3, np.float32)
+    match = float(np.clip(match, *TINT_MATCH))
+    own = rgb / np.maximum(y, 1e-6)[..., None]
+    own = hue[None, None, :] * np.clip(own / np.maximum(hue, 1e-6)[None, None, :], *TINT_HUE)
+    # the set's own hue where it is lit; where the set is dark (sky, a shadow, or a body that has moved since) no hue,
+    # gray; off the set's edge its mean hue, so the frame keeps its whole place in the body's colour
+    w = (ca * np.clip(y / max(TINT_DARK * top_y, 1e-6), 0, 1))[..., None]
+    h = own * w + (ca[..., None] - w) + hue[None, None, :] * (1 - ca[..., None])
+    out = np.clip(h * (g * match)[..., None], 0, 1)
+    # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
+    # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
+    clip = np.clip(cv2.GaussianBlur(near, (0, 0), 4 * TINT_BLUR), 0, 1) * ca
+    if clip.any():
+        out = out * (1 - clip[..., None]) + np.clip(rgb, 0, 1) * clip[..., None]
+    rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)
+    return np.dstack([rgb8, grey[..., 3]])
+
+
 def colour_picture(u, p, colour, planes):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
@@ -5061,13 +5119,15 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     tile_of = lambda j: tiles.get(j) or {}
     not_shown = lambda j: unfit(u["frames"], j, tile_of)
     # (colour on: the frames a pass playing its grey filter shows another frame of that filter for, step_frame)
-    step = {}
+    step, tint = {}, []
     for m in ns if colour else ():
-        s, got = shown_of(u, p, m, not_shown, tile_of)
+        s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
+        if tinted:
+            tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
-            "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step,
+            "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
@@ -5109,17 +5169,17 @@ def _colour_recipes(u, p, cache, ns, tiles):
 
 
 def _colour_by(u, want, ns, tiles, grey):
-    """{frame n: the tiles of its colour set in the filters' order} for the frames of ns drawn with a set (set_of, the
-    set movie_frame picks at SPICE's places); none when the pass plays its grey filter (plays_colour; grey: its
-    plan's)."""
+    """{frame n: the tiles of its colour set in the filters' order} for the frames of ns drawn as a set (set_shown, the
+    set movie_frame picks at SPICE's places; a frame drawn in its set's colour is left to the server, the steady
+    table's "tint"); none when the pass plays its grey filter (plays_colour; grey: its plan's)."""
     by, placed = {}, set(ns)
     if not plays_colour(u, want, grey):
         return by
     not_shown = lambda j: j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {})
     for n in ns:
         covers = lambda got: set_cover(tiles[n], [tiles[j] for j in got.values()]) >= HELD_COVER
-        got = set_of(u, n, want, not_shown, lambda j: j in placed, covers)
-        if got:
+        got, tinted = set_shown(u, n, want, not_shown, lambda j: j in placed, covers)
+        if got and not tinted:
             by[str(n)] = [got[f] for f in want]
     return by
 
@@ -5665,11 +5725,43 @@ def set_of(u, n, want, not_shown, placed, covers=None):
     return None
 
 
-def step_frame(filters, s, grey, whole, near):
+HOLD_AGE = sets_passes.SET_GAP   # s: the furthest in time a picture of other frames stands in for a movie frame (shown_of)
+HOLD_BANDS = ("MT1", "MT2", "MT3", "UV1", "UV2", "UV3")   # bands a colour set stands in for within HOLD_AGE (held_band)
+
+
+def held_band(f):
+    """Whether a frame through filter f is one a colour set taken near it stands in for (shown_of): a methane band, an
+    ultraviolet one or a polarizer, whose own gray as the picture's brightness would not be the body's look (dark
+    methane belts, a UV limb). Any other filter (clear, the colours, the continuum bands, IR) gives its own picture."""
+    return f in HOLD_BANDS or any(b in HOLD_BANDS for b in f.split("/")) or _polarizer(f)
+
+
+def set_shown(u, n, want, not_shown, placed, covers=None):
+    """(the colour set frame n of a movie playing in colour shows, or None; True when it shows it as the colour of
+    frame n's own picture) (pure but for the pass's sets: movie_frame's and the page's, _colour_by). The set is
+    set_of's. A frame of the set, or one taken within HOLD_AGE of it (the same moment: a cycle's other filters, which
+    drawn on their own would strobe from look to look), is drawn as the set. A frame further from it plays its own
+    moment in the set's colour (tinted: its brightness and detail, the set's hue; shown_of picks the picture, lum_of)
+    (Sam 2026-11-06: frames were lost behind one colour picture, and the movie had fewer frames than it took).
+    The 2012 Titan transit (165TI LRMONITOR001 WAC) played 25 of its 26 frames as one set taken 50 minutes into it, and
+    the first Titan flyby (00ATI MOVIEA001) never showed the CB3 frames that see its surface through the haze."""
+    got = set_of(u, n, want, not_shown, placed, covers)
+    if not got or n in got.values():
+        return got, False
+    frames = u["frames"]
+    t, ts = frames[n][3], [frames[j][3] for j in got.values()]
+    age = t - max(ts) if t >= max(ts) else min(ts) - t
+    if age <= HOLD_AGE:
+        return got, False
+    return got, True
+
+
+def step_frame(filters, s, grey, whole, near, times=None):
     """The frame shown for frame s (held_of's) in a movie playing its grey filter (pure, ported to the page through
     the steady table's "step"): s when it is the grey filter's; else, in a run of at most STEP_RUN frames of other
     filters, the grey filter's last whole frame before the run (whole(j): placed, shown), else its first after it,
-    that near(j) (its place takes in most of s's); s when there is none."""
+    that near(j) (its place takes in most of s's) and, given the frames' times, was taken within HOLD_AGE of s; s when
+    there is none."""
     if filters[s] == grey:
         return s
     a, b = s, s
@@ -5682,7 +5774,8 @@ def step_frame(filters, s, grey, whole, near):
     before = (j for j in range(a - 1, -1, -1) if filters[j] == grey and whole(j))
     after = (j for j in range(b + 1, len(filters)) if filters[j] == grey and whole(j))
     for j in (next(before, None), next(after, None)):
-        if j is not None and near(j):
+        # (times: the frames' times; a gray frame taken over HOLD_AGE from s is not s's moment, s plays itself)
+        if j is not None and near(j) and (times is None or abs(times[j] - times[s]) <= HOLD_AGE):
             return j
     return s
 
@@ -5730,10 +5823,31 @@ def holds(tile_of, not_shown):
     return lambda j: "offset" in tile_of(j) and not not_shown(j) and not over_exposed(tile_of(j))
 
 
+def lum_of(frames, s, grey, whole, near):
+    """The frame whose picture gives a tinted movie frame s its brightness and detail (shown_of): of the frames within
+    HOLD_AGE of it that are whole (whole(j)), cover its place (near(j)) and are not of held_band's bands, the pass's
+    gray filter's nearest in time, else any filter's nearest; s itself when it is not of those bands and none of the
+    gray filter is near; None when s is of those bands and no such frame is near (it then plays on its own, in gray).
+    So the movie keeps one look instead of strobing filter to filter (00ATI MOVIEA001: CB3's surface, CB1's smooth
+    haze, IR3's bands), and a polarizer or UV frame shows its moment through the filter beside it (153HY HYPERION001:
+    its P0, P60, P120 and UV3 frames flashed gray between colour ones)."""
+    t = frames[s][3]
+    ok = [j for j in range(len(frames)) if abs(frames[j][3] - t) <= HOLD_AGE and not held_band(frames[j][2])
+          and (j == s or (whole(j) and near(j)))]
+    by_time = lambda js: min(js, key=lambda j: (abs(frames[j][3] - t), j != s)) if js else None
+    mine = by_time([j for j in ok if frames[j][2] == grey])
+    if mine is not None:
+        return mine
+    if not held_band(frames[s][2]):
+        return s
+    return by_time(ok)
+
+
 def shown_of(u, p, n, not_shown, tile_of):
-    """(the frame whose picture frame n of a movie shows, the colour set it shows or None), as movie_frame draws it
-    with colour on: the set (set_of) when the pass plays in colour (plays_colour); else the frame held_of holds, put
-    through step_frame when the pass plays its grey filter."""
+    """(the frame whose picture frame n of a movie shows, the colour set it shows or None, True when the set is drawn
+    as the colour of that frame's picture), as movie_frame draws it with colour on: the set (set_shown) when the pass
+    plays in colour (plays_colour); else the frame held_of holds, put through step_frame when the pass plays its grey
+    filter."""
     frames, want = u["frames"], p.get("colour")
     placed = lambda j: "offset" in tile_of(j)
     colours = bool(want) and plays_colour(u, want, p["grey"])
@@ -5744,13 +5858,20 @@ def shown_of(u, p, n, not_shown, tile_of):
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
-        got = set_of(u, n, want, not_shown, placed, covers)
+        got, tint = set_shown(u, n, want, not_shown, placed, covers)
+        if got and tint:
+            # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
+            # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
+            j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
+            if j is not None:
+                return j, got, True
+            got = None   # (a held band with no other filter near: on its own, in gray, below)
         if got:
-            return s, got
+            return s, got, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
-                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
-    return s, None
+                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
+    return s, None, False
 
 
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True):
@@ -5791,9 +5912,9 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # a partial frame (lines lost in downlink), an uncalibrated, over-exposed or empty one (unfit) shows the last whole
     # frame of its filter in its place; with colour on, the frame plays its colour set (set_of) or, in a pass playing
     # its grey filter, that filter's frame beside it (step_frame): shown_of
-    got = None
+    got, tint = None, False
     if colour:
-        s, got = shown_of(u, p, n, not_shown, tile_of)
+        s, got, tint = shown_of(u, p, n, not_shown, tile_of)
     else:
         s = held_of([fr[2] for fr in frames], n, not_shown, whole)
     if s != n:
@@ -5862,6 +5983,10 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rgba = colour_picture(u, p, used, planes)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]
+            if tint:
+                # frame n's own picture in the set's colour (set_shown): its brightness and detail, the set's hue
+                rgba = tinted_frame(rgba, _place(u, t, rect, k, W, H, cache, p["display_scale"]), gamma)
+                rep["tint"] = True
         else:
             used = None
     if not used:

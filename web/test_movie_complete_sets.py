@@ -77,7 +77,7 @@ assert om.held_of(fs, 5, bad, lambda j: "offset" in tiles[j] and not bad(j)) == 
 u = {"frames": frames, "_sets": [[("RED", 6), ("GRN", 7), ("BL1", 8)], [("RED", 9), ("GRN", 10), ("BL1", 11)]]}
 pc = {"colour": ["RED", "GRN", "BL1"], "grey": "CL1/CL2"}
 assert om.plays_colour(u, pc["colour"], pc["grey"])
-assert [om.shown_of(u, pc, n, bad, tile_of) for n in (1, 2, 5)] == [(3, None)] * 3   # no set takes in its place
+assert [om.shown_of(u, pc, n, bad, tile_of) for n in (1, 2, 5)] == [(3, None, False)] * 3   # no set takes in its place
 print("held frames are never over-exposed; ok")
 
 # ---------- 1. a colour movie opens on its first complete set; sets update whole ----------
