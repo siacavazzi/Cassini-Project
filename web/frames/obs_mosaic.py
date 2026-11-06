@@ -4391,8 +4391,9 @@ def _chained(u, cache, p, name, key, work):
         if rec is not None and rec.get(key) is not None:
             return rec[key]
         if not os.path.exists(path):
-            places, hows = work()
-            data = json.dumps({"places": {str(n): [round(v, 2) for v in xy] for n, xy in places.items()}, "how": hows})
+            places, hows, *more = work()
+            data = json.dumps({"places": {str(n): [round(v, 2) for v in xy] for n, xy in places.items()}, "how": hows,
+                               **(more[0] if more else {})})
             reel._cached(path, data.encode)
         with open(path) as fh:
             kept = {int(n): xy for n, xy in json.load(fh)["places"].items()}
@@ -4438,7 +4439,16 @@ STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by de
 STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
-STEADY_FILE = "steady2-" + PLAN_FILE   # steady2: held on the target (steady_guide)
+STEADY_FILE = "steady3-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places
+# a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
+# if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
+# (color_image.find_small_body) and SPICE's place of it jumps between neighbouring frames by more than STEADY_JUMPY (in
+# more than STEADY_JUMPS of the pairs), or is off by more than STEADY_REACH over the pass (median), the stabilization
+# takes the pictures' places of the moon instead of SPICE's (seen_places)
+STEADY_JUMPY = 8.0    # px
+STEADY_JUMPS = 0.1    # of the neighbouring pairs
+STEADY_EDGE = 16     # px: a blob found nearer the tile's edge than its radius and this is not the moon (seen_places)
+STEADY_SEEN = 0.5     # of the placed tiles: the least share the moon must be found on for the pictures to be believed
 
 
 def steady_chain(u, cache, p=None):
@@ -4461,13 +4471,82 @@ def steady_chain(u, cache, p=None):
 
     def work():
         made, pic, there = _every_tile(u, cache, p)
+        held, why = seen_places(u, made, pic, there)
+        if held:
+            # SPICE's places of a small moon replaced by where the pictures show it: the chain starts there, steps
+            # by it, and is held to it (steady_places)
+            made = [dict(t, offset=held[t["n"]]) if t["n"] in held else t for t in made]
 
         def step(places, j, n):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-        return _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
+
+
+def steady_held(u, cache, p=None):
+    """{tile n: [x, y]}: what steady_places holds pass u's chain to, SPICE's place of each tile (its offset) or, where
+    seen_places took the pictures' places of a small moon, those."""
+    p = p or plan(u, cache)
+    steady_chain(u, cache, p)
+    path = os.path.join(folder(u, cache), STEADY_FILE)
+    held = {}
+    if os.path.exists(path):
+        with open(path) as fh:
+            held = {int(n): xy for n, xy in (json.load(fh).get("held") or {}).items()}
+    return held
+
+
+def seen_places(u, made, pic, there):
+    """({tile n: [x, y]}, why) for a pass whose target is a small moon SPICE places badly, else ({}, why): each placed
+    tile's place with the moon where its picture shows it. The moon is looked for in each tile near where SPICE puts it
+    (color_image.find_small_body: the one compact lit blob the size of its disk; None for a crescent or a frame-cut
+    moon near SPICE's place, a speck, or a disk filling the frame). SPICE is off from the picture by d = seen - SPICE in
+    each tile it is found on; when d jumps by more than STEADY_JUMPY between neighbouring tiles in more than STEADY_JUMPS
+    of the pairs, or is past STEADY_REACH over the pass (median), SPICE is not believed: a tile it is found on takes the
+    picture's place, the others SPICE's moved by the nearest found tiles' d (between two, in proportion). On fewer than
+    STEADY_SEEN of the tiles nothing is believed of the pictures (SPICE's places stand). why: what was measured."""
+    if not u.get("z"):
+        return {}, None
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
+    half = max(STEADY_AROUND, radius * (1 + CENTRE_MARGIN) + STEADY_AROUND / 2)
+    if not (0 < radius and half < FRAME / 2):
+        return {}, None
+    placed = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
+    off = {}
+    for t in placed:
+        # (a tile's picture is in reference pixels, its corner at its place plus box; SPICE's target at 0)
+        bx, by = t["box"][0], t["box"][1]
+        im = pic(t["n"])
+        got = color_image.find_small_body(im, -t["offset"][0] - bx, -t["offset"][1] - by, radius)
+        if got is not None:
+            # (not a blob against the tile's edge: a bright wedge where the picture's corner is cut, which Pan
+            # ISS_264PN_PAN001_PIE's methane frames locked onto 860 px from the moon)
+            inside = cv2.distanceTransform(np.pad(im[..., 3] > 0, 1).astype(np.uint8), cv2.DIST_L2, 3)[1:-1, 1:-1]
+            yi, xi = min(int(got[1]), im.shape[0] - 1), min(int(got[0]), im.shape[1] - 1)
+            if inside[max(yi, 0), max(xi, 0)] < radius + STEADY_EDGE:
+                got = None
+        if got is not None:
+            off[t["n"]] = (-(bx + got[0]) - t["offset"][0], -(by + got[1]) - t["offset"][1])
+    if not placed or len(off) < STEADY_SEEN * len(placed) or len(off) < 2:
+        return {}, {"found": len(off), "of": len(placed)}
+    ns = sorted(off)
+    jumps = [math.hypot(off[b][0] - off[a][0], off[b][1] - off[a][1]) for a, b in zip(ns, ns[1:])]
+    jumpy = float(np.mean([j > STEADY_JUMPY for j in jumps]))
+    far = float(np.median([math.hypot(*off[n]) for n in ns]))
+    why = {"found": len(off), "of": len(placed), "jumpy": round(jumpy, 3), "off": round(far, 1),
+           "most": round(max(jumps), 1)}
+    if jumpy <= STEADY_JUMPS and far <= STEADY_REACH:
+        return {}, why
+    order = [t["n"] for t in placed]
+    at = {n: i for i, n in enumerate(order)}
+    idx = [at[n] for n in ns]
+    dx = np.interp(range(len(order)), idx, [off[n][0] for n in ns])
+    dy = np.interp(range(len(order)), idx, [off[n][1] for n in ns])
+    return {n: [placed[i]["offset"][0] + float(dx[i]), placed[i]["offset"][1] + float(dy[i])]
+            for i, n in enumerate(order)}, why
 
 
 def other_bodies(u):
@@ -4531,7 +4610,9 @@ def steady_places(u, cache, p=None, smooth=STEADY_SMOOTH):
     if not chain:
         return {}
     ns = sorted(chain)
-    held = held_to_spice([tile(u, n, cache, p["display_scale"])["offset"] for n in ns], [chain[n] for n in ns], smooth)
+    to = steady_held(u, cache, p)
+    held = held_to_spice([to.get(n) or tile(u, n, cache, p["display_scale"])["offset"] for n in ns],
+                         [chain[n] for n in ns], smooth)
     return {n: xy for n, xy in zip(ns, held)}
 
 
@@ -4767,6 +4848,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     if not fixed:
         return {"local": False}
     ns = sorted(chain)
+    held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
     rect = movie_rect(fp, tiles[ns[0]], radius, centre, seen)
     how = (bool(colour), bool(centre), 0)
@@ -4792,7 +4874,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
-            "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
+            "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}
