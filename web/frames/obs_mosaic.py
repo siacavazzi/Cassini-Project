@@ -4695,17 +4695,18 @@ def seen_places(u, made, pic, there):
     if not (0 < radius and half < FRAME / 2):
         return {}, None
     placed = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
-    # (not on a tile where SPICE puts another body against the moon, within STEADY_AROUND of touching it: the blob
-    # found there is the two together, or the other one, a transit's Titan. Rhea over Titan, 154RH MUTUALEVE002:
-    # tiles 11 to 18 took Titan's limb for Rhea, 145 px apart, and the movie swung from one moon to the other.
-    # Those tiles take the moon's place from the tiles either side, as tiles it is not found on do)
+    # (on a tile where SPICE puts another body against the moon, within STEADY_AROUND of touching it, the blob found
+    # may be the other one, or the two together: Rhea over Titan, 154RH MUTUALEVE002, whose tiles 11 to 18 took
+    # Titan for Rhea, 145 px off, and the movie swung from one moon to the other. There a blob is the moon only when
+    # it is nearer SPICE's place of the moon than SPICE's place of every such body by STEADY_AROUND, SPICE's offsets
+    # between bodies on one frame being right (its pointing moves them all); otherwise that tile takes the moon's
+    # place from the tiles either side, as tiles it is not found on do)
     others = other_bodies(u)
-    near = {n for n, bodies in others.items()
-            if any(math.hypot(x, y) < radius + r + STEADY_AROUND for x, y, r, _ in bodies)}
-    off = {}
+    near = {n: [(x, y) for x, y, r, _ in bodies if math.hypot(x, y) < radius + r + STEADY_AROUND]
+            for n, bodies in others.items()}
+    near = {n: xy for n, xy in near.items() if xy}
+    off, rejected = {}, []
     for t in placed:
-        if t["n"] in near:
-            continue
         # (a tile's picture is in reference pixels, its corner at its place plus box; SPICE's target at 0)
         bx, by = t["box"][0], t["box"][1]
         im = pic(t["n"])
@@ -4718,15 +4719,21 @@ def seen_places(u, made, pic, there):
             if inside[max(yi, 0), max(xi, 0)] < radius + STEADY_EDGE:
                 got = None
         if got is not None:
-            off[t["n"]] = (-(bx + got[0]) - t["offset"][0], -(by + got[1]) - t["offset"][1])
-    looked = len(placed) - len(near & {t["n"] for t in placed})
+            d = (-(bx + got[0]) - t["offset"][0], -(by + got[1]) - t["offset"][1])
+            # (d is the blob from SPICE's moon with the sign of a place: the blob sits at -d from it, the other body at
+            # x, y from it)
+            if any(math.hypot(-d[0] - x, -d[1] - y) < math.hypot(*d) + STEADY_AROUND for x, y in near.get(t["n"], ())):
+                rejected.append(t["n"])
+                continue
+            off[t["n"]] = d
+    looked = len(placed) - len(rejected)
     if not placed or len(off) < STEADY_SEEN * looked or len(off) < 2:
-        return {}, {"found": len(off), "of": looked}
+        return {}, {"found": len(off), "of": looked, "other body": len(rejected)}
     ns = sorted(off)
     jumps = [math.hypot(off[b][0] - off[a][0], off[b][1] - off[a][1]) for a, b in zip(ns, ns[1:])]
     jumpy = float(np.mean([j > STEADY_JUMPY for j in jumps]))
     far = float(np.median([math.hypot(*off[n]) for n in ns]))
-    why = {"found": len(off), "of": looked, "touching": len(near & {t["n"] for t in placed}), "jumpy": round(jumpy, 3), "off": round(far, 1),
+    why = {"found": len(off), "of": looked, "other body": len(rejected), "jumpy": round(jumpy, 3), "off": round(far, 1),
            "most": round(max(jumps), 1)}
     if jumpy <= STEADY_JUMPS and far <= STEADY_REACH:
         return {}, why

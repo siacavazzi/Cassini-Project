@@ -105,8 +105,9 @@ with calibration.looking("balanced"):
         assert not json.load(fh).get("held"), "SPICE's places stand"
     print(f"usual SPICE: stabilized max {calm.max():.1f} px", seen)
     assert calm.max() < 6
-# 4. a bigger moon touching the target on ten tiles, SPICE 45 px off all the way (154RH's 18): those tiles take the moon's place from the
-#    tiles either side, so the hold stays on the target; without the rule it swings onto the other moon
+# 4. a bigger moon touching the target on ten tiles, SPICE 45 px off all the way (154RH's 18): a blob found nearer
+#    the other moon is not taken for the target (that tile takes its place from the tiles either side), so the hold
+#    stays on the target; without the rule it swings onto the other moon
 with calibration.looking("balanced"):
     other_on[0] = True
     off = [[x + 45 + rng.uniform(-2, 2), y - 10 + rng.uniform(-2, 2)] for x, y in truth]
@@ -118,13 +119,13 @@ with calibration.looking("balanced"):
     u4, cache4 = make("TOUCH", off)
     touch, _, seen = error(u4, cache4, off)
     print(f"another moon touching it: stabilized off the moon max {touch.max():.1f} px", seen)
-    assert seen["touching"] == len(TOUCH) and touch.max() < 6, (touch.max(), seen)
+    assert seen["other body"] >= 1 and touch.max() < 6, (touch.max(), seen)
     keep = om.other_bodies
     om.other_bodies = lambda u: {}
     u5, cache5 = make("TOUCH0", off)
     swung, _, _ = error(u5, cache5, off)
     om.other_bodies = keep
-    print(f"  before (the touching tiles looked at): max {swung.max():.1f} px")
+    print(f"  before (every blob believed): max {swung.max():.1f} px")
     assert swung.max() > 10, swung.max()
     other_on[0] = False
     ba.bodies_of = lambda ids: {}
