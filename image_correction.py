@@ -370,12 +370,75 @@ def _match(im1, im2, g, mask1, mask2, within=None):
         shift, how = _plausible(shift, how, g, rejected)
         if shift is None:
             shift, how = centroid_shift(im1, im2), "centroid"
+    if shift is not None and how in ("stars", "edges", "centroid") and _worse(im1, im2, mask1, mask2, shift):
+        # a fallback fit that lines the edges up worse than the frames as they are, where those already line up well
+        rejected.append(f"{how} {shift[0]:+.1f},{shift[1]:+.1f} (edges worse)")
+        shift, how = None, "not aligned"
+    if shift is None:
+        # a weak peak (under find_shift's bar) believed where it lines the edges up clearly better (checked_shift)
+        shift, how = checked_shift(im1, im2, mask1, mask2, g)
     if shift is None and g is not None:
         # nothing matched anywhere (or only wild fits): SPICE's offset, where it lines the frames up better than none
         shift, how = spice_shift(im1, im2, mask1, mask2, g)
+    if shift is None:
+        # nothing moves it, but the frames line up as they are: it stands as taken, not "not aligned"
+        here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
+        if here >= AS_TAKEN_SURE:
+            shift, how = (0.0, 0.0), f"as taken (edges agree {here:.2f})"
     if rejected:
         how = f"{how} ({', '.join(rejected)} rejected)"
     return shift, how
+
+
+"""
+A weak match, checked on the edges: phase correlation over the whole of both frames, on the frames and on their edges,
+peaks too weakly for find_shift's bar (0.3) on many frames whose detail is plain to see. A NAC frame of the rings
+(00ASA SATSYSTEM001, N1475763992_1 RED onto N1475763973_1 GRN: a 0.18 peak at -10.0,+14.9, the same on the edges)
+correlates weakly because its detail runs one way (along the ringlets) and its brightness differs between the filters,
+yet moving it by that peak lines the edges up 0.99 where SPICE's place gave 0.08: a fringe on every ringlet. 30 of the
+pass's 50 tiles left at SPICE's place were like that. Each peak of at least CHECK_RESPONSE (on the frames, on their
+edges) within reach (CHECK_REACH of no shift, and FIT_REACH of SPICE's offset g when there is one) is believed when it lines the
+edges up (_agreement) to CHECK_AGREE and CHECK_GAIN better than the frames as they are and than SPICE's offset; the
+better of the two stands. ((dx, dy), how) or (None, "not aligned")
+"""
+CHECK_RESPONSE = 0.05  # the least peak checked
+CHECK_REACH = 100.0    # px: the farthest peak checked (find_shift's own reach)
+CHECK_AGREE = 0.6      # the least edge agreement a checked peak needs (AS_TAKEN's bar) ...
+CHECK_GAIN = 0.1       # ... and how much better than as taken and than SPICE's offset it must line the edges up
+AS_TAKEN_SURE = 0.85   # edge agreement of a channel as taken that stands when nothing moves it (_match)
+WORSE_BY = 0.03        # a fallback fit lining the edges up this much worse than as taken does not stand (_worse)
+
+
+def checked_shift(im1, im2, mask1, mask2, g=None):
+    base = [_agreement(im1, im2, mask1, mask2, (0.0, 0.0))]
+    if g is not None and np.hypot(g[0], g[1]) <= GUESS_MAX + FIT_REACH:
+        base.append(_agreement(im1, im2, mask1, mask2, (float(g[0]), float(g[1]))))
+    best = None
+    for how, a, b in (("phase", im1, im2), ("edges", edges(im1), edges(im2))):
+        found = find_shift_whole(a, b, max(a.shape[:2]), CHECK_RESPONSE)
+        if found is None:
+            continue
+        dx, dy = found[0], found[1]
+        if np.hypot(dx, dy) > CHECK_REACH or g is not None and np.hypot(dx - g[0], dy - g[1]) > FIT_REACH:
+            # (a move of hundreds of px leaves the channels over different parts of the picture: Jupiter
+            # N1355699839_1, a 0.13 peak at +325,+175 near SPICE's offset, drew a blue block over a third of the set)
+            continue
+        if abs(dx) < 0.25 and abs(dy) < 0.25:
+            continue   # (as find_shift's edges: no shift at all is the camera's fixed pattern matching itself)
+        agree = _agreement(im1, im2, mask1, mask2, (dx, dy))
+        if agree >= CHECK_AGREE and agree >= max(base) + CHECK_GAIN and (best is None or agree > best[2]):
+            best = (dx, dy, agree, how, found[2])
+    if best is None:
+        return None, "not aligned"
+    return (best[0], best[1]), f"{best[3]} checked on edges (peak {best[4]:.2f}, edges agree {max(base):.2f} to {best[2]:.2f})"
+
+
+def _worse(im1, im2, mask1, mask2, shift):
+    """Whether a fallback fit (stars, edges, centroid) lines the edges up WORSE_BY worse than the frames as they are,
+    where those already line up to CHECK_AGREE: 00ASA's N1475762680_1 RED took a star fit of +41.2,+10.4 that put its
+    ring edges at 0.69 where as taken they agreed 0.76, N1475767520_1 RED +13.3,-5.0 at 0.88 where as taken 0.93"""
+    here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
+    return here >= CHECK_AGREE and _agreement(im1, im2, mask1, mask2, shift) < here - WORSE_BY
 
 
 """
