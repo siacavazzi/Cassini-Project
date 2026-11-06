@@ -239,15 +239,17 @@ def main():
     for key in OBS[25:27]:
         assert passes(*key)[0]["kind"] == "movie", (key, kinds(passes(*key)))
     cloud, wind = passes(*OBS[27]), passes(*OBS[28])
-    assert kinds(cloud) == [("movie", 26), ("movie", 4)] and cloud[0]["revisit"], kinds(cloud)
+    # (the cloud monitor's last four frames, a leg after a pause on the same view, are the same movie: _restare)
+    assert kinds(cloud) == [("movie", 30)] and cloud[0]["revisit"], kinds(cloud)
     assert kinds(wind) == [("mosaic_movie", 72), ("movie", 16)] and wind[1]["revisit"], kinds(wind)
     assert not any(u["islands"] for key in OBS[25:29] for u in passes(*key))
 
     # the WAC riding along on a CIRS ring scan: its pans across the rings are strip mosaics, its holds stay movies,
-    # every pass in PANNED's folder, the passes split as they were; the NAC's ride-along filter sets stay movies
+    # every pass in PANNED's folder, the passes split as they were (but holds of one view joined); the NAC's ride-along filter sets stay movies
     temp, tdif, subm = passes(*OBS[29]), passes(*OBS[30]), passes(*OBS[31])
     assert kinds(temp) == [("mosaic", 9)] and temp[0]["panned"], kinds(temp)
-    assert kinds(tdif) == [(None, 1), ("movie", 5), ("movie", 5), ("movie", 5), ("mosaic", 7), ("movie", 5), ("mosaic", 5),
+    # (its first two holds take the same view, a pause apart: one movie, _restare)
+    assert kinds(tdif) == [(None, 1), ("movie", 10), ("movie", 5), ("mosaic", 7), ("movie", 5), ("mosaic", 5),
                            (None, 1)], kinds(tdif)
     assert all(om.folder(u, "/c").endswith(om.PANNED) for u in temp + tdif)
     assert kinds(subm) == [("movie", 5)] * 6 and not any(u["panned"] for u in subm), kinds(subm)

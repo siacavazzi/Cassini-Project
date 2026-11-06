@@ -276,6 +276,10 @@ def units(target, obs, cam):
         prev = laps[-1] if laps else None
         # (and one view taken lap after lap, a filter set each time, is one pass: a time series, _judge's views)
         views = bool(prev and (prev.get("drift") or prev.get("views")) and u.get("drift"))
+        # (and a movie taken again on the same view after a pause longer than GAP, within LAP_GAP, is one movie: a
+        # stare or a ride-along WAC whose observation pauses between its legs, 048SA_STRMOVIEC001's WAC every 100
+        # minutes for 19 hours, 052SA_APOMOVIC001's twelve legs. Sam 2026-11-06, the movie catalog)
+        views = views or _restare(prev, u)
         if (prev and (prev["mosaic"] or views) and u["frames"] and u["frames"][0][3] - prev["last"] <= LAP_GAP and u["z"]
                 and 1 / ZOOM < u["z"] / prev["z"] < ZOOM
                 and (views and _overlap(prev, u) >= LAP_OVERLAP
@@ -432,6 +436,20 @@ def _piece(prev, u):
         return False
     w, h = min(p[2], q[2]) - max(p[0], q[0]), min(p[3], q[3]) - max(p[1], q[1])
     return max(w, 0) * max(h, 0) >= LAP_INSIDE * (q[2] - q[0]) * (q[3] - q[1])
+
+
+def _restare(prev, u):
+    """Pass u takes up prev's movie again: both movies of one view (a stare, not a track, a pan or a ring strip),
+    through a filter in common, their footprints sharing LAP_OVERLAP. The lap join in units then makes them one pass
+    (its gap and distance rules: LAP_GAP, ZOOM)."""
+    if not prev or not u["frames"]:
+        return False
+    still = lambda v: v["kind"] == "movie" and not (v.get("track") or v.get("panned") or v.get("strip") or v.get("tossup"))
+    if not (still(prev) and still(u)):
+        return False
+    if not {fr[2] for fr in prev["frames"]} & {fr[2] for fr in u["frames"]}:
+        return False
+    return _overlap(prev, u) >= LAP_OVERLAP
 
 
 def _box(u, z):
