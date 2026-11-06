@@ -878,6 +878,14 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     if len(names) < 2 or len(names) > PER_BODY_MOST or any({b[0] for b in e} != set(names) for e in each):
         return None
     at = [{b[0]: b for b in e} for e in each]
+    # a nearer body filling the frame (over its middle, wider than half of it: a close Titan with Saturn behind, 019TI
+    # HDAC001's WAC) shows only a sliver of limb, too little for its own match: its channels came apart into a rainbow
+    # round the limb
+    nearest_first = sorted(names, key=lambda n: at[ref][n][4])
+    if any(at[ref][n][3] >= ba.FULL_FRAME / 2 and
+           np.hypot(at[ref][n][1] - ba.CCD_CENTER, at[ref][n][2] - ba.CCD_CENTER) < at[ref][n][3]
+           for n in nearest_first[:-1]):
+        return None
     shape = np.asarray(guide[ref]).shape[:2]
     k = shape[1] / ba.FULL_FRAME
     fx, fy = _pointing_fix(guide, each[ref], ref)
