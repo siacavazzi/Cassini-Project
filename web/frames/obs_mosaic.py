@@ -4618,7 +4618,8 @@ STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by de
 STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
-STEADY_FILE = "steady3-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places
+STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places;
+                                       # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
 # (color_image.find_small_body) and SPICE's place of it jumps between neighbouring frames by more than STEADY_JUMPY (in
@@ -4694,8 +4695,17 @@ def seen_places(u, made, pic, there):
     if not (0 < radius and half < FRAME / 2):
         return {}, None
     placed = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
+    # (not on a tile where SPICE puts another body against the moon, within STEADY_AROUND of touching it: the blob
+    # found there is the two together, or the other one, a transit's Titan. Rhea over Titan, 154RH MUTUALEVE002:
+    # tiles 11 to 18 took Titan's limb for Rhea, 145 px apart, and the movie swung from one moon to the other.
+    # Those tiles take the moon's place from the tiles either side, as tiles it is not found on do)
+    others = other_bodies(u)
+    near = {n for n, bodies in others.items()
+            if any(math.hypot(x, y) < radius + r + STEADY_AROUND for x, y, r, _ in bodies)}
     off = {}
     for t in placed:
+        if t["n"] in near:
+            continue
         # (a tile's picture is in reference pixels, its corner at its place plus box; SPICE's target at 0)
         bx, by = t["box"][0], t["box"][1]
         im = pic(t["n"])
@@ -4709,13 +4719,14 @@ def seen_places(u, made, pic, there):
                 got = None
         if got is not None:
             off[t["n"]] = (-(bx + got[0]) - t["offset"][0], -(by + got[1]) - t["offset"][1])
-    if not placed or len(off) < STEADY_SEEN * len(placed) or len(off) < 2:
-        return {}, {"found": len(off), "of": len(placed)}
+    looked = len(placed) - len(near & {t["n"] for t in placed})
+    if not placed or len(off) < STEADY_SEEN * looked or len(off) < 2:
+        return {}, {"found": len(off), "of": looked}
     ns = sorted(off)
     jumps = [math.hypot(off[b][0] - off[a][0], off[b][1] - off[a][1]) for a, b in zip(ns, ns[1:])]
     jumpy = float(np.mean([j > STEADY_JUMPY for j in jumps]))
     far = float(np.median([math.hypot(*off[n]) for n in ns]))
-    why = {"found": len(off), "of": len(placed), "jumpy": round(jumpy, 3), "off": round(far, 1),
+    why = {"found": len(off), "of": looked, "touching": len(near & {t["n"] for t in placed}), "jumpy": round(jumpy, 3), "off": round(far, 1),
            "most": round(max(jumps), 1)}
     if jumpy <= STEADY_JUMPS and far <= STEADY_REACH:
         return {}, why
