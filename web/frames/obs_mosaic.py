@@ -2263,8 +2263,10 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     glow_toe = None
-    if calibration.look() == "balanced" and toe is None and not filled:
-        # no dark sky and no body filling the frames: where the frames are lit sky (stray light, a ring's glow at high
+    if calibration.look() == "balanced" and toe is None and not filled and not on:
+        # no dark sky and no body in the frames (a moon's disk on them, `on`: the 141EN plume movie, whose jets' faint
+        # edge, a step in its frames, came out a hard speckled line once the black rose to it; Sam, 11-05): where the
+        # frames are lit sky (stray light, a ring's glow at high
         # phase, the E ring), each band's black rises by that share of the way to its median, as a single picture's
         # does (calibration._floor's glow), so the sky goes near black and only the glow brighter than it shows; the
         # top stays where it was. 033RI HIPHAMOVB001's 2 s NAC frames of faint glow came out a lifted gray square,
