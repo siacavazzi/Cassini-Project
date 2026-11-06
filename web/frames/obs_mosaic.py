@@ -4350,6 +4350,8 @@ TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame e
 #                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
 TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per channel: a set's colour fringes (a body
 #                         moving between its filters: red and blue edges on Titan's limb) are not carried into the frame
+TINT_FEATHER = 0.012   # of the picture's side: how far a tinted frame eases over to the set where it clipped
+TINT_LOCAL = 0.06      # of the picture's side: the reach of the local brightness match that fill is brought to
 TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
 TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
 TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
@@ -4396,9 +4398,26 @@ def tinted_frame(colour, grey, gamma=2.2):
     out = np.clip(h * (g * match)[..., None], 0, 1)
     # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
     # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
-    clip = np.clip(cv2.GaussianBlur(near, (0, 0), 4 * TINT_BLUR), 0, 1) * ca
+    side = max(colour.shape[:2])
+    clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * TINT_BLUR, TINT_FEATHER * side)), 0, 1) * ca
     if clip.any():
-        out = out * (1 - clip[..., None]) + np.clip(rgb, 0, 1) * clip[..., None]
+        # the set's picture brought to the frame's brightness round it, so the fill meets the frame without a seam
+        # (the set was taken at another time and exposure: drawn as it is it made a patch of another brightness and
+        # contrast over Saturn, cut along the frame's clipping, behind the 2012 Titan transit)
+        valid = lit.astype(np.float32)
+        sigma = TINT_LOCAL * side
+        # (normalized convolution: the ratio of the blurred frame to the blurred set over where both are measured, at
+        # two reaches, the wide one where the near one has nothing to go on deep inside the clipped part)
+        local = np.ones(g.shape, np.float32)
+        for reach in (4 * sigma, sigma):
+            num = cv2.GaussianBlur(g * match * valid, (0, 0), reach)
+            den = cv2.GaussianBlur(y * valid, (0, 0), reach)
+            cover = cv2.GaussianBlur(valid, (0, 0), reach)
+            known = np.clip(cover / 0.05, 0, 1)
+            local = local * (1 - known) + np.where(den > 1e-9, num / np.maximum(den, 1e-9), 1.0) * known
+        local = np.clip(local, *TINT_MATCH).astype(np.float32)
+        fill = np.clip(rgb * local[..., None], 0, 1)
+        out = out * (1 - clip[..., None]) + fill * clip[..., None]
     rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)
     return np.dstack([rgb8, grey[..., 3]])
 
