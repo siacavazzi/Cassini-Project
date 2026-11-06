@@ -45,8 +45,10 @@ import csv
 import datetime
 import json
 import os
+import re
 import shutil
 import struct
+import sys
 
 SATURN_SYSTEM = ["CASSINI", "SUN", "EARTH", "SATURN", "MIMAS", "ENCELADUS", "TETHYS", "DIONE", "RHEA", "TITAN",
                  "HYPERION", "IAPETUS", "PHOEBE", "JANUS", "EPIMETHEUS", "HELENE", "TELESTO", "CALYPSO", "ATLAS",
@@ -214,16 +216,42 @@ def moments(args, years):
     scores = read_scores(args)
     want = pictures(args.data, years, {o for r in rows for o in r["obs"].split()})
     out = []
+    labels = {}
     for r in rows:
         obs = r["obs"].split()
         pics = sorted(p for o in obs for p in want[o])
         if not pics:
             raise SystemExit(f"{args.moments}: no pictures in the catalog for {r['label']!r} ({' '.join(obs)})")
+        for problem in moment_problems(r, pics, labels):
+            print(f"{args.moments}: {problem}", file=sys.stderr)
         e = {"kind": "observation", "label": r["label"], "body": r["body"], "obs": obs, **measure(pics),
              "why": r["why"], "source": r["source"]}
         if any(o in scores for o in obs):
             e["photo_score"] = round(max(scores.get(o, 0) for o in obs), 1)
         out.append(e)
+    return out
+
+
+PLANNED = {"RI": "SATURN", "SA": "SATURN"}   # an UNK frame of a rings or Saturn observation is Saturn's view
+
+
+def moment_problems(r, pics, labels):
+    """What looks wrong with one moments.csv row against its catalog pictures (pictures(): (et, filters, cam, id,
+    km_per_px, target)): a label used twice is an error; a date that is not the first picture's (UTC day), or a body
+    that is none of its pictures' targets (an UNK target counts when the observation's code is the body's, as for
+    ISS_038RI_... and SATURN), is a warning. labels collects the labels seen so far."""
+    out = []
+    key = r["label"].strip().lower()
+    if key in labels:
+        raise SystemExit(f"moments: {r['label']!r} is listed twice ({labels[key]} and {r['date']})")
+    labels[key] = r["date"]
+    first = utc_of(pics[0][0])[:10]
+    if first != r["date"]:
+        out.append(f"{r['label']!r} is dated {r['date']}, its first picture is on {first}")
+    targets = {p[5] for p in pics}
+    codes = {m.group(1) for o in r["obs"].split() for m in [re.match(r"^ISS_[0-9][0-9A-Z]{2}([A-Z]{2})_", o)] if m}
+    if r["body"] not in targets and not ("UNK" in targets and any(PLANNED.get(c) == r["body"] for c in codes)):
+        out.append(f"{r['label']!r}: body {r['body']} is not a target of its pictures ({', '.join(sorted(targets))})")
     return out
 
 

@@ -84,7 +84,7 @@ date,label,body,obs,why,source
 2006-05-14,Rhea and Dione cross,DIONE,ISS_024DI_MUTUALEVE002_PRIME,"Rhea and Dione cross paths, one moon briefly hiding part of the other (closest about 2006-134 06:51 UTC; found by SPICE transit search)",
 2011-09-17,"Dione crosses Titan, September 2011",DIONE,ISS_153DI_MUTUALEVE002_PRIME,Dione moves across Titan's disc and out again (closest about 2011-260 11:57 UTC; found by SPICE transit search),
 2005-03-09,Enceladus against Saturn,ENCELADUS,ISS_004EN_NGNPOL001_PRIME,Enceladus seen against Saturn's disc in its north polar pass (closest about 2005-068 07:07 UTC; found by SPICE transit search),
-2011-12-08,"Tethys passes over Titan, December 2011",TETHYS,ISS_158TE_MUTUALEVE001_PRIME,"Tethys crosses in front of Titan, three hours after Dione did (closest about 2011-342 00:04 UTC; found by SPICE transit search)",
+2011-12-07,"Tethys passes over Titan, December 2011",TETHYS,ISS_158TE_MUTUALEVE001_PRIME,"Tethys crosses in front of Titan, three hours after Dione did (closest about 2011-342 00:04 UTC; found by SPICE transit search)",
 2007-06-28,Enceladus crossing Saturn's limb,ENCELADUS,ISS_047EN_GLOCOL001_PRIME,Enceladus crossing Saturn's limb in a short color sequence (closest about 2007-179 12:52 UTC; found by SPICE transit search),
 2007-06-12,Opposition spot on the rings,SATURN,ISS_046RI_0PHASE001_PRIME,"The point exactly opposite the Sun falls on the rings: a bright glow, the opposition surge, slides across them from frame to frame",
 2010-12-21,Enceladus over edge-on rings,ENCELADUS,ISS_142EN_ORSCA001_PIE ISS_142EN_ENCEL001_VIMS,"Close past Enceladus with Cassini almost exactly in the ring plane, so the rings are a thin line behind the moon",
