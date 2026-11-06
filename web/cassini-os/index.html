@@ -13223,7 +13223,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"adc870695d70";
+  const BUILD = /*BUILD*/"6c47fe03b87d";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -15381,7 +15381,10 @@ function updateLabels() {
     const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + (el.firstChild ? el.firstChild.textContent : name).length * 8 + 10, y + 8];
-    if (!hide && placed.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) hide = true;
+    // a label that was hidden for an overlap needs a few pixels of clear space to come back, so two labels whose
+    // boxes just touch settle on one state instead of blinking as the view drifts by a fraction of a pixel
+    const m = el.hidden ? 4 : 0;
+    if (!hide && placed.some(b => box[0] - m < b[2] && box[2] + m > b[0] && box[1] - m < b[3] && box[3] + m > b[1])) hide = true;
     el.hidden = hide;
     if (hide) continue;
     placed.push(box);
@@ -15884,6 +15887,10 @@ function frame(now) {
   controls.update();
   aimFollow();
   if (window.studyCamera) window.studyCamera();
+  // bring the camera's world matrix up to date with where the frame left it: a render does this, but a frame that is
+  // not drawn kept the one Object3D.lookAt left half-way (the orbit controls' aim, before the follow view turned it),
+  // and the rest test and the labels both read it, so while paused the labels jumped between two places
+  camera.updateMatrixWorld();
   const draw = !window.cassiniPerf || cassiniPerf.draw(now);
   if (draw) renderer.clear();
   const closeObjs = [cassini].concat(window.studyCloseObjects ? studyCloseObjects() : []);
