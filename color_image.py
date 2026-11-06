@@ -986,15 +986,26 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     # the reference, below, as before; a fill there from the far body's color drew colored rims round Dione,
     # N1701985106_1)
     # (the ratio measured inside the far body's limb: its haze ring past the limb is bluer, and a fill near the limb
-    # took that blue, N1686941052_1; a hazy body's limb ring itself is not filled either but grey as off it: its own
-    # color there is neither the inside's nor the sky's, and a fill drew a green band under Rhea, N1702246291_1)
+    # took that blue, N1686941052_1, and that inside color drew a green band on the limb ring under Rhea,
+    # N1702246291_1)
     inner = _disk(shape, far[1] + fx, far[2] + fy, far[3] - PER_BODY_GROW - PER_BODY_HAZE * far[3]) > 0
     fill_zone = inner if order[0] in PER_BODY_HAZY else far_disk
-    sky = np.logical_or.reduce([g > 0 for g in ghosts]) & ~fill_zone
-    if any((g > 0)[fill_zone].any() for g in ghosts) or any(e.any() for e in edges):
+    # ... and a hazy body's limb ring filled on its own, with the ratio its ring has round the part hidden (the haze's
+    # own color): grey there, it ended in a straight-edged grey wedge across Titan under Rhea, N1702247101_1
+    limb_ring = far_disk & ~fill_zone
+    any_ghost = np.logical_or.reduce([g > 0 for g in ghosts])
+    sky = any_ghost & ~far_disk
+    if any((g > 0)[far_disk].any() for g in ghosts) or any(e.any() for e in edges):
         miss = [((g > 0) & fill_zone) | e for g, e in zip(ghosts, edges)]
         x = [np.asarray(c, np.float32) for c in out]
         filled, _ = cal.fill_saturated(x, miss, reach=PER_BODY_FILL_REACH * k, where=inner & ~nearer_disks, floor=False)
+        if limb_ring.any():
+            ring_miss = [(g > 0) & limb_ring for g in ghosts]
+            if any(m.any() for m in ring_miss):
+                ring_filled, _ = cal.fill_saturated(x, ring_miss, reach=PER_BODY_FILL_REACH * k,
+                                                    where=limb_ring & ~nearer_disks & ~any_ghost, floor=False)
+                filled = [np.where(rm, rf, f) for f, rf, rm in zip(filled, ring_filled, ring_miss)]
+                miss = [m | rm for m, rm in zip(miss, ring_miss)]
         for j, c in enumerate(out):
             if not miss[j].any():
                 continue
@@ -1010,8 +1021,8 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     if sky.any():
         grow = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * MOVED_GROW + 1,) * 2)
         soft = cv2.GaussianBlur(cv2.dilate(sky.astype(np.float32), grow), (0, 0), MOVED_SOFT / 2)
-        # (not over the far body's inside, which the fill keeps in color)
-        ghost = np.maximum(ghost, np.clip(soft * 2, 0, 1) * (1 - fill_zone))
+        # (not over the far body or its limb ring, which the fill keeps in color)
+        ghost = np.maximum(ghost, np.clip(soft * 2, 0, 1) * (1 - far_disk))
     # a nearer body the camera saturated in some filter (over PER_BODY_CLIPPED of its disk) has no color there to
     # draw: the saturated fill would take the color round it, the far body's (an orange Dione over Titan,
     # N1694954493_1), so it is drawn grey from the reference, as its whole disk
