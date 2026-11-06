@@ -270,6 +270,14 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# the Moments window built out (moments.html): its style joins the head's and its script runs after the body view's,
+# whose filter it follows ("cassini:bodymode"); it wraps the chrome's studyMoments and draws the list itself
+mo = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "moments.html")).read()
+part = lambda tag: mo[mo.index(f"<{tag}"):mo.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>")
+study += part("script") + "\n"
+
 # the orbit diagram (orbit.html): its style joins the head's and its script runs after the chrome script (the camera
 # windows draw it when they show one, and the export draws it onto a saved picture)
 od = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "orbit.html")).read()
