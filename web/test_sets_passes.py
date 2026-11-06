@@ -250,4 +250,13 @@ if om:
     st = judged(stare, ["RED", "GRN", "BL1"])
     assert not st["track"] and st["kind"] == "movie", (st["kind"], st["track"])
     print("tracks (visits that creep on Saturn, a steady drift): movie; moon flyby creep, colour mosaic, filter raster: mosaic; stare: movie")
+    # a stare taken up again on the same view after a pause (an observation's next leg) is the same movie
+    # (_restare: units joins them as one pass); another view, a mosaic, other filters or a track are not
+    later = judged(stare, ["RED", "GRN", "BL1"], [7000.0 + 30 * i for i in range(30)])
+    assert om._restare(st, later)
+    assert not om._restare(st, judged([(x + 900, y) for x, y in stare], ["RED", "GRN", "BL1"]))
+    assert not om._restare(st, m) and not om._restare(m, st)
+    assert not om._restare(st, judged(stare, ["MT1", "CB2"]))
+    assert not om._restare(t, t)
+    print("a stare taken up again on its view: one movie; another view, a mosaic, other filters, a track: not")
 print("ok")
