@@ -3,8 +3,9 @@ Titan transit played 25 of its 26 frames as one set taken 50 minutes into it, an
 the CB3 frames that see its surface through the haze):
 
 1. set_shown: a frame of the shown color set, or taken within HOLD_AGE of it, shows the set; one further from it plays
-   itself, in the set's color (tinted), or in gray for a methane, UV or polarizer frame (held_band). A set taken after
-   the frame (the movie's opening, before its first set) counts the same way.
+   its moment in the set's color (tinted), drawn from lum_of's frame: the gray filter's beside it, else its own; a
+   methane, UV or polarizer frame (held_band) through another filter's beside it, else on its own in gray. A set taken
+   after the frame (the movie's opening, before its first set) counts the same way.
 2. step_frame: in a movie playing its gray filter, another filter's frame shows the gray frame beside it only when that
    was taken within HOLD_AGE of it.
 3. tinted_frame: the frame's brightness and detail in the set's hue, at the set's brightness; off the set, its mean hue.
@@ -45,15 +46,23 @@ assert [t for _, t in shown[23:26]] == [False, False, True]
 assert shown[26][1] and shown[27][1] and not shown[28][1] and sorted(shown[28][0].values()) == [26, 27, 28]
 print("clear frames far from a set play themselves, in its color; ok")
 
-# a methane frame far from the set: gray, on its own (no set)
+# a methane frame: within HOLD_AGE of the set, the set; further, its moment in the set's color
 fs2 = ["RED", "GRN", "BL1", "MT3", "MT3"]
 u2 = unit(fs2, [0, 60, 120, 200, 900])
 u2["_sets"] = [[("RED", 0), ("GRN", 1), ("BL1", 2)]]
 assert om.set_shown(u2, 3, want, none, ok) == ({"RED": 0, "GRN": 1, "BL1": 2}, False)
-assert om.set_shown(u2, 4, want, none, ok) == (None, False)
+assert om.set_shown(u2, 4, want, none, ok) == ({"RED": 0, "GRN": 1, "BL1": 2}, True)
+# lum_of: the picture a tinted frame is drawn from: the gray filter's nearest within HOLD_AGE, else its own, and for a
+# methane, UV or polarizer frame another filter's beside it, or none (gray on its own)
+f3 = [(0, "", "CB3", 0), (0, "", "IR3", 100), (0, "", "CB1", 1000), (0, "", "MT1", 1050), (0, "", "MT1", 5000)]
+assert om.lum_of(f3, 1, "CB3", ok, ok) == 0      # IR3 shows CB3 beside it
+assert om.lum_of(f3, 2, "CB3", ok, ok) == 2      # no CB3 near: its own
+assert om.lum_of(f3, 3, "CB3", ok, ok) == 2      # MT1: the CB1 beside it
+assert om.lum_of(f3, 4, "CB3", ok, ok) is None   # MT1 alone: gray
+assert om.lum_of(f3, 1, "CB3", lambda j: j != 0, ok) == 1   # (the CB3 not whole: its own)
 assert om.held_band("MT3") and om.held_band("CL1/UV3") and om.held_band("P120/GRN") and not om.held_band("CB3")
 assert not om.held_band("CL1/CL2") and not om.held_band("IR3")
-print("methane, UV and polarizer frames far from a set play gray; ok")
+print("methane, UV and polarizer frames play their moment through the filter beside them; ok")
 
 # ---------- 2. step_frame's time limit ----------
 fs3 = ["CB3", "MT1", "CB3"]

@@ -5723,9 +5723,8 @@ def set_shown(u, n, want, not_shown, placed, covers=None):
     frame n's own picture) (pure but for the pass's sets: movie_frame's and the page's, _colour_by). The set is
     set_of's. A frame of the set, or one taken within HOLD_AGE of it (the same moment: a cycle's other filters, which
     drawn on their own would strobe from look to look), is drawn as the set. A frame further from it plays its own
-    moment (Sam 2026-11-06: frames were lost behind one colour picture, and the movie had fewer frames than it took):
-    one of held_band's bands on its own, in gray; any other filter as its own picture in the set's colour (tinted:
-    its brightness and detail, the set's hue).
+    moment in the set's colour (tinted: its brightness and detail, the set's hue; shown_of picks the picture, lum_of)
+    (Sam 2026-11-06: frames were lost behind one colour picture, and the movie had fewer frames than it took).
     The 2012 Titan transit (165TI LRMONITOR001 WAC) played 25 of its 26 frames as one set taken 50 minutes into it, and
     the first Titan flyby (00ATI MOVIEA001) never showed the CB3 frames that see its surface through the haze."""
     got = set_of(u, n, want, not_shown, placed, covers)
@@ -5736,7 +5735,7 @@ def set_shown(u, n, want, not_shown, placed, covers=None):
     age = t - max(ts) if t >= max(ts) else min(ts) - t
     if age <= HOLD_AGE:
         return got, False
-    return (None, False) if held_band(frames[n][2]) else (got, True)
+    return got, True
 
 
 def step_frame(filters, s, grey, whole, near, times=None):
@@ -5806,6 +5805,26 @@ def holds(tile_of, not_shown):
     return lambda j: "offset" in tile_of(j) and not not_shown(j) and not over_exposed(tile_of(j))
 
 
+def lum_of(frames, s, grey, whole, near):
+    """The frame whose picture gives a tinted movie frame s its brightness and detail (shown_of): of the frames within
+    HOLD_AGE of it that are whole (whole(j)), cover its place (near(j)) and are not of held_band's bands, the pass's
+    gray filter's nearest in time, else any filter's nearest; s itself when it is not of those bands and none of the
+    gray filter is near; None when s is of those bands and no such frame is near (it then plays on its own, in gray).
+    So the movie keeps one look instead of strobing filter to filter (00ATI MOVIEA001: CB3's surface, CB1's smooth
+    haze, IR3's bands), and a polarizer or UV frame shows its moment through the filter beside it (153HY HYPERION001:
+    its P0, P60, P120 and UV3 frames flashed gray between colour ones)."""
+    t = frames[s][3]
+    ok = [j for j in range(len(frames)) if abs(frames[j][3] - t) <= HOLD_AGE and not held_band(frames[j][2])
+          and (j == s or (whole(j) and near(j)))]
+    by_time = lambda js: min(js, key=lambda j: (abs(frames[j][3] - t), j != s)) if js else None
+    mine = by_time([j for j in ok if frames[j][2] == grey])
+    if mine is not None:
+        return mine
+    if not held_band(frames[s][2]):
+        return s
+    return by_time(ok)
+
+
 def shown_of(u, p, n, not_shown, tile_of):
     """(the frame whose picture frame n of a movie shows, the colour set it shows or None, True when the set is drawn
     as the colour of that frame's picture), as movie_frame draws it with colour on: the set (set_shown) when the pass
@@ -5823,13 +5842,11 @@ def shown_of(u, p, n, not_shown, tile_of):
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got, tint = set_shown(u, n, want, not_shown, placed, covers)
         if got and tint and s == n:
-            # its own moment in the set's colour, drawn from the pass's gray filter beside it when there is one within
-            # HOLD_AGE (step_frame), so the movie keeps one look instead of strobing filter to filter (00ATI MOVIEA001:
-            # CB3's surface, CB1's smooth haze, IR3's bands)
-            if placed(s) and len({fr[2] for fr in frames}) > 1:
-                s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
-                               lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
-            return s, got, True
+            # its own moment in the set's colour, its picture from lum_of (one look for the movie)
+            j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
+            if j is not None:
+                return j, got, True
+            got = None   # (a held band with no other filter near: on its own, in gray, below)
         if got:
             return s, got, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
