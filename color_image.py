@@ -1039,7 +1039,9 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
         b = at[ref][name]
         reach = PER_BODY_GROW + PER_BODY_HAZE * b[3]
         limbs |= (_disk(shape, b[1] + fx, b[2] + fy, b[3] + reach) > 0) & ~(_disk(shape, b[1] + fx, b[2] + fy, b[3] - reach) > 0)
-    rest = moved_region(out, ref, np.logical_and.reduce(omasks) & ~limbs, bands)
+    # (nor where the sky's copies of a nearer body are drawn grey already: they differ, and would make the whole set
+    # grey, N1686942882_1)
+    rest = moved_region(out, ref, np.logical_and.reduce(omasks) & ~limbs & ~(ghost > 0), bands)
     if isinstance(rest, str):
         return dict(report, failed="still moved over most of the picture")
     if rest is not None:
