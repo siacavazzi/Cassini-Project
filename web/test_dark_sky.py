@@ -43,6 +43,17 @@ assert abs(float(np.mean(left[240:260, 290:310]) - np.mean(stripes[290:310]))) <
 assert dc.sky_residual(frame(level=100.0)) is None
 assert dc.sky_residual(np.zeros((100, 100))) is None
 
+# a glow from the top edge that reaches on past the middle (Phoebe 2004, N1465564864_1): taken away as far as it goes,
+# not cut off where the edge band ends, which left a lighter box in the middle with straight sides
+top = 1.2 * np.clip(1 - yy / (0.7 * H), 0, None) + rng.normal(0, 1.0, (H, H))
+top[(yy - 150) ** 2 + (xx - 256) ** 2 < 12 ** 2] += 400.0      # a small moon in it
+left = dc.sky_residual(top)
+assert left is not None
+flat = top - left
+box = lambda a, y: float(np.median(a[y:y + 30, 200:312]) - np.median(np.concatenate([a[y:y + 30, 20:60], a[y:y + 30, -60:-20]], 1)))
+for y in (130, 190, 250):
+    assert abs(box(flat, y)) < 0.2, (y, box(top, y), box(flat, y))
+
 # the step: in STEPS after "dark", on by default, its own cache name when off
 assert cal.STEPS.index("darksky") == cal.STEPS.index("dark") + 1 and cal.step("darksky")
 with cal.stepping("darksky"):

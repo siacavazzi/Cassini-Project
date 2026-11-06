@@ -623,7 +623,8 @@ into an edge glow and a grainy, striped sky. sky_residual measures them on the f
     column, as the 2 Hz step does for lines (cisscal_noise.image_hum), where at most SKY_STRIPES DN;
   - the lift: the sky's mean in SKY_BLOCKS x SKY_BLOCKS blocks, filled in under the bodies from the blocks round them,
     smoothed, less the sky's level in the middle of the frame, so only what lifts the sky round the edges above it is
-    taken away; only near the frame's edges, where the glow is (SKY_EDGE: a plume or a faint ring in the middle of the frame stays), and
+    taken away; only near the frame's edges, where the glow is (SKY_EDGE: a plume or a faint ring in the middle of the frame stays),
+    and further in only where a broad glow (SKY_BROAD) falls away from that edge band into the middle, and
     only when at most SKY_LIFT DN (more is light, not the dark: a ring, Saturn's glow).
 Used when at least SKY_SHARE of the blocks are sky and that sky is dark (within SKY_DARK DN of the dark model). Returns the correction in DN (added to the dark), or None.
 """
@@ -635,6 +636,7 @@ SKY_STRIPES = 4.0     # DN
 SKY_LIFT = 6.0        # DN
 SKY_EDGE = 0.2        # the lift is taken away within this share of the frame's edges, fading out by twice it
 SKY_LEAST = 64        # sky pixels a column needs to be measured
+SKY_BROAD = 5         # blocks: a lift at least this wide is a glow that may reach on into the middle of the frame
 SKY_ODD = 2.5         # DN: a block this far from the blocks round it (their median) is left out of the lift
 
 
@@ -707,7 +709,21 @@ def sky_residual(image):
     if inner.sum() < 4:
         return out if out.any() else None
     lift = surface - float(np.percentile(surface[inner], 25))   # the sky's own level, below a faint plume or haze
-    lift = np.clip(cv2.resize(lift, (w, h), interpolation=cv2.INTER_LINEAR), 0, None) * _border(h, w)
+    # a glow that reaches on into the middle (Phoebe 2004, N1465564864_1: the top third of the frame a DN brighter,
+    # fading out past the middle) is taken away as far as it goes, not cut off where the edge band ends (a lighter
+    # box, its side edges straight, the middle's share of it left): its broad part (wider than SKY_BROAD blocks, so
+    # a plume or a faint ring is not) as far as it falls away from the edges without rising again (a reconstruction
+    # from the edge band, so a glow round a body in the middle, a rise of its own, stays)
+    broad = np.clip(lift, 0, None).astype(np.float32)
+    broad = cv2.morphologyEx(broad, cv2.MORPH_OPEN, np.ones((SKY_BROAD, SKY_BROAD), np.uint8), borderType=cv2.BORDER_REFLECT)
+    reach = np.where(edge >= 1.0, broad, 0).astype(np.float32)
+    for _ in range(2 * b):
+        grown = np.minimum(cv2.dilate(reach, np.ones((3, 3), np.uint8)), broad)
+        if np.array_equal(grown, reach):
+            break
+        reach = grown
+    full = lambda a: np.clip(cv2.resize(np.asarray(a, np.float32), (w, h), interpolation=cv2.INTER_LINEAR), 0, None)
+    lift = np.maximum(full(lift) * _border(h, w), full(reach))
     top = float(lift[sky].max()) if sky.any() else 0.0
     if 0 < top <= SKY_LIFT:
         out += np.minimum(lift, top)
