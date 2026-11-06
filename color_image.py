@@ -376,7 +376,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
 
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
-    why = region = None
+    why = region = bodies = None
+    warped = bool(warps and any(w is not None for w in warps))
     bands = [cal.band_of(lbl.info) for lbl in lbls]
     try:
         if not align:
@@ -386,12 +387,23 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 guide = None
         elif guide is not None:
             shifts = []
+            # the channels before alignment, for per_body
+            before = (list(guide), list(linear[0]), list(masks), None if full is None else list(full))
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
             if full is not None:
                 full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
             # a body that moved between the filters (grey_plan): drawn grey from the reference there, or everywhere
             why, region = grey_plan(aligned, channels, ref, np.logical_and.reduce(masks), bands)
+            if why == "moved" and not warped:
+                # ... unless each body can be aligned on its own (per_body)
+                got = per_body(lbls, ref, before[0], before[1], before[2], bands, before[3], shifts)
+                if isinstance(got, dict):
+                    bodies = got
+                elif got is not None:
+                    channels, masks, region, bodies = got
+                    why = "moved" if region is not None else None
+                    full = bodies.pop("_full")
             # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill; a part
             # drawn grey keeps no channel's fill there either (the fill would put a colour back)
             imgs = cal.tone(*_greyed(channels, linear, ref, aligned, why, region),
@@ -399,8 +411,17 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             if why and region is not None:
                 imgs = neutral(imgs, region)
         else:
-            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
+            before, shifts = (list(imgs), list(imgs), list(masks)), []
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
+            if why == "moved" and not warped:
+                got = per_body(lbls, ref, *before, bands, None, shifts)
+                if isinstance(got, dict):
+                    bodies = got
+                elif got is not None:
+                    imgs, masks, region, bodies = got
+                    bodies.pop("_full")
+                    why = "moved" if region is not None else None
             if why == "moved":
                 imgs = grey_from(imgs, ref, region)
     except Exception:
@@ -429,6 +450,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     elif region is not None:
         # the share of the picture drawn grey from the reference where a body moved between the filters (grey_plan)
         report["grey_moved"] = round(float(np.mean(region)), 4)
+    if bodies is not None:
+        # each body aligned on its own (per_body), or why that failed and the set was drawn grey as before
+        report["per_body_failed" if "failed" in bodies else "per_body"] = bodies.get("failed", bodies)
     if warps and any(w is not None for w in warps):
         # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
         report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
@@ -687,6 +711,273 @@ def grey_plan(aligned, channels, ref, valid=None, bands=None):
     if region is None:
         return None, None
     return "moved", (None if isinstance(region, str) else region)
+
+
+"""
+Per-body registration (fix plan PR 15): a set grey_plan draws grey because something "moved", where SPICE puts two or
+more known bodies (obs_mosaic.RADIUS) on the frame, each at least PER_BODY_LEAST px across. A moon crossing another,
+or Saturn, moves against it between the filters (Tethys over Titan, N1689372813_1: 24 px a filter), so a set aligned on
+one body has the other's copies apart and the whole set was drawn grey. Each body is aligned on its own instead:
+
+1. Where the bodies are on the reference: SPICE's disks, all moved by how far the reference's pointing is off
+   (_pointing_fix: the disks drawn as a picture, matched to the reference by image_correction.guided_shift).
+2. From the farthest to the nearest, each channel is matched to the reference by the pipeline's own matcher
+   (image_correction.align_with_masks) on that body alone: its disk in both frames, PER_BODY_GROW px wider, with
+   every nearer body's disk filled flat, so nothing else is matched. The smallest body first, on its own: how far it is
+   from SPICE's move is the camera's drift between the filters, and every other body is looked for only PER_BODY_NEAR
+   round SPICE's move of it plus that drift (put there when its own match finds nothing: Titan's featureless haze).
+   Where the set's own match over the whole picture lands within PER_BODY_NEAR of a body's, that one is kept.
+3. The channels aligned on the farthest body are the picture (the sky keeps its alignment); each nearer body's
+   channels go over them within its disk, feathered over PER_BODY_FEATHER px.
+4. Where a nearer body hid the one behind it in some filter but not in the reference, that filter has nothing of the
+   far body: drawn grey from the reference (grey_from), as is anything else still moving (moved_region on the
+   composite: a third moon, ring arcs).
+
+Returns (channels, masks, region or None, report) for load_aligned to go on with, or None where it does not apply,
+or a report {"failed": why} when a body's match failed or the composite still moved over most of the picture (the
+set is then drawn grey as before, report["per_body_failed"]). guide = the channels to match on (the classic display, or the drawn channels),
+chans = the channels to draw (linear or drawn), both before alignment; masks = their valid masks; bands as grey_plan.
+"""
+PER_BODY_LEAST = 20      # px across: smaller bodies are not aligned on their own
+PER_BODY_GROW = 6        # px round a body's disk that its match sees (and PER_BODY_HAZE)
+PER_BODY_HAZE = 0.08     # of its radius more (a hazy or soft limb reaches past the disk: Titan's)
+PER_BODY_SOFT = 6        # px over which the part a match sees fades out
+PER_BODY_HOLE = 3        # px round a nearer body's disk left out of the far one's match
+PER_BODY_FEATHER = 3     # px over which a nearer body's limb is blended onto what is behind it
+PER_BODY_NEAR = 6        # px round SPICE's move plus the camera's drift that a body is looked for
+PER_BODY_POINTING = 32   # px: how far the reference's pointing may be off SPICE's (_pointing_fix's search)
+PER_BODY_MOST = 4        # bodies at most
+PER_BODY_CLIPPED = 0.01  # of a nearer body's disk saturated in some filter: drawn grey
+
+
+def _frame_bodies(lbl):
+    """[(name, x, y, r, km)] of every known body SPICE puts on frame lbl (its target from label.target_loc, the others
+    from the geometry cache's bodies table, bootleg_autonav.bodies_of), centres in the frame's full resolution pixels,
+    radii over PER_BODY_LEAST / 2; None where the target can't be placed or the bodies table has not got the frame."""
+    import obs_mosaic
+    info = lbl.info
+    name = str(info.get("TARGET_NAME", "")).replace('"', "").strip()
+    cam = "W" if info.get("INSTRUMENT_ID") == "ISSWA" else "N"
+    km = obs_mosaic.RADIUS.get(name)
+    try:
+        with spice_lock:
+            loc = lbl.target_loc()
+    except Exception:
+        return None
+    if not km or not loc or not loc[2]:
+        return None
+    others = ba.bodies_of([ba.frame_id(lbl)]).get(ba.frame_id(lbl))
+    if others is None:
+        return None
+    out = [(name, ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), km / (float(loc[2]) * obs_mosaic.IFOV[cam]),
+            float(loc[2]))]
+    out += [(b, ba.CCD_CENTER + x, ba.CCD_CENTER + y, r, z) for b, x, y, r, z in others if obs_mosaic.RADIUS.get(b)]
+    return [b for b in out if 2 * b[3] >= PER_BODY_LEAST]
+
+
+def _disk(shape, x, y, r, soft=0.0):
+    """A disk at (x, y) of radius r on a picture of shape (rows, columns) at the full resolution grid's scale, as
+    float32 0 to 1, feathered over soft px about r (a hard disk when soft is 0)"""
+    h, w = shape[:2]
+    k = w / ba.FULL_FRAME
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = np.hypot(xx / k - x, yy / k - y)
+    if soft <= 0:
+        return (d <= r).astype(np.float32)
+    return np.clip((r + soft / 2 - d) / soft, 0, 1).astype(np.float32)
+
+
+def _grey_level(im):
+    """A picture as one float32 brightness plane (the mean of its colors)"""
+    im = np.asarray(im, np.float32)
+    return im.mean(axis=2) if im.ndim == 3 else im
+
+
+def _as_like(plane, like):
+    """A brightness plane back in the form of picture like (its colors and type), for the matcher"""
+    like = np.asarray(like)
+    out = plane[..., None].repeat(like.shape[2], axis=2) if like.ndim == 3 else plane
+    if np.issubdtype(like.dtype, np.integer):
+        out = np.clip(out + 0.5, 0, np.iinfo(like.dtype).max)
+    return out.astype(like.dtype)
+
+
+def _only(im, keep, flat):
+    """Picture im with only the part keep (0 to 1) of it seen: the rest made flat, at the level of keep's own edge, and
+    the part flat (0 to 1: a nearer body's disk) filled at the level round it, so neither cut is an edge for the
+    matcher to line up"""
+    g = _grey_level(im)
+
+    def level(band):
+        return float(np.median(g[band])) if band.any() else 0.0
+    edge = (keep > 0.05) & (keep < 0.95) & (flat < 0.05)
+    out = g * keep + level(edge) * (1 - keep)
+    if flat.any():
+        round_it = (cv2.dilate((flat > 0.05).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0) & (flat < 0.05) & (keep > 0.95)
+        out = out * (1 - flat) + level(round_it) * flat
+    return _as_like(out, im)
+
+
+def _pointing_fix(guide, bodies, ref):
+    """How far (dx, dy, full resolution px) the reference's bodies are from SPICE's places: the square round the
+    smallest body's disk (the sharpest limb), with every disk drawn at the reference's brightness inside it (each
+    nearer one over the ones behind it), matched to the reference there (image_correction.guided_shift,
+    PER_BODY_POINTING px round no move); (0, 0) where nothing matches"""
+    g = _grey_level(guide[ref])
+    k = g.shape[1] / ba.FULL_FRAME
+    scene = np.zeros(g.shape, np.float32)
+    for name, x, y, r, z in sorted(bodies, key=lambda b: -b[4]):
+        d = _disk(g.shape, x, y, r)
+        if (d > 0).any():
+            scene = np.where(d > 0, float(np.median(g[d > 0])), scene)
+    scene = cv2.GaussianBlur(scene, (0, 0), 1.0)
+    _, x, y, r, _ = min(bodies, key=lambda b: b[3])
+    half = (r + PER_BODY_POINTING + 2 * PER_BODY_GROW) * k
+    x0, y0 = max(int(x * k - half), 0), max(int(y * k - half), 0)
+    x1, y1 = min(int(x * k + half) + 1, g.shape[1]), min(int(y * k + half) + 1, g.shape[0])
+    if x1 - x0 < 64 or y1 - y0 < 64:
+        return 0.0, 0.0
+    a = np.ascontiguousarray(scene[y0:y1, x0:x1])
+    b = np.ascontiguousarray(g[y0:y1, x0:x1])
+    try:
+        found, _ = ic.guided_shift(_as_like(a, guide[ref]), _as_like(b, guide[ref]), (0.0, 0.0), window=PER_BODY_POINTING * k)
+    except Exception:
+        found = None
+    if found is None or np.hypot(*found) > PER_BODY_POINTING * k:
+        return 0.0, 0.0
+    return float(found[0]) / k, float(found[1]) / k
+
+
+def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None):
+    if len(lbls) < 2:
+        return None
+    each = [_frame_bodies(l) for l in lbls]
+    if any(b is None for b in each):
+        return None
+    names = [b[0] for b in each[ref]]
+    if len(names) < 2 or len(names) > PER_BODY_MOST or any({b[0] for b in e} != set(names) for e in each):
+        return None
+    at = [{b[0]: b for b in e} for e in each]
+    shape = np.asarray(guide[ref]).shape[:2]
+    k = shape[1] / ba.FULL_FRAME
+    fx, fy = _pointing_fix(guide, each[ref], ref)
+    # far to near on the reference (the farthest first: its alignment is the sky's)
+    order = sorted(names, key=lambda n: -at[ref][n][4])
+    report = {"bodies": order, "pointing": [round(fx, 1), round(fy, 1)], "shifts": {}}
+    # the smallest body is matched first, on its own (a small disk's whole limb is in view: the sharpest match); how
+    # far that match is from SPICE is the camera's own drift between the filters, the same for every body, so each
+    # other body is then looked for only PER_BODY_NEAR round SPICE's move of it plus that drift, and is put there
+    # when its own match finds nothing (a soft disk with no detail: Titan's haze)
+    drift = [None] * len(lbls)
+    found_of = {}
+    for name in sorted(order, key=lambda n: at[ref][n][3]):
+        nearer = order[order.index(name) + 1:]
+        shifts = []
+        for j in range(len(lbls)):
+            if j == ref:
+                shifts.append(None)
+                continue
+            # SPICE's move of this body from the reference to channel j (the pointing fix the same in both)
+            b0, bj = at[ref][name], at[j][name]
+            g = ((bj[1] - b0[1]) * k, (bj[2] - b0[2]) * k)
+            grow = PER_BODY_GROW + PER_BODY_HAZE * b0[3]
+
+            def part(im, b, at_):
+                # (each frame seen round its own place of the body, its own nearer bodies filled flat: what is cut
+                # moves with the body, so the cut itself pulls the match only towards the body's move)
+                flat = np.zeros(shape, np.float32)
+                for n in nearer:
+                    m = at_[n]
+                    flat = np.maximum(flat, _disk(shape, m[1] + fx, m[2] + fy, m[3] + PER_BODY_HOLE, 2.0))
+                return _only(im, _disk(shape, b[1] + fx, b[2] + fy, b[3] + grow, PER_BODY_SOFT), flat)
+            pair = [part(guide[ref], b0, at[ref]), part(guide[j], bj, at[j])]
+            found, how = [], []
+            if drift[j] is None:
+                ic.align_with_masks(pair, [masks[ref].copy(), masks[j].copy()], 0, how, found=found, guess=[None, g])
+                if found[1] is None:
+                    return {"failed": f"{name} in channel {j}: {how[1]}"}
+                drift[j] = (found[1][0] - g[0], found[1][1] - g[1])
+                shifts.append(found[1])
+                continue
+            g = (g[0] + drift[j][0], g[1] + drift[j][1])
+            ic.align_with_masks(pair, [masks[ref].copy(), masks[j].copy()], 0, how, found=found, guess=[None, g],
+                                within=PER_BODY_NEAR * k)
+            got = found[1] if found[1] is not None else g
+            w = whole[j] if whole is not None else None
+            if w is not None and np.hypot(w[0] - got[0], w[1] - got[1]) <= PER_BODY_NEAR * k:
+                # the set's own match over the whole picture lands on this body too (a frame-filling Saturn, its
+                # rings): believed over the match on the body alone, which saw less of it (165TI's ring edges)
+                got = w
+            shifts.append(got)
+        found_of[name] = shifts
+        report["shifts"][name] = [None if s is None else [round(s[0], 1), round(s[1], 1)] for s in shifts]
+    aligned = {}
+    for name in order:
+        moved, mmasks = ic.align_with_masks(list(chans), [m.copy() for m in masks], ref, use=found_of[name])
+        aligned[name] = (moved, mmasks, found_of[name])
+    # the farthest body's alignment, each nearer body over it within its disk
+    out, omasks, base = [c.copy() for c in aligned[order[0]][0]], list(aligned[order[0]][1]), aligned[order[0]][2]
+    # what the camera saturated in each channel (load_aligned's full), moved with the channels the same way
+    moved_full = None if full is None else \
+        {name: [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, aligned[name][2])] for name in order}
+    ofull = None if full is None else list(moved_full[order[0]])
+    ghost = np.zeros(shape, np.float32)
+    for name in order[1:]:
+        moved, mmasks, shifts = aligned[name]
+        b = at[ref][name]
+        w = _disk(shape, b[1] + fx, b[2] + fy, b[3], PER_BODY_FEATHER)
+        for j, c in enumerate(moved):
+            ww = w if c.ndim == 2 else w[..., None]
+            mixed = out[j].astype(np.float32) * (1 - ww) + c.astype(np.float32) * ww
+            if np.issubdtype(c.dtype, np.integer):
+                mixed = np.clip(mixed + 0.5, 0, np.iinfo(c.dtype).max)
+            out[j] = mixed.astype(c.dtype)
+            omasks[j] = np.where(w > 0.5, mmasks[j], omasks[j])
+            if ofull is not None:
+                ofull[j] = np.where(w > 0.5, moved_full[name][j], ofull[j])
+            if j != ref:
+                # where this body sits in the far body's alignment of channel j: that filter saw it, not what is behind
+                dx = shifts[j][0] - (base[j] or (0, 0))[0]
+                dy = shifts[j][1] - (base[j] or (0, 0))[1]
+                ghost = np.maximum(ghost, _disk(shape, b[1] + fx + dx / k, b[2] + fy + dy / k, b[3]))
+        ghost *= 1 - (w > 0)
+    # a nearer body the camera saturated in some filter (over PER_BODY_CLIPPED of its disk) has no color there to
+    # draw: the saturated fill would take the color round it, the far body's (an orange Dione over Titan,
+    # N1694954493_1), so it is drawn grey from the reference, as its whole disk
+    clipped = []
+    if ofull is not None:
+        for name in order[1:]:
+            b = at[ref][name]
+            disk = _disk(shape, b[1] + fx, b[2] + fy, b[3]) > 0
+            if disk.any() and max(float((m[disk] > 0.5).mean()) for m in ofull) > PER_BODY_CLIPPED:
+                clipped.append(name)
+                ghost = np.maximum(ghost, disk.astype(np.float32))
+    if clipped:
+        report["clipped"] = clipped
+    region = None
+    if ghost.any():
+        grow = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * MOVED_GROW + 1,) * 2)
+        region = cv2.GaussianBlur(cv2.dilate(ghost, grow), (0, 0), MOVED_SOFT / 2)
+        region = np.clip(region * 2, 0, 1)
+    # anything else still moving (a third moon, ring arcs): the existing region rule on the composite
+    rest = moved_region(out, ref, np.logical_and.reduce(omasks), bands)
+    if isinstance(rest, str):
+        return dict(report, failed="still moved over most of the picture")
+    if rest is not None:
+        region = rest if region is None else np.maximum(region, rest)
+    if region is not None:
+        # a nearer body's own disk stays in color
+        inside = np.zeros(shape, np.float32)
+        for name in order[1:]:
+            if name in clipped:
+                continue
+            b = at[ref][name]
+            inside = np.maximum(inside, _disk(shape, b[1] + fx, b[2] + fy, b[3] - PER_BODY_FEATHER / 2))
+        region = region * (1 - inside)
+        if not region.any():
+            region = None
+    report["_full"] = ofull
+    return out, omasks, region, report
 
 
 """

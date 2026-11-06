@@ -1787,7 +1787,11 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(404, "Not in a pass")
                 if made[0] is None:
                     # the pass is being worked out, or SPICE could not place the frame: the window shows the frame
-                    return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, made[1].get("why", ""))
+                    # (and how far it is, which the window shows: "working out the pass, 12 of 36 frames")
+                    why = made[1].get("why", "")
+                    if why == "working out the pass" and made[1].get("of"):
+                        why = f"{why}, {made[1].get('made', 0)} of {made[1]['of']} frames"
+                    return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, why)
                 data = made[0] if fmt == "webp" else encode(Image.open(io.BytesIO(made[0])), FULL, "png")
                 return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
