@@ -1,4 +1,4 @@
-# Pipeline-stages poster: Enceladus, 14 July 2005
+# Pipeline-stages posters
 
 One mosaic, `ISS_011EN_N9COL001_PRIME` pass 0 (39 NAC frames, 10 pointings, CLEAR + UV3/GRN/IR3), shown at every
 stage of the pipeline, then drilled down from the mosaic to one pointing (05, over the tiger stripes) and back to its
@@ -41,3 +41,15 @@ $PY -I scripts/poster.py; $PY -I scripts/sheet.py
 ```
 
 These figures were made on origin/main 5609624.
+
+## Whole-disk version: Rhea, 26 November 2005
+
+Sam asked for a complete mosaic. `scripts/fullscan.py` reads only the geometry cache and Image_index. For each pass it
+compares the frame footprints (1024 px squares at the SPICE centring shift) against the body's disk, and keeps passes
+that cover at least 97% of the disk with a disk wider than one frame. That gives 122 passes (`full_mosaics.json`). The
+first one rendered is `ISS_018RH_REGMAP001_PRIME`: 83 frames, 21 pointings, IR3/GRN/UV3 plus clear, with the whole disk
+and the rings behind it. `scripts/poster_full.py rhea/cfg.json` lays out the poster from the same stage scripts.
+
+![rhea](rhea/poster_preview_1200.jpg)
+
+Known pipeline flaw, visible on the poster: a blurred grey strip at the top limb, in pointing 10.
