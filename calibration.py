@@ -1633,6 +1633,9 @@ so it gets the picture's typical color with the surface the others saw. Returns 
 reach: the ratio the picture has near each pixel instead (over a Gaussian of reach pixels, the typical one where too
 little near it says), for a picture whose colour changes across it: a mosaic of Saturn from its pole's blue-green to its
 gold lower latitudes, where the one typical ratio gave the clipped gold the pole's green.
+where: the pixels a ratio may be measured over (with the lit ones), None for every one; floor: False for pixels a
+channel did not see rather than saturated (color_image.per_body's far body behind a nearer one in some filter), which
+are filled with the ratio alone, never brought up to the channel's clipping.
 """
 FILL_NEAR = 0.05   # (fill_saturated's reach) the share of the pixels round one measured, from which their ratio is used whole
 FILL_FLOOR = 99.9  # (fill_saturated) percentile of a channel's unsaturated lit pixels a pixel it saturated is filled no darker than
@@ -1653,10 +1656,11 @@ def mostly_saturated(mask, lit):
     return n > 0 and float((np.asarray(mask, bool) & lit).sum()) > FILL_MOST * n
 
 
-def fill_saturated(channels, masks, reach=None):
+def fill_saturated(channels, masks, reach=None, where=None, floor=True):
     masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
     x = [np.asarray(c, np.float32) for c in channels]
     lit = lit_of(x)
+    seen = lit if where is None else lit & np.asarray(where, bool)
     out = []
     for i, (c, m) in enumerate(zip(x, masks)):
         if not m.any():
@@ -1665,7 +1669,7 @@ def fill_saturated(channels, masks, reach=None):
         total = np.zeros(c.shape, np.float32)
         count = np.zeros(c.shape, np.float32)
         for j, (o, n) in enumerate(zip(x, masks)):
-            both = lit & ~m & ~n & (o > 0)
+            both = seen & ~m & ~n & (o > 0)
             if j == i or both.sum() < 100:
                 continue
             ratio = np.float32(np.median(c[both] / o[both]))
@@ -1697,7 +1701,7 @@ def fill_saturated(channels, masks, reach=None):
         # with ragged edges along GRN's clipping. Not for a channel saturated over most of the picture
         # (mostly_saturated), whose fill keeps the others' colour.
         under = lit & ~m
-        if some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
+        if floor and some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
             floor = np.float32(np.percentile(c[under], FILL_FLOOR))
             filled[some] = np.maximum(filled[some], floor)
         out.append(filled)
