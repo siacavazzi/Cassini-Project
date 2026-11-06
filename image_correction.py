@@ -377,6 +377,9 @@ def _match(im1, im2, g, mask1, mask2, within=None):
     if shift is None:
         # a weak peak (under find_shift's bar) believed where it lines the edges up clearly better (checked_shift)
         shift, how = checked_shift(im1, im2, mask1, mask2, g)
+    if shift is None:
+        # a limb or terminator through filters that look nothing alike inside it: matched on the lit area's outline
+        shift, how = limb_shift(im1, im2, mask1, mask2)
     if shift is None and g is not None:
         # nothing matched anywhere (or only wild fits): SPICE's offset, where it lines the frames up better than none
         shift, how = spice_shift(im1, im2, mask1, mask2, g)
@@ -440,6 +443,62 @@ def checked_shift(im1, im2, mask1, mask2, g=None):
     if best is None:
         return None, "not aligned"
     return (best[0], best[1]), f"{best[3]} checked on edges (peak {best[4]:.2f}, edges agree {max(base):.2f} to {best[2]:.2f})"
+
+
+"""
+A body's limb matched on its outline alone: the lit area of each frame (above its own Otsu threshold, 2 px blurred)
+correlated as a shape, so the filters' brightness inside it, which phase correlation and the edges trip on, plays no
+part. Titan through CB3 and MT1, or Saturn's limb through BL1 and MT2, look nothing alike inside the disk, but the
+disk's outline is the same curve (N1872922446_1: phase and edges found nothing; the outlines line up to 0.4 % of the
+frame differing, from 3.7 % as taken, 20 px off). A straight edge (a ring's, a frame-filling terminator) says only how
+far across it the frame moved, and correlates as a ridge with a low peak: only a peak of LIMB_RESPONSE is believed, a
+move within CHECK_REACH that leaves at most LIMB_DIFF of the frame differing and halves what differed as taken, and
+that the edges agree with (_agreement no worse than as taken). Each frame must have a clear lit and dark part
+(LIMB_CONTRAST between its 5th and 95th percentiles, lit over LIMB_SHARE of it to 1 - LIMB_SHARE). SPICE's offset is
+not asked: between a set's filters it is often the one off (N1496643022_1: SPICE -18,-7, the outline +17,+9).
+((dx, dy), how) or (None, "not aligned")
+"""
+LIMB_RESPONSE = 0.2   # the least peak of the outlines' correlation
+LIMB_DIFF = 0.01      # the most of the frame (inside both) whose lit and dark may differ after the move ...
+LIMB_GAIN = 0.6       # ... and at most this share of what differed as taken
+LIMB_CONTRAST = 30.0  # of 255: the least spread between a frame's 5th and 95th percentiles
+LIMB_SHARE = 0.05     # the least share of the frame lit, and of it dark
+
+
+def _lit(im, mask):
+    gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+    blurred = cv2.GaussianBlur(gray, (0, 0), 2)
+    v = blurred[mask]
+    if v.size < 1000:
+        return None
+    lo, hi = np.percentile(v, (5, 95))
+    if hi - lo < LIMB_CONTRAST:
+        return None
+    t, _ = cv2.threshold(np.clip(v, 0, 255).astype(np.uint8).reshape(-1, 1), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    lit = (blurred > t) & mask
+    return lit if LIMB_SHARE <= lit[mask].mean() <= 1 - LIMB_SHARE else None
+
+
+def limb_shift(im1, im2, mask1, mask2):
+    l1, l2 = _lit(im1, mask1), _lit(im2, mask2)
+    if l1 is None or l2 is None:
+        return None, "not aligned"
+    f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
+    (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
+    if response < LIMB_RESPONSE or np.hypot(dx, dy) > CHECK_REACH:
+        return None, "not aligned"
+
+    def differ(shift):
+        moved = shift_image(l2.astype(np.float32), *shift) > 0.5
+        both = mask1 & (shift_image(mask2.astype(np.float32), *shift) > 0.99)
+        both = cv2.erode(both.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
+        return float((l1[both] != moved[both]).mean()) if both.sum() >= 1000 else 1.0
+    before, after = differ((0.0, 0.0)), differ((dx, dy))
+    if after > LIMB_DIFF or after > LIMB_GAIN * before:
+        return None, "not aligned"
+    if _agreement(im1, im2, mask1, mask2, (dx, dy)) < _agreement(im1, im2, mask1, mask2, (0.0, 0.0)):
+        return None, "not aligned"
+    return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
 
 
 """

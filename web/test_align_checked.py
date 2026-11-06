@@ -73,4 +73,22 @@ assert shift7 is not None and np.hypot(*shift7) < 1.0 and ("nothing to fringe" i
 print("cloud tops:", how6, "|", how7)
 # a limb (a sharp edge) is never placed that way
 assert not ic._flat(ref, moved, MASK, MASK)
+
+# a disk whose inside looks nothing alike through two filters (bright smooth in one, dark mottled in the other), moved
+# 9,-6 px: the limb match finds it on the outline
+def disk(dx, dy, band):
+    r = np.hypot(xx - 700 - dx, yy - 400 - dy)
+    inside = (r < 420)
+    tex = np.sin(xx / 7.0) * np.cos(yy / 9.0)
+    img = np.where(inside, 200 - 0.1 * r if band else 90 + 25 * tex, 8) + rng.normal(0, 1.0, (N, N))
+    return cv2.cvtColor(np.clip(cv2.GaussianBlur(img.astype(np.float32), (0, 0), 1.2), 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+d1, d2 = disk(0, 0, 0), disk(9, -6, 1)
+shift8, how8 = ic.limb_shift(d1, d2, MASK, MASK)
+assert shift8 is not None and np.hypot(shift8[0] - 9, shift8[1] + 6) < 1.5, (how8, shift8)
+print("limb:", how8, [round(v, 1) for v in shift8])
+# a straight edge (half the frame lit) is not a limb: no move believed along it
+edge1 = cv2.cvtColor(np.where(xx < 500, 180, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+edge2 = cv2.cvtColor(np.where(xx < 506, 120, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+shift9, how9 = ic.limb_shift(edge1, edge2, MASK, MASK)
+assert shift9 is None or abs(shift9[1]) < 1.0, (how9, shift9)
 print("ok")
