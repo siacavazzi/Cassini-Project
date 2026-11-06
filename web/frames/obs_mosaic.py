@@ -2486,7 +2486,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             v = np.concatenate([i.ravel() for i in by[f]]) - blacks[f]
             lit = v[v > 0.2 * np.percentile(v, 99)]
             levels.append(float(np.median(lit)) if lit.size else 0.0)
-        mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels]) \
+        mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels], obs=u["key"][1]) \
             if min(levels) > 0 else None
         if isinstance(mix, calibration.FalseMix):
             out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
@@ -4438,7 +4438,7 @@ def colour_picture(u, p, colour, planes):
     else:
         rgb = np.dstack([a[..., 0] for a in planes])
     bal = scale.get("balance")
-    mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None)
+    mix = calibration.color_mix(u["key"][2], colour, u["key"][0], [bal[f] for f in colour] if bal else None, obs=u["key"][1])
     typical = scale.get("typical")
     if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
@@ -5224,7 +5224,7 @@ def _colour_recipes(u, p, cache, ns, tiles):
     want = p["colour"]
     scale = p["display_scale"]
     bal = scale.get("balance")
-    mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None)
+    mix = calibration.color_mix(u["key"][2], want, u["key"][0], [bal[f] for f in want] if bal else None, obs=u["key"][1])
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
@@ -5258,7 +5258,7 @@ def _eye_recipes(u, p, ns, tiles):
     if len(want) not in (2, 3):
         return None
     with calibration.coloring("eye"):
-        mix = calibration.color_mix(u["key"][2], want, u["key"][0])
+        mix = calibration.color_mix(u["key"][2], want, u["key"][0], obs=u["key"][1])
     if mix is None:
         return None
     by = _colour_by(u, want, ns, tiles, p["grey"])

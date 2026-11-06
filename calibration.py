@@ -50,6 +50,7 @@ import gzip
 import json
 import math
 import os
+import re
 
 import cv2
 import numpy as np
@@ -918,11 +919,36 @@ def emulated(bands, target=None):
     return not (len(bands) == 2 and SURFACE_WINDOW.get(str(target or "").upper()) in bands)
 
 
-def color_mix(camera, bands, target=None, gains=None, own=False):
+"""
+The body whose color natural color emulation (eye_mix) gives a set: its target, unless the target is one the tables
+know nothing of (no eye color, no tint, no typical brightness in any of the set's bands) and its observation is named
+after a body they do know (ISS_159SA_STORMW..., OBS_BODY). Saturn's storm watch frames are filed under whichever small
+moon rode along (JANUS, HELENE, METHONE, PALLENE: ..._RIDER) or under UNK, and drew the whole planet in that moon's gray,
+under a False color label: 490 methane sets (Spot check 9, 2026-11-06).
+"""
+OBS_BODY = {"SA": "SATURN", "TI": "TITAN", "JU": "JUPITER", "EN": "ENCELADUS", "RH": "RHEA", "DI": "DIONE",
+            "TE": "TETHYS", "MI": "MIMAS", "IA": "IAPETUS"}
+
+
+def _known_body(target, bands, camera):
+    t = str(target or "").upper()
+    eye_tint(t)   # (loads the eye colors)
+    return t in _eye_colors or tint_of(t) is not None or any(body_level(t, b, camera) is not None for b in bands)
+
+
+def mix_target(target, bands, camera=None, obs=None):
+    if not obs or _known_body(target, bands, camera):
+        return target
+    m = re.match(r"ISS_C?\d{2,3}([A-Z]{2})", str(obs).replace('"', "").strip())
+    body = OBS_BODY.get(m.group(1)) if m else None
+    return body if body and _known_body(body, bands, camera) else target
+
+
+def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
     if len(bands) in (2, 3) and (style() == "eye" or style() == "balanced" and emulated(bands, target)):
         if len(bands) == 3 and natural_mix(camera, bands) is not None:
             return natural_mix(camera, bands)
-        m = eye_mix(camera, bands, target)
+        m = eye_mix(camera, bands, mix_target(target, bands, camera, obs))
         if m is not None or style() == "eye":
             return m
         # no eye mix (a filter without a wavelength): natural color balances it as before
@@ -1469,7 +1495,7 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
-                    own=True)
+                    own=True, obs=_value(infos[0], "OBSERVATION_ID", ""))
     false = isinstance(mix, FalseMix)
     lum = None
     if false:
