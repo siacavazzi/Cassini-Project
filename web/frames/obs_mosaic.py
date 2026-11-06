@@ -4302,8 +4302,15 @@ CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a 
 
 
 TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
-TINT_DARK = 0.02    # of the bright end: below it a colour's hue fades to the mean hue (sky noise has no hue of its own)
+TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame eases over to the set's own picture (the
+#                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
+TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per channel: a set's colour fringes (a body
+#                         moving between its filters: red and blue edges on Titan's limb) are not carried into the frame
+TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
 TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
+TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
+#                            display scale already, and a set showing another scene (the rings a moon was framed on, the
+#                            frame on Saturn's night side) would otherwise set it (221EN PLMHPMR003 came out near black)
 
 
 def tinted_frame(colour, grey, gamma=2.2):
@@ -4322,7 +4329,10 @@ def tinted_frame(colour, grey, gamma=2.2):
         ca = cv2.GaussianBlur(ca, (0, 0), TINT_BLUR)
     y = rgb @ np.asarray([0.2126, 0.7152, 0.0722], np.float32)
     g = lin(grey[..., 0])
-    both = (ca > 0.99) & (ga > 0.99)
+    # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
+    near = np.clip((grey[..., 0].astype(np.float32) - TINT_CLIP) / max(1.0, CLIP_FROM - TINT_CLIP), 0, 1)
+    clipped = near > 0
+    both = (ca > 0.99) & (ga > 0.99) & ~clipped
     top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
     top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
     lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g)
@@ -4332,8 +4342,9 @@ def tinted_frame(colour, grey, gamma=2.2):
     else:
         match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
         hue = np.ones(3, np.float32)
-    match = float(np.clip(match, 1 / LUM_MATCH[1], LUM_MATCH[1]))
+    match = float(np.clip(match, *TINT_MATCH))
     own = rgb / np.maximum(y, 1e-6)[..., None]
+    own = hue[None, None, :] * np.clip(own / np.maximum(hue, 1e-6)[None, None, :], *TINT_HUE)
     # the set's own hue where it is lit; where the set is dark (sky, a shadow, or a body that has moved since) no hue,
     # gray; off the set's edge its mean hue, so the frame keeps its whole place in the body's colour
     w = (ca * np.clip(y / max(TINT_DARK * top_y, 1e-6), 0, 1))[..., None]
@@ -4341,7 +4352,7 @@ def tinted_frame(colour, grey, gamma=2.2):
     out = np.clip(h * (g * match)[..., None], 0, 1)
     # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
     # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
-    clip = np.clip((grey[..., 0].astype(np.float32) - CLIP_FROM) / max(1.0, 255.0 - CLIP_FROM), 0, 1) * ca
+    clip = np.clip(cv2.GaussianBlur(near, (0, 0), 4 * TINT_BLUR), 0, 1) * ca
     if clip.any():
         out = out * (1 - clip[..., None]) + np.clip(rgb, 0, 1) * clip[..., None]
     rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)

@@ -68,8 +68,8 @@ colour = np.zeros((H, W, 4), np.uint8)
 colour[50:150, 50:150] = (200, 140, 60, 255)            # an orange disk, flat
 grey = np.zeros((H, W, 4), np.uint8)
 grey[40:160, 40:160, 3] = 255
-grey[40:160, 40:160, 0] = 120
-grey[90:110, 90:110, 0] = 40                            # a dark spot the set doesn't have
+grey[40:160, 40:160, 0] = 170
+grey[90:110, 90:110, 0] = 60                            # a dark spot the set doesn't have
 out = om.tinted_frame(colour, grey, 2.2).astype(int)
 lin = lambda v: calibration.decode(np.asarray(v, np.float32) / 255, 2.2)
 # the frame's alpha, the frame's detail (the spot), the set's hue
@@ -79,6 +79,9 @@ r = lin(out[70, 70, :3]); c = lin([200, 140, 60])
 assert np.allclose(r / r.sum(), c / c.sum(), atol=0.02), (r, c)
 # brought to the set's brightness where both are lit
 assert abs(int(out[70, 70, 0]) - 200) <= 3, out[70, 70]
+# a frame much dimmer than the set (another scene) moves only so far: both are on the pass's display scale
+dim = grey.copy(); dim[40:160, 40:160, 0] = 40
+assert om.tinted_frame(colour, dim, 2.2)[70, 70, 0] < 120
 # off the set (the frame's edge past it): the set's mean hue, not gray
 e = lin(out[45, 45, :3])
 assert e[0] > e[2] * 2, e
