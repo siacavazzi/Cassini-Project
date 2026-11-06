@@ -4892,7 +4892,7 @@ def _colour_by(u, want, ns, tiles, grey):
         return by
     not_shown = lambda j: j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {})
     for n in ns:
-        covers = lambda got: all(box_cover(tiles[n], tiles[j]) >= HELD_COVER for j in got.values())
+        covers = lambda got: set_cover(tiles[n], [tiles[j] for j in got.values()]) >= HELD_COVER
         got = set_of(u, n, want, not_shown, lambda j: j in placed, covers)
         if got:
             by[str(n)] = [got[f] for f in want]
@@ -5472,6 +5472,33 @@ def box_cover(t, q):
     return max(0.0, w) * max(0.0, h) / max(1e-9, (a[2] - a[0]) * (a[3] - a[1]))
 
 
+def set_cover(t, qs):
+    """The share of tile t's place (its outline where SPICE puts it; its box without one) that every one of tiles
+    qs's places covers at once, as a colour set is drawn (colour_picture: only where every filter has the picture;
+    held_cover on the planes). Each filter's box over half of it was not enough: a frame turned in the view fills
+    little of its box, so the 2008 north pole movie (082SA NPOLECAM002, which moved between its cycles) held its
+    first cycle's set through the second, each box taking in 55% of the new place but the pictures less than half,
+    and played grey filter after grey filter until the second cycle's own set was in."""
+    def poly(x):
+        if x.get("outline"):
+            return np.asarray(x["outline"], np.float32)
+        bx, by, bw, bh = x["box"]
+        ox, oy = x["offset"]
+        return np.asarray([[ox + bx, oy + by], [ox + bx + bw, oy + by], [ox + bx + bw, oy + by + bh],
+                           [ox + bx, oy + by + bh]], np.float32)
+    a = poly(t)
+    full = abs(float(cv2.contourArea(a)))
+    if full <= 0:
+        return 0.0
+    hull = cv2.convexHull(a)
+    for q in qs:
+        area, inter = cv2.intersectConvexConvex(hull, cv2.convexHull(poly(q)))
+        if area <= 0 or inter is None:
+            return 0.0
+        hull = cv2.convexHull(inter.reshape(-1, 2).astype(np.float32))
+    return abs(float(cv2.contourArea(hull))) / full
+
+
 def holds(tile_of, not_shown):
     """whole(j) for held_of: frame j placed, shown (not not_shown) and not over-exposed. A frame held in another's place
     is never a white slab: the 2009 south pole movie's empty clear frames held the 88% saturated one before them."""
@@ -5491,7 +5518,7 @@ def shown_of(u, p, n, not_shown, tile_of):
     whole = holds(tile_of, hidden)
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
     if colours:
-        covers = lambda got: all(box_cover(tile_of(n), tile_of(j)) >= HELD_COVER for j in got.values())
+        covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got = set_of(u, n, want, not_shown, placed, covers)
         if got:
             return s, got
@@ -5599,9 +5626,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             planes = _despiked(planes, p["display_scale"].get("gamma", 2.2))
         # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
         # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
-        # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own
-        # instead
-        if held_cover(t, planes, rect, k) >= HELD_COVER:
+        # filter has the picture. Under HELD_COVER of both frame n's own place and the frame shown for it covered,
+        # the frame is drawn on its own instead. (Either place will do: the 2008 north pole movie's MT3 frames, held to
+        # the first cycle's, are covered at their own place only; an unfit clear frame held to the one before, as in
+        # the 2009 south pole movie, is covered at the held frame's place.)
+        if max(held_cover(at(own), planes, rect, k), held_cover(t, planes, rect, k)) >= HELD_COVER:
             rgba = colour_picture(u, p, used, planes)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]
