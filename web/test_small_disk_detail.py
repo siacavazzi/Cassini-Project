@@ -55,8 +55,9 @@ full = np.full((1024, 1024, 4), 170, np.uint8)
 full[..., 3] = 255
 with calibration.looking("balanced"):
     a, b = om.detail(small, sigma), om.detail(full, sigma)
-assert np.median(a[disk, 1]) >= 250, np.median(a[disk, 1])
+# (rolled off short of 255 since detail() stopped clipping, _soft_detail, but still far over the disk's 170)
+assert np.median(a[disk, 1]) >= 235, np.median(a[disk, 1])
 assert abs(int(np.median(b[..., 1])) - 170) <= 1
-print(f"detail(): a 170 disk on sky -> {np.median(a[disk, 1]):.0f} (flat white, why a small disk is left out); "
+print(f"detail(): a 170 disk on sky -> {np.median(a[disk, 1]):.0f} (near white, why a small disk is left out); "
       f"a frame of 170 -> {np.median(b[..., 1]):.0f}")
 print("ok")
