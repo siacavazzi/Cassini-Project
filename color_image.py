@@ -394,7 +394,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
             # a body that moved between the filters (grey_plan): drawn grey from the reference there, or everywhere
             why, region = grey_plan(aligned, channels, ref, np.logical_and.reduce(masks), bands)
-            if why in ("moved", "not aligned"):
+            if why == "moved":
                 # ... unless each body can be aligned on its own (per_body)
                 got = per_body(lbls, ref, before[0], before[1], before[2], bands, before[3], shifts, warps)
                 if isinstance(got, dict):
@@ -403,8 +403,6 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                     channels, masks, region, bodies = got
                     why = "moved" if region is not None else None
                     full = bodies.pop("_full")
-                    # (a channel the whole picture's match could not place is placed body by body)
-                    aligned[:] = ["per body" if a in UNALIGNED else a for a in aligned]
             # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill; a part
             # drawn grey keeps no channel's fill there either (the fill would put a colour back)
             imgs = cal.tone(*_greyed(channels, linear, ref, aligned, why, region),
@@ -415,7 +413,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             before, shifts = (list(imgs), list(imgs), list(masks)), []
             imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
-            if why in ("moved", "not aligned"):
+            if why == "moved":
                 got = per_body(lbls, ref, *before, bands, None, shifts, warps)
                 if isinstance(got, dict):
                     bodies = got
@@ -423,7 +421,6 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                     imgs, masks, region, bodies = got
                     bodies.pop("_full")
                     why = "moved" if region is not None else None
-                    aligned[:] = ["per body" if a in UNALIGNED else a for a in aligned]
             if why == "moved":
                 imgs = grey_from(imgs, ref, region)
     except Exception:
@@ -973,8 +970,14 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     # channels there scaled by the ratio round it, calibration.fill_saturated over PER_BODY_FILL_REACH px, measured
     # off every nearer body's disk), so the far body keeps its color where it was drawn grey before (Titan round
     # Rhea or Dione). What the camera saturated there was the nearer body's, not the far one's: no longer saturated.
-    if any(g.any() for g in ghosts):
-        miss = [g > 0 for g in ghosts]
+    # ... and where some channel has picture of the far body and another moved onto it has none (the far body cut by
+    # the frame's edge, a filter moved 70 px onto it: N1694916618_1's top), whose edge fill drew a band of one color
+    far = at[ref][order[0]]
+    on_far = _disk(shape, far[1] + fx, far[2] + fy, far[3] * (1 + PER_BODY_HAZE) + PER_BODY_GROW) > 0
+    seen_by = np.logical_or.reduce([np.asarray(m, bool) for m in omasks])
+    edges = [seen_by & ~np.asarray(m, bool) & on_far for m in omasks]
+    if any(g.any() for g in ghosts) or any(e.any() for e in edges):
+        miss = [(g > 0) | e for g, e in zip(ghosts, edges)]
         x = [np.asarray(c, np.float32) for c in out]
         filled, _ = cal.fill_saturated(x, miss, reach=PER_BODY_FILL_REACH * k, where=~nearer_disks, floor=False)
         for j, c in enumerate(out):
@@ -986,6 +989,7 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
             out[j] = np.where(miss[j] if c.ndim == 2 else miss[j][..., None], f.astype(c.dtype), c)
             if ofull is not None:
                 ofull[j] = np.where(miss[j], 0, ofull[j]).astype(ofull[j].dtype)
+            omasks[j] = np.asarray(omasks[j], bool) | edges[j]
         report["filled"] = round(float(np.mean(np.logical_or.reduce(miss))), 4)
     ghost = np.zeros(shape, np.float32)
     # a nearer body the camera saturated in some filter (over PER_BODY_CLIPPED of its disk) has no color there to
