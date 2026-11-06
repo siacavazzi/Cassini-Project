@@ -4352,6 +4352,7 @@ TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per 
 #                         moving between its filters: red and blue edges on Titan's limb) are not carried into the frame
 TINT_FEATHER = 0.012   # of the picture's side: how far a tinted frame eases over to the set where it clipped
 TINT_LOCAL = 0.06      # of the picture's side: the reach of the local brightness match that fill is brought to
+TINT_EDGE = 0.012   # of the picture's side: how far inside what the set saw its own hue starts
 TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
 TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
 TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
@@ -4371,8 +4372,10 @@ def tinted_frame(colour, grey, gamma=2.2):
     rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None] / 1.0)
     rgb = np.clip(rgb, 0, None)
     if TINT_BLUR > 0:
-        rgb = cv2.GaussianBlur(rgb, (0, 0), TINT_BLUR)
-        ca = cv2.GaussianBlur(ca, (0, 0), TINT_BLUR)
+        # (premultiplied: blurred unweighted, the picture's edge took in the empty canvas past it, a colored seam)
+        ca0 = ca
+        ca = cv2.GaussianBlur(ca0, (0, 0), TINT_BLUR)
+        rgb = cv2.GaussianBlur(rgb * ca0[..., None], (0, 0), TINT_BLUR) / np.maximum(ca, 1e-3)[..., None]
     y = rgb @ np.asarray([0.2126, 0.7152, 0.0722], np.float32)
     g = lin(grey[..., 0])
     # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
@@ -4391,14 +4394,20 @@ def tinted_frame(colour, grey, gamma=2.2):
     match = float(np.clip(match, *TINT_MATCH))
     own = rgb / np.maximum(y, 1e-6)[..., None]
     own = hue[None, None, :] * np.clip(own / np.maximum(hue, 1e-6)[None, None, :], *TINT_HUE)
-    # the set's own hue where it is lit; where the set is dark (sky, a shadow, or a body that has moved since) no hue,
-    # gray; off the set's edge its mean hue, so the frame keeps its whole place in the body's colour
-    w = (ca * np.clip(y / max(TINT_DARK * top_y, 1e-6), 0, 1))[..., None]
-    h = own * w + (ca[..., None] - w) + hue[None, None, :] * (1 - ca[..., None])
+    # the set's own hue where it is lit, held back from the edges of what it saw (its channels part there: magenta and
+    # green seams); elsewhere, where the frame is lit (off the set's edge, or where the body has turned or moved since
+    # the set: 153HY HYPERION001's cap came out gray), the set's mean hue, and gray only where the frame is dark too
+    side = max(colour.shape[:2])
+    seen = (ca * np.clip(y / max(TINT_DARK * top_y, 1e-6), 0, 1)).astype(np.float32)
+    k = max(3, int(round(TINT_EDGE * side)) | 1)
+    seen = cv2.GaussianBlur(cv2.erode(seen, np.ones((k, k), np.uint8)), (0, 0), k / 2)
+    w = seen[..., None]
+    frame_lit = np.clip(g / max(TINT_DARK * top_g, 1e-6), 0, 1)[..., None]
+    rest = hue[None, None, :] * frame_lit + (1 - frame_lit)
+    h = own * w + rest * (1 - w)
     out = np.clip(h * (g * match)[..., None], 0, 1)
     # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
     # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
-    side = max(colour.shape[:2])
     clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * TINT_BLUR, TINT_FEATHER * side)), 0, 1) * ca
     if clip.any():
         # the set's picture brought to the frame's brightness round it, so the fill meets the frame without a seam
@@ -5816,6 +5825,17 @@ def set_shown(u, n, want, not_shown, placed, covers=None):
     age = t - max(ts) if t >= max(ts) else min(ts) - t
     if age <= HOLD_AGE:
         return got, False
+    # further from it, a frame of a set still coming in (its channels within HOLD_AGE after it) shows that set: its own
+    # moment in its own colors, not drawn through a set taken long before (165TI LRMONITOR001's last RED and GRN, 75
+    # minutes after the set before, came out blown white and banded)
+    for run in _pass_sets(u):
+        if any(j == n for _, j in run):
+            mine = {f: j for f, j in run if f in want and not not_shown(j)}
+            if (len(mine) == len(want) and all(placed(j) for j in mine.values())
+                    and max(frames[j][3] for j in mine.values()) - frames[n][3] <= HOLD_AGE
+                    and (covers is None or covers(mine))):
+                return mine, False
+            break
     return got, True
 
 

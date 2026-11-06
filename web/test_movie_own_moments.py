@@ -42,8 +42,8 @@ assert all(t for _, t in shown[:20]), [t for _, t in shown]
 assert not any(t for _, t in shown[20:23]) and all(g for g, _ in shown[20:23])
 # after the set: within HOLD_AGE the set, then its own picture in the set's color
 assert [t for _, t in shown[23:26]] == [False, False, True]
-# the next set coming in: its first channels play themselves in the last set's color, until it is whole
-assert shown[26][1] and shown[27][1] and not shown[28][1] and sorted(shown[28][0].values()) == [26, 27, 28]
+# the next set coming in, long after the last: its first channels show it (its own colors), not the old set
+assert [sorted(g.values()) for g, _ in shown[26:29]] == [[26, 27, 28]] * 3 and not any(t for _, t in shown[26:29])
 print("clear frames far from a set play themselves, in its color; ok")
 
 # a methane frame: within HOLD_AGE of the set, the set; further, its moment in the set's color
