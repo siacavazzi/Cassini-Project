@@ -406,7 +406,11 @@ rep('new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDe
     'new THREE.WebGLRenderer({ canvas: hudCanvas, antialias: true, logarithmicDepthBuffer: true }) : null;\nif (hudRenderer) { hudRenderer.setPixelRatio(window.cassiniPerf ? cassiniPerf.hudPixelRatio() : Math.min(window.devicePixelRatio, 2));')
 rep("""  renderer.clear();
   const cd = camera.position.distanceTo(cassini.position);
-  if (cd < 0.01) {""", """  const draw = !window.cassiniPerf || cassiniPerf.draw(now);
+  if (cd < 0.01) {""", """  // bring the camera's world matrix up to date with where the frame left it: a render does this, but a frame that is
+  // not drawn kept the one Object3D.lookAt left half-way (the orbit controls' aim, before the follow view turned it),
+  // and the rest test and the labels both read it, so while paused the labels jumped between two places
+  camera.updateMatrixWorld();
+  const draw = !window.cassiniPerf || cassiniPerf.draw(now);
   if (draw) renderer.clear();
   const cd = camera.position.distanceTo(cassini.position);
   if (!draw) {}
