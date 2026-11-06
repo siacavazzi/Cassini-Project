@@ -91,4 +91,8 @@ edge1 = cv2.cvtColor(np.where(xx < 500, 180, 10).astype(np.uint8), cv2.COLOR_GRA
 edge2 = cv2.cvtColor(np.where(xx < 506, 120, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 shift9, how9 = ic.limb_shift(edge1, edge2, MASK, MASK)
 assert shift9 is None or abs(shift9[1]) < 1.0, (how9, shift9)
+# the same disk on a frame that lost a third of its lines (LIMB_VALID): the outline match is not tried (153DI
+# N1694953782_3 took 34 px off the rows of fill)
+lost = MASK.copy(); lost[::3] = False
+assert ic.limb_shift(d1, d2, MASK, lost) == (None, "not aligned")
 print("ok")

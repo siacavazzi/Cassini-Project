@@ -463,6 +463,10 @@ LIMB_DIFF = 0.01      # the most of the frame (inside both) whose lit and dark m
 LIMB_GAIN = 0.6       # ... and at most this share of what differed as taken
 LIMB_CONTRAST = 30.0  # of 255: the least spread between a frame's 5th and 95th percentiles
 LIMB_SHARE = 0.05     # the least share of the frame lit, and of it dark
+LIMB_VALID = 0.9      # the least share of each frame that is picture (its mask): a frame with many lost lines, filled
+                      # across, has rows of fill whose outline the correlation matched 34 and 74 px off (153DI
+                      # N1694953782_3: 70 % of the frame left, drawn with a colored rim round Titan; matches it got
+                      # right had 97 % or more)
 
 
 def _lit(im, mask):
@@ -480,6 +484,8 @@ def _lit(im, mask):
 
 
 def limb_shift(im1, im2, mask1, mask2):
+    if min(float(np.mean(mask1)), float(np.mean(mask2))) < LIMB_VALID:
+        return None, "not aligned"
     l1, l2 = _lit(im1, mask1), _lit(im2, mask2)
     if l1 is None or l2 is None:
         return None, "not aligned"
