@@ -7,8 +7,8 @@ of it that moves 2 px a filter, as SPICE would give them (color_image._frame_bod
 as real pointing is). Checks:
 1. grey_plan calls the set "moved" when it is aligned on the near body (today's grey set).
 2. per_body finds each body's own move, and in the composite both disks line up in every channel.
-3. The far body that the near one hid in some filter but not in the reference is grey there (region), and the near
-   body's disk is not.
+3. The far body that the near one hid in some filter but not in the reference is filled with its own color there
+   (calibration.fill_saturated with the ratio round it), not grey.
 4. A body whose match fails (the matcher places nothing) gives {"failed": ...}, so load_aligned draws the set grey as before.
 5. A set with one body is not per_body's (None).
 Run: python web/test_per_body.py
@@ -110,13 +110,21 @@ for j in (0, 2):
     assert float(np.abs(a - b).max()) < 0.05, (j, float(np.abs(a - b).max()))
 print("both bodies line up in every channel")
 
-# 3. grey where the near body hid the far one in another filter; not on the near body itself
-assert region is not None
-near_disk = np.hypot(xx - NEAR["x"], yy - NEAR["y"]) <= NEAR["r"] - 3
-assert float(region[near_disk].max()) == 0.0, float(region[near_disk].max())
-beside = (np.abs(yy - NEAR["y"]) < 10) & (np.abs(xx - (NEAR["x"] + NEAR["r"] + 3)) < 2)
-assert float(region[beside].min()) > 0.5, float(region[beside].min())
-print("grey where only some filters saw the far body, the near body in color:", round(float(region.mean()), 4))
+# 3. where the near body hid the far one in another filter (not in the reference): filled with the far body's own color
+#    round it, not grey (Sam 2026-11-06: grey crescents round the transiting moon); off the far body, in the sky, a
+#    filter's copy of the near body's limb may still be grey
+on_far = np.hypot(xx - FAR["x"], yy - FAR["y"]) <= FAR["r"] - 30   # (the region rule's soft edge may reach its limb)
+assert region is None or float(region[on_far].max()) < 0.05, float(region[on_far].max())
+assert rep.get("filled", 0) > 0, rep
+for j in (0, 2):
+    # (just past the near disk, on the side the near body sat in channel j once it is aligned on the far body, on
+    # the far disk)
+    side = 1 if j == 0 else -1
+    beside = (np.abs(yy - (NEAR["y"] + 36)) < 2) & (np.abs(xx - (NEAR["x"] + side * 35)) < 2)
+    got_ratio = float(np.median(out[j][beside] / np.maximum(out[ref][beside], 1e-6)))
+    want = LEVEL[j] / LEVEL[ref]
+    assert abs(got_ratio - want) < 0.1 * want, (j, got_ratio, want)
+print("the far body hidden in some filters is filled in its own color:", rep["filled"])
 
 # 4. a match that fails (the matcher places nothing): today's grey
 real = ic.align_with_masks
