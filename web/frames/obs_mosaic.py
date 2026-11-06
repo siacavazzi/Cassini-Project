@@ -175,8 +175,14 @@ SMALL_RADIUS = {"JANUS": 89.5, "EPIMETHEUS": 58.1, "PROMETHEUS": 43.1, "PANDORA"
 # yellow and cyan frames. Not in RADIUS: centred on SPICE's place its movie's filters landed 10-20 px apart, and its
 # colour sets' sky off the disk drew Earth gray ("moved")
 SPECKS = {"EARTH": 6378}
+# the bodies of the cruise (mean radius): Jupiter's moons in 2000-2001 and the Moon at the Earth flyby in 1999, so Auto
+# center has a disk to center their pictures on (Io and Europa in eclipse, Himalia, the Moon: "no disk of a known
+# body", the picture left where the camera had it). Like the small moons, not in FILL_RADIUS: far off they are disks
+# of a few dozen pixels in the sky, which the filled scale would blow out
+CRUISE_RADIUS = {"IO": 1822, "EUROPA": 1561, "GANYMEDE": 2634, "CALLISTO": 2410, "HIMALIA": 70, "MOON": 1737}
 FILL_RADIUS = dict(RADIUS)
 RADIUS.update(SMALL_RADIUS)
+RADIUS.update(CRUISE_RADIUS)
 IFOV = {"N": 6.0e-6, "W": 0.012 / 200.956}   # radians per full resolution pixel; the WAC's at the focal length its frames
                                              # are resampled to (geometric_correction.F_LINEAR), 59.7 microradians
 # radius (km) and rotation period (hours) of the bodies a camera can follow a feature on (_judge's track): a feature
@@ -1753,8 +1759,11 @@ _luts = {}
 
 def _shade(part, t):
     """A tile's picture (RGBA at its canvas size) with its tile dict's "gain" applied: the luminance base's gain of
-    a band other than the grey filter, on linear brightness (the pass's display gamma, t["gamma"]), alpha as it
-    is. The same array when the tile has none."""
+    a band other than the grey filter, or a movie frame's exposure gain, on linear brightness (the pass's display
+    gamma, t["gamma"]), alpha as it is. The same array when the tile has none. A gain under 1 leaves white white:
+    a clipped pixel (CLIP_FROM and up, eased in to 255) is at least as bright as white, so dimmed it would draw a
+    floor as a value: the sun's saturated glare in the 2006 backlit Saturn movie (028RG HIPHASE002, exposure gain
+    0.7) came out a flat grey blob among frames where it is white."""
     g = t.get("gain")
     if not g or g == 1.0:
         return part
@@ -1762,8 +1771,11 @@ def _shade(part, t):
     lut = _luts.get(key)
     if lut is None:
         v = np.arange(256, dtype=np.float64) / 255
-        lut = _luts[key] = (calibration.encode(np.clip(calibration.decode(v, key[1]) * g, 0, 1), key[1]) * 255
-                            + 0.5).astype(np.uint8)
+        lin = calibration.encode(np.clip(calibration.decode(v, key[1]) * g, 0, 1), key[1])
+        if g < 1.0:
+            w = np.clip((v * 255 - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
+            lin = lin + w * w * (3 - 2 * w) * (v - lin)
+        lut = _luts[key] = (lin * 255 + 0.5).astype(np.uint8)
     out = part.copy()
     out[..., :3] = lut[part[..., :3]]
     return out
@@ -1938,13 +1950,43 @@ def visit_frames(u, colour):
     return whole
 
 
+LONG_LEAST = 0.01   # of a frame: (long_repeats) the least saturated share that can make a frame a long repeat
+
+
+def long_repeats(tiles, colour):
+    """The tiles (n) of the colour filters that are a long exposure taken again at a place where the same filter has a
+    shorter one in the same visit: saturated OVER_LEAST of the frame or more (or OVER_EXPOSED of its lit part), and OVER_STEP times as much as that
+    filter's other frame within SAME_PLACE of it and MIX_SPAN of its time (unfit's long exposure among short ones,
+    for a mosaic). The HIPHASE ring mosaics take a colour set, then one filter again for longer to bring up the faint
+    rings: drawn as the newest tile of its filter, the long frame's clipped rings and lifted sky stood in for the set's
+    own frame, one band of three at that place (269RI HIPHASEFB001: RED again 2.3x, 8-36% saturated, at the ansae,
+    magenta patches; 195RI HIPHASEC001: GRN again, green patches by the limb). They go under (colour_planes), so they
+    still fill where the set's own frame does not reach."""
+    placed = [t for t in tiles if t["filter"] in colour and "offset" in t and "t" in t]
+    out = set()
+    for t in placed:
+        s = t.get("saturated", 0.0)
+        # (or most of what is lit in it, when little of the frame is lit: 269RI's RED again at the right ansa,
+        # W1870769631_1, 4.9% of the frame and 88% of its lit part)
+        if s < OVER_LEAST and (s < LONG_LEAST or s < OVER_EXPOSED * t.get("lit", 1.0)):
+            continue
+        reach = SAME_PLACE * max(t["box"][2], t["box"][3])
+        if any(o["n"] != t["n"] and o["filter"] == t["filter"] and abs(o["t"] - t["t"]) <= MIX_SPAN
+               and math.hypot(o["offset"][0] - t["offset"][0], o["offset"][1] - t["offset"][1]) <= reach
+               and s >= OVER_STEP * o.get("saturated", 0.0) for o in placed):
+            out.add(t["n"])
+    return out
+
+
 def visit_tiles(u, tiles, colour):
-    """The tiles a colour picture draws (visit_frames): the same list when every colour tile is part of a whole visit."""
+    """The tiles a colour picture draws (visit_frames): the same list when every colour tile is part of a whole visit
+    and none is a long exposure taken again (long_repeats, marked "long": drawn under the others)."""
     if _rolling.get() or any("base" in t for t in tiles):
         return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
     keep = visit_frames(u, colour)
-    out = [t for t in tiles if t["filter"] not in colour or t["n"] in keep]
-    return tiles if len(out) == len(tiles) else out
+    longs = long_repeats(tiles, colour)
+    out = [dict(t, long=True) if t["n"] in longs else t for t in tiles if t["filter"] not in colour or t["n"] in keep]
+    return tiles if len(out) == len(tiles) and not longs else out
 
 
 def set_times(shape, placed):
@@ -2039,7 +2081,7 @@ def _sky_fine(iofs, masks):
                            for i, l, m in zip(iofs, local, masks)])
 
 
-def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
+def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2049,11 +2091,15 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
     body's disk on the frame (x, y, radius: _disk_mask's, full resolution pixels) when it is small: a frame lit all
     over by stray light round a moon a few pixels across (Pallene, Hati, Kiviuq) has no dark sky to find, so its sky
     is everything off the disk, and its own black takes the veil away (it went from white to black over the pass
-    as the stray light faded). seen: a dict the raised black is put in."""
+    as the stray light faded). seen: a dict the raised black is put in. on_body: the frame's middle is on the body's
+    disk (on_disk), so a frame with no dark sky is the body, never a glow."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     top = scale.get("sky_tops", {}).get(f)
-    if not own_sky or (top is None and disk is None):
-        return out
+    if not own_sky or (top is None and disk is None and on_body):
+        return out   # (a frame of the body, in a pass with no sky height of its own: the pass's black, as before #279)
+    # (a pass with no sky height of its own and no small body: only a frame lit all over by a glow gets a black of its
+    # own, every other frame keeps the pass's)
+    glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
 
     def black_of(iof):
@@ -2061,15 +2107,27 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         q = iof[::4, ::4].astype(np.float32)
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         m = _dark_sky(q)
-        veiled = False
+        veiled = glow = False
         if disk is not None and disk[2] < SPECK_PX:
             # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
             # sky found under 5% of its brightest is still the veil's lower part, whose line bands and other filters'
             # levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over its set)
             m = np.zeros(q.shape, bool)
-        if m.mean() <= SKY_MIN:
-            if disk is None:
+        # (a glow's flat floor is what _dark_sky takes for a sky with an offset in it; whether a frame of a pass with no
+        # sky height of its own has dark sky is measured from 0, as before _dark_sky)
+        unlit = (q < top_of_sky).mean() <= SKY_MIN
+        if glow_only and not unlit:
+            return None
+        if (glow_only or m.mean() <= SKY_MIN) and unlit and disk is None and not on_body:
+            # no dark sky under 5% of the top: a frame lit all over by a glow (the forward-scattered light round a
+            # backlit plume, ISS_155EN_PLMHPHR001_PIE's jet frames: their sky at a sixth of the jets' root, every one
+            # of them a flat gray square in the movie) has a flat floor, its sky; a frame a lit body fills (its darkest
+            # quarter terrain) does not, and keeps the pass's black
+            lo, floor, hi = (float(v) for v in np.percentile(q, [1, GLOW_FLOOR_PCT, 99.9]))
+            if not (hi > floor and floor - lo <= GLOW_FLAT * (hi - floor)):
                 return None
+            m, top_of_sky, glow = q <= floor, floor, True
+        elif m.mean() <= SKY_MIN:
             # no dark sky: a small body's frame lit all over (stray light), its sky everything off the disk
             m = ~_disk_mask(q.shape, iof.shape, *disk)
             top_of_sky, veiled = float(np.percentile(q[m], 99.9)) if m.any() else 0.0, True
@@ -2089,6 +2147,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
             if m.mean() <= SKY_MIN:
                 return None
         (level,), margin = calibration.sky_levels([[q]], [[m]])
+        if glow:
+            # (the glow's floor is its far side, a gentle slope up to the jets' halo: black over the frame's middle,
+            # GLOW_BLACK_PCT of it smoothed, so the frame's edge does not show as a square; the jets and the halo
+            # close round them stay over it)
+            level = float(np.percentile(cv2.blur(q, (SKY_SMOOTH, SKY_SMOOTH)), GLOW_BLACK_PCT))
         if veiled:
             # (the veil is all stray light, smooth, brighter on one side: black over the top of it, SKY_SMOOTH pixels
             # round, so none of it shows; stars and the moon are sharp and stay over it)
@@ -2107,9 +2170,9 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None):
         if raised <= black:
             return None
         # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
-        # (a veiled frame's lit pixels are its veil: the sky, which is what goes black)
+        # (a veiled or glowing frame's lit pixels are its veil or glow: the sky, which is what goes black)
         lit = q[q >= top_of_sky]
-        if not veiled and lit.size and raised >= float(np.median(lit)):
+        if not (veiled or glow) and lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
             seen["black"] = raised
@@ -2147,6 +2210,9 @@ def _disk_mask(qshape, shape, x, y, radius):
 
 SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
+GLOW_FLOOR_PCT = 25  # tile_scale: a movie frame with no dark sky, lit all over by a glow: its sky is under this percentile
+GLOW_BLACK_PCT = 50  # ... and its black over this percentile of the frame, smoothed
+GLOW_FLAT = 0.1      # ... when that floor is flat: from the 1st percentile to it under this share of the way on to the top
 SMALL_BODY = 0.02   # of a frame: a body whose disk's radius is under this is small (small_body): a speck, not
                    # Enceladus 64 px across the edge of a plume movie, whose plume fills the frame
 
@@ -2167,6 +2233,15 @@ def small_body(u, frame):
         return None   # (a target with no disk of its own, rings or sky, is not one)
     radius = km / (z * IFOV[u["key"][2]])
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
+
+
+def on_disk(u, frame):
+    """True when frame's middle is on pass u's body's disk (SPICE): the frame shows the body, so a frame of it with no
+    dark sky is not lit by a glow (tile_scale). Titan ISS_021TI's full-frame movie frames are its haze all over, a
+    flat floor like the 155EN jets' glow, and 66 to 100% of each went black."""
+    *_, x, y, z = frame
+    km = RADIUS.get(u["key"][0])
+    return bool(z and km and math.hypot(x, y) < km / (z * IFOV[u["key"][2]]))
 
 
 SKY_OFFSET_MOST = 0.25   # _dark_sky: a frame's floor up to this share of its 99.9th percentile is an offset in its sky
@@ -2411,7 +2486,8 @@ def _tile_made(u, n, cache, scale, base):
     seen = {}
     disk = small_body(u, u["frames"][n])
     try:
-        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk),
+        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
+                                                                                       on_disk(u, u["frames"][n])),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                     around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
     except Exception as e:
@@ -3442,9 +3518,10 @@ def view_rect(p, tiles=None):
 def under_first(tiles):
     """The tiles in the order a mosaic draws them, each over the ones before: the luminance base's fills (lum_fills)
     lowest, then partial frames (partial) and tiles far darker than the picture before them (dim_under, marked
-    "under"), the newest lowest (as _grown leaves a tile it draws under the picture so far), then the rest as given."""
+    "under"), a colour set's long exposure taken again (long_repeats), the newest lowest (as _grown leaves a tile it draws
+    under the picture so far), then the rest as given."""
     fill = lambda t: bool(t.get("fill"))
-    low = lambda t: not fill(t) and (partial(t) or t.get("under"))
+    low = lambda t: not fill(t) and (partial(t) or t.get("under") or t.get("long"))
     return ([t for t in tiles if fill(t)] + sorted((t for t in tiles if low(t)), key=lambda t: -t["n"])
             + [t for t in tiles if not fill(t) and not low(t)])
 
@@ -3673,7 +3750,7 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill")))
 
 
 def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
@@ -3810,7 +3887,7 @@ def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag=""):
     (visit_tiles), under names of their own when that leaves tiles out; which tiles go under (dim_places) is decided
     on all of the pass's tiles, as for its other pictures."""
     mine = visit_tiles(u, tiles, colour)
-    extra = VISIT_TAG if len(mine) < len(tiles) else ""
+    extra = VISIT_TAG if len(mine) < len(tiles) or any(t.get("long") for t in mine) else ""
     return [filter_mosaic(u, p, f, mine, rect, cache, ref, tag + extra, every=tiles) for f in colour]
 
 
@@ -4357,8 +4434,9 @@ def _chained(u, cache, p, name, key, work):
         if rec is not None and rec.get(key) is not None:
             return rec[key]
         if not os.path.exists(path):
-            places, hows = work()
-            data = json.dumps({"places": {str(n): [round(v, 2) for v in xy] for n, xy in places.items()}, "how": hows})
+            places, hows, *more = work()
+            data = json.dumps({"places": {str(n): [round(v, 2) for v in xy] for n, xy in places.items()}, "how": hows,
+                               **(more[0] if more else {})})
             reel._cached(path, data.encode)
         with open(path) as fh:
             kept = {int(n): xy for n, xy in json.load(fh)["places"].items()}
@@ -4404,7 +4482,16 @@ STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by de
 STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
-STEADY_FILE = "steady2-" + PLAN_FILE   # steady2: held on the target (steady_guide)
+STEADY_FILE = "steady3-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places
+# a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
+# if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
+# (color_image.find_small_body) and SPICE's place of it jumps between neighbouring frames by more than STEADY_JUMPY (in
+# more than STEADY_JUMPS of the pairs), or is off by more than STEADY_REACH over the pass (median), the stabilization
+# takes the pictures' places of the moon instead of SPICE's (seen_places)
+STEADY_JUMPY = 8.0    # px
+STEADY_JUMPS = 0.1    # of the neighbouring pairs
+STEADY_EDGE = 16     # px: a blob found nearer the tile's edge than its radius and this is not the moon (seen_places)
+STEADY_SEEN = 0.5     # of the placed tiles: the least share the moon must be found on for the pictures to be believed
 
 
 def steady_chain(u, cache, p=None):
@@ -4427,13 +4514,82 @@ def steady_chain(u, cache, p=None):
 
     def work():
         made, pic, there = _every_tile(u, cache, p)
+        held, why = seen_places(u, made, pic, there)
+        if held:
+            # SPICE's places of a small moon replaced by where the pictures show it: the chain starts there, steps
+            # by it, and is held to it (steady_places)
+            made = [dict(t, offset=held[t["n"]]) if t["n"] in held else t for t in made]
 
         def step(places, j, n):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-        return _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
+
+
+def steady_held(u, cache, p=None):
+    """{tile n: [x, y]}: what steady_places holds pass u's chain to, SPICE's place of each tile (its offset) or, where
+    seen_places took the pictures' places of a small moon, those."""
+    p = p or plan(u, cache)
+    steady_chain(u, cache, p)
+    path = os.path.join(folder(u, cache), STEADY_FILE)
+    held = {}
+    if os.path.exists(path):
+        with open(path) as fh:
+            held = {int(n): xy for n, xy in (json.load(fh).get("held") or {}).items()}
+    return held
+
+
+def seen_places(u, made, pic, there):
+    """({tile n: [x, y]}, why) for a pass whose target is a small moon SPICE places badly, else ({}, why): each placed
+    tile's place with the moon where its picture shows it. The moon is looked for in each tile near where SPICE puts it
+    (color_image.find_small_body: the one compact lit blob the size of its disk; None for a crescent or a frame-cut
+    moon near SPICE's place, a speck, or a disk filling the frame). SPICE is off from the picture by d = seen - SPICE in
+    each tile it is found on; when d jumps by more than STEADY_JUMPY between neighbouring tiles in more than STEADY_JUMPS
+    of the pairs, or is past STEADY_REACH over the pass (median), SPICE is not believed: a tile it is found on takes the
+    picture's place, the others SPICE's moved by the nearest found tiles' d (between two, in proportion). On fewer than
+    STEADY_SEEN of the tiles nothing is believed of the pictures (SPICE's places stand). why: what was measured."""
+    if not u.get("z"):
+        return {}, None
+    radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
+    half = max(STEADY_AROUND, radius * (1 + CENTRE_MARGIN) + STEADY_AROUND / 2)
+    if not (0 < radius and half < FRAME / 2):
+        return {}, None
+    placed = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
+    off = {}
+    for t in placed:
+        # (a tile's picture is in reference pixels, its corner at its place plus box; SPICE's target at 0)
+        bx, by = t["box"][0], t["box"][1]
+        im = pic(t["n"])
+        got = color_image.find_small_body(im, -t["offset"][0] - bx, -t["offset"][1] - by, radius)
+        if got is not None:
+            # (not a blob against the tile's edge: a bright wedge where the picture's corner is cut, which Pan
+            # ISS_264PN_PAN001_PIE's methane frames locked onto 860 px from the moon)
+            inside = cv2.distanceTransform(np.pad(im[..., 3] > 0, 1).astype(np.uint8), cv2.DIST_L2, 3)[1:-1, 1:-1]
+            yi, xi = min(int(got[1]), im.shape[0] - 1), min(int(got[0]), im.shape[1] - 1)
+            if inside[max(yi, 0), max(xi, 0)] < radius + STEADY_EDGE:
+                got = None
+        if got is not None:
+            off[t["n"]] = (-(bx + got[0]) - t["offset"][0], -(by + got[1]) - t["offset"][1])
+    if not placed or len(off) < STEADY_SEEN * len(placed) or len(off) < 2:
+        return {}, {"found": len(off), "of": len(placed)}
+    ns = sorted(off)
+    jumps = [math.hypot(off[b][0] - off[a][0], off[b][1] - off[a][1]) for a, b in zip(ns, ns[1:])]
+    jumpy = float(np.mean([j > STEADY_JUMPY for j in jumps]))
+    far = float(np.median([math.hypot(*off[n]) for n in ns]))
+    why = {"found": len(off), "of": len(placed), "jumpy": round(jumpy, 3), "off": round(far, 1),
+           "most": round(max(jumps), 1)}
+    if jumpy <= STEADY_JUMPS and far <= STEADY_REACH:
+        return {}, why
+    order = [t["n"] for t in placed]
+    at = {n: i for i, n in enumerate(order)}
+    idx = [at[n] for n in ns]
+    dx = np.interp(range(len(order)), idx, [off[n][0] for n in ns])
+    dy = np.interp(range(len(order)), idx, [off[n][1] for n in ns])
+    return {n: [placed[i]["offset"][0] + float(dx[i]), placed[i]["offset"][1] + float(dy[i])]
+            for i, n in enumerate(order)}, why
 
 
 def other_bodies(u):
@@ -4497,7 +4653,9 @@ def steady_places(u, cache, p=None, smooth=STEADY_SMOOTH):
     if not chain:
         return {}
     ns = sorted(chain)
-    held = held_to_spice([tile(u, n, cache, p["display_scale"])["offset"] for n in ns], [chain[n] for n in ns], smooth)
+    to = steady_held(u, cache, p)
+    held = held_to_spice([to.get(n) or tile(u, n, cache, p["display_scale"])["offset"] for n in ns],
+                         [chain[n] for n in ns], smooth)
     return {n: xy for n, xy in zip(ns, held)}
 
 
@@ -4733,6 +4891,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     if not fixed:
         return {"local": False}
     ns = sorted(chain)
+    held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
     rect = movie_rect(fp, tiles[ns[0]], radius, centre, seen)
     how = (bool(colour), bool(centre), 0)
@@ -4758,7 +4917,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
-            "chain": [chain[n] for n in ns], "spice": [tiles[n]["offset"] for n in ns],
+            "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}
@@ -4804,7 +4963,7 @@ def _colour_by(u, want, ns, tiles, grey):
         return by
     not_shown = lambda j: j in placed and unfit(u["frames"], j, lambda i: tiles.get(i) or {})
     for n in ns:
-        covers = lambda got: all(box_cover(tiles[n], tiles[j]) >= HELD_COVER for j in got.values())
+        covers = lambda got: set_cover(tiles[n], [tiles[j] for j in got.values()]) >= HELD_COVER
         got = set_of(u, n, want, not_shown, lambda j: j in placed, covers)
         if got:
             by[str(n)] = [got[f] for f in want]
@@ -5384,6 +5543,33 @@ def box_cover(t, q):
     return max(0.0, w) * max(0.0, h) / max(1e-9, (a[2] - a[0]) * (a[3] - a[1]))
 
 
+def set_cover(t, qs):
+    """The share of tile t's place (its outline where SPICE puts it; its box without one) that every one of tiles
+    qs's places covers at once, as a colour set is drawn (colour_picture: only where every filter has the picture;
+    held_cover on the planes). Each filter's box over half of it was not enough: a frame turned in the view fills
+    little of its box, so the 2008 north pole movie (082SA NPOLECAM002, which moved between its cycles) held its
+    first cycle's set through the second, each box taking in 55% of the new place but the pictures less than half,
+    and played grey filter after grey filter until the second cycle's own set was in."""
+    def poly(x):
+        if x.get("outline"):
+            return np.asarray(x["outline"], np.float32)
+        bx, by, bw, bh = x["box"]
+        ox, oy = x["offset"]
+        return np.asarray([[ox + bx, oy + by], [ox + bx + bw, oy + by], [ox + bx + bw, oy + by + bh],
+                           [ox + bx, oy + by + bh]], np.float32)
+    a = poly(t)
+    full = abs(float(cv2.contourArea(a)))
+    if full <= 0:
+        return 0.0
+    hull = cv2.convexHull(a)
+    for q in qs:
+        area, inter = cv2.intersectConvexConvex(hull, cv2.convexHull(poly(q)))
+        if area <= 0 or inter is None:
+            return 0.0
+        hull = cv2.convexHull(inter.reshape(-1, 2).astype(np.float32))
+    return abs(float(cv2.contourArea(hull))) / full
+
+
 def holds(tile_of, not_shown):
     """whole(j) for held_of: frame j placed, shown (not not_shown) and not over-exposed. A frame held in another's place
     is never a white slab: the 2009 south pole movie's empty clear frames held the 88% saturated one before them."""
@@ -5403,7 +5589,7 @@ def shown_of(u, p, n, not_shown, tile_of):
     whole = holds(tile_of, hidden)
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
     if colours:
-        covers = lambda got: all(box_cover(tile_of(n), tile_of(j)) >= HELD_COVER for j in got.values())
+        covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got = set_of(u, n, want, not_shown, placed, covers)
         if got:
             return s, got
@@ -5511,9 +5697,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             planes = _despiked(planes, p["display_scale"].get("gamma", 2.2))
         # a colour set held from an earlier pointing (a track's last visit, a thousand px away, or a pass that moved
         # on across the body) shows little or nothing where this frame is: colour_picture draws only where every
-        # filter has the picture. Under HELD_COVER of frame n's own place covered, the frame is drawn on its own
-        # instead
-        if held_cover(t, planes, rect, k) >= HELD_COVER:
+        # filter has the picture. Under HELD_COVER of both frame n's own place and the frame shown for it covered,
+        # the frame is drawn on its own instead. (Either place will do: the 2008 north pole movie's MT3 frames, held to
+        # the first cycle's, are covered at their own place only; an unfit clear frame held to the one before, as in
+        # the 2009 south pole movie, is covered at the held frame's place.)
+        if max(held_cover(at(own), planes, rect, k), held_cover(t, planes, rect, k)) >= HELD_COVER:
             rgba = colour_picture(u, p, used, planes)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]

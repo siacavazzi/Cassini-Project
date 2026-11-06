@@ -1,0 +1,2426 @@
+[
+ {
+  "obs": "ISS_049RH_CRESCENT001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 31,
+  "radius_px": 2118,
+  "cover": 0.989,
+  "first": "N1567120233_1",
+  "last": "N1567122585_1",
+  "filters": {
+   "CL1/CL2": 31
+  },
+  "minutes": 39
+ },
+ {
+  "obs": "ISS_050DI_REGMAPF001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 77,
+  "radius_px": 1964,
+  "cover": 0.979,
+  "first": "N1569826640_1",
+  "last": "N1569828843_1",
+  "filters": {
+   "CL1/UV3": 20,
+   "CL1/GRN": 19,
+   "CL1/IR1": 19,
+   "CL1/CL2": 19
+  },
+  "minutes": 37
+ },
+ {
+  "obs": "ISS_018RH_REGMAP001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 83,
+  "radius_px": 1841,
+  "cover": 1.0,
+  "first": "N1511726777_2",
+  "last": "N1511729588_2",
+  "filters": {
+   "CL1/UV3": 20,
+   "CL1/GRN": 21,
+   "CL1/IR3": 21,
+   "CL1/CL2": 21
+  },
+  "minutes": 47
+ },
+ {
+  "obs": "ISS_003TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 48,
+  "radius_px": 1837,
+  "cover": 1.0,
+  "first": "N1487100613_2",
+  "last": "N1487103497_2",
+  "filters": {
+   "CL1/MT1": 16,
+   "CL1/UV3": 16,
+   "CL1/CB3": 16
+  },
+  "minutes": 48
+ },
+ {
+  "obs": "ISS_129DI_REGMAP001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 80,
+  "radius_px": 1709,
+  "cover": 0.989,
+  "first": "N1649315958_1",
+  "last": "N1649319522_1",
+  "filters": {
+   "CL1/UV3": 20,
+   "CL1/GRN": 20,
+   "CL1/IR1": 20,
+   "CL1/CL2": 20
+  },
+  "minutes": 59
+ },
+ {
+  "obs": "ISS_043TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 72,
+  "radius_px": 1697,
+  "cover": 0.977,
+  "first": "N1556356410_1",
+  "last": "N1556362972_1",
+  "filters": {
+   "CL1/CB3": 54,
+   "CL1/MT1": 18
+  },
+  "minutes": 109
+ },
+ {
+  "obs": "ISS_046TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 72,
+  "radius_px": 1696,
+  "cover": 1.0,
+  "first": "N1560489733_1",
+  "last": "N1560496664_1",
+  "filters": {
+   "CL1/CB3": 54,
+   "CL1/MT1": 18
+  },
+  "minutes": 116
+ },
+ {
+  "obs": "ISS_044TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 63,
+  "radius_px": 1676,
+  "cover": 1.0,
+  "first": "N1557733859_1",
+  "last": "N1557740437_1",
+  "filters": {
+   "CL1/CB3": 45,
+   "CL1/MT1": 18
+  },
+  "minutes": 110
+ },
+ {
+  "obs": "ISS_053TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 56,
+  "radius_px": 1662,
+  "cover": 0.988,
+  "first": "N1575546698_1",
+  "last": "N1575553227_1",
+  "filters": {
+   "CL1/CB3": 42,
+   "CL1/MT1": 14
+  },
+  "minutes": 109
+ },
+ {
+  "obs": "ISS_132TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 56,
+  "radius_px": 1653,
+  "cover": 0.995,
+  "first": "N1654442331_1",
+  "last": "N1654448708_1",
+  "filters": {
+   "CL1/CB3": 42,
+   "CL1/MT1": 14
+  },
+  "minutes": 107
+ },
+ {
+  "obs": "ISS_114TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 56,
+  "radius_px": 1647,
+  "cover": 0.999,
+  "first": "N1625809672_1",
+  "last": "N1625816287_1",
+  "filters": {
+   "CL1/CB3": 42,
+   "CL1/MT1": 14
+  },
+  "minutes": 110
+ },
+ {
+  "obs": "ISS_049IA_REGMAPTRL001_PRIME",
+  "cam": "N",
+  "target": "IAPETUS",
+  "pass": 0,
+  "n": 117,
+  "radius_px": 1599,
+  "cover": 1.0,
+  "first": "N1568157369_2",
+  "last": "N1568162506_3",
+  "filters": {
+   "RED/CL2": 4,
+   "BL1/CL2": 4,
+   "BL1/GRN": 1,
+   "UV2/CL2": 4,
+   "UV2/UV3": 4,
+   "CL1/UV3": 18,
+   "CL1/GRN": 18,
+   "CL1/IR1": 18,
+   "CL1/CL2": 22,
+   "CL1/IR3": 4,
+   "IR2/CL2": 3,
+   "IR4/CL2": 2,
+   "P0/GRN": 2,
+   "P60/GRN": 2,
+   "P120/GRN": 2,
+   "P0/UV3": 2,
+   "P60/UV3": 2,
+   "P120/UV3": 2,
+   "P0/MT2": 1,
+   "P60/MT2": 1,
+   "P120/MT2": 1
+  },
+  "minutes": 86
+ },
+ {
+  "obs": "ISS_125RI_PHOTLIT001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 68,
+  "radius_px": 1598,
+  "cover": 0.988,
+  "first": "W1643312102_1",
+  "last": "W1643318557_1",
+  "filters": {
+   "CL1/RED": 19,
+   "CL1/GRN": 19,
+   "CL1/BL1": 19,
+   "CL1/IR1": 11
+  },
+  "minutes": 108
+ },
+ {
+  "obs": "ISS_214TE_TETHYS001_PIE",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 0,
+  "n": 65,
+  "radius_px": 1592,
+  "cover": 1.0,
+  "first": "N1807463412_1",
+  "last": "N1807468103_1",
+  "filters": {
+   "CL1/CL2": 13,
+   "CL1/UV3": 13,
+   "CL1/GRN": 13,
+   "CL1/IR1": 13,
+   "CL1/IR3": 13
+  },
+  "minutes": 78
+ },
+ {
+  "obs": "ISS_00ASA_SATSYSTEM001_PRIME",
+  "cam": "N",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 145,
+  "radius_px": 1584,
+  "cover": 1.0,
+  "first": "N1475762138_1",
+  "last": "N1475768394_1",
+  "filters": {
+   "CL1/CL2": 1,
+   "CL1/GRN": 48,
+   "RED/CL2": 48,
+   "BL1/CL2": 48
+  },
+  "minutes": 104
+ },
+ {
+  "obs": "ISS_214TE_TETHYS002_PIE",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 0,
+  "n": 52,
+  "radius_px": 1557,
+  "cover": 0.999,
+  "first": "N1807472427_1",
+  "last": "N1807477081_1",
+  "filters": {
+   "CL1/CL2": 13,
+   "CL1/UV3": 13,
+   "CL1/GRN": 13,
+   "CL1/IR3": 13
+  },
+  "minutes": 78
+ },
+ {
+  "obs": "ISS_269RI_HIPHASEFB001_PIE",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 399,
+  "radius_px": 1515,
+  "cover": 1.0,
+  "first": "W1870759006_1",
+  "last": "W1870777525_1",
+  "filters": {
+   "CL1/VIO": 87,
+   "IR3/CL2": 87,
+   "CL1/BL1": 51,
+   "CL1/GRN": 51,
+   "CL1/RED": 123
+  },
+  "minutes": 309
+ },
+ {
+  "obs": "ISS_202TI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 45,
+  "radius_px": 1373,
+  "cover": 0.992,
+  "first": "N1772756123_1",
+  "last": "N1772765055_1",
+  "filters": {
+   "CL1/MT1": 11,
+   "CL1/CB3": 33,
+   "CL1/UV3": 1
+  },
+  "minutes": 148
+ },
+ {
+  "obs": "ISS_015TE_STEREO001_PRIME",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 0,
+  "n": 30,
+  "radius_px": 1358,
+  "cover": 0.987,
+  "first": "N1506213903_1",
+  "last": "N1506217043_1",
+  "filters": {
+   "CL1/CL2": 20,
+   "CL1/UV3": 2,
+   "P0/GRN": 2,
+   "P60/GRN": 2,
+   "P120/GRN": 2,
+   "CL1/IR3": 2
+  },
+  "minutes": 52
+ },
+ {
+  "obs": "ISS_022RH_REGMAPC001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 31,
+  "radius_px": 1338,
+  "cover": 0.999,
+  "first": "N1521608622_1",
+  "last": "N1521610148_1",
+  "filters": {
+   "CL1/CL2": 11,
+   "CL1/UV3": 5,
+   "CL1/GRN": 5,
+   "CL1/IR1": 5,
+   "CL1/IR3": 5
+  },
+  "minutes": 25
+ },
+ {
+  "obs": "ISS_142EN_ORSCA001_PIE",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 31,
+  "radius_px": 1323,
+  "cover": 0.988,
+  "first": "N1671591706_1",
+  "last": "N1671595237_1",
+  "filters": {
+   "CL1/CL2": 11,
+   "CL1/UV3": 9,
+   "CL1/IR1": 10,
+   "CL1/GRN": 1
+  },
+  "minutes": 59
+ },
+ {
+  "obs": "ISS_214TE_UVMOSAIC001_PRIME",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 0,
+  "n": 27,
+  "radius_px": 1323,
+  "cover": 1.0,
+  "first": "N1807457569_1",
+  "last": "N1807459970_1",
+  "filters": {
+   "UV1/CL2": 9,
+   "UV2/CL2": 9,
+   "CL1/UV3": 9
+  },
+  "minutes": 40
+ },
+ {
+  "obs": "ISS_00ATI_MONITORNA001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 63,
+  "radius_px": 1283,
+  "cover": 1.0,
+  "first": "N1477437170_2",
+  "last": "N1477441341_2",
+  "filters": {
+   "CL1/IR3": 9,
+   "CL1/MT1": 9,
+   "CL1/UV3": 9,
+   "CL1/CB1": 9,
+   "CL1/CB3": 27
+  },
+  "minutes": 69
+ },
+ {
+  "obs": "ISS_173RI_HIPHWAC001_PIE",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 252,
+  "radius_px": 1264,
+  "cover": 1.0,
+  "first": "W1729146410_1",
+  "last": "W1729157675_1",
+  "filters": {
+   "IR3/CL2": 84,
+   "CL1/VIO": 84,
+   "CL1/RED": 84
+  },
+  "minutes": 188
+ },
+ {
+  "obs": "ISS_158DI_REGMAP001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 84,
+  "radius_px": 1256,
+  "cover": 1.0,
+  "first": "N1702383635_1",
+  "last": "N1702390881_1",
+  "filters": {
+   "CL1/UV3": 18,
+   "CL1/GRN": 18,
+   "CL1/IR1": 18,
+   "CL1/CL2": 30
+  },
+  "minutes": 121
+ },
+ {
+  "obs": "ISS_116RI_EQXMOSAIC001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 199,
+  "radius_px": 1251,
+  "cover": 1.0,
+  "first": "W1628750872_1",
+  "last": "W1628779999_1",
+  "filters": {
+   "IR3/CL2": 26,
+   "CL1/IR1": 26,
+   "IR2/IR1": 18,
+   "IR2/CL2": 25,
+   "CL1/RED": 26,
+   "CL1/GRN": 26,
+   "CL1/BL1": 26,
+   "CL1/VIO": 26
+  },
+  "minutes": 485
+ },
+ {
+  "obs": "ISS_C23JU_PORTRAIT_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 0,
+  "n": 269,
+  "radius_px": 1210,
+  "cover": 1.0,
+  "first": "N1356750997_1",
+  "last": "N1356763606_1",
+  "filters": {
+   "P0/GRN": 9,
+   "P60/GRN": 9,
+   "P120/GRN": 9,
+   "P0/UV3": 9,
+   "P60/UV3": 9,
+   "P120/UV3": 9,
+   "P0/BL2": 9,
+   "P60/BL2": 9,
+   "P120/BL2": 9,
+   "P0/CB1": 9,
+   "P60/CB1": 9,
+   "P120/CB1": 9,
+   "P0/MT1": 9,
+   "P60/MT1": 9,
+   "P120/MT1": 9,
+   "P0/CB2": 9,
+   "P60/CB2": 9,
+   "P120/CB2": 9,
+   "CL1/CB3": 9,
+   "IRP0/CB3": 9,
+   "BL1/CL2": 18,
+   "CL1/GRN": 18,
+   "CL1/CB2": 18,
+   "CL1/MT2": 17,
+   "CL1/MT3": 18
+  },
+  "minutes": 210
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02A000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 0,
+  "n": 73,
+  "radius_px": 1208,
+  "cover": 0.999,
+  "first": "N1356975879_2",
+  "last": "N1356991149_3",
+  "filters": {
+   "BL1/CL2": 20,
+   "CL1/CB2": 19,
+   "CL1/MT2": 11,
+   "CL1/MT3": 11,
+   "HAL/CL2": 12
+  },
+  "minutes": 254
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02A000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 1,
+  "n": 171,
+  "radius_px": 1198,
+  "cover": 0.999,
+  "first": "N1357008677_2",
+  "last": "N1357045948_2",
+  "filters": {
+   "HAL/CL2": 23,
+   "BL1/CL2": 51,
+   "CL1/CB2": 51,
+   "CL1/MT2": 23,
+   "CL1/MT3": 23
+  },
+  "minutes": 621
+ },
+ {
+  "obs": "ISS_165DI_REGMAP001_PIE",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 1,
+  "n": 36,
+  "radius_px": 1180,
+  "cover": 1.0,
+  "first": "N1714692364_1",
+  "last": "N1714693817_1",
+  "filters": {
+   "CL1/UV3": 9,
+   "CL1/GRN": 9,
+   "CL1/IR1": 9,
+   "CL1/CL2": 9
+  },
+  "minutes": 24
+ },
+ {
+  "obs": "ISS_217DI_REGMAP001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 72,
+  "radius_px": 1161,
+  "cover": 1.0,
+  "first": "N1813168753_1",
+  "last": "N1813170635_1",
+  "filters": {
+   "P0/GRN": 9,
+   "P60/GRN": 9,
+   "P120/GRN": 9,
+   "CL1/UV3": 9,
+   "CL1/GRN": 9,
+   "CL1/IR1": 9,
+   "CL1/IR3": 9,
+   "CL1/CL2": 9
+  },
+  "minutes": 31
+ },
+ {
+  "obs": "ISS_022RH_REGGEODB001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 36,
+  "radius_px": 1149,
+  "cover": 1.0,
+  "first": "N1521604111_2",
+  "last": "N1521605631_1",
+  "filters": {
+   "CL1/CL2": 12,
+   "CL1/UV3": 6,
+   "CL1/GRN": 6,
+   "CL1/IR1": 6,
+   "CL1/IR3": 6
+  },
+  "minutes": 25
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02B000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 0,
+  "n": 32,
+  "radius_px": 1086,
+  "cover": 0.994,
+  "first": "N1357312481_1",
+  "last": "N1357318447_2",
+  "filters": {
+   "BL1/CL2": 9,
+   "CL1/CB2": 8,
+   "CL1/MT2": 5,
+   "CL1/MT3": 5,
+   "HAL/CL2": 5
+  },
+  "minutes": 99
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02B000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 1,
+  "n": 149,
+  "radius_px": 1073,
+  "cover": 1.0,
+  "first": "N1357326267_2",
+  "last": "N1357358884_1",
+  "filters": {
+   "BL1/CL2": 44,
+   "CL1/CB2": 44,
+   "CL1/MT2": 20,
+   "CL1/MT3": 20,
+   "HAL/CL2": 21
+  },
+  "minutes": 544
+ },
+ {
+  "obs": "ISS_039RI_PHOTLIT003_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 58,
+  "radius_px": 1064,
+  "cover": 1.0,
+  "first": "W1550611100_1",
+  "last": "W1550618373_1",
+  "filters": {
+   "CL1/RED": 19,
+   "CL1/GRN": 19,
+   "CL1/BL1": 19,
+   "CL1/CL2": 1
+  },
+  "minutes": 121
+ },
+ {
+  "obs": "ISS_041RI_PHOTDRK004_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 120,
+  "radius_px": 1059,
+  "cover": 1.0,
+  "first": "W1553194457_1",
+  "last": "W1553203997_1",
+  "filters": {
+   "CL1/VIO": 15,
+   "CL1/BL1": 15,
+   "CL1/GRN": 15,
+   "CL1/RED": 15,
+   "IR2/CL2": 15,
+   "IR2/IR1": 15,
+   "CL1/IR1": 15,
+   "IR3/CL2": 15
+  },
+  "minutes": 159
+ },
+ {
+  "obs": "ISS_221DI_REGMAP001_PIE",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 70,
+  "radius_px": 1059,
+  "cover": 1.0,
+  "first": "N1820404446_1",
+  "last": "N1820409063_1",
+  "filters": {
+   "CL1/UV3": 12,
+   "CL1/GRN": 12,
+   "CL1/IR1": 3,
+   "CL1/IR3": 12,
+   "UV1/CL2": 2,
+   "UV2/CL2": 1,
+   "UV2/UV3": 1,
+   "BL1/GRN": 1,
+   "BL1/CL2": 1,
+   "RED/CL2": 1,
+   "IR2/CL2": 1,
+   "IR4/CL2": 1,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1,
+   "CL1/CL2": 19
+  },
+  "minutes": 77
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02B000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 2,
+  "n": 125,
+  "radius_px": 1056,
+  "cover": 1.0,
+  "first": "N1357361307_1",
+  "last": "N1357382707_1",
+  "filters": {
+   "HAL/CL2": 13,
+   "BL1/CL2": 26,
+   "CL1/CB2": 26,
+   "CL1/MT2": 12,
+   "CL1/MT3": 12,
+   "P0/GRN": 3,
+   "P60/GRN": 3,
+   "P120/GRN": 3,
+   "P0/UV3": 3,
+   "P60/UV3": 3,
+   "P120/UV3": 3,
+   "P0/CB1": 3,
+   "P60/CB1": 3,
+   "P120/CB1": 3,
+   "P0/CB2": 3,
+   "P60/CB2": 3,
+   "P120/CB2": 3
+  },
+  "minutes": 357
+ },
+ {
+  "obs": "ISS_064RI_WN60305001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 110,
+  "radius_px": 1048,
+  "cover": 1.0,
+  "first": "W1586459721_1",
+  "last": "W1586473296_1",
+  "filters": {
+   "IR2/CL2": 22,
+   "CL1/IR1": 22,
+   "CL1/RED": 22,
+   "CL1/BL1": 22,
+   "CL1/GRN": 22
+  },
+  "minutes": 226
+ },
+ {
+  "obs": "ISS_067TI_MIDIRTMAP002_CIRS",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 33,
+  "radius_px": 1043,
+  "cover": 1.0,
+  "first": "N1589340582_1",
+  "last": "N1589359785_1",
+  "filters": {
+   "CL1/CL2": 33
+  },
+  "minutes": 320
+ },
+ {
+  "obs": "ISS_050DI_REGMAPG001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 29,
+  "radius_px": 1039,
+  "cover": 1.0,
+  "first": "N1569836741_1",
+  "last": "N1569839110_1",
+  "filters": {
+   "CL1/UV3": 7,
+   "CL1/GRN": 7,
+   "CL1/IR1": 7,
+   "CL1/CL2": 8
+  },
+  "minutes": 40
+ },
+ {
+  "obs": "ISS_039RI_PHOTLIT002_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 92,
+  "radius_px": 1027,
+  "cover": 1.0,
+  "first": "W1550491399_1",
+  "last": "W1550498635_1",
+  "filters": {
+   "CL1/IR1": 18,
+   "IR2/CL2": 18,
+   "CL1/RED": 18,
+   "CL1/GRN": 18,
+   "CL1/BL1": 18,
+   "CL1/CL2": 2
+  },
+  "minutes": 121
+ },
+ {
+  "obs": "ISS_131EN_ENCEL002_PRIME",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 1018,
+  "cover": 0.99,
+  "first": "N1652862530_1",
+  "last": "N1652863123_1",
+  "filters": {
+   "CL1/CL2": 4,
+   "P0/GRN": 4,
+   "P60/GRN": 4,
+   "P120/GRN": 4
+  },
+  "minutes": 10
+ },
+ {
+  "obs": "ISS_077RI_PHOTOM001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 50,
+  "radius_px": 1015,
+  "cover": 0.985,
+  "first": "W1595471602_1",
+  "last": "W1595479395_1",
+  "filters": {
+   "IR2/CL2": 10,
+   "CL1/IR1": 10,
+   "CL1/RED": 10,
+   "CL1/BL1": 10,
+   "CL1/GRN": 10
+  },
+  "minutes": 130
+ },
+ {
+  "obs": "ISS_039RI_PHOTLIT004_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 104,
+  "radius_px": 985,
+  "cover": 1.0,
+  "first": "W1550696891_1",
+  "last": "W1550703695_1",
+  "filters": {
+   "IR2/CL2": 15,
+   "CL1/RED": 15,
+   "CL1/GRN": 15,
+   "CL1/BL1": 15,
+   "CL1/VIO": 14,
+   "CL1/IR1": 15,
+   "IR3/CL2": 15
+  },
+  "minutes": 113
+ },
+ {
+  "obs": "ISS_153EN_ENCEL001_PIE",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 27,
+  "radius_px": 983,
+  "cover": 1.0,
+  "first": "N1694646740_1",
+  "last": "N1694648543_1",
+  "filters": {
+   "CL1/UV3": 9,
+   "CL1/GRN": 9,
+   "CL1/CL2": 9
+  },
+  "minutes": 30
+ },
+ {
+  "obs": "ISS_051TI_STEREOB001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 973,
+  "cover": 1.0,
+  "first": "N1571715625_1",
+  "last": "N1571717190_1",
+  "filters": {
+   "CL1/CB3": 12,
+   "CL1/MT1": 4
+  },
+  "minutes": 26
+ },
+ {
+  "obs": "ISS_00CIA_LIMBTOPOE001_PRIME",
+  "cam": "N",
+  "target": "IAPETUS",
+  "pass": 0,
+  "n": 26,
+  "radius_px": 969,
+  "cover": 1.0,
+  "first": "N1483223285_1",
+  "last": "N1483224906_1",
+  "filters": {
+   "CL1/CL2": 26
+  },
+  "minutes": 27
+ },
+ {
+  "obs": "ISS_136TE_TETHYS001_PRIME",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 1,
+  "n": 14,
+  "radius_px": 963,
+  "cover": 1.0,
+  "first": "N1660467904_1",
+  "last": "N1660469246_1",
+  "filters": {
+   "CL1/CL2": 7,
+   "CL1/GRN": 7
+  },
+  "minutes": 22
+ },
+ {
+  "obs": "ISS_028RI_WN50208001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 80,
+  "radius_px": 956,
+  "cover": 0.994,
+  "first": "W1536638800_1",
+  "last": "W1536643556_1",
+  "filters": {
+   "CL1/VIO": 10,
+   "CL1/BL1": 10,
+   "CL1/GRN": 10,
+   "CL1/RED": 10,
+   "IR2/CL2": 10,
+   "IR2/IR1": 10,
+   "CL1/IR1": 10,
+   "IR3/CL2": 10
+  },
+  "minutes": 79
+ },
+ {
+  "obs": "ISS_00CIA_GLOBMAPC001_PRIME",
+  "cam": "N",
+  "target": "IAPETUS",
+  "pass": 0,
+  "n": 20,
+  "radius_px": 954,
+  "cover": 1.0,
+  "first": "N1483194454_1",
+  "last": "N1483196102_1",
+  "filters": {
+   "CL1/CL2": 20
+  },
+  "minutes": 27
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 2,
+  "n": 36,
+  "radius_px": 950,
+  "cover": 0.979,
+  "first": "W1689134024_1",
+  "last": "W1689137422_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_051TI_STEREOC001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 945,
+  "cover": 1.0,
+  "first": "N1571736625_1",
+  "last": "N1571739496_1",
+  "filters": {
+   "CL1/CB3": 12,
+   "CL1/MT1": 4
+  },
+  "minutes": 48
+ },
+ {
+  "obs": "ISS_278TI_CLOUD007_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 943,
+  "cover": 1.0,
+  "first": "N1875685134_1",
+  "last": "N1875687898_1",
+  "filters": {
+   "CL1/CB3": 12,
+   "CL1/MT1": 4
+  },
+  "minutes": 46
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 3,
+  "n": 36,
+  "radius_px": 924,
+  "cover": 0.991,
+  "first": "W1689139614_1",
+  "last": "W1689143012_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_044RI_PHOTDRK003_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 111,
+  "radius_px": 921,
+  "cover": 1.0,
+  "first": "W1557382494_1",
+  "last": "W1557390129_1",
+  "filters": {
+   "CL1/VIO": 15,
+   "CL1/BL1": 20,
+   "CL1/GRN": 20,
+   "CL1/RED": 20,
+   "IR2/CL2": 10,
+   "CL1/IR1": 10,
+   "IR3/CL2": 15,
+   "IR2/IR1": 1
+  },
+  "minutes": 127
+ },
+ {
+  "obs": "ISS_005RH_REGMAPA001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 9,
+  "radius_px": 917,
+  "cover": 1.0,
+  "first": "N1490874611_1",
+  "last": "N1490875063_1",
+  "filters": {
+   "CL1/CL2": 9
+  },
+  "minutes": 8
+ },
+ {
+  "obs": "ISS_077RI_PHOTOM002_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 50,
+  "radius_px": 905,
+  "cover": 1.0,
+  "first": "W1595513002_1",
+  "last": "W1595520778_1",
+  "filters": {
+   "IR2/CL2": 10,
+   "CL1/IR1": 10,
+   "CL1/RED": 10,
+   "CL1/BL1": 10,
+   "CL1/GRN": 10
+  },
+  "minutes": 130
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 4,
+  "n": 36,
+  "radius_px": 899,
+  "cover": 1.0,
+  "first": "W1689145204_1",
+  "last": "W1689148602_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_293SA_FAREWELL001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 80,
+  "radius_px": 899,
+  "cover": 1.0,
+  "first": "W1884003566_6",
+  "last": "W1884011258_5",
+  "filters": {
+   "CL1/CL2": 29,
+   "CL1/BL1": 17,
+   "CL1/GRN": 17,
+   "CL1/RED": 17
+  },
+  "minutes": 128
+ },
+ {
+  "obs": "ISS_022RH_REGGEODA001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 18,
+  "radius_px": 882,
+  "cover": 1.0,
+  "first": "N1521597697_1",
+  "last": "N1521598440_1",
+  "filters": {
+   "CL1/CL2": 6,
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/IR3": 4
+  },
+  "minutes": 12
+ },
+ {
+  "obs": "ISS_230MI_MIMAS001_PIE",
+  "cam": "N",
+  "target": "MIMAS",
+  "pass": 0,
+  "n": 26,
+  "radius_px": 882,
+  "cover": 0.998,
+  "first": "N1831441687_1",
+  "last": "N1831444255_1",
+  "filters": {
+   "UV2/CL2": 1,
+   "CL1/IR1": 1,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1,
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/CL2": 9,
+   "CL1/IR3": 4
+  },
+  "minutes": 43
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 5,
+  "n": 36,
+  "radius_px": 875,
+  "cover": 1.0,
+  "first": "W1689150794_1",
+  "last": "W1689154192_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_005RH_REGMAPE001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 9,
+  "radius_px": 872,
+  "cover": 1.0,
+  "first": "N1490886921_1",
+  "last": "N1490887373_1",
+  "filters": {
+   "CL1/CL2": 9
+  },
+  "minutes": 8
+ },
+ {
+  "obs": "ISS_264TI_CLOUD002_PIE",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 52,
+  "radius_px": 871,
+  "cover": 0.99,
+  "first": "N1867408664_1",
+  "last": "N1867426341_1",
+  "filters": {
+   "CL1/MT1": 13,
+   "CL1/CB3": 39
+  },
+  "minutes": 295
+ },
+ {
+  "obs": "ISS_285TI_LRMONITOR002_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 36,
+  "radius_px": 864,
+  "cover": 1.0,
+  "first": "N1879806844_1",
+  "last": "N1879813822_1",
+  "filters": {
+   "CL1/MT1": 9,
+   "CL1/CB3": 27
+  },
+  "minutes": 116
+ },
+ {
+  "obs": "ISS_00CIA_GRAYLITEH001_PRIME",
+  "cam": "N",
+  "target": "IAPETUS",
+  "pass": 0,
+  "n": 30,
+  "radius_px": 863,
+  "cover": 1.0,
+  "first": "N1483244842_1",
+  "last": "N1483247722_1",
+  "filters": {
+   "CL1/CL2": 30
+  },
+  "minutes": 47
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 6,
+  "n": 36,
+  "radius_px": 854,
+  "cover": 1.0,
+  "first": "W1689156384_1",
+  "last": "W1689159782_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_153EN_ENCEL001_PIE",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 1,
+  "n": 11,
+  "radius_px": 850,
+  "cover": 1.0,
+  "first": "N1694651225_1",
+  "last": "N1694652403_1",
+  "filters": {
+   "CL1/CL2": 4,
+   "CL1/IR3": 4,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1
+  },
+  "minutes": 20
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02C000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 0,
+  "n": 262,
+  "radius_px": 849,
+  "cover": 1.0,
+  "first": "N1357757984_1",
+  "last": "N1357811330_2",
+  "filters": {
+   "P0/GRN": 3,
+   "P60/GRN": 3,
+   "P120/GRN": 2,
+   "P0/UV3": 3,
+   "P60/UV3": 3,
+   "P120/UV3": 3,
+   "P0/CB1": 2,
+   "P60/CB1": 2,
+   "P120/CB1": 2,
+   "P0/CB2": 2,
+   "P60/CB2": 2,
+   "P120/CB2": 2,
+   "BL1/CL2": 69,
+   "CL1/CB2": 67,
+   "CL1/MT2": 32,
+   "CL1/MT3": 32,
+   "HAL/CL2": 33
+  },
+  "minutes": 889
+ },
+ {
+  "obs": "ISS_100SA_SREGMAP001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 64,
+  "radius_px": 848,
+  "cover": 1.0,
+  "first": "W1611016296_3",
+  "last": "W1611024801_1",
+  "filters": {
+   "CL1/VIO": 8,
+   "CL1/BL1": 8,
+   "CL1/GRN": 8,
+   "CL1/RED": 8,
+   "MT2/CL2": 8,
+   "CB2/CL2": 8,
+   "MT3/CL2": 8,
+   "CB3/CL2": 8
+  },
+  "minutes": 142
+ },
+ {
+  "obs": "ISS_214DI_REGMAP001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 29,
+  "radius_px": 845,
+  "cover": 1.0,
+  "first": "N1807488235_1",
+  "last": "N1807491547_1",
+  "filters": {
+   "CL1/UV3": 6,
+   "CL1/GRN": 6,
+   "CL1/IR3": 6,
+   "CL1/CL2": 11
+  },
+  "minutes": 55
+ },
+ {
+  "obs": "ISS_00CIA_LIMBTOPOB001_PRIME",
+  "cam": "N",
+  "target": "IAPETUS",
+  "pass": 0,
+  "n": 18,
+  "radius_px": 841,
+  "cover": 1.0,
+  "first": "N1483173691_1",
+  "last": "N1483174493_1",
+  "filters": {
+   "CL1/CL2": 18
+  },
+  "minutes": 13
+ },
+ {
+  "obs": "ISS_195RI_HIPHASEC001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 314,
+  "radius_px": 839,
+  "cover": 1.0,
+  "first": "W1752967209_1",
+  "last": "W1752982722_16",
+  "filters": {
+   "CL1/VIO": 58,
+   "IR3/CL2": 58,
+   "CL1/BL1": 51,
+   "CL1/GRN": 51,
+   "CL1/RED": 72,
+   "CL1/IRP0": 12,
+   "CL1/IRP90": 12
+  },
+  "minutes": 258
+ },
+ {
+  "obs": "ISS_273TI_LRMONITOR003_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 28,
+  "radius_px": 839,
+  "cover": 1.0,
+  "first": "N1872864679_1",
+  "last": "N1872871850_1",
+  "filters": {
+   "CL1/MT1": 7,
+   "CL1/CB3": 21
+  },
+  "minutes": 119
+ },
+ {
+  "obs": "ISS_278TI_CLOUD008_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 838,
+  "cover": 1.0,
+  "first": "N1875699174_1",
+  "last": "N1875701992_1",
+  "filters": {
+   "CL1/CB3": 12,
+   "CL1/MT1": 4
+  },
+  "minutes": 47
+ },
+ {
+  "obs": "ISS_016DI_REGMAPA001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 28,
+  "radius_px": 836,
+  "cover": 1.0,
+  "first": "N1507733542_2",
+  "last": "N1507734588_2",
+  "filters": {
+   "CL1/UV3": 7,
+   "CL1/GRN": 7,
+   "CL1/IR3": 7,
+   "CL1/CL2": 7
+  },
+  "minutes": 17
+ },
+ {
+  "obs": "ISS_004EN_NGNPOL001_PRIME",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 24,
+  "radius_px": 834,
+  "cover": 1.0,
+  "first": "N1489043718_2",
+  "last": "N1489045691_2",
+  "filters": {
+   "CL1/UV3": 6,
+   "P0/GRN": 6,
+   "P60/GRN": 6,
+   "P120/GRN": 6
+  },
+  "minutes": 33
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 7,
+  "n": 36,
+  "radius_px": 834,
+  "cover": 1.0,
+  "first": "W1689161974_1",
+  "last": "W1689165372_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_264TI_CLOUD003_PIE",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 52,
+  "radius_px": 827,
+  "cover": 1.0,
+  "first": "N1867433881_1",
+  "last": "N1867451509_1",
+  "filters": {
+   "CL1/CB3": 39,
+   "CL1/MT1": 13
+  },
+  "minutes": 294
+ },
+ {
+  "obs": "ISS_285TI_LRMONITOR001_PRIME",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 52,
+  "radius_px": 827,
+  "cover": 1.0,
+  "first": "N1879783564_1",
+  "last": "N1879794022_1",
+  "filters": {
+   "CL1/MT1": 13,
+   "CL1/CB3": 39
+  },
+  "minutes": 174
+ },
+ {
+  "obs": "ISS_018RH_REGCOL001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 68,
+  "radius_px": 826,
+  "cover": 1.0,
+  "first": "N1511714684_1",
+  "last": "N1511719101_2",
+  "filters": {
+   "UV1/CL2": 4,
+   "UV2/CL2": 4,
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/IR1": 4,
+   "CL1/IR3": 4,
+   "BL1/CL2": 4,
+   "RED/CL2": 4,
+   "IR2/CL2": 4,
+   "IR4/CL2": 4,
+   "P0/GRN": 4,
+   "P60/GRN": 4,
+   "P120/GRN": 4,
+   "P0/UV3": 4,
+   "P60/UV3": 4,
+   "P120/UV3": 4,
+   "CL1/CL2": 4
+  },
+  "minutes": 74
+ },
+ {
+  "obs": "ISS_00CRH_REGGEODC001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 11,
+  "radius_px": 822,
+  "cover": 0.979,
+  "first": "N1484584650_1",
+  "last": "N1484585440_1",
+  "filters": {
+   "CL1/CL2": 4,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1,
+   "CL1/UV3": 1,
+   "CL1/GRN": 1,
+   "CL1/IR1": 1,
+   "CL1/IR3": 1
+  },
+  "minutes": 13
+ },
+ {
+  "obs": "ISS_191SA_FEATRAK001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 216,
+  "radius_px": 819,
+  "cover": 0.971,
+  "first": "W1749054357_1",
+  "last": "W1749086468_1",
+  "filters": {
+   "CB3/CL2": 36,
+   "MT3/CL2": 36,
+   "CB2/CL2": 36,
+   "MT2/CL2": 36,
+   "CL1/VIO": 36,
+   "CL1/BL1": 36
+  },
+  "minutes": 535
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 8,
+  "n": 36,
+  "radius_px": 815,
+  "cover": 1.0,
+  "first": "W1689167564_1",
+  "last": "W1689170962_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_037RI_PHOTDRK001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 72,
+  "radius_px": 814,
+  "cover": 1.0,
+  "first": "W1547909853_1",
+  "last": "W1547918518_1",
+  "filters": {
+   "CL1/IR1": 12,
+   "IR2/IR1": 12,
+   "IR2/CL2": 12,
+   "CL1/RED": 12,
+   "CL1/GRN": 12,
+   "CL1/BL1": 12
+  },
+  "minutes": 144
+ },
+ {
+  "obs": "ISS_C23JU_ATMOS02D000_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 0,
+  "n": 272,
+  "radius_px": 799,
+  "cover": 1.0,
+  "first": "N1357861485_1",
+  "last": "N1357913822_1",
+  "filters": {
+   "BL1/CL2": 69,
+   "CL1/CB2": 68,
+   "CL1/MT2": 33,
+   "CL1/MT3": 33,
+   "HAL/CL2": 33,
+   "P0/GRN": 3,
+   "P60/GRN": 3,
+   "P120/GRN": 3,
+   "P0/UV3": 3,
+   "P60/UV3": 3,
+   "P120/UV3": 3,
+   "P0/CB1": 3,
+   "P60/CB1": 3,
+   "P120/CB1": 3,
+   "P0/CB2": 3,
+   "P60/CB2": 3,
+   "P120/CB2": 3
+  },
+  "minutes": 872
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 9,
+  "n": 36,
+  "radius_px": 797,
+  "cover": 1.0,
+  "first": "W1689173154_1",
+  "last": "W1689176552_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_141EN_DAYMAP001_CIRS",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 9,
+  "radius_px": 794,
+  "cover": 1.0,
+  "first": "N1669819104_1",
+  "last": "N1669820960_1",
+  "filters": {
+   "CL1/CL2": 9
+  },
+  "minutes": 31
+ },
+ {
+  "obs": "ISS_121EN_FP3HIRES001_CIRS",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 1,
+  "n": 14,
+  "radius_px": 789,
+  "cover": 1.0,
+  "first": "N1637468816_1",
+  "last": "N1637471935_1",
+  "filters": {
+   "CL1/CL2": 14
+  },
+  "minutes": 52
+ },
+ {
+  "obs": "ISS_00CRH_REGGEODD001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 6,
+  "radius_px": 787,
+  "cover": 1.0,
+  "first": "N1484593683_1",
+  "last": "N1484594362_1",
+  "filters": {
+   "CL1/CL2": 6
+  },
+  "minutes": 11
+ },
+ {
+  "obs": "ISS_118RI_PHOTLIT001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 129,
+  "radius_px": 785,
+  "cover": 1.0,
+  "first": "W1632296564_1",
+  "last": "W1632310196_1",
+  "filters": {
+   "CL1/CL2": 9,
+   "MT3/CL2": 9,
+   "IR4/CL2": 9,
+   "IR3/CL2": 9,
+   "CL1/IR1": 9,
+   "IR2/IR1": 9,
+   "IR2/CL2": 9,
+   "CL1/RED": 15,
+   "CL1/GRN": 15,
+   "CL1/BL1": 15,
+   "CL1/VIO": 9,
+   "MT2/CL2": 6,
+   "CB2/CL2": 6
+  },
+  "minutes": 227
+ },
+ {
+  "obs": "ISS_137SA_REGMAP001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 1,
+  "n": 4,
+  "radius_px": 780,
+  "cover": 0.998,
+  "first": "W1662339714_1",
+  "last": "W1662343798_1",
+  "filters": {
+   "CB2/CL2": 4
+  },
+  "minutes": 68
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 10,
+  "n": 36,
+  "radius_px": 780,
+  "cover": 1.0,
+  "first": "W1689178744_1",
+  "last": "W1689182142_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_027RH_REGMAPB001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 1,
+  "n": 20,
+  "radius_px": 779,
+  "cover": 1.0,
+  "first": "N1534494890_1",
+  "last": "N1534495416_1",
+  "filters": {
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/IR1": 4,
+   "CL1/IR3": 4,
+   "CL1/CL2": 4
+  },
+  "minutes": 9
+ },
+ {
+  "obs": "ISS_152HY_HYPERION001_PRIME",
+  "cam": "N",
+  "target": "HYPERION",
+  "pass": 1,
+  "n": 29,
+  "radius_px": 770,
+  "cover": 1.0,
+  "first": "N1692986978_1",
+  "last": "N1692988748_1",
+  "filters": {
+   "CL1/CL2": 2,
+   "CL1/UV3": 5,
+   "CL1/GRN": 6,
+   "CL1/IR1": 5,
+   "CL1/IR3": 5,
+   "P0/UV3": 1,
+   "P60/UV3": 1,
+   "P120/UV3": 1,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1
+  },
+  "minutes": 29
+ },
+ {
+  "obs": "ISS_011EN_N3COL001_PRIME",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 764,
+  "cover": 1.0,
+  "first": "N1500056614_2",
+  "last": "N1500057559_2",
+  "filters": {
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/CL2": 4,
+   "CL1/IR3": 4
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 11,
+  "n": 36,
+  "radius_px": 764,
+  "cover": 1.0,
+  "first": "W1689184334_1",
+  "last": "W1689187732_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_027RH_REGMAPB001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 20,
+  "radius_px": 761,
+  "cover": 1.0,
+  "first": "N1534492041_1",
+  "last": "N1534492574_1",
+  "filters": {
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/IR1": 4,
+   "CL1/IR3": 4,
+   "CL1/CL2": 4
+  },
+  "minutes": 9
+ },
+ {
+  "obs": "ISS_043DI_REGMAPB001_PRIME",
+  "cam": "N",
+  "target": "DIONE",
+  "pass": 0,
+  "n": 21,
+  "radius_px": 760,
+  "cover": 0.977,
+  "first": "N1556123061_1",
+  "last": "N1556124215_1",
+  "filters": {
+   "CL1/CL2": 5,
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/IR1": 4,
+   "CL1/IR3": 4
+  },
+  "minutes": 19
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP103_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 6,
+  "n": 21,
+  "radius_px": 753,
+  "cover": 0.983,
+  "first": "N1355726431_1",
+  "last": "N1355727379_1",
+  "filters": {
+   "BL1/CL2": 3,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "ISS_264TI_CLOUD004_PIE",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 40,
+  "radius_px": 753,
+  "cover": 1.0,
+  "first": "N1867459081_1",
+  "last": "N1867471287_1",
+  "filters": {
+   "CL1/CB3": 30,
+   "CL1/MT1": 10
+  },
+  "minutes": 203
+ },
+ {
+  "obs": "ISS_273TI_TIPHA001_PIE",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 753,
+  "cover": 1.0,
+  "first": "N1872921516_1",
+  "last": "N1872924166_1",
+  "filters": {
+   "CL1/CB3": 12,
+   "CL1/MT1": 4
+  },
+  "minutes": 44
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP103_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 5,
+  "n": 21,
+  "radius_px": 752,
+  "cover": 0.999,
+  "first": "N1355723131_1",
+  "last": "N1355724079_1",
+  "filters": {
+   "BL1/CL2": 3,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "ISS_191TI_LRMONITOR002_PIE",
+  "cam": "N",
+  "target": "TITAN",
+  "pass": 0,
+  "n": 34,
+  "radius_px": 752,
+  "cover": 0.997,
+  "first": "N1748697262_1",
+  "last": "N1748702574_1",
+  "filters": {
+   "CL1/CB3": 18,
+   "CL1/MT1": 6,
+   "CL1/IR3": 1,
+   "RED/CL2": 1,
+   "CL1/GRN": 1,
+   "BL1/CL2": 2,
+   "CL1/UV3": 2,
+   "CL1/MT2": 1,
+   "CL1/MT3": 1,
+   "CL1/CB2": 1
+  },
+  "minutes": 88
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP103_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 3,
+  "n": 21,
+  "radius_px": 749,
+  "cover": 0.982,
+  "first": "N1355716531_1",
+  "last": "N1355717479_1",
+  "filters": {
+   "BL1/CL2": 3,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 12,
+  "n": 36,
+  "radius_px": 749,
+  "cover": 1.0,
+  "first": "W1689189924_1",
+  "last": "W1689193322_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP103_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 1,
+  "n": 21,
+  "radius_px": 746,
+  "cover": 0.999,
+  "first": "N1355709931_1",
+  "last": "N1355710879_1",
+  "filters": {
+   "BL1/CL2": 3,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP103_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 0,
+  "n": 21,
+  "radius_px": 745,
+  "cover": 1.0,
+  "first": "N1355706631_1",
+  "last": "N1355707579_1",
+  "filters": {
+   "BL1/CL2": 3,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP101_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 3,
+  "n": 20,
+  "radius_px": 742,
+  "cover": 0.974,
+  "first": "N1355698891_1",
+  "last": "N1355699839_1",
+  "filters": {
+   "BL1/CL2": 2,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "ISS_00CRH_REGGEODE001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 4,
+  "radius_px": 742,
+  "cover": 0.978,
+  "first": "N1484600323_1",
+  "last": "N1484600951_1",
+  "filters": {
+   "CL1/CL2": 4
+  },
+  "minutes": 10
+ },
+ {
+  "obs": "CIRS_C23JU_NSMAP101_PRIME",
+  "cam": "N",
+  "target": "JUPITER",
+  "pass": 2,
+  "n": 21,
+  "radius_px": 740,
+  "cover": 1.0,
+  "first": "N1355695591_1",
+  "last": "N1355696539_1",
+  "filters": {
+   "BL1/CL2": 3,
+   "CL1/CB1": 3,
+   "CL1/MT1": 3,
+   "CL1/CB2": 3,
+   "CL1/MT2": 3,
+   "CL1/MT3": 3,
+   "UV1/CL2": 3
+  },
+  "minutes": 16
+ },
+ {
+  "obs": "ISS_015HY_MORPHO001_PRIME",
+  "cam": "N",
+  "target": "HYPERION",
+  "pass": 0,
+  "n": 35,
+  "radius_px": 738,
+  "cover": 0.997,
+  "first": "N1506388174_2",
+  "last": "N1506389783_2",
+  "filters": {
+   "CL1/CL2": 5,
+   "CL1/UV3": 5,
+   "CL1/IR1": 5,
+   "CL1/IR3": 5,
+   "P0/GRN": 5,
+   "P60/GRN": 5,
+   "P120/GRN": 5
+  },
+  "minutes": 27
+ },
+ {
+  "obs": "ISS_259MI_MIMASSP001_PRIME",
+  "cam": "N",
+  "target": "MIMAS",
+  "pass": 0,
+  "n": 18,
+  "radius_px": 736,
+  "cover": 1.0,
+  "first": "N1864506016_1",
+  "last": "N1864506707_1",
+  "filters": {
+   "CL1/CL2": 10,
+   "CL1/GRN": 3,
+   "CL1/IR3": 3,
+   "CL1/UV3": 2
+  },
+  "minutes": 12
+ },
+ {
+  "obs": "ISS_026TE_TETHYS002_VIMS",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 0,
+  "n": 17,
+  "radius_px": 735,
+  "cover": 0.999,
+  "first": "N1532368192_1",
+  "last": "N1532369498_1",
+  "filters": {
+   "CL1/CL2": 7,
+   "CL1/UV3": 2,
+   "CL1/GRN": 2,
+   "CL1/IR3": 2,
+   "CL1/IR1": 1,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1
+  },
+  "minutes": 22
+ },
+ {
+  "obs": "ISS_150SA_NHEMMOVIE001_VIMS",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 13,
+  "n": 36,
+  "radius_px": 735,
+  "cover": 1.0,
+  "first": "W1689195514_1",
+  "last": "W1689198912_1",
+  "filters": {
+   "CL1/IR1": 4,
+   "CL1/VIO": 4,
+   "CL1/BL1": 4,
+   "CL1/GRN": 4,
+   "CL1/RED": 4,
+   "MT2/CL2": 4,
+   "MT3/CL2": 4,
+   "CL1/HAL": 4,
+   "CB2/CL2": 4
+  },
+  "minutes": 57
+ },
+ {
+  "obs": "ISS_250EN_ENCELNPOL001_PIE",
+  "cam": "N",
+  "target": "ENCELADUS",
+  "pass": 0,
+  "n": 45,
+  "radius_px": 729,
+  "cover": 1.0,
+  "first": "N1858919839_1",
+  "last": "N1858923093_1",
+  "filters": {
+   "CL1/CL2": 7,
+   "CL1/GRN": 10,
+   "CL1/IR3": 10,
+   "CL1/UV3": 10,
+   "UV1/CL2": 1,
+   "UV2/CL2": 1,
+   "P0/UV3": 1,
+   "P60/UV3": 1,
+   "P120/UV3": 1,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1
+  },
+  "minutes": 54
+ },
+ {
+  "obs": "ISS_247RI_COLPHMEMP002_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 40,
+  "radius_px": 725,
+  "cover": 1.0,
+  "first": "W1856335078_1",
+  "last": "W1856339901_1",
+  "filters": {
+   "CL1/RED": 10,
+   "CL1/GRN": 10,
+   "CL1/BL1": 10,
+   "CL1/VIO": 10
+  },
+  "minutes": 80
+ },
+ {
+  "obs": "ISS_038RI_PHOTDRK001_PRIME",
+  "cam": "W",
+  "target": "SATURN",
+  "pass": 0,
+  "n": 40,
+  "radius_px": 712,
+  "cover": 1.0,
+  "first": "W1549389102_1",
+  "last": "W1549396681_1",
+  "filters": {
+   "CL1/IR1": 8,
+   "IR2/CL2": 8,
+   "CL1/RED": 8,
+   "CL1/GRN": 8,
+   "CL1/BL1": 8
+  },
+  "minutes": 126
+ },
+ {
+  "obs": "ISS_00BIA_GLOBCOLA001_PRIME",
+  "cam": "N",
+  "target": "IAPETUS",
+  "pass": 0,
+  "n": 53,
+  "radius_px": 707,
+  "cover": 1.0,
+  "first": "N1483150865_1",
+  "last": "N1483153203_1",
+  "filters": {
+   "UV1/CL2": 2,
+   "UV2/CL2": 2,
+   "CL1/UV3": 3,
+   "CL1/GRN": 4,
+   "CL1/IR1": 2,
+   "CL1/IR3": 2,
+   "BL1/CL2": 3,
+   "BL1/GRN": 2,
+   "RED/CL2": 2,
+   "IR2/CL2": 2,
+   "IR4/CL2": 2,
+   "P0/GRN": 2,
+   "P60/GRN": 2,
+   "P120/GRN": 2,
+   "CL1/CL2": 12,
+   "UV2/UV3": 1,
+   "RED/GRN": 1,
+   "RED/IR1": 1,
+   "IR2/IR1": 1,
+   "IR2/IR3": 1,
+   "IR4/IR3": 1,
+   "P0/UV3": 1,
+   "P60/UV3": 1,
+   "P120/UV3": 1
+  },
+  "minutes": 39
+ },
+ {
+  "obs": "ISS_045RH_REGMAP001_PRIME",
+  "cam": "N",
+  "target": "RHEA",
+  "pass": 0,
+  "n": 16,
+  "radius_px": 706,
+  "cover": 1.0,
+  "first": "N1558976733_1",
+  "last": "N1558977341_1",
+  "filters": {
+   "CL1/UV3": 4,
+   "CL1/GRN": 4,
+   "CL1/IR1": 4,
+   "CL1/CL2": 4
+  },
+  "minutes": 10
+ },
+ {
+  "obs": "ISS_119TE_GEOLOG001_PRIME",
+  "cam": "N",
+  "target": "TETHYS",
+  "pass": 0,
+  "n": 22,
+  "radius_px": 706,
+  "cover": 1.0,
+  "first": "N1634216023_1",
+  "last": "N1634217615_1",
+  "filters": {
+   "CL1/CL2": 5,
+   "CL1/UV3": 5,
+   "CL1/GRN": 4,
+   "CL1/IR3": 4,
+   "CL1/IR1": 1,
+   "P0/GRN": 1,
+   "P60/GRN": 1,
+   "P120/GRN": 1
+  },
+  "minutes": 27
+ }
+]

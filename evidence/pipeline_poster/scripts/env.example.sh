@@ -1,0 +1,3 @@
+S=/Volumes/LaCie/claude_scratch_spk; T=/Volumes/SAM_IAC_PHOTO/cassini-work; W=$HOME/dev/wt-pipeposter; PY=$HOME/dev/Cassini-Project/.venv/bin/python; P=$T/pipeposter
+export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 CASSINI_WORKERS=1 CASSINI_MOVIE_WORKERS=1 CASSINI_ROLL_WORKERS=1 CASSINI_DATA=$T/archives/cassini_lut8.zip CASSINI_INDEX_CACHE=$HOME/dev/scratch/saturnposter-zipindex CASSINI_KERNELS=/Volumes/LaCie/cassiniprojectJAN05.zip CASSINI_SPICE_CACHE=$T/caches/pipeposter-spice CASSINI_CISSCAL=/Volumes/LaCie/cassini_calibration/cisscal CASSINI_GEOMETRY_CACHE=$HOME/dev/scratch/pipeposter/geometry.sqlite CASSINI_FULLRES_CACHE=$T/caches/pipeposter-fullres
+C=$T/caches/pipeposter-cache

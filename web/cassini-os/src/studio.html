@@ -860,7 +860,13 @@ void main() {
     return saved;
   }
   async function download() {
-    const blob = await made(); if (!blob) return;
+    let blob = await made(); if (!blob) return;
+    // Settings > Gallery > Orbit diagram on saved pictures: the diagram in the corner, at the picture's moment
+    if (!isMovie() && window.cassiniOrbit && setting("gallery.orbitInset", false)) {
+      const t = ((st.item && st.item.moment) || []).find(p => p[0] === "t"), a = cassiniOrbit.about(st.item && st.item.ids);
+      if (a.target == null && t) a.et = utcToEt(t[1]);
+      blob = await cassiniOrbit.inset(blob, a);
+    }
     const ext = /mp4/.test(blob.type) ? "mp4" : /webm/.test(blob.type) ? "webm" : "jpg";
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `${base().replace(/ · /g, " ").replace(/[^\w .()-]+/g, "").trim()} edited.${ext}`;

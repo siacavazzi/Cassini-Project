@@ -1,0 +1,49 @@
+{
+ "_about": "Copy to <shared>/farm.json and edit. See docs/cache-build-runbook.md. Paths may start with ~.",
+ "python": "~/dev/Cassini-Project/.venv/bin/python",
+ "phases": ["composites", "processed", "mosaics", "movies", "strips", "chains"],
+ "whole_mission": [{"phase": "frames", "only": "mini", "hours": 1.5}],
+ "job": {"cmd": "~/agents/bin/job", "thread": "Cache build"},
+ "s_per_picture": 0.8,
+ "year_cost": {"2015": 1.25, "2016": 1.05, "2017": 0.6},
+ "split_share": 0.06,
+ "machines": {
+  "mini": {
+   "_about": "the hub: holds the T7 and the shared folder; I/O-heavy and the lightest units",
+   "speed": 1.0, "end": "light", "tmux": "farm-mini", "procs": 9, "max_load": 60, "min_free": 50, "need_gb": 300,
+   "cache": "/Volumes/SAM_IAC_PHOTO/cassini-work/build-cache",
+   "status": "/Volumes/SAM_IAC_PHOTO/cassini-work/farm-mini/status",
+   "logs": "/Volumes/SAM_IAC_PHOTO/cassini-work/farm-mini/logs",
+   "pause": "/Volumes/SAM_IAC_PHOTO/cassini-work/farm/mini.pause",
+   "live": "",
+   "env": {
+    "CASSINI_DATA": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/cassini_lut8.zip",
+    "CASSINI_KERNELS": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/cassiniprojectJAN05.zip",
+    "CASSINI_GEOMETRY_CACHE": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/geometry-usgs.sqlite",
+    "CASSINI_SPICE_CACHE": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/spice_cache",
+    "CASSINI_CISSCAL": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/cisscal",
+    "CASSINI_INDEX_CACHE": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/zip_index"
+   }
+  },
+  "mbp": {
+   "_about": "the M5 Pro laptop: compute-heavy, takes the heaviest units; builds on its own disk, ships to the hub",
+   "speed": 2.2, "end": "heavy", "procs": 16, "max_load": 60, "min_free": 50, "need_gb": 300,
+   "shared": "ssh://mini/Volumes/SAM_IAC_PHOTO/cassini-work/farm",
+   "python": "~/dev/Cassini-Project/.venv/bin/python",
+   "cache": "~/cassini-build/cache",
+   "status": "~/cassini-build/status",
+   "logs": "~/cassini-build/logs",
+   "pause": "~/cassini-build/pause",
+   "live": "",
+   "ship_to": "mini:/Volumes/SAM_IAC_PHOTO/cassini-work/build-cache-incoming-mbp",
+   "free": true,
+   "env": {
+    "CASSINI_DATA": "~/cassini-build/inputs/cassini_lut8.zip",
+    "CASSINI_GEOMETRY_CACHE": "~/cassini-build/inputs/geometry-usgs.sqlite",
+    "CASSINI_SPICE_CACHE": "~/cassini-build/inputs/spice_cache",
+    "CASSINI_CISSCAL": "~/cassini-build/inputs/cisscal",
+    "CASSINI_INDEX_CACHE": "~/cassini-build/inputs/zip_index"
+   }
+  }
+ }
+}

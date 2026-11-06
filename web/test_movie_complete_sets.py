@@ -256,3 +256,21 @@ server_held = [om.held_of(fs, n, lambda j: j in t["partial"], lambda j: j not in
 assert page_held == server_held == [3, 1, 2, 3, 3, 3], (page_held, server_held)
 print("the page shows the frame the server does; ok")
 print("ok")
+
+# a colour set covers a frame's place only where all its frames do at once, on their outlines (set_cover): the 2008
+# north pole movie (082SA NPOLECAM002) moved between cycles, each of the first cycle's frames (turned 25 degrees in
+# the view) boxed 55% of the new place but the three pictures together under half, so the second cycle played grey
+import math as _m
+def _turned(cx, cy, side=100, deg=25):
+    c, s = _m.cos(_m.radians(deg)), _m.sin(_m.radians(deg))
+    pts = [(-side / 2, -side / 2), (side / 2, -side / 2), (side / 2, side / 2), (-side / 2, side / 2)]
+    out = [[cx + x * c - y * s, cy + x * s + y * c] for x, y in pts]
+    xs, ys = [p[0] for p in out], [p[1] for p in out]
+    return {"offset": [cx, cy], "box": [min(xs) - cx, min(ys) - cy, max(xs) - min(xs), max(ys) - min(ys)], "outline": out}
+here = _turned(0, 0)
+old = [_turned(44, 17.6), _turned(46, 19.6), _turned(48, 21.6)]
+assert all(om.box_cover(here, q) >= om.HELD_COVER for q in old)          # each box takes in over half
+assert om.set_cover(here, old) < om.HELD_COVER                            # the pictures together do not
+assert om.set_cover(here, [_turned(1, 1), _turned(2, 0), _turned(0, 2)]) > 0.9
+assert om.set_cover(here, [here]) > 0.999
+print("a colour set covers a frame's place only where all its frames do at once (%.2f); ok" % om.set_cover(here, old))

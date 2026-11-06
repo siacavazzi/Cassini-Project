@@ -156,7 +156,8 @@ def veiled(level, x=340.0, y=-100.0):
 pal = {"blacks": {"CL1/CL2": 0.12}, "white": 0.11, "gamma": 3.0}
 disk = (340.0, -100.0, 10.0)
 before = om.tile_scale(pal, "CL1/CL2", True)
-assert "black_of" not in before                                     # no sky_tops: the pass's black, as before
+# no sky_tops: the pass's black, as before (a frame lit all over by a glow aside: test_movie_glow_sky.py)
+assert "black_of" not in before or before["black_of"](veiled(0.2)) is None
 black_of = om.tile_scale(pal, "CL1/CL2", True, disk=disk)["black_of"]
 for level in (0.2, 0.15):
     iof = veiled(level)

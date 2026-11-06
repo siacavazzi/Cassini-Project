@@ -101,7 +101,10 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
   const texts = w => [...w.querySelectorAll(".shottag, .kindtag, #mvtag, .rltag, .rlhow")].map(e => e.textContent.trim()).filter(Boolean);
   function infoFields(w) {
     const out = {};
-    w.querySelectorAll("dl.info dt").forEach(dt => { const dd = dt.nextElementSibling; if (dd && dd.textContent.trim() !== "—") out[dt.textContent.trim()] = dd.textContent.trim(); });
+    w.querySelectorAll("dl.info dt").forEach(dt => { const dd = dt.nextElementSibling; if (dd && dd.textContent.trim() && dd.textContent.trim() !== "—") out[dt.textContent.trim()] = dd.textContent.trim(); });
+    // the caption under a camera window's picture (frame, status, filter, color), by the same names as before
+    const NAME = { frame: "Frame", status: "Status", filter: "Filter", colour: "Color", target: "Target" };
+    w.querySelectorAll(".capline [data-f]").forEach(e => { const v = e.textContent.trim(); if (v && v !== "—") out[NAME[e.dataset.f] || e.dataset.f] = v; });
     return out;
   }
   async function capture(w) {
