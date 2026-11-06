@@ -751,6 +751,7 @@ PER_BODY_POINTING = 64   # px: how far the reference's pointing may be off SPICE
 PER_BODY_CRESCENT = 0.2  # a disk whose median is under this share of its mean is drawn at its mean (_pointing_fix)
 PER_BODY_MOST = 4        # bodies at most
 PER_BODY_CLIPPED = 0.01  # of a nearer body's disk saturated in some filter: drawn grey
+PER_BODY_HAZY = ("TITAN", "SATURN")   # bodies whose limb is a haze, its color ring its own (per_body's region rule)
 PER_BODY_FILL_REACH = 24  # px round the far body's part a filter did not see, whose color it is filled with
 
 
@@ -1034,11 +1035,15 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
     if ghost.any():
         region = ghost
     # anything else still moving (a third moon, ring arcs): the existing region rule on the composite
-    # (not on any body's limb, within PER_BODY_GROW and PER_BODY_HAZE of its radius: each body is aligned there on
+    # (not on a hazy body's limb, within PER_BODY_GROW and PER_BODY_HAZE of its radius: each body is aligned there on
     # its own, and what still differs is its own color, a haze's blue ring past the disk in BL1 that RED and GRN
     # don't see, N1694954730_1, not something that moved)
     limbs = np.zeros(shape, bool)
     for name in order:
+        if name not in PER_BODY_HAZY:
+            # (an airless moon's limb is sharp in every filter: what differs there moved, Rhea 13 px apart under
+            # Tethys, N1713643243_1)
+            continue
         b = at[ref][name]
         reach = PER_BODY_GROW + PER_BODY_HAZE * b[3]
         limbs |= (_disk(shape, b[1] + fx, b[2] + fy, b[3] + reach) > 0) & ~(_disk(shape, b[1] + fx, b[2] + fy, b[3] - reach) > 0)
