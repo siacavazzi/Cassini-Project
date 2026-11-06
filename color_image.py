@@ -397,7 +397,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             why, region = grey_plan(aligned, channels, ref, np.logical_and.reduce(masks), bands)
             if why == "moved" and not warped:
                 # ... unless each body can be aligned on its own (per_body)
-                got = per_body(lbls, ref, before[0], before[1], before[2], bands, before[3])
+                got = per_body(lbls, ref, before[0], before[1], before[2], bands, before[3], shifts)
                 if isinstance(got, dict):
                     bodies = got
                 elif got is not None:
@@ -411,11 +411,11 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             if why and region is not None:
                 imgs = neutral(imgs, region)
         else:
-            before = (list(imgs), list(imgs), list(masks))
-            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, guess=guess)
+            before, shifts = (list(imgs), list(imgs), list(masks)), []
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
             if why == "moved" and not warped:
-                got = per_body(lbls, ref, *before, bands)
+                got = per_body(lbls, ref, *before, bands, None, shifts)
                 if isinstance(got, dict):
                     bodies = got
                 elif got is not None:
@@ -722,8 +722,11 @@ one body has the other's copies apart and the whole set was drawn grey. Each bod
 1. Where the bodies are on the reference: SPICE's disks, all moved by how far the reference's pointing is off
    (_pointing_fix: the disks drawn as a picture, matched to the reference by image_correction.guided_shift).
 2. From the farthest to the nearest, each channel is matched to the reference by the pipeline's own matcher
-   (image_correction.align_with_masks, SPICE's move of that body as the guess) on that body alone: its disk in both
-   frames, PER_BODY_GROW px wider, with every nearer body's disk filled flat, so nothing else is matched.
+   (image_correction.align_with_masks) on that body alone: its disk in both frames, PER_BODY_GROW px wider, with
+   every nearer body's disk filled flat, so nothing else is matched. The smallest body first, on its own: how far it is
+   from SPICE's move is the camera's drift between the filters, and every other body is looked for only PER_BODY_NEAR
+   round SPICE's move of it plus that drift (put there when its own match finds nothing: Titan's featureless haze).
+   Where the set's own match over the whole picture lands within PER_BODY_NEAR of a body's, that one is kept.
 3. The channels aligned on the farthest body are the picture (the sky keeps its alignment); each nearer body's
    channels go over them within its disk, feathered over PER_BODY_FEATHER px.
 4. Where a nearer body hid the one behind it in some filter but not in the reference, that filter has nothing of the
@@ -816,27 +819,36 @@ def _only(im, keep, flat):
 
 
 def _pointing_fix(guide, bodies, ref):
-    """How far (dx, dy, full resolution px) the reference's bodies are from SPICE's places: the disks (each nearer one
-    over the ones behind it) drawn at the reference's brightness inside each, matched to the reference
-    (image_correction.guided_shift, PER_BODY_POINTING px round no move); (0, 0) where nothing matches"""
+    """How far (dx, dy, full resolution px) the reference's bodies are from SPICE's places: the square round the
+    smallest body's disk (the sharpest limb), with every disk drawn at the reference's brightness inside it (each
+    nearer one over the ones behind it), matched to the reference there (image_correction.guided_shift,
+    PER_BODY_POINTING px round no move); (0, 0) where nothing matches"""
     g = _grey_level(guide[ref])
+    k = g.shape[1] / ba.FULL_FRAME
     scene = np.zeros(g.shape, np.float32)
     for name, x, y, r, z in sorted(bodies, key=lambda b: -b[4]):
         d = _disk(g.shape, x, y, r)
         if (d > 0).any():
             scene = np.where(d > 0, float(np.median(g[d > 0])), scene)
     scene = cv2.GaussianBlur(scene, (0, 0), 1.0)
+    _, x, y, r, _ = min(bodies, key=lambda b: b[3])
+    half = (r + PER_BODY_POINTING + 2 * PER_BODY_GROW) * k
+    x0, y0 = max(int(x * k - half), 0), max(int(y * k - half), 0)
+    x1, y1 = min(int(x * k + half) + 1, g.shape[1]), min(int(y * k + half) + 1, g.shape[0])
+    if x1 - x0 < 64 or y1 - y0 < 64:
+        return 0.0, 0.0
+    a = np.ascontiguousarray(scene[y0:y1, x0:x1])
+    b = np.ascontiguousarray(g[y0:y1, x0:x1])
     try:
-        found, _ = ic.guided_shift(_as_like(scene, guide[ref]), guide[ref], (0.0, 0.0), window=PER_BODY_POINTING)
+        found, _ = ic.guided_shift(_as_like(a, guide[ref]), _as_like(b, guide[ref]), (0.0, 0.0), window=PER_BODY_POINTING * k)
     except Exception:
         found = None
-    if found is None or np.hypot(*found) > PER_BODY_POINTING:
+    if found is None or np.hypot(*found) > PER_BODY_POINTING * k:
         return 0.0, 0.0
-    k = ba.FULL_FRAME / g.shape[1]
-    return float(found[0]) * k, float(found[1]) * k
+    return float(found[0]) / k, float(found[1]) / k
 
 
-def per_body(lbls, ref, guide, chans, masks, bands=None, full=None):
+def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None):
     if len(lbls) < 2:
         return None
     each = [_frame_bodies(l) for l in lbls]
@@ -890,7 +902,13 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None):
             g = (g[0] + drift[j][0], g[1] + drift[j][1])
             ic.align_with_masks(pair, [masks[ref].copy(), masks[j].copy()], 0, how, found=found, guess=[None, g],
                                 within=PER_BODY_NEAR * k)
-            shifts.append(found[1] if found[1] is not None else g)
+            got = found[1] if found[1] is not None else g
+            w = whole[j] if whole is not None else None
+            if w is not None and np.hypot(w[0] - got[0], w[1] - got[1]) <= PER_BODY_NEAR * k:
+                # the set's own match over the whole picture lands on this body too (a frame-filling Saturn, its
+                # rings): believed over the match on the body alone, which saw less of it (165TI's ring edges)
+                got = w
+            shifts.append(got)
         found_of[name] = shifts
         report["shifts"][name] = [None if s is None else [round(s[0], 1), round(s[1], 1)] for s in shifts]
     aligned = {}

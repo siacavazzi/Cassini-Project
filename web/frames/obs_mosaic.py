@@ -2296,14 +2296,24 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
     scale itself is the same with or without it."""
     by, disks = {}, {}
-    for path, _, f, _, _, x, y, z in frames:
-        _, iof, _ = stacking.load_hdr(path, u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
-        if iof is not None:
-            q = iof[::4, ::4].astype(np.float32)
+    # the frames read and calibrated MOVIE_WORKERS at once (in order: the same scale), so a cold pass's plan is not
+    # one frame after another (021TI REGMAPNA001: 67 frames, 28 s of a 100 s first movie frame)
+    mode = calibration.mode()
+
+    def read(fr):
+        with calibration.in_mode(mode):
+            iof = stacking.load_hdr(fr[0], u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))[1]
+        # (only the quarter size picture kept, and the frame's size)
+        return None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape)
+    with concurrent.futures.ThreadPoolExecutor(MOVIE_WORKERS) as pool:
+        read_all = list(pool.map(read, frames))
+    for (path, _, f, _, _, x, y, z), got in zip(frames, read_all):
+        if got is not None:
+            q, shape = got
             by.setdefault(f, []).append(q)
             if z:
                 km = RADIUS.get(u["key"][0]) or SPECKS.get(u["key"][0], 0)
-                disks.setdefault(f, []).append(_disk_pixels(q, iof.shape, x, y, km / (z * IFOV[u["key"][2]])))
+                disks.setdefault(f, []).append(_disk_pixels(q, shape, x, y, km / (z * IFOV[u["key"][2]])))
     if not by:
         return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
     scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
