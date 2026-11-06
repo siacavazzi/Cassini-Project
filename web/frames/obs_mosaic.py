@@ -4438,10 +4438,14 @@ PER_BODY_GROW = 3      # canvas px more (its blur)
 PER_BODY_TITAN = 0.4   # of Titan's radius past its disk moved with it: its haze's glow reaches that far (153DI)
 PER_BODY_LIT = 0.1     # of a plane's brightest: lit, where a ratio between planes is measured
 PER_BODY_TARGET = 0.25  # _target_off: the most a plane's target is looked for from the shown plane's, of its radius
+PER_BODY_WIDE = 0.5     # _target_off's search for the target itself, of its radius (158TI's Titan 37 px a filter)
+PER_BODY_BETTER_TARGET = 0.05   # ... the target's own (its whole limb is matched, nothing else in the ring)
+PER_BODY_STILL = 0.3    # of its edges' top: an edge this strong in both pictures at no move is still (_target_off)
 PER_BODY_BETTER = 0.3   # how much better (correlation) the pictures' place of a body must line up than SPICE's
 PER_BODY_MEASURE = 600  # canvas px of radius: a bigger body (Saturn) is moved by SPICE's offsets alone, not looked for
 PER_BODY_LEAST = 10    # canvas px of radius: a smaller body (Pandora, Telesto, a speck) is not moved
-PER_BODY_FRONT = (3, 0.12)   # canvas px and share of its radius round the target's disk (its blurred limb and glare)
+PER_BODY_SLOP = 10      # canvas px (_per_body_planes)
+PER_BODY_FRONT = (4, 0.15)   # canvas px and share of its radius round the target's disk (its blurred limb and glare, and the hold a few px off: Dione 8 px off in 153DI)
                              # that is not moved with a body behind it, nor taken from it
 
 
@@ -4467,9 +4471,13 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
     H, W = planes[0].shape[:2]
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
 
-    def target(i):
+    def spice_target(i):
         (px, py), (sx, sy) = places[i]
         return (px - sx - rect[0]) * k, (py - sy - rect[1]) * k
+    lined = {}
+
+    def target(i):
+        return lined.get(i) or spice_target(i)
 
     def disk(c, r):
         return (xx - c[0]) ** 2 + (yy - c[1]) ** 2 <= r * r
@@ -4478,6 +4486,25 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
     front = PER_BODY_FRONT[0] + PER_BODY_FRONT[1] * radius * k
     out, moves = list(planes), {}
     away = np.zeros((H, W), bool)
+    # the target itself first: where SPICE's place of it is off by the pointing between the filters and the hold did
+    # not take it out (Titan 37 px a filter in 158TI MUTUALEVE001, the planes held on Rhea, Titan in red, yellow and
+    # blue rings), each plane is moved so its target's limb lies on the shown plane's (_target_off over every other
+    # body's disk left out), when that lines up clearly better than as it is
+    tr = target(ref)
+    # (the bodies in front of it left out; one behind it, Saturn behind Titan in 165TI, is what its limb is seen on)
+    ex = [(tr[0] + x * k, tr[1] + y * k, r * k * 1.2 + PER_BODY_GROW) for x, y, r, behind in named[ref].values() if not behind]
+    for i in range(len(planes)):
+        if i == ref:
+            continue
+        off = _target_off(gray[ref], gray[i], tr, radius * k, exclude=ex, wide=True)
+        if off is None or math.hypot(*off) < 1.0:
+            continue
+        m = np.float32([[1, 0, -off[0]], [0, 1, -off[1]]])
+        out[i] = cv2.warpAffine(out[i], m, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+        gray[i] = out[i][..., 0].astype(np.float32)
+        # (its bodies moved with it: SPICE's offsets of them from the target now count from the shown plane's target)
+        lined[i] = tr
+        moves.setdefault("_target", [None] * len(planes))[i] = [round(-off[0], 1), round(-off[1], 1)]
 
     for name in common:
         xr, yr, rr, behind = named[ref][name]
@@ -4513,7 +4540,10 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
             moves[name].append([round(dx, 1), round(dy, 1)])
             if math.hypot(dx, dy) < 0.5:
                 continue
-            front_i = disk(ti, radius * k + front) if behind else np.zeros((H, W), bool)
+            # (what is moved of this plane stops PER_BODY_SLOP further out than the target's zone: the hold puts the
+            # target a few px off, Dione 8 px in 153DI, and its limb came along with the body behind it; that band of
+            # the body's new place is filled from the shown plane, as a hole is)
+            front_i = disk(ti, radius * k + front + PER_BODY_SLOP) if behind else np.zeros((H, W), bool)
             was = disk(ci, r * k * (1 + haze) + PER_BODY_GROW) & ~front_i
             g = gray[i]
             m = np.float32([[1, 0, dx], [0, 1, dy]])
@@ -4529,22 +4559,36 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
             r_target = float(np.median(g[on_t] / g_ref[on_t])) if on_t.sum() >= 50 else 1.0
             r_body = ratio(ok & lit, r_target)
             h = g.copy()
-            gone = was & ~new
+            # (where the body was, the band PER_BODY_SLOP leaves unmoved too)
+            gone = disk(ci, r * k * (1 + haze) + PER_BODY_GROW) & ~new & \
+                ~(disk(ti, radius * k + front) if behind else np.zeros((H, W), bool))
             h[gone] = g_ref[gone] * r_target
             h[ok] = moved[ok]
             # (on the body's disk; past it, in its glow, the plane's own: a fill there from the shown plane drew
             # Dione's place, which the far body's copy was cut round, as a blue crescent in the sky beside it)
-            hole = new & ~ok & disk(cr, rr * k)
+            hole = new & ~ok
             h[hole] = g_ref[hole] * r_body
             if behind:
                 # (round the target's limb, where its blur and glare lie over the body and each filter saw them over
                 # another part of it: the shown plane's, or green and orange arcs ring the target)
-                ring = disk(ti, radius * k + front + 1) & ~disk(ti, radius * k - 1) & \
-                    (cv2.dilate((was | new).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0)
+                # (where the body is, or was in this plane, its disks whole: was and new leave this zone out)
+                bodies_here = disk(ci, r * k * (1 + haze) + PER_BODY_GROW + 2) | disk(cr, rr * k * (1 + haze) + PER_BODY_GROW + 2)
+                ring = disk(ti, radius * k + front + 1) & ~disk(ti, radius * k - 1) & bodies_here
                 # (from the target's color at its limb to the body's at the ring's outer edge)
                 # (off the body, over the sky, the target's own: Dione's glow beside Titan came out blue and green)
-                w = np.clip((np.hypot(xx - ti[0], yy - ti[1]) - radius * k) / front, 0, 1) * new
-                h[ring] = g_ref[ring] * (r_target * (1 - w[ring]) + r_body * w[ring])
+                # (each pixel there is the target's blurred limb and the body behind it, mixed: its ratio is the
+                # target's and the body's in the share its brightness puts it between the two, the target's just
+                # inside its limb and the body's just outside the ring. The target's ratio alone turned Titan's light
+                # round Rhea blue and orange, the body's alone Rhea's limb glare, 154RH)
+                t_in = disk(ti, radius * k - 2) & ~disk(ti, radius * k - 8) & lit
+                b_out = disk(ti, radius * k + front + 8) & ~disk(ti, radius * k + front + 2) & new
+                lt = float(np.median(g_ref[t_in])) if t_in.sum() >= 20 else float(g_ref.max())
+                lb = float(np.median(g_ref[b_out])) if b_out.sum() >= 20 else 0.0
+                on_body = disk(cr, rr * k * (1 + haze) + PER_BODY_GROW)
+                # (either way round: a dark Titan over a bright Saturn, 165TI, as a bright Rhea over Titan)
+                wt = np.clip((g_ref - lb) / (lt - lb), 0, 1) if abs(lt - lb) > 1 else np.ones_like(g_ref)
+                wt = np.where(on_body, wt, 1.0)
+                h[ring] = g_ref[ring] * (r_target * wt[ring] + r_body * (1 - wt[ring]))
             plane = out[i].copy()
             plane[..., :3] = np.clip(h + 0.5, 0, 255).astype(np.uint8)[..., None]
             out[i] = plane
@@ -4554,7 +4598,7 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
     return out, (moves or None)
 
 
-def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None):
+def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None, wide=False):
     """How far (canvas px) a body's limb in plane g is from its limb in the shown plane ref (at, radius r): the move
     (searched over PER_BODY_TARGET of its radius round no move and round guess, a pixel then a quarter pixel) that
     best correlates the two pictures' brightness edges in the ring round its limb (from 0.8 to 1.3 of its radius: the
@@ -4562,7 +4606,7 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None):
     with a guess, which then stands)."""
     if r < 8 or r > PER_BODY_MEASURE:
         return None if guess != (0.0, 0.0) else (0.0, 0.0)
-    reach = PER_BODY_TARGET * r
+    reach = (PER_BODY_WIDE if wide else PER_BODY_TARGET) * r
     half = int(r * 1.3 + reach + 4 + math.hypot(*guess))
     # (cut to the canvas: a body near its edge is looked for on what is there of it)
     x0, y0 = max(int(at[0]) - half, 0), max(int(at[1]) - half, 0)
@@ -4578,9 +4622,13 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None):
     yy, xx = np.mgrid[0:y1 - y0, 0:x1 - x0].astype(np.float32)
     d = np.hypot(xx + x0 - at[0], yy + y0 - at[1])
     ring = (d > 0.8 * r) & (d < 1.3 * r)
-    if exclude is not None:
-        # (not over the target's disk and its glow: its limb would be matched as well, Titan under Rhea in 154RH)
-        ring &= np.hypot(xx + x0 - exclude[0], yy + y0 - exclude[1]) > exclude[2]
+    # (not over another disk and its glow: its limb would be matched as well, Titan under Rhea in 154RH)
+    for ex in ([exclude] if exclude and not isinstance(exclude[0], (tuple, list)) else exclude or ()):
+        ring &= np.hypot(xx + x0 - ex[0], yy + y0 - ex[1]) > ex[2]
+    if not wide and guess != (0.0, 0.0):
+        # (edges strong in both pictures where they are: what does not move between the filters, an edge-on ring line
+        # across Titan in 153DI, which matched at no move and split Titan in three)
+        ring &= ~((ea > PER_BODY_STILL) & (eg > PER_BODY_STILL))
     if ring.sum() < 0.3 * math.pi * (1.3 ** 2 - 0.8 ** 2) * r * r:
         return None if guess != (0.0, 0.0) else (0.0, 0.0)
 
@@ -4614,6 +4662,8 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None):
     near = np.arange(-step / 2, step / 2 + 0.5, 1.0)
     _, bx, by = min((cost(bx + dx, by + dy), bx + dx, by + dy) for dx in near for dy in near)
     best = min(((cost(bx + dx, by + dy), bx + dx, by + dy) for dx in np.arange(-0.75, 0.8, 0.25) for dy in np.arange(-0.75, 0.8, 0.25)))
+    if wide and best[0] > cost(0.0, 0.0) - PER_BODY_BETTER_TARGET:
+        return 0.0, 0.0
     if guess != (0.0, 0.0) and best[0] > cost(gx, gy) - PER_BODY_BETTER:
         # (SPICE's guess stands unless the pictures line up clearly better elsewhere: Titan under the ring line and
         # Tethys, 158TE, was matched on the ring)
