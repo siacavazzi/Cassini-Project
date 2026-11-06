@@ -71,4 +71,17 @@ for f in ("GRN", "CL1/CL2"):
 # and the mosaic's drawing order puts it first (under every whole tile), as a partial frame
 order = [t["n"] for t in om.under_first([dict(t, under=True) if t["n"] == 4 else t for t in grey])]
 assert order == [4, 0, 2, 6, 8, 10], order
+
+# a colour picture's tiles take the decision of their pointing's first colour tile (among), not of a filter it does
+# not draw: a black VIO frame first at a pointing (195RI HIPHASEC001) put the lit colour tiles after it under too
+u2 = {"key": ("SATURN", "ISS_TEST_DIM_AMONG", "W", 0), "frames": [], "z": 1e6, "movie": False, "mosaic": True}
+os.makedirs(om.folder(u2, cache), exist_ok=True)
+plan2 = [(0, "VIO", 0, 0.5, 0), (1, "GRN", 0, 0.5, 10), (2, "VIO", 250, 0.0005, 1000), (3, "GRN", 250, 0.5, 1010)]
+tiles2 = [{"n": n, "filter": f, "t": float(s_), "offset": [float(x), 0.0], "box": [-200, -200, 400, 400], "pic": pic(f"a{n}", v)}
+          for n, f, x, v, s_ in plan2]
+u2["frames"] = [(f"W{n}", n, f, float(s_), None, float(x), 0.0, u2["z"]) for n, f, x, v, s_ in plan2]
+g2 = [t for t in tiles2 if t["filter"] == "GRN"]
+assert om.dim_places(u2, p, "GRN", g2, tiles2, cache) == {3}, "without among: the VIO root decides (as before)"
+assert om.dim_places(u2, p, "GRN", g2, tiles2, cache, ["GRN"]) == set(), "the lit colour tile stays over"
+assert om.dim_places(u2, p, "VIO", [t for t in tiles2 if t["filter"] == "VIO"], tiles2, cache) == {2}
 print("ok")

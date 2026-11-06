@@ -296,9 +296,14 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
         # when two others calibrate, so the set is a calibrated two-filter picture instead of every
         # channel falling back to its own stretch (Phoebe day, 2004-06-11: every NAC BL1 frame is 8LSB)
-        if 2 <= len(keep) < len(lbls):
+        # ... and when fewer than two calibrate, the set is drawn grey from one filter (the one that calibrates, or the
+        # first, the longest wavelength, when none does) instead of each channel stretched on its own: the Moon's
+        # IR1/UV3/UV1 set of 1999-08-18 (two 8LSB members) came out with a blue sky and its disks side by side
+        if len(keep) < 2:
+            keep = keep or [0]
+        if len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
-            print(f"Can't calibrate {dropped}, making a two-filter picture of the others")
+            print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
             lbls, imgs, iofs, masks, stacked, clips = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips))
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
@@ -941,6 +946,70 @@ def frame_path(row, target, folder):
 
 def sharpen(image):
     return ImageEnhance.Sharpness(image).enhance(1.5)
+
+
+# find_small_body: a small moon's centred view placed on the moon the picture shows, near where SPICE puts it. SPICE's
+# place for the 2017 small-moon flybys is tens to hundreds of pixels off (spot check 7: Pan N1867604614_1 36 px, Atlas
+# N1870699340_2 about 320 px, so Atlas sat cut at the view's left edge)
+FIND_SMOOTH = 2.0      # px: the picture is smoothed this much first, so cosmic rays and stars are not bodies
+FIND_AREA = (0.25, 4.0)  # a body's lit area, as a share of the disk SPICE gives it (its mean radius: an irregular moon)
+FIND_SPAN = 3.0        # its width and height are under this many times its disk's diameter (a ring arc is not a moon)
+FIND_LIT = 0.85        # under this share of its disk lit (half lit, a crescent, or cut by the frame's edge), its centroid
+                       # sits off its centre (a half-lit disk's by 0.42 of its radius), so it is used only where SPICE is
+                       # off by more than the disk's radius
+FIND_MIN_RADIUS = 12.0  # px: smaller bodies look like a cosmic ray's track or a clump of them (Aegaeon N1829224056_1,
+                        # 9 px: the blob found was a track 190 px off), so they are left where SPICE puts them
+FIND_ROUND = 0.3       # a body's blob is this round or more (short over long side, and its share of its box)
+FIND_MAX_RADIUS = 256  # px: bigger bodies fill the frame; SPICE places them, as before
+FIND_REACH = 400       # px: the blob is looked for only this near SPICE's place (Atlas N1870699340_2 was 342 px off), and
+                       # of the blobs there, the nearest to it is taken, not the biggest: another moon or a bright
+                       # ring arc elsewhere in the frame is not the body
+
+
+"""
+Where a small body sits on a picture centred by SPICE (frame_server.centred: RGBA, north up, full resolution pixels):
+the centroid of the one compact lit blob the size of its disk, or None where there is no such blob or SPICE is to be
+kept. image = RGBA uint8, alpha 0 off the frame; cx, cy = where SPICE puts the body's centre; radius = its disk's radius
+(px, obs_mosaic.RADIUS over the range). Returns (x, y) of the body's centre in the picture, or None.
+"""
+def find_small_body(image, cx, cy, radius, reach=FIND_REACH):
+    if not radius or not FIND_MIN_RADIUS <= radius <= FIND_MAX_RADIUS:
+        return None
+    rgb = image[..., :3].astype(np.float32)
+    valid = image[..., 3] > 0
+    if valid.sum() < 1000:
+        return None
+    lum = cv2.GaussianBlur(rgb.mean(axis=2), (0, 0), FIND_SMOOTH)
+    inside = cv2.erode(valid.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+    values = lum[inside]
+    sky = float(np.median(values))
+    noise = 1.4826 * float(np.median(np.abs(values - sky))) + 0.5
+    top = float(np.percentile(values, 99.9))
+    if top - sky < 10 * noise:
+        return None
+    lit = (lum > sky + max(0.25 * (top - sky), 6 * noise)) & valid
+    n, labels, stats, centroids = cv2.connectedComponentsWithStats(lit.astype(np.uint8), connectivity=8)
+    disk = np.pi * radius * radius
+    best = None
+    for k in range(1, n):
+        x, y, w, h, area = stats[k]
+        if not FIND_AREA[0] * disk <= area <= FIND_AREA[1] * disk or max(w, h) > FIND_SPAN * 2 * radius:
+            continue
+        if min(w, h) < FIND_ROUND * max(w, h) or area < FIND_ROUND * w * h:
+            continue   # a track or a ring arc, not a moon
+        d = float(np.hypot(centroids[k][0] - cx, centroids[k][1] - cy))
+        if d <= reach and (best is None or d < best[0]):
+            best = (d, k)
+    if best is None:
+        return None
+    away, best = best
+    x, y, w, h, area = stats[best]
+    fx, fy = (float(v) for v in centroids[best])
+    # a blob that reaches the frame's edge is a body the frame cuts: its centroid is off its centre too
+    cut = bool((labels[y:y + h, x:x + w] == best)[~inside[y:y + h, x:x + w]].any())
+    if (area < FIND_LIT * disk or cut) and away <= radius:
+        return None
+    return fx, fy
 
 
 # A light unsharp mask, the last step of every picture the site serves (frame_server's stills and composites, and every
