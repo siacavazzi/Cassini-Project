@@ -147,7 +147,7 @@ def items(phase):
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
     if phase == "chains":
-        # a movie pass's stabilization and exposure chains (steady1-, exposure5-c11s0-plan4.json), which the page
+        # a movie pass's stabilization and exposure chains (steady2-, exposure5-c11s0-plan4.json), which the page
         # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
@@ -357,7 +357,7 @@ def make_planes(u, cache, centre=True):
     steady=0, exposure=0), at 1024, Auto center as the window has it; and for a filled pass (Titan, Jupiter), the
     same before its detail filter (sharpen False, detail=0, files _d0), which the page sharpens itself after its
     exposure, trail or colour mix. Returns 0: make_pass has counted the pass's frames."""
-    filled = bool(obs_mosaic.plan(u, cache)["display_scale"].get("filled"))
+    filled = obs_mosaic.sharpens(obs_mosaic.plan(u, cache)["display_scale"])
     for f in u["frames"]:
         for sharpen in ((True, False) if filled else (True,)):
             obs_mosaic.movie_webp(f[1], 1024, cache, 0, False, wait=True, ahead=0, centre=centre, sharpen=sharpen)

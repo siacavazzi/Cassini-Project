@@ -53,7 +53,7 @@ CROP_MAX = int(os.environ.get("CASSINI_NATIVE_CROP", "2048"))       # longest si
 BLOCK = int(os.environ.get("CASSINI_NATIVE_BLOCK", "1024"))        # canvas px drawn at a time
 KEEP_MB = int(os.environ.get("CASSINI_FULLRES_MB", "5120"))         # most the native pictures' cache holds
 JPEG_QUALITY = 92
-VERSION = "native-v2"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
+VERSION = "native-v10"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
 # bytes per pixel, roughly, of a saved native mosaic (sky is most of a mosaic's canvas and costs almost nothing)
 EST_BYTES = {"jpg": (0.08, 0.005), "png": (2.0, 0.02)}   # (per pixel of picture, per pixel of empty canvas)
 
@@ -191,7 +191,7 @@ def corrections(u, made, cache):
         tagged = bool(tag)
         blend = calibration.step("blend")
         for f in filters:
-            mine = om._mine(u, p, tiles, f)
+            mine = om._mine(u, p, om.visit_tiles(u, tiles, colour) if colour and f in colour else tiles, f)
             first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
             got = out[f] = {}
             window, shown = om._window(u, p, first, rect, cache)
@@ -222,8 +222,13 @@ def corrections(u, made, cache):
                     got[t["n"]].append(_packed(kept[0]))
                 om._yield()
         if colour and base:
-            picture = om.colour_picture(u, p, colour, [om.filter_mosaic(u, p, f, tiles, rect, cache, ref, tag) for f in colour])
-            g = om.grey_gain(picture, om.filter_mosaic(u, p, om.LUM, tiles, rect, cache, None, tag), p["k"], p["display_scale"]["gamma"])
+            picture = om.colour_picture(u, p, colour, om.colour_planes(u, p, colour, tiles, rect, cache, ref, tag))
+            grey = om.filter_mosaic(u, p, om.LUM, tiles, rect, cache, None, tag)
+            if om.mixes(u, p, tiles, colour):
+                shape = picture.shape[:2]
+                picture = om.unmixed(picture, om.set_mask([om.set_times(shape, om.placed_tiles(u, p, om._mine(u, p, om.visit_tiles(u, tiles, colour), f), rect, cache))
+                                                           for f in colour], p["k"]), grey)
+            g = om.grey_gain(picture, grey, p["k"], p["display_scale"]["gamma"])
             out["_grey"] = None if g is None else list(map(float, g))
         return json.dumps(out).encode()
 
@@ -350,7 +355,7 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     p, tiles, rect, count, used, name = made
     filters, colour, base, _, _ = drawn(u, made)
     blend = calibration.step("blend")
-    filled = p["display_scale"].get("filled")
+    filled = om.sharpens(p["display_scale"])
     sigma = om.DETAIL_SIGMA * om.FRAME * k
     pad = max(8, round(64 * k / 0.5)) + 2 + (math.ceil(4 * sigma) + 2 if filled else 0)
     # the block's frames start on the blend step's grid (mosaic.GRID) of the whole canvas, so blocks side by side lay
@@ -358,10 +363,15 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     px, py = pad + (x0 - pad) % mosaic.GRID, pad + (y0 - pad) % mosaic.GRID
     sub = (rect[0] + (x0 - px) / k, rect[1] + (y0 - py) / k, (w + px + pad) / k, (h + py + pad) / k)
     pk = dict(p, k=k)
-    planes = {}
+    planes, times = {}, {}
+    mixing = bool(colour and base and om.mixes(u, p, tiles, colour))
     for f in filters:
-        mine = om._mine(u, pk, tiles, f)
+        mine = om._mine(u, pk, om.visit_tiles(u, tiles, colour) if colour and f in colour else tiles, f)
         window, shown = om._window(u, pk, mine, sub, cache)
+        if mixing and f in colour:
+            # (when each frame on top was taken, as so_far's set_mask measures it, on this block's frames)
+            times[f] = om.set_times(window[0][0].shape[:2] if window else (math.ceil(sub[3] * k), math.ceil(sub[2] * k)),
+                                    ((om.set_time(u, t["n"]), w[0][..., 3], 0, 0) for w, t in zip(window, shown)))
         if not window:
             planes[f] = np.zeros((math.ceil(sub[3] * k), math.ceil(sub[2] * k), 4), np.uint8)
             continue
@@ -375,6 +385,8 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     if colour:
         rgba = om.colour_picture(u, p, colour, [planes[f] for f in colour])
         if base:
+            if mixing:
+                rgba = om.unmixed(rgba, om.set_mask([times[f] for f in colour], k), planes[om.LUM])
             rgba = om.over_grey(rgba, planes[om.LUM], k, p["display_scale"]["gamma"], gain=corr.get("_grey"))
     else:
         rgba = planes[filters[0]]

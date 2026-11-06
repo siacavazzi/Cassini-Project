@@ -41,13 +41,15 @@ json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint
            "view": [600, 600], "k": 1, "colour": None, "grey": "RED", "whole": False}, open(os.path.join(d, om.PLAN_FILE), "w"))
 
 with calibration.looking("balanced"):
-    logs = om.exposure_chain(u, cache)
+    # (with colour off, each filter's own frame plays: with it on, a grey pass of two filters in turn shows its grey
+    # filter's frame for the other's, step_frame, and has no filter flicker to even)
+    logs = om.exposure_chain(u, cache, None, False)
     # the chain follows the movie's brightness frame to frame, whichever filter (to the 8-bit picture's rounding)
     # the narrow strip is a scene of its own, and the frame after it starts the next stretch: the strip left as it is
     assert logs[SCENE][1] == 1 and logs[SCENE + 1][1] == 2, (logs[SCENE], logs[SCENE + 1])
     for n in range(SCENE):
         assert abs(logs[n][0] - math.log(bright[n] / bright[0])) < 0.03 and logs[n][1] == 0, (n, logs[n], math.log(bright[n] / bright[0]))
-    gains = om.exposure_gains(u, cache, smooth=4)
+    gains = om.exposure_gains(u, cache, smooth=4, colour=False)
     assert gains[SCENE] == 1.0, gains[SCENE]
     N = SCENE   # (the rest: the stretch before the other scene)
     shown = [bright[n] * gains[n] for n in range(N)]

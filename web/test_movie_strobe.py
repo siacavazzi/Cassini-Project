@@ -11,7 +11,8 @@
   pass's first frame held shows the first whole frame after it (010SA EUVFUV003, 011RI IMPACT003 opened white)
 - a small body's frame lit all over by stray light (no dark sky) takes its own black from everything off the disk
   (tile_scale's disk), so the veil goes (Pallene 139PL, Hati 182OT, Kiviuq 112OT); a frame with dark sky, a plume
-  movie's Enceladus (64 px) and a pass without a small body keep the rule they had
+  movie's Enceladus (64 px) and a pass without a small body keep the rule they had; Earth from Saturn is one (fix
+  plan PR 10: 195RI's stray-light veil drew gray, yellow and cyan frames with line bands)
 Run: python web/test_movie_strobe.py"""
 import json, os, sys, tempfile  # noqa: E401
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
@@ -112,6 +113,14 @@ assert shown(frames[:5], tiles7) == [0, 0, 0, 0, 4], shown(frames[:5], tiles7)
 tiles7b = [{**placed, "saturated": s} for s in (0.8, 1.0, 0.92, 0.99, 0.8)]
 assert shown(frames[:5], tiles7b)[2] == 2, shown(frames[:5], tiles7b)
 print("an over-exposed frame between frames saturated all over is held; ok")
+# ... and the least saturated of a filter the pass over-exposed through is held as the rest of it is, not left to
+# play alone, half white, and again in its neighbour's place (SPOLEDYN001 2009, W1609834686_1: a clear frame 39%
+# saturated among clear frames 65-100% saturated, between well exposed BL1 frames)
+frames8 = fr(["BL1", "CL1/CL2", "CL1/CL2", "CL1/CL2", "CL1/CL2", "BL1", "CL1/CL2", "CL1/CL2", "CL1/CL2", "CL1/CL2", "BL1"])
+sat8 = (0.03, 1.0, 1.0, 0.99, 0.92, 0.0, 1.0, 1.0, 0.39, 0.65, 0.0)
+got = shown(frames8, [{**placed, "saturated": s} for s in sat8])
+assert got[8] != 8 and got[9] != 8 and all(sat8[g] < 0.05 for g in got), got
+print("the least saturated frame of an over-exposed filter is held too:", got)
 
 # ---- the steady table's "partial" list (the page's heldOf) is unfit's
 assert [m for m in range(8) if om.unfit(frames, m, lambda j: [{**placed, "saturated": 0.17 if n % 2 == 0 else 0.75}
@@ -124,6 +133,12 @@ assert om.small_body({"key": ("ENCELADUS", "OBS", "N", 0)}, ("p", "N1_1", "CL1",
 assert om.small_body({"key": ("SATURN", "OBS", "N", 0)}, ("p", "N1_1", "CL1", 0, 0, 0, 0, 1.9e6)) is None
 assert om.small_body({"key": ("S_RINGS", "OBS", "N", 0)}, ("p", "N1_1", "CL1", 0, 0, 0, 0, 1e6)) is None   # no disk
 assert om.small_body(u, ("p", "N1_1", "CL1", 0, 0, 0, 0, 0)) is None                                     # no place
+# Earth from Saturn (Day the Earth Smiled, N1752969273_1: 1.45e9 km) is a speck under a pixel, kept out of the
+# filled scale, centring and the colour sets' rules (SPECKS, not RADIUS)
+earth = om.small_body({"key": ("EARTH", "ISS_195RI_HIPHASEC001_VIMS", "N", 0)},
+                      ("p", "N1752969273_1", "GRN", 0, 0, -10.5, -7.0, 1.4459e9))
+assert earth is not None and earth[2] < 1, earth
+assert "EARTH" not in om.FILL_RADIUS and "EARTH" not in om.RADIUS
 
 rng = np.random.default_rng(3)
 
@@ -159,6 +174,26 @@ also = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2":
 assert kept == also, (kept, also)
 # without a small body (the plume movie's Enceladus) a veiled frame keeps the pass's black, as before
 assert om.tile_scale({**pal, "sky_tops": {"CL1/CL2": 0.001}}, "CL1/CL2", True)["black_of"](veiled(0.2)) is None
+# a speck under a pixel (Earth from Saturn) whose veil fades to a dark corner: the dark corner is not its sky, the
+# veil goes under black all the same (195RI N1752968916_1, N1752969019_1)
+spk = (0.0, 0.0, 0.7)
+iof = (2e-4 * (1 + 0.5 * np.linspace(0, 1, 1024)[None, :]) + rng.normal(0, 4e-6, (1024, 1024))).astype(np.float32)
+iof[:, :200] = rng.normal(0, 2e-6, (1024, 200))           # the dark corner (a fifth of the frame)
+iof[509:514, 509:514] = 0.02                               # Earth
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk)["black_of"](iof)
+q = iof[::4, ::4]
+assert got is not None and np.mean(q[~om._disk_mask(q.shape, iof.shape, *spk)] > got["black"]) < 0.06, got
+assert got["black"] < 0.02                                 # Earth over it
+# ... and the veil's 2 Hz line bands (one line in ten, here 5% brighter, as on 195RI's first colour set) go under black
+# too: a round box mean spread a band over its neighbouring lines, and the bands rose over the black as thin lines
+band = (2e-4 + rng.normal(0, 2e-6, (1024, 1024))).astype(np.float32)
+rows = rng.choice(1024, 100, replace=False)
+band[rows] *= 1.05
+band[509:514, 509:514] = 0.02
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk)["black_of"](band)
+lines = band[rows]
+assert got is not None and np.mean(lines > got["black"]) < 0.02, (got, np.mean(lines > got["black"]))
+assert got["black"] < 0.02                                 # Earth over it
 print("small body: the stray-light veil under black, the moon over it")
 
 # ---- a mosaic leaves out a tile saturated all over; a movie keeps it (and holds it, unfit)
