@@ -1519,6 +1519,53 @@ body.phone #bodymenu.open #bmlist { max-height: 34dvh; }
 body.phone #bodymenu #bmlist button { padding: 7px 10px; }
 body.phone.phone-land #bodymenu { left: auto !important; width: min(380px, 46vw) !important; top: calc(var(--menu) + var(--gap)) !important; bottom: auto !important; }
 
+/* the Moments bar: search, sort, type chips, length slider */
+#mbar { flex: none; display: grid; gap: 6px; padding: 7px 10px 8px; border-bottom: 1px solid var(--q-line); font-size: 11px; color: var(--q-dim); }
+#mbar .mrow { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; }
+#mbar .mrow.mone { grid-template-columns: minmax(0, 1fr); }
+#mbar .mrow.mlenrow { grid-template-columns: 52px minmax(0, 1fr) 52px; }
+#mbar .mlab { color: var(--q-dim); }
+#mq { all: unset; box-sizing: border-box; flex: 1; min-width: 0; height: 22px; padding: 0 8px; border: 1px solid var(--q-line); border-radius: 6px; color: var(--q-text); font-size: 11px; }
+#mq::placeholder { color: var(--q-dim); }
+#mq:focus-visible { border-color: var(--q-accent); }
+#msort { display: flex; gap: 2px; flex-wrap: wrap; }
+#msort button, #mtypes button { all: unset; height: 20px; padding: 0 7px; border-radius: 5px; color: var(--q-dim); cursor: default; white-space: nowrap; line-height: 20px; }
+#msort button:hover, #mtypes button:hover { color: var(--q-text); background: rgba(255,255,255,.06); }
+#msort button[aria-pressed="true"] { color: #fff; background: rgba(138,182,255,.18); }
+#msort button:focus-visible, #mtypes button:focus-visible { outline: 1px solid var(--q-accent); }
+#mtypes { display: flex; gap: 3px; flex-wrap: wrap; }
+#mtypes button { border: 1px solid var(--q-line); padding: 0 7px 0 6px; }
+#mtypes button::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--c, #888); opacity: .35; vertical-align: 1px; }
+#mtypes button[aria-pressed="true"] { color: var(--q-text); border-color: rgba(255,255,255,.22); }
+#mtypes button[aria-pressed="true"]::before { opacity: 1; }
+#mtypes button small { margin-left: 4px; font: 10px var(--hudf); color: var(--q-dim); }
+#mtypes button.pot { border-style: dashed; }
+#mlen { flex: 1; min-width: 80px; accent-color: var(--q-accent); height: 16px; margin: 0; }
+#mlenv { text-align: right; font: 10px var(--hudf); color: var(--q-text); }
+#mbar .mpot { display: flex; align-items: center; gap: 8px; }
+#moments .colhead { display: none; }
+/* a short window (the body view's) folds the type, length and potential rows behind Filters */
+#mbar .msearch { grid-template-columns: minmax(0, 1fr); }
+#mmore { all: unset; display: none; height: 22px; padding: 0 8px; border: 1px solid var(--q-line); border-radius: 6px; color: var(--q-dim); cursor: default; }
+#mmore:hover, #mmore[aria-expanded="true"] { color: var(--q-text); }
+#mmore:focus-visible { outline: 1px solid var(--q-accent); }
+#moments.mshort #mbar .msearch { grid-template-columns: minmax(0, 1fr) auto; }
+#moments.mshort #mmore { display: block; }
+#moments.mshort:not(.mopen) #mbar .mx { display: none; }
+/* a type's dot on each row, and potential entries set back a little */
+#mlist li[data-type] .t::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: var(--c, #888); vertical-align: 1px; }
+#mlist li.pot .t { color: rgba(232,236,242,.7); }
+#mlist li.pot .t::before { background: none; box-shadow: inset 0 0 0 1px var(--c, #888); }
+#mlist .ty { grid-column: 3; grid-row: 1 / span 2; align-self: center; font-size: 10px; color: var(--q-dim); padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mlist .d i { display: block; font-style: normal; font-size: 10px; opacity: .7; line-height: 1.1; }
+#mlist li.mempty { padding: 14px 12px; font-size: 11px; line-height: 1.4; color: var(--q-dim); background: none !important; }
+#mlist li.mempty button { all: unset; color: var(--q-accent); cursor: default; display: inline; height: auto; }
+#moments { height: min(560px, calc(100% - 260px)); }
+#moments.zoomed { width: 480px; }
+body.phone #mbar { padding: 6px 8px; }
+body.phone #mbar .mrow { grid-template-columns: 40px minmax(0, 1fr); }
+body.phone #mbar .mrow.mlenrow { grid-template-columns: 40px minmax(0, 1fr) 48px; }
+
 .orbitdg { display: block; width: 100%; height: 100%; overflow: visible; }
 .orbitdg text { font: 500 5.2px var(--ui, -apple-system, sans-serif); fill: rgba(232,236,242,.62); letter-spacing: .02em; text-transform: none; }
 .orbitdg text.big { fill: rgba(232,236,242,.85); }
@@ -4650,7 +4697,8 @@ function targetLabel(k) {
   $("tlnow").addEventListener("click", () => recenterTimeline());
 
   // previous / next moment
-  const items = () => [...document.querySelectorAll("#mlist li:not([hidden])")];
+  // in time order, whatever order the list is sorted in (moments.html)
+  const items = () => [...document.querySelectorAll("#mlist li[data-et]:not([hidden])")].sort((a, b) => a.dataset.et - b.dataset.et);
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
   $("prev").addEventListener("click", () => { const li = items().filter(li => +li.dataset.et < state.et - 60).pop(); if (li) li.querySelector("button").click(); });
 
@@ -4777,14 +4825,24 @@ function targetLabel(k) {
     hudRenderer.autoClear = ac;
   };
 
+  // the moment coming up: the shown row with the first time at or after an hour ago, whatever order the list is
+  // sorted in (moments.html). The rows are read again only when the list changes (it can hold thousands with the movies)
+  let nextRows = null, nextLi = null;
+  new MutationObserver(() => { nextRows = null; }).observe($("mlist"), { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  function markNextMoment() {
+    if (!nextRows) nextRows = [...document.querySelectorAll("#mlist li[data-et]:not([hidden])")].map(li => [+li.dataset.et, li]).sort((a, b) => a[0] - b[0]);
+    const t = state.et - 3600;
+    let lo = 0, hi = nextRows.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (nextRows[m][0] < t) lo = m + 1; else hi = m; }
+    const li = nextRows[lo] ? nextRows[lo][1] : null;
+    if (li === nextLi && (!li || li.classList.contains("next"))) return;
+    if (nextLi) nextLi.classList.remove("next");
+    nextLi = li; if (li) li.classList.add("next");
+  }
+
   // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
   window.studyHud = ms => {
-    let marked = false;
-    document.querySelectorAll("#mlist li:not([hidden])").forEach(li => {
-      const next = !marked && +li.dataset.et >= (state.et - 3600);
-      if (next) marked = true;
-      li.classList.toggle("next", next);
-    });
+    markNextMoment();
     if (!reticleSeen) $("reticle").hidden = true;
     reticleSeen = false;
     const d = new Date(ms);
@@ -12753,6 +12811,221 @@ void main() {
 })();
 </script>
 <script>
+// ---------- Moments: types, sort, filters, and the potential moments (moments.html) ----------
+(() => {
+  const $ = id => document.getElementById(id);
+  const win = $("moments"), list = $("mlist");
+  if (!win || !list) return;
+  // the types, in the order the type sort and the chips use; c is the type's dot
+  const TYPES = [
+    { key: "milestone", label: "Milestones", c: "#e8ecf2" },
+    { key: "special", label: "Special", c: "#f2c46d" },
+    { key: "closest", label: "Closest views", c: "#ef8f6b" },
+    { key: "find", label: "Finds", c: "#9fd38a" },
+    { key: "transit", label: "Transits", c: "#c49cf0" },
+    { key: "flyby", label: "Flybys", c: "#8ab6ff" },
+    { key: "movie", label: "Movies", c: "#6fd6d0" },
+  ];
+  const TYPE = Object.fromEntries(TYPES.map((t, i) => [t.key, { ...t, i }]));
+  const SORTS = [["date", "Date", 1], ["type", "Type", 1], ["body", "Body", 1], ["length", "Length", -1], ["score", "Photo", -1]];
+  // Longer than: the slider's stops, in seconds
+  const LENS = [0, 60, 300, 900, 1800, 3600, 2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600, 86400];
+  const KEY = "cassini.moments";
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { saved = {}; }
+  const V = {
+    sort: SORTS.some(s => s[0] === saved.sort) ? saved.sort : "date", dir: saved.dir === -1 ? -1 : 1,
+    off: new Set(Array.isArray(saved.off) ? saved.off.filter(k => k !== "movie") : []),
+    movies: false, potential: false, len: Math.min(LENS.length - 1, Math.max(0, saved.len | 0)), q: "",
+  };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ sort: V.sort, dir: V.dir, off: [...V.off], len: V.len })); } catch {} };
+
+  // ---- the bar ----
+  const bar = document.createElement("div"); bar.id = "mbar";
+  bar.innerHTML = `
+    <div class="mrow msearch"><input id="mq" type="search" placeholder="Search moments" aria-label="Search moments" autocomplete="off" spellcheck="false"><button id="mmore" aria-expanded="false" title="Sort and show">Filters</button></div>
+    <div class="mrow"><span class="mlab">Sort</span><div id="msort" role="group" aria-label="Sort by"></div></div>
+    <div class="mrow mx"><span class="mlab">Show</span><div id="mtypes" role="group" aria-label="Types shown"></div></div>
+    <div class="mrow mx mlenrow"><span class="mlab" title="Keep the entries that last at least this long">At least</span><input id="mlen" type="range" min="0" max="${LENS.length - 1}" step="1" aria-label="Longer than"><span id="mlenv"></span></div>
+    <div class="mrow mx mone"><div class="mpot"><button class="sw" id="mpot" role="switch" aria-checked="false" aria-label="Potential moments"></button>
+      <span title="Finds, transits and closest views the searches turned up that nobody has picked yet">Potential finds and transits too</span></div></div>`;
+  win.insertBefore(bar, $("mlist"));
+  for (const [k, l] of SORTS) {
+    const b = document.createElement("button"); b.dataset.sort = k; b.textContent = l;
+    b.addEventListener("click", () => {
+      if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = SORTS.find(s => s[0] === k)[2]; }
+      save(); render(true);
+    });
+    $("msort").appendChild(b);
+  }
+  for (const t of TYPES) {
+    const b = document.createElement("button"); b.dataset.type = t.key; b.style.setProperty("--c", t.c);
+    if (t.key === "movie") { b.classList.add("pot"); b.title = "Every movie-like sequence in the archive: 10 or more steps of one camera, view and target"; }
+    b.innerHTML = `${t.key === "movie" ? "Potential movies" : t.label}<small></small>`;
+    b.addEventListener("click", () => {
+      if (t.key === "movie") { V.movies = !V.movies; if (V.movies) loadCandidates(); }
+      else if (V.off.has(t.key)) V.off.delete(t.key); else V.off.add(t.key);
+      save(); render();
+    });
+    $("mtypes").appendChild(b);
+  }
+  $("mmore").addEventListener("click", () => { const on = win.classList.toggle("mopen"); $("mmore").setAttribute("aria-expanded", String(on)); });
+  new ResizeObserver(() => { if (!win.classList.contains("shaded")) win.classList.toggle("mshort", win.clientHeight > 0 && win.clientHeight < 440); }).observe(win);
+  $("mlen").value = V.len;
+  $("mlen").addEventListener("input", () => { V.len = +$("mlen").value; save(); render(); });
+  $("mpot").addEventListener("click", () => { V.potential = !V.potential; if (V.potential) loadCandidates(); render(); });
+  let qt = 0;
+  $("mq").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(() => { V.q = $("mq").value.trim().toLowerCase(); render(true); }, 120); });
+  // keys typed into the search box are the box's (Space, M, [ and ] drive the viewer elsewhere)
+  $("mq").addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Escape") { $("mq").value = ""; V.q = ""; render(true); $("mq").blur(); } });
+
+  // ---- the entries ----
+  let picks = [], cands = null, loading = null;
+  const entry = (e, potential) => {
+    const type = e.kind === "milestone" ? "milestone" : e.kind === "flyby" ? "flyby" : e.kind === "observation" ? (TYPE[e.type] ? e.type : "special") : e.kind;
+    const body = typeof momentBody === "function" ? momentBody(e) : (e.body || "");
+    const title = e.kind === "flyby" ? `${titleCase(e.body)} flyby` : e.label;
+    const len = e.end_et > e.et ? e.end_et - e.et : 0;
+    return { e, type, potential, body, title, len, score: e.photo_score || 0,
+      text: `${title} ${body} ${e.why || ""} ${(e.obs || []).join(" ")} ${TYPE[type] ? TYPE[type].label : ""}`.toLowerCase() };
+  };
+  function loadCandidates() {
+    if (cands || loading) return loading;
+    $("mfoot").textContent = "Loading the potential moments…";
+    loading = fetch("data/candidates.json").then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
+      cands = (Array.isArray(list) ? list : []).filter(c => !window.cassiniSlice || cassiniSlice.has(c.et)).map(c => entry(c, true));
+      render();
+    });
+    return loading;
+  }
+  const all = () => cands ? picks.concat(cands) : picks;
+  const shown = x => {
+    if (x.type === "movie") { if (!V.movies) return false; }
+    else if (V.off.has(x.type) || (x.potential && !V.potential)) return false;
+    if (V.len && x.len < LENS[V.len]) return false;
+    if (V.q && !V.q.split(/\s+/).every(w => x.text.includes(w))) return false;
+    return true;
+  };
+  const bodyName = () => window.cassiniBodyMode && cassiniBodyMode.name;
+
+  // ---- sort and group ----
+  const LEN_GROUPS = [[86400, "A day or more"], [4 * 3600, "4 hours or more"], [3600, "An hour or more"], [600, "10 minutes or more"], [1, "Under 10 minutes"], [0, "Moments (no length)"]];
+  function group(x) {
+    if (V.sort === "date") return mission ? x.e.utc.slice(0, 4) : null;
+    if (V.sort === "type") return (TYPE[x.type] || { label: x.type }).label + (x.potential && x.type !== "movie" ? ", potential" : "");
+    if (V.sort === "body") return x.body ? titleCase(x.body) : "Other";
+    if (V.sort === "length") return LEN_GROUPS.find(([s]) => x.len >= s)[1];
+    return null;
+  }
+  function cmp(a, b) {
+    const d = V.dir, byEt = a.e.et - b.e.et;
+    if (V.sort === "type") return d * ((TYPE[a.type]?.i ?? 99) - (TYPE[b.type]?.i ?? 99) || (a.potential - b.potential)) || byEt;
+    if (V.sort === "body") return d * (a.body || "~").localeCompare(b.body || "~") || byEt;
+    if (V.sort === "length") return d * (a.len - b.len) || byEt;
+    if (V.sort === "score") return d * (a.score - b.score) || byEt;
+    return d * byEt;
+  }
+
+  // ---- a row ----
+  function play(x) {
+    const e = x.e;
+    if (e.kind === "flyby" || e.kind === "milestone" || e.kind === "observation") return jump(e);
+    // a potential moment opens like an imaging session; a movie also plays in movie mode, its camera's pictures only
+    const session = { ...e, kind: "observation" };
+    return Promise.resolve(jump(session)).then(() => {
+      if (e.kind === "movie" && window.cassiniMovie) {
+        setPlaying(false);
+        cassiniMovie.start(true, { from: e.et - 60, until: e.end_et + 60, cams: /^[NW]$/.test(e.cam || "") ? e.cam : undefined });
+      }
+    });
+  }
+  function row(x) {
+    const e = x.e, li = document.createElement("li");
+    li.className = (x.type === "milestone" ? "ms" : x.type === "flyby" ? "" : "ob") + (x.potential ? " pot" : "");
+    li.dataset.et = e.et; li.dataset.body = x.body; li.dataset.type = x.type;
+    if (TYPE[x.type]) li.style.setProperty("--c", TYPE[x.type].c);
+    const d = new Date(etToMs(e.et)), cams = { N: "NAC", W: "WAC", NW: "NAC + WAC" };
+    const s = e.kind === "milestone" ? d.toISOString().slice(11, 16) + " UTC"
+      : e.kind === "flyby" ? `${fmtInt(e.altitude_km)} km · ${e.speed_km_s.toFixed(1)} km/s`
+      : e.kind === "observation" ? `${fmtInt(e.frames)} pictures${e.rgb_sets ? ` · ${e.rgb_sets} in color` : ""} · ${fmtSpan(e.end_et - e.et)}`
+      : [cams[e.cam], e.steps ? `${fmtInt(e.steps)} steps` : "", `${fmtInt(e.frames)} pictures`, e.color ? "color" : "", x.len ? fmtSpan(x.len) : ""].filter(Boolean).join(" · ");
+    const n = Math.min(5, Math.max(1, Math.round(x.score / 20)));
+    const right = x.score ? `<span class="sc" title="Photo score ${Math.round(x.score)}">${"★".repeat(n) + "·".repeat(5 - n)}</span>`
+      : `<span class="ty">${x.potential && x.type !== "movie" ? "potential" : ""}</span>`;
+    li.innerHTML = `<button><span class="d">${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}${V.sort !== "date" || !mission ? `<i>${d.getUTCFullYear()}</i>` : ""}</span><span class="t"></span>${right}<span class="s"></span></button>`;
+    li.querySelector(".t").textContent = x.title; li.querySelector(".s").textContent = s;
+    const b = li.querySelector("button");
+    const why = e.why ? e.why + (e.source ? ` (${e.source})` : "") : "";
+    b.title = [x.potential ? `Potential ${TYPE[x.type] ? TYPE[x.type].label.toLowerCase().replace(/s$/, "") : x.type}${e.ref ? ` (${e.ref})` : ""}` : "", why].filter(Boolean).join(": ");
+    b.addEventListener("click", () => play(x));
+    return li;
+  }
+
+  // ---- render ----
+  function render(toTop) {
+    const name = bodyName();
+    const rows = all().filter(shown).filter(x => !name || x.body === name).sort(cmp);
+    const frag = document.createDocumentFragment();
+    let g = null;
+    for (const x of rows) {
+      const k = group(x);
+      if (k !== null && k !== g) { g = k; const h = document.createElement("li"); h.className = "yr"; h.textContent = k; frag.appendChild(h); }
+      frag.appendChild(row(x));
+    }
+    list.replaceChildren(frag);
+    if (!rows.length) {
+      const li = document.createElement("li"); li.className = "mempty";
+      li.textContent = name ? `No moments of ${titleCase(name)} with these choices. Its imaging sessions are in the ${titleCase(name)} window. `
+        : "No moments with these choices. ";
+      const b = document.createElement("button"); b.textContent = "Show everything";
+      b.addEventListener("click", () => { V.off.clear(); V.len = 0; V.q = ""; $("mq").value = ""; $("mlen").value = 0; save(); render(true); });
+      li.appendChild(b); list.appendChild(li);
+    }
+    // the viewer's past/next shading reads the list again
+    try { momentEts = null; lastPast = -1; } catch {}
+    sync(rows.length, name);
+    if (V.sort === "date" && V.dir === 1 && !toTop) { if (typeof scrollMoments === "function") scrollMoments(); }
+    else list.scrollTop = 0;
+  }
+  function sync(n, name) {
+    for (const b of $("msort").children) {
+      const on = b.dataset.sort === V.sort;
+      b.setAttribute("aria-pressed", String(on));
+      b.textContent = SORTS.find(s => s[0] === b.dataset.sort)[1] + (on ? (V.dir === 1 ? " ▴" : " ▾") : "");
+    }
+    const counts = {};
+    for (const x of all()) if (x.type === "movie" || !x.potential || V.potential) counts[x.type] = (counts[x.type] || 0) + 1;
+    for (const b of $("mtypes").children) {
+      const k = b.dataset.type, on = k === "movie" ? V.movies : !V.off.has(k);
+      b.setAttribute("aria-pressed", String(on));
+      b.hidden = k !== "movie" && !counts[k];
+      b.querySelector("small").textContent = counts[k] ? fmtInt(counts[k]) : "";
+    }
+    $("mpot").setAttribute("aria-checked", String(V.potential));
+    $("mlenv").textContent = V.len ? fmtSpan(LENS[V.len]) : "any";
+    const foot = $("mfoot"); delete foot.dataset.all;
+    const ms = picks.filter(x => x.type === "milestone").length;
+    const pot = cands ? all().filter(x => x.potential).length : 0;
+    foot.textContent = (name ? `${fmtInt(n)} moment${n === 1 ? "" : "s"} of ${titleCase(name)}`
+      : n === picks.length && !V.movies && !V.potential ? `${fmtInt(n)} moments, ${ms} milestone${ms === 1 ? "" : "s"}` : `${fmtInt(n)} shown`)
+      + (window.cassiniSlice && cassiniSlice.spans ? ` · ${cassiniSlice.label} only` : "")
+      + (V.movies || V.potential ? ` · ${fmtInt(pot)} potential in all` : "");
+    foot.title = "Potential moments: the movie catalog and the finds and transits nobody has picked yet (Potential movies, and the switch above)";
+  }
+
+  // the list's entries arrive with the viewer's picks (buildUi -> studyMoments); the chrome's own part still runs first
+  const base = window.studyMoments;
+  window.studyMoments = p => {
+    if (base) base(p);
+    picks = p.map(e => entry(e, false));
+    render();
+  };
+  // the body view: its own filter ran; the list is drawn again for the body, or for everything
+  document.addEventListener("cassini:bodymode", () => render());
+  window.cassiniMoments = { render, load: loadCandidates, state: V, get entries() { return all(); } };
+})();
+</script>
+<script>
 // ---------- the orbit diagram ----------
 (function () {
   const PALE = "rgba(232,236,242,", BLUE = "138,182,255";
@@ -13255,7 +13528,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"ba0e42aaaf2d";
+  const BUILD = /*BUILD*/"05f15ec694e8";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

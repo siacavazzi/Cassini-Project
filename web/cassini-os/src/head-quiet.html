@@ -1274,7 +1274,8 @@ function targetLabel(k) {
   $("tlnow").addEventListener("click", () => recenterTimeline());
 
   // previous / next moment
-  const items = () => [...document.querySelectorAll("#mlist li:not([hidden])")];
+  // in time order, whatever order the list is sorted in (moments.html)
+  const items = () => [...document.querySelectorAll("#mlist li[data-et]:not([hidden])")].sort((a, b) => a.dataset.et - b.dataset.et);
   $("next").addEventListener("click", () => { const li = items().find(li => +li.dataset.et > state.et + 3.5 * 3600); if (li) li.querySelector("button").click(); });
   $("prev").addEventListener("click", () => { const li = items().filter(li => +li.dataset.et < state.et - 60).pop(); if (li) li.querySelector("button").click(); });
 
@@ -1401,14 +1402,24 @@ function targetLabel(k) {
     hudRenderer.autoClear = ac;
   };
 
+  // the moment coming up: the shown row with the first time at or after an hour ago, whatever order the list is
+  // sorted in (moments.html). The rows are read again only when the list changes (it can hold thousands with the movies)
+  let nextRows = null, nextLi = null;
+  new MutationObserver(() => { nextRows = null; }).observe($("mlist"), { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  function markNextMoment() {
+    if (!nextRows) nextRows = [...document.querySelectorAll("#mlist li[data-et]:not([hidden])")].map(li => [+li.dataset.et, li]).sort((a, b) => a[0] - b[0]);
+    const t = state.et - 3600;
+    let lo = 0, hi = nextRows.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (nextRows[m][0] < t) lo = m + 1; else hi = m; }
+    const li = nextRows[lo] ? nextRows[lo][1] : null;
+    if (li === nextLi && (!li || li.classList.contains("next"))) return;
+    if (nextLi) nextLi.classList.remove("next");
+    nextLi = li; if (li) li.classList.add("next");
+  }
+
   // per-frame read-outs: menu-bar clock, mission progress, HUD strip, status bar
   window.studyHud = ms => {
-    let marked = false;
-    document.querySelectorAll("#mlist li:not([hidden])").forEach(li => {
-      const next = !marked && +li.dataset.et >= (state.et - 3600);
-      if (next) marked = true;
-      li.classList.toggle("next", next);
-    });
+    markNextMoment();
     if (!reticleSeen) $("reticle").hidden = true;
     reticleSeen = false;
     const d = new Date(ms);
