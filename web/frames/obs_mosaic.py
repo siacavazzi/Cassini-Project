@@ -1938,13 +1938,43 @@ def visit_frames(u, colour):
     return whole
 
 
+LONG_LEAST = 0.01   # of a frame: (long_repeats) the least saturated share that can make a frame a long repeat
+
+
+def long_repeats(tiles, colour):
+    """The tiles (n) of the colour filters that are a long exposure taken again at a place where the same filter has a
+    shorter one in the same visit: saturated OVER_LEAST of the frame or more (or OVER_EXPOSED of its lit part), and OVER_STEP times as much as that
+    filter's other frame within SAME_PLACE of it and MIX_SPAN of its time (unfit's long exposure among short ones,
+    for a mosaic). The HIPHASE ring mosaics take a colour set, then one filter again for longer to bring up the faint
+    rings: drawn as the newest tile of its filter, the long frame's clipped rings and lifted sky stood in for the set's
+    own frame, one band of three at that place (269RI HIPHASEFB001: RED again 2.3x, 8-36% saturated, at the ansae,
+    magenta patches; 195RI HIPHASEC001: GRN again, green patches by the limb). They go under (colour_planes), so they
+    still fill where the set's own frame does not reach."""
+    placed = [t for t in tiles if t["filter"] in colour and "offset" in t and "t" in t]
+    out = set()
+    for t in placed:
+        s = t.get("saturated", 0.0)
+        # (or most of what is lit in it, when little of the frame is lit: 269RI's RED again at the right ansa,
+        # W1870769631_1, 4.9% of the frame and 88% of its lit part)
+        if s < OVER_LEAST and (s < LONG_LEAST or s < OVER_EXPOSED * t.get("lit", 1.0)):
+            continue
+        reach = SAME_PLACE * max(t["box"][2], t["box"][3])
+        if any(o["n"] != t["n"] and o["filter"] == t["filter"] and abs(o["t"] - t["t"]) <= MIX_SPAN
+               and math.hypot(o["offset"][0] - t["offset"][0], o["offset"][1] - t["offset"][1]) <= reach
+               and s >= OVER_STEP * o.get("saturated", 0.0) for o in placed):
+            out.add(t["n"])
+    return out
+
+
 def visit_tiles(u, tiles, colour):
-    """The tiles a colour picture draws (visit_frames): the same list when every colour tile is part of a whole visit."""
+    """The tiles a colour picture draws (visit_frames): the same list when every colour tile is part of a whole visit
+    and none is a long exposure taken again (long_repeats, marked "long": drawn under the others)."""
     if _rolling.get() or any("base" in t for t in tiles):
         return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
     keep = visit_frames(u, colour)
-    out = [t for t in tiles if t["filter"] not in colour or t["n"] in keep]
-    return tiles if len(out) == len(tiles) else out
+    longs = long_repeats(tiles, colour)
+    out = [dict(t, long=True) if t["n"] in longs else t for t in tiles if t["filter"] not in colour or t["n"] in keep]
+    return tiles if len(out) == len(tiles) and not longs else out
 
 
 def set_times(shape, placed):
@@ -3403,9 +3433,10 @@ def view_rect(p, tiles=None):
 def under_first(tiles):
     """The tiles in the order a mosaic draws them, each over the ones before: the luminance base's fills (lum_fills)
     lowest, then partial frames (partial) and tiles far darker than the picture before them (dim_under, marked
-    "under"), the newest lowest (as _grown leaves a tile it draws under the picture so far), then the rest as given."""
+    "under"), a colour set's long exposure taken again (long_repeats), the newest lowest (as _grown leaves a tile it draws
+    under the picture so far), then the rest as given."""
     fill = lambda t: bool(t.get("fill"))
-    low = lambda t: not fill(t) and (partial(t) or t.get("under"))
+    low = lambda t: not fill(t) and (partial(t) or t.get("under") or t.get("long"))
     return ([t for t in tiles if fill(t)] + sorted((t for t in tiles if low(t)), key=lambda t: -t["n"])
             + [t for t in tiles if not fill(t) and not low(t)])
 
@@ -3634,7 +3665,7 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
-              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("fill")))
+              left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill")))
 
 
 def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=False):
@@ -3771,7 +3802,7 @@ def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag=""):
     (visit_tiles), under names of their own when that leaves tiles out; which tiles go under (dim_places) is decided
     on all of the pass's tiles, as for its other pictures."""
     mine = visit_tiles(u, tiles, colour)
-    extra = VISIT_TAG if len(mine) < len(tiles) else ""
+    extra = VISIT_TAG if len(mine) < len(tiles) or any(t.get("long") for t in mine) else ""
     return [filter_mosaic(u, p, f, mine, rect, cache, ref, tag + extra, every=tiles) for f in colour]
 
 
