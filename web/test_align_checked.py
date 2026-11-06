@@ -54,9 +54,23 @@ shift4, how4 = ic._match(ref, same, None, MASK, MASK)
 assert shift4 is not None and np.hypot(*shift4) < 1.0, (how4, shift4)
 print("lined up:", how4)
 
-# nothing alike (one frame blank sky): no checked match, not aligned
+# nothing alike (ringlets against blank sky): no checked match, and the ringlets would fringe: not aligned
 sky = cv2.cvtColor(np.clip(rng.normal(20, 3, (N, N)), 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 shift5, how5 = ic._match(ref, sky, None, MASK, MASK)
 assert shift5 is None, (how5, shift5)
 print("blank:", how5)
+
+# frame-filling cloud tops through two filters, a gentle gradient and faint noise each, nothing to match on: SPICE's
+# place (nothing to fringe) instead of not aligned; and without SPICE, as taken
+def clouds(band):
+    img = 150 + (40 if band else -30) * (xx / N) + (20 if band else 35) * (yy / N) + rng.normal(0, 1.5, (N, N))
+    return cv2.cvtColor(np.clip(img, 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+c1, c2 = clouds(0), clouds(1)
+shift6, how6 = ic._match(c1, c2, (6.0, -9.0), MASK, MASK)
+assert shift6 == (6.0, -9.0) and "nothing to fringe" in how6, (how6, shift6)
+shift7, how7 = ic._match(c1, c2, None, MASK, MASK)
+assert shift7 is not None and np.hypot(*shift7) < 1.0 and ("nothing to fringe" in how7 or "as taken" in how7), (how7, shift7)
+print("cloud tops:", how6, "|", how7)
+# a limb (a sharp edge) is never placed that way
+assert not ic._flat(ref, moved, MASK, MASK)
 print("ok")

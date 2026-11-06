@@ -385,6 +385,15 @@ def _match(im1, im2, g, mask1, mask2, within=None):
         here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
         if here >= AS_TAKEN_SURE:
             shift, how = (0.0, 0.0), f"as taken (edges agree {here:.2f})"
+    if shift is None and _flat(im1, im2, mask1, mask2):
+        # nothing to match, and nothing a few pixels' error would show as a fringe: SPICE's place (or as taken)
+        # rather than a gray picture
+        # (SPICE's offset only within FIT_REACH: a larger move only cuts the picture down to where the channels
+        # overlap, colored strips along its edges, N1787002873_1 at 117 px, where it can show no better colour)
+        if g is not None and np.hypot(g[0], g[1]) <= FIT_REACH:
+            shift, how = (float(g[0]), float(g[1])), "SPICE (nothing to fringe)"
+        else:
+            shift, how = (0.0, 0.0), "as taken (nothing to fringe)"
     if rejected:
         how = f"{how} ({', '.join(rejected)} rejected)"
     return shift, how
@@ -431,6 +440,42 @@ def checked_shift(im1, im2, mask1, mask2, g=None):
     if best is None:
         return None, "not aligned"
     return (best[0], best[1]), f"{best[3]} checked on edges (peak {best[4]:.2f}, edges agree {max(base):.2f} to {best[2]:.2f})"
+
+
+"""
+Whether two frames that matched nothing show nothing a misplacement would fringe: frame-filling cloud tops of Saturn
+or Titan, a black sky. Each frame, blurred as edges() sees it, is compared with itself moved FLAT_PROBE px on both
+axes (past the 3 to 30 px SPICE's offset between a set's filters is seen off) over the pixels valid in both; where
+the brightness changes by at most FLAT_DN at the 99th percentile and FLAT_PEAK_DN at the 99.9th (of 255), a channel
+placed that far off would change the color by no more than that, which does not show. Of 73 sets drawn gray in a
+400-set sample (main 11d0bca), 41 were such frames (Saturn's clouds N1548760421_1, N1787002873_1; Titan's haze
+N1504740260_1); the rest show a limb, a ring edge or a moon, which still need a match (FLAT_DN in the 8-bit display
+the channels are matched on).
+"""
+FLAT_PROBE = 12.0    # px
+FLAT_DN = 8.0        # of 255, at the 99th percentile
+FLAT_PEAK_DN = 16.0  # of 255, at the 99.9th percentile
+FLAT_LEAST_DN = 6.0  # of 255: a frame spanning less than this (1st to 99th percentile) is blank, not flat
+
+
+def _flat(im1, im2, mask1, mask2):
+    both = mask1 & mask2
+    k = 2 * int(FLAT_PROBE) + 9
+    both = cv2.erode(both.astype(np.uint8), np.ones((k, k), np.uint8), borderValue=0) > 0
+    if both.sum() < 1000:
+        return False
+    for im in (im1, im2):
+        gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+        lo, hi = np.percentile(gray[both], (1, 99))
+        if hi - lo < FLAT_LEAST_DN:
+            return False   # a blank frame (a black sky stretched to gray): its color says nothing (W1448930891_1 white)
+        blurred = cv2.GaussianBlur(gray, (0, 0), 1.5)
+        moved = cv2.warpAffine(blurred, np.float32([[1, 0, FLAT_PROBE], [0, 1, FLAT_PROBE]]), blurred.shape[::-1],
+                               borderMode=cv2.BORDER_REFLECT)
+        d = np.abs(blurred - moved)[both]
+        if np.percentile(d, 99) > FLAT_DN or np.percentile(d, 99.9) > FLAT_PEAK_DN:
+            return False
+    return True
 
 
 def _worse(im1, im2, mask1, mask2, shift):
