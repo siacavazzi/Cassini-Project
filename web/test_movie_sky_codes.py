@@ -52,7 +52,7 @@ crescent = [("CL", lit, 0.26, True, t) for t in (0, 1)]
 jets = [("RED", faint, 22.0, False, t) for t in (2, 3, 4)]
 long = obs_mosaic._long_white(crescent + jets + [("CL", lit, 0.26, True, 5)], blacks, white)
 print("long", long)
-assert long and long["runs"] == [[2, 4]] and abs(long["exposure"] - 2.6) < 1e-9 and 0 < long["white"] < 0.2 * white
+assert long and long["runs"] == [[2, 4]] and abs(long["exposure"] - 2.6) < 1e-9 and 0 < long["white"] < white
 # near misses: one exposure only; a run with a frame on the disk; a run brighter than LONG_FAINT of the white
 assert obs_mosaic._long_white(crescent + [("CL", faint, 0.26, False, 2)], blacks, white) is None
 assert obs_mosaic._long_white(crescent + jets[:2] + [("RED", faint, 22.0, True, 4)], blacks, white) is None

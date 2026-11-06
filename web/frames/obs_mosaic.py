@@ -2105,7 +2105,7 @@ def _sky_fine(iofs, masks):
                            for i, l, m in zip(iofs, local, masks)])
 
 
-def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None):
+def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2118,7 +2118,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     as the stray light faded). seen: a dict the raised black is put in. on_body: the frame's middle is on the body's
     disk (on_disk), so a frame with no dark sky is the body, never a glow. exposure, t: the frame's exposure (s) and
     time, which put a movie frame off the disk in one of the pass's runs of long exposures (pass_scale's "long") on
-    their white."""
+    their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
+    the shadow (032RI's silhouette) are in the sky the rule would take under black."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     long = scale.get("long")
     if (long and own_sky and not on_body and exposure is not None and exposure >= long["exposure"] and t is not None
@@ -2183,14 +2184,14 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             if m.mean() <= SKY_MIN:
                 return None
         (level,), margin = calibration.sky_levels([[q]], [[m]])
-        spread = 0.0
-        if level < median - noise:
+        spread, before = 0.0, None
+        if codes and not (glow or veiled) and level < median - noise:
             # a sky whose spread is not its pixel noise (a frame stored in 8 bits, its sky a few whole codes in blocks and
             # column stripes, the pixel-to-pixel steps mostly 0): sky_levels' level (its 20th percentile plus 0.84 of
             # that noise, the median on a sky of noise alone) is a code or more under the sky's median, and the upper
             # half of the sky drew as a veil over the movie's black: 089MI's GRN gray, Atlas's RED halo (2016-17 PIE
             # movies). The level is the sky's median
-            level = median
+            before, level = level, median
             # and the band's height over it at least the sky's own spread up to its SKY_SPREAD percentile (what that
             # noise measure misses), as a single picture's black sits: the sky's blocks and column stripes over its
             # median, and the faint stray light round the moon they show in, are under black, as in the frame alone
@@ -2218,11 +2219,17 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
         # (a pass with no dark sky has no height of its own: the frame's noise margin, as a single picture's)
         raised = level + max(margin if top is None else top, own, spread)
-        if raised <= black:
-            return None
         # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
         # (a veiled or glowing frame's lit pixels are its veil or glow: the sky, which is what goes black)
         lit = q[q >= top_of_sky]
+        if before is not None and lit.size and raised >= float(np.median(lit)):
+            # (a whole-code sky's black that would draw the frame black: the black it had without that rule, so the
+            # frame is never drawn on a lower black than before: 155EN's faint plume frames)
+            raised = before + max(margin if top is None else top, own)
+            if seen is not None:
+                seen.pop("whole_codes", None)
+        if raised <= black:
+            return None
         if not (veiled or glow) and lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
@@ -2479,7 +2486,9 @@ def _long_white(each, blacks, white):
     under 57 of 255 on the white of its 0.26 s crescent frames. A run of frames in a row exposed LONG_EXPOSURE times
     longer than the frame that sets the pass's white (the brightest above its black), none of them on the body's disk
     and every one under LONG_FAINT of that white, takes the white of all such runs: the 99.9th percentile of their
-    frames above their blacks, so they keep one scale among themselves. A run with a frame on the disk (Titan's
+    frames above their blacks over LONG_FAINT, so they keep one scale among themselves, and a run at LONG_FAINT of the
+    pass's white is drawn the same either way (a full white on the jets' roots lifted the glow round them into a gray
+    square with the frame's line bands in it, 155EN's second plume pass). A run with a frame on the disk (Titan's
     full-disk frames, the plume movie's own long UV exposures of the lit body) keeps the pass's. each: (filter,
     quarter size I/F, exposure s or None, on the body's disk, time) per frame, in time order."""
     known = [(float(np.percentile(q, 99.9)) - blacks.get(f, 0.0), e) for f, q, e, *_ in each if e]
@@ -2498,6 +2507,7 @@ def _long_white(each, blacks, white):
     if not runs:
         return None
     own = float(np.percentile(np.concatenate([(q - blacks.get(f, 0.0)).ravel() for r in runs for f, q, *_ in r]), 99.9))
+    own /= LONG_FAINT
     return {"exposure": threshold, "white": own, "runs": [[r[0][4], r[-1][4]] for r in runs]} if own > 0 else None
 
 
@@ -2582,7 +2592,8 @@ def _tile_made(u, n, cache, scale, base):
     exposure = _exposure(label_handler.label(path, as_png=True)) if (scale or {}).get("long") else None
     try:
         image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
-                                                                                       on_disk(u, u["frames"][n]), exposure, t),
+                                                                                       on_disk(u, u["frames"][n]), exposure, t,
+                                                                                       not _ring(u)),
                                                     repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                     around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
     except Exception as e:
