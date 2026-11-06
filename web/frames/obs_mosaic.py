@@ -4431,12 +4431,202 @@ def tinted_frame(colour, grey, gamma=2.2):
     return np.dstack([rgb8, grey[..., 3]])
 
 
-def colour_picture(u, p, colour, planes):
+# a movie's color frame with another body in it (_per_body_planes)
+PER_BODY_HAZE = (0.2, 24)   # of a body's radius past its disk that is moved with it (Titan's haze ring), for any
+                            # other body at most this many reference px (Saturn's 1,300 px radius is no wider a glow)
+PER_BODY_GROW = 3      # canvas px more (its blur)
+PER_BODY_TITAN = 0.4   # of Titan's radius past its disk moved with it: its haze's glow reaches that far (153DI)
+PER_BODY_LIT = 0.1     # of a plane's brightest: lit, where a ratio between planes is measured
+PER_BODY_TARGET = 0.25  # _target_off: the most a plane's target is looked for from the shown plane's, of its radius
+PER_BODY_BETTER = 0.3   # how much better (correlation) the pictures' place of a body must line up than SPICE's
+PER_BODY_MEASURE = 600  # canvas px of radius: a bigger body (Saturn) is moved by SPICE's offsets alone, not looked for
+PER_BODY_LEAST = 10    # canvas px of radius: a smaller body (Pandora, Telesto, a speck) is not moved
+PER_BODY_FRONT = (3, 0.12)   # canvas px and share of its radius round the target's disk (its blurred limb and glare)
+                             # that is not moved with a body behind it, nor taken from it
+
+
+def _per_body_planes(u, js, places, planes, rect, k, radius, s):
+    """A color frame's planes (one per filter: tiles js, each at its place [(drawn offset, SPICE's offset)]) with every
+    other body SPICE puts on all of them moved, in each plane, to where it is in the plane of the frame shown (the
+    tile nearest s): the planes are held on the target (steady_places), and a body moving against it between the
+    filters (Titan behind Rhea, 37 px a filter in 154RH MUTUALEVE002; Tethys over Titan, 158TE) came out as red, green
+    and blue copies. SPICE's place of one body from another on a frame is right (its pointing moves them both), so each
+    plane's copy is moved by the difference of the two planes' SPICE offsets of the body from the target
+    (other_bodies). Where the copy was and is no longer, the plane takes the shown plane's picture times its ratio to
+    it on the target (what the body hid there: sky, or the target); where the target hid the body in that plane and
+    not in the shown one, the shown plane's picture times its ratio to it on the body. Returns (planes, {name: [dx, dy]
+    canvas px of each plane}) or (planes, None) when no other body is on every plane."""
+    others = other_bodies(u, names=True)
+    if len(planes) < 2 or not all(others.get(j) for j in js):
+        return planes, None
+    ref = min(range(len(js)), key=lambda i: abs(js[i] - s))
+    named = [{b[0]: b[1:] for b in others[j]} for j in js]
+    common = sorted(set(named[0]).intersection(*named[1:]))
+    if not common:
+        return planes, None
+    H, W = planes[0].shape[:2]
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+
+    def target(i):
+        (px, py), (sx, sy) = places[i]
+        return (px - sx - rect[0]) * k, (py - sy - rect[1]) * k
+
+    def disk(c, r):
+        return (xx - c[0]) ** 2 + (yy - c[1]) ** 2 <= r * r
+
+    gray = [a[..., 0].astype(np.float32) for a in planes]
+    front = PER_BODY_FRONT[0] + PER_BODY_FRONT[1] * radius * k
+    out, moves = list(planes), {}
+    away = np.zeros((H, W), bool)
+
+    for name in common:
+        xr, yr, rr, behind = named[ref][name]
+        if rr * k < PER_BODY_LEAST:
+            continue
+        tr = target(ref)
+        cr = (tr[0] + xr * k, tr[1] + yr * k)
+        # the target in front of the body hides it (a body behind), so its disk is left as it is
+        front_r = disk(tr, radius * k + front) if behind else np.zeros((H, W), bool)
+        haze = PER_BODY_TITAN if name == "TITAN" else min(PER_BODY_HAZE[0], PER_BODY_HAZE[1] / max(rr, 1e-6))
+        new = disk(cr, rr * k * (1 + haze) + PER_BODY_GROW) & ~front_r
+        if not new.any():
+            continue
+        away |= new
+        g_ref = gray[ref]
+        lit = g_ref > PER_BODY_LIT * max(float(g_ref.max()), 1.0)
+        on_target = disk(tr, radius * k) & lit & ~new
+        moves[name] = []
+        for i in range(len(planes)):
+            if i == ref:
+                moves[name].append(None)
+                continue
+            x, y, r, _ = named[i][name]
+            ti = target(i)
+            ci = (ti[0] + x * k, ti[1] + y * k)
+            # (where the body's limb is in this plane, looked for round where SPICE's offsets put it: the planes may
+            # be held on it rather than the target, Rhea in 158TI MUTUALEVE001, so SPICE's move alone split it)
+            seen = _target_off(gray[ref], gray[i], cr, rr * k, (ci[0] - cr[0], ci[1] - cr[1]),
+                               exclude=(tr[0], tr[1], radius * k + front))
+            if seen is not None:
+                ci = (cr[0] + seen[0], cr[1] + seen[1])
+            dx, dy = cr[0] - ci[0], cr[1] - ci[1]
+            moves[name].append([round(dx, 1), round(dy, 1)])
+            if math.hypot(dx, dy) < 0.5:
+                continue
+            front_i = disk(ti, radius * k + front) if behind else np.zeros((H, W), bool)
+            was = disk(ci, r * k * (1 + haze) + PER_BODY_GROW) & ~front_i
+            g = gray[i]
+            m = np.float32([[1, 0, dx], [0, 1, dy]])
+            moved = cv2.warpAffine(g * was, m, (W, H), flags=cv2.INTER_LINEAR)
+            seen = cv2.warpAffine(was.astype(np.float32), m, (W, H), flags=cv2.INTER_LINEAR)
+            ok = new & (seen > 0.99)
+            moved = np.where(ok, moved / np.maximum(seen, 1e-3), moved)
+
+            def ratio(where, fallback):
+                both = where & (g_ref > 0)
+                return float(np.median(moved[both] / g_ref[both])) if both.sum() >= 50 else fallback
+            on_t = on_target & ~was
+            r_target = float(np.median(g[on_t] / g_ref[on_t])) if on_t.sum() >= 50 else 1.0
+            r_body = ratio(ok & lit, r_target)
+            h = g.copy()
+            gone = was & ~new
+            h[gone] = g_ref[gone] * r_target
+            h[ok] = moved[ok]
+            # (on the body's disk; past it, in its glow, the plane's own: a fill there from the shown plane drew
+            # Dione's place, which the far body's copy was cut round, as a blue crescent in the sky beside it)
+            hole = new & ~ok & disk(cr, rr * k)
+            h[hole] = g_ref[hole] * r_body
+            if behind:
+                # (round the target's limb, where its blur and glare lie over the body and each filter saw them over
+                # another part of it: the shown plane's, or green and orange arcs ring the target)
+                ring = disk(ti, radius * k + front + 1) & ~disk(ti, radius * k - 1) & \
+                    (cv2.dilate((was | new).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0)
+                # (from the target's color at its limb to the body's at the ring's outer edge)
+                # (off the body, over the sky, the target's own: Dione's glow beside Titan came out blue and green)
+                w = np.clip((np.hypot(xx - ti[0], yy - ti[1]) - radius * k) / front, 0, 1) * new
+                h[ring] = g_ref[ring] * (r_target * (1 - w[ring]) + r_body * w[ring])
+            plane = out[i].copy()
+            plane[..., :3] = np.clip(h + 0.5, 0, 255).astype(np.uint8)[..., None]
+            out[i] = plane
+            gray[i] = h
+    if moves:
+        moves["_away"] = away
+    return out, (moves or None)
+
+
+def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None):
+    """How far (canvas px) a body's limb in plane g is from its limb in the shown plane ref (at, radius r): the move
+    (searched over PER_BODY_TARGET of its radius round no move and round guess, a pixel then a quarter pixel) that
+    best correlates the two pictures' brightness edges in the ring round its limb (from 0.8 to 1.3 of its radius: the
+    body behind it and the sky beyond add little there); (0, 0) for a small target or one mostly off the picture (None
+    with a guess, which then stands)."""
+    if r < 8 or r > PER_BODY_MEASURE:
+        return None if guess != (0.0, 0.0) else (0.0, 0.0)
+    reach = PER_BODY_TARGET * r
+    half = int(r * 1.3 + reach + 4 + math.hypot(*guess))
+    # (cut to the canvas: a body near its edge is looked for on what is there of it)
+    x0, y0 = max(int(at[0]) - half, 0), max(int(at[1]) - half, 0)
+    x1, y1 = min(int(at[0]) + half, ref.shape[1]), min(int(at[1]) + half, ref.shape[0])
+    if x1 - x0 < 16 or y1 - y0 < 16:
+        return None if guess != (0.0, 0.0) else (0.0, 0.0)
+
+    def edges(a):
+        a = cv2.GaussianBlur(np.ascontiguousarray(a[y0:y1, x0:x1]), (0, 0), 1.0)
+        e = np.hypot(cv2.Sobel(a, cv2.CV_32F, 1, 0), cv2.Sobel(a, cv2.CV_32F, 0, 1))
+        return e / max(float(np.percentile(e, 99)), 1e-6)
+    ea, eg = edges(ref), edges(g)
+    yy, xx = np.mgrid[0:y1 - y0, 0:x1 - x0].astype(np.float32)
+    d = np.hypot(xx + x0 - at[0], yy + y0 - at[1])
+    ring = (d > 0.8 * r) & (d < 1.3 * r)
+    if exclude is not None:
+        # (not over the target's disk and its glow: its limb would be matched as well, Titan under Rhea in 154RH)
+        ring &= np.hypot(xx + x0 - exclude[0], yy + y0 - exclude[1]) > exclude[2]
+    if ring.sum() < 0.3 * math.pi * (1.3 ** 2 - 0.8 ** 2) * r * r:
+        return None if guess != (0.0, 0.0) else (0.0, 0.0)
+
+    def coster(ea, eg, ring, q):
+        a = ea[ring]
+        na = float(np.sqrt((a * a).sum())) or 1.0
+
+        def cost(dx, dy):
+            # (minus the normalized correlation of the two rings' edges: an empty part of the sky is no match, as it
+            # was for a difference of the two, 158TI's Rhea taken 110 px off)
+            moved = cv2.warpAffine(eg, np.float32([[1, 0, -dx / q], [0, 1, -dy / q]]), eg.shape[::-1],
+                                   flags=cv2.INTER_LINEAR)[ring]
+            return -float((a * moved).sum()) / (na * (float(np.sqrt((moved * moved).sum())) or 1.0))
+        return cost
+    cost = coster(ea, eg, ring, 1.0)
+    # (anywhere from no move to SPICE's guess and reach round both: the planes may be held on this body already, or on
+    # neither, 158TI's Rhea 48 px off where SPICE said 110; on the pictures shrunk to about 60 px of radius every 2 of
+    # its px, then every pixel round the best at full size)
+    q = max(1.0, r / 60)
+    if q > 1:
+        small = lambda e: cv2.resize(e, (max(1, int(e.shape[1] / q)), max(1, int(e.shape[0] / q))), interpolation=cv2.INTER_AREA)
+        sring = cv2.resize(ring.astype(np.uint8), small(ea).shape[::-1], interpolation=cv2.INTER_NEAREST) > 0
+        coarse = coster(small(ea), small(eg), sring, q)
+    else:
+        coarse = cost
+    gx, gy = guess
+    step = 2.0 * q
+    xs = np.arange(min(0.0, gx) - reach, max(0.0, gx) + reach + 0.5, step)
+    ys = np.arange(min(0.0, gy) - reach, max(0.0, gy) + reach + 0.5, step)
+    _, bx, by = min((coarse(dx, dy), dx, dy) for dx in xs for dy in ys)
+    near = np.arange(-step / 2, step / 2 + 0.5, 1.0)
+    _, bx, by = min((cost(bx + dx, by + dy), bx + dx, by + dy) for dx in near for dy in near)
+    best = min(((cost(bx + dx, by + dy), bx + dx, by + dy) for dx in np.arange(-0.75, 0.8, 0.25) for dy in np.arange(-0.75, 0.8, 0.25)))
+    if guess != (0.0, 0.0) and best[0] > cost(gx, gy) - PER_BODY_BETTER:
+        # (SPICE's guess stands unless the pictures line up clearly better elsewhere: Titan under the ring line and
+        # Tethys, 158TE, was matched on the ring)
+        return None
+    return float(best[1]), float(best[2])
+
+
+def colour_picture(u, p, colour, planes, away=None):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
-    body are close to black."""
+    body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame)."""
     scale = p["display_scale"]
     if len(planes) == 2:
         # two filters: green their mean in linear light, as a two-filter composite draws it (calibration.two_bands)
@@ -4461,7 +4651,10 @@ def colour_picture(u, p, colour, planes):
         # map movie, 175SA NPOLMAP001: RED saturated over 70% of the disk, GRN over 44%)
         g = scale["gamma"]
         x = calibration.decode(np.moveaxis(rgb.astype(np.float32) / 255, -1, 0), g).astype(np.float32)
-        filled, every = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]))
+        # (away: the other bodies of a movie frame (_per_body_planes), whose color is not the clipped body's: Rhea
+        # saturated over Titan took Titan's orange)
+        filled, every = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]),
+                                                   where=None if away is None else ~away)
         # never under what the band read: a clipped band is at least as bright as its clipped value, and the ratio
         # the fill reads is measured where the band did not clip, its dimmer part, so where most of a frame clipped
         # it came out under the band's own reading and turned the tile green, blue or flat yellow with ragged edges
@@ -4876,8 +5069,8 @@ def seen_places(u, made, pic, there):
             for i, n in enumerate(order)}, why
 
 
-def other_bodies(u):
-    """{tile n: [(x, y, r, behind)]}: every body but its target that SPICE puts on tile n of pass u
+def other_bodies(u, names=False):
+    """{tile n: [(x, y, r, behind)]} ([(name, x, y, r, behind)] with names): every body but its target that SPICE puts on tile n of pass u
     (bootleg_autonav.bodies_of, the geometry cache's bodies table), its centre from the target's centre and its radius,
     north up, in the pass's reference pixels (where the tiles are drawn: frames_seen's turn and scale), and whether it
     is further off than the target (behind it). Tiles whose frame the table has not
@@ -4896,8 +5089,9 @@ def other_bodies(u):
         a = math.radians(angles.get(fr[1], 0.0))
         c, sn, k = math.cos(a), math.sin(a), fz / u["z"]
         # (the body from the target on the camera's axes: the target is at -x, -y from the frame's middle)
-        out[n] = [((c * (bx + x) + sn * (by + y)) * k, (c * (by + y) - sn * (bx + x)) * k, r * k, bool(km and km > fz))
-                  for _, bx, by, r, km in got[fr[1]]]
+        out[n] = [((name,) if names else ()) +
+                  ((c * (bx + x) + sn * (by + y)) * k, (c * (by + y) - sn * (bx + x)) * k, r * k, bool(km and km > fz))
+                  for name, bx, by, r, km in got[fr[1]]]
     return out
 
 
@@ -5032,7 +5226,10 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
             v = calibration.decode(a[..., :3].astype(np.float64).mean(axis=2) / 255, gamma)
             return (a[..., 3] > 0) & (v > EXPOSURE_LIT * max(float(np.percentile(v[a[..., 3] > 0], 99.5)) if (a[..., 3] > 0).any() else 0, 1e-6))
         for n in range(len(u["frames"])):
-            im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady)
+            # (the other bodies where each filter saw them, as before _per_body_planes: what it moves is a body's
+            # copies, which the exposure was measured with, and the chain's stretches cut where a body's copies left
+            # the picture, 154RH's first frames drawn at 0.63)
+            im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady, per_body=False)
             if im is None:
                 continue
             a, kind = np.asarray(im), tuple(rep.get("color") or ())
@@ -5957,7 +6154,7 @@ def shown_of(u, p, n, not_shown, tile_of):
     return s, None, False
 
 
-def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True):
+def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True):
     """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
     when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
     merged in I/F, calibrated, centred north up by SPICE, scaled to the pass's reference distance, on the pass's
@@ -5975,7 +6172,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     exposure: exposure normalization (Settings > Movie), the whole picture drawn with frame n's exposure gain
     (exposure_gains, smoothed over that many frames); 0: as the pass's display scale draws it. sharpen: a filled
     pass's last step, detail(); False leaves it out (the plane a browser gains, mixes and sharpens itself,
-    steady-local.html)."""
+    steady-local.html). per_body False: every other body where each filter saw it (_per_body_planes not applied), as
+    exposure_chain measures the movie."""
     p = plan(u, cache)
     t = tile(u, n, cache, p["display_scale"])
     rep = {"movie": True, "n": n, "of": len(u["frames"]), "filter": t["filter"], "observation": u["key"][1],
@@ -6051,6 +6249,19 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         used = want
     if used:
         planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
+        # another body in the set (a transit: Titan behind Rhea) moved against the target between the filters: each
+        # filter's copy of it put where the shown frame has it (_per_body_planes), not three colored copies
+        # (where the target is in each tile's picture: SPICE's place, or the pictures' where seen_places took them,
+        # Dione 28 px off SPICE in 153DI MUTUALEVE002, whose copies otherwise went with Titan's)
+        held = steady_held(u, cache, p) if steady and not track else {}
+        raws = {f: held.get(j) or (raw if j == n else tile(u, j, cache, p["display_scale"]))["offset"]
+                for f, j in got.items()}
+        planes, moved = _per_body_planes(u, [got[f] for f in used], [(newest[f]["offset"], raws[f]) for f in used],
+                                         planes, rect, k, radius, s) if per_body else (planes, None)
+        away = None
+        if moved:
+            away = moved.pop("_away", None)
+            rep["per_body"] = moved
         # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
         # its own filter either side to take its cosmic rays out against (_around): the set's planes are cleaned as a
         # still composite's channels are (calibration._clean_spikes), or each hit is a bright dot through the mix
@@ -6063,7 +6274,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         # the first cycle's, are covered at their own place only; an unfit clear frame held to the one before, as in
         # the 2009 south pole movie, is covered at the held frame's place.)
         if max(held_cover(at(own), planes, rect, k), held_cover(t, planes, rect, k)) >= HELD_COVER:
-            rgba = colour_picture(u, p, used, planes)
+            rgba = colour_picture(u, p, used, planes, away)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
@@ -6098,8 +6309,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
 
 
 # the same frame drawn the same way: named in the cache by folder, frame, trail, colour and centring (movie_webp)
-movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True:
-                                  (folder(u, cache), n, trail, colour, out, centre, bool(u.get("track")), steady, exposure, sharpen)
+movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True:
+                                  (folder(u, cache), n, trail, colour, out, centre, bool(u.get("track")), steady, exposure, sharpen, per_body)
                                   if out <= OUT else None)
 
 
