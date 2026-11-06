@@ -2128,6 +2128,10 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False):
                 return None
             m, top_of_sky, glow = q <= floor, floor, True
         elif m.mean() <= SKY_MIN:
+            if disk is None:
+                # no dark sky and no small body to take the sky off from (a frame the body fills, 191SA FEATRAK001):
+                # the pass's black (the guard the #279 merge lost: 75 of that movie's 120 tiles failed with TypeError)
+                return None
             # no dark sky: a small body's frame lit all over (stray light), its sky everything off the disk
             m = ~_disk_mask(q.shape, iof.shape, *disk)
             top_of_sky, veiled = float(np.percentile(q[m], 99.9)) if m.any() else 0.0, True
