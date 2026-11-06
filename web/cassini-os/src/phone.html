@@ -18,6 +18,8 @@
 body.phone { --phs: 1; --menu: calc(env(safe-area-inset-top, 0px) + 30px); --gap: 6px; --side: max(6px, env(safe-area-inset-left, 0px)); --sider: max(6px, env(safe-area-inset-right, 0px)); }
 /* menu bar: taller targets for fingers; the date is on the replay controls already */
 body.phone #menubar { height: var(--menu); padding-left: var(--side); padding-right: var(--sider); }
+body.phone #menubar .menu.app > button { white-space: nowrap; }   /* "Cassini OS" on one line at 390 px */
+body.phone .camwin .kindtag { left: 34px; text-align: right; }   /* clear of the NAC/WAC corner label */
 body.phone .menu > button { height: 30px; line-height: 30px; padding: 0 9px; }
 body.phone .menu.app > button { padding-left: 4px; }
 body.phone .menu ul { top: 30px; max-width: calc(100vw - 12px); max-height: calc(100dvh - 40px); overflow-y: auto; }

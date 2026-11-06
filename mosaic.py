@@ -1288,10 +1288,16 @@ def _fill_gap(rgb, gap, alpha, reach):
     filled, which _blended draws opaque."""
     k = 2 * int(reach) + 1
     near = cv2.dilate(gap.astype(np.uint8), np.ones((k, k), np.uint8)) > 0
-    fill = gap | (near & (alpha > 0) & (alpha < GAP_TRUST))
-    _nearest(rgb, fill, (alpha >= GAP_TRUST) & ~gap)
+    # a frame's soft edge is its own picture faded by mask.png, its color whole: only its outermost GAP_RIM_PX (where
+    # turning a tile mixed its color with the black around it) is filled, and the rest is kept. Filled up to GAP_TRUST,
+    # the soft edges on both sides of every gap in Saturn's 003SA 3X3MOVIEB001 (about 27 px of a 1024 px frame each)
+    # were drawn as the smooth fill: a wide band with no detail between every two columns, wavy where the two filters'
+    # fills met, and a bright notch where it crossed the ring at the top (spot check 7)
+    whole = (alpha >= GAP_TRUST) | (cv2.erode((alpha > 0).astype(np.uint8), np.ones((2 * GAP_RIM_PX + 1,) * 2, np.uint8)) > 0)
+    fill = gap | (near & (alpha > 0) & ~whole)
+    _nearest(rgb, fill, whole & ~gap)
     # (the blur of what has picture only, so the black round the mosaic is not blurred in)
-    real = ((alpha >= GAP_TRUST) | fill).astype(np.float32)
+    real = (whole | fill).astype(np.float32)
     sigma = max(reach / 2, 1.0)
     soft = cv2.GaussianBlur(rgb * real[..., None], (0, 0), sigma).reshape(rgb.shape)
     soft /= np.maximum(cv2.GaussianBlur(real, (0, 0), sigma), 1e-6)[..., None]
@@ -1300,6 +1306,7 @@ def _fill_gap(rgb, gap, alpha, reach):
 
 
 GAP_TRUST = 0.8   # (_fill_gap) a frame's own alpha from which its colour along a gap is its picture's
+GAP_RIM_PX = 3    # (_fill_gap) px: a frame's outermost rim along a gap, filled; inside it the soft edge is its picture
 
 
 def moved(decision, y, x):

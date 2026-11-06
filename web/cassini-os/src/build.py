@@ -610,6 +610,35 @@ rep('  const near = probe && state.et > probe.track.start - 30 * 86400 && state.
 # while it coasts, the probe is a spacecraft to look at up close, not a point above Titan; landed, it is 10 m off
 rep('name === "HUYGENS" ? 4 :', 'name === "HUYGENS" ? (window.studyCoast && studyCoast.modelShown(state.et) ? 1.6e-5 : window.studyLanded && studyLanded.active(state.et) ? 1e-5 : 4) :')
 rep('  if (name === "HUYGENS") {\n    // from the side', '  if (name === "HUYGENS" && !(window.studyCoast && studyCoast.modelShown(state.et)) && !(window.studyLanded && studyLanded.active(state.et))) {\n    // from the side')
+# surface sites (surface-sites.html, window.studySites): places on a body's surface with nothing of their own to draw,
+# such as Dragonfly's future landing site on Titan, marked with the viewer's own marker dot and label. Each is one
+# more name in the marker list; its style joins the head's and its script runs after the chrome script
+ss = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "surface-sites.html")).read()
+spart = lambda tag: ss[ss.index(f"<{tag}"):ss.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", spart("style")[len("<style>"):] + "\n</head>")
+study += spart("script") + "\n"
+rep('  const mg = new THREE.BufferGeometry();\n  mg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(names.length * 3), 3));',
+    '  if (window.studySites) for (const s of studySites.list) names.push(s.key);\n  const mg = new THREE.BufferGeometry();\n  mg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(names.length * 3), 3));')
+rep('n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? THEME.mkTitan',
+    'n === "HUYGENS" ? [1, 0.82, 0.55] : window.studySites && studySites.is(n) ? studySites.color(n) : n === "TITAN" ? THEME.mkTitan')
+rep('    el.className = "lbl" + (name === "CASSINI" ? " cassini" : name === "HUYGENS" ? " probe" : LABEL_PRIORITY(name) < 5 ? " major" : "");\n'
+    '    el.textContent = titleCase(name);\n'
+    '    el.addEventListener("click", () => setFocus(name));',
+    '    const site = window.studySites && studySites.is(name);\n'
+    '    el.className = "lbl" + (site ? " site" : name === "CASSINI" ? " cassini" : name === "HUYGENS" ? " probe" : LABEL_PRIORITY(name) < 5 ? " major" : "");\n'
+    '    el.textContent = site ? studySites.label(name) : titleCase(name);\n'
+    '    el.addEventListener("click", () => site ? studySites.click(name) : setFocus(name));')
+rep('function objPos(n) { return n === "CASSINI" ? cassini.position : ',
+    'function objPos(n) { return n === "CASSINI" ? cassini.position : window.studySites && studySites.is(n) ? studySites.obj(n).position : ')
+rep('function shown(name) {\n', 'function shown(name) {\n  if (window.studySites && studySites.is(name)) return studySites.marked(name);\n')
+rep('function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : ',
+    'function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : window.studySites && studySites.is(name) ? studySites.radius(name) : ')
+rep('  state.target = imagingTarget();\n', '  if (window.studySites) studySites.place();\n  state.target = imagingTarget();\n')
+# sites are placed last among the labels, so they never push a body's label out, and a label's box is as wide as its
+# first line (its name; the HUD adds a second line under it), so a site's is as wide as its own name
+rep('const LABEL_PRIORITY = n => n === state.focus ? 0 :', 'const LABEL_PRIORITY = n => window.studySites && studySites.is(n) ? 6 : n === state.focus ? 0 :')
+rep('    const box = [x, y - 8, x + name.length * 8 + 10, y + 8];', '    const box = [x, y - 8, x + (el.firstChild ? el.firstChild.textContent : name).length * 8 + 10, y + 8];')
 # the close-up pass takes in every small craft near the camera (Cassini, and Huygens on its own): the nearest sets the
 # range, and all of them are blown up about it together
 rep("""  const cd = camera.position.distanceTo(cassini.position);

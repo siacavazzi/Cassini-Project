@@ -716,8 +716,9 @@ body.phone .wmopt, body.phone .wmset { padding: 10px 14px; }
 .openmosaic[hidden] { display: none; }
 body.idle .openmosaic { opacity: .35; } body.idle .openmosaic:hover { opacity: 1; }
 .well.fullres .savepic { color: var(--q-accent); }
-/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync) */
-.finishmosaic { all: unset; position: absolute; left: 6px; top: 5px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
+/* "Finish mosaic" on a pass's mosaic part way through, while paused (cameraFeed finishSync); under the corner labels
+   (the mosaic tag, and NAC/WAC on a phone), which it covered in a narrow window */
+.finishmosaic { all: unset; position: absolute; left: 6px; top: 26px; z-index: 3; padding: 3px 7px; border-radius: 4px; box-sizing: border-box;
   font: 9px/1 var(--hudf); letter-spacing: .04em; color: var(--q-text); background: rgba(0,0,0,.55); border: 1px solid var(--q-line); cursor: pointer; }
 .finishmosaic:hover { color: #fff; border-color: var(--q-accent); }
 .finishmosaic:focus-visible { outline: 1px solid var(--q-accent); }
@@ -884,6 +885,8 @@ body.phone .srow input[type=range] { width: 96px; }
 body.phone { --phs: 1; --menu: calc(env(safe-area-inset-top, 0px) + 30px); --gap: 6px; --side: max(6px, env(safe-area-inset-left, 0px)); --sider: max(6px, env(safe-area-inset-right, 0px)); }
 /* menu bar: taller targets for fingers; the date is on the replay controls already */
 body.phone #menubar { height: var(--menu); padding-left: var(--side); padding-right: var(--sider); }
+body.phone #menubar .menu.app > button { white-space: nowrap; }   /* "Cassini OS" on one line at 390 px */
+body.phone .camwin .kindtag { left: 34px; text-align: right; }   /* clear of the NAC/WAC corner label */
 body.phone .menu > button { height: 30px; line-height: 30px; padding: 0 9px; }
 body.phone .menu.app > button { padding-left: 4px; }
 body.phone .menu ul { top: 30px; max-width: calc(100vw - 12px); max-height: calc(100dvh - 40px); overflow-y: auto; }
@@ -1687,6 +1690,13 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 @media (prefers-reduced-motion: reduce) { #tourhint, #tourring { transition: opacity .2s ease; animation: none; } }
 body.phone #tourhint { font-size: 12.5px; }
 body.phone #tourhint button { padding: 6px 11px; }
+
+/* dim, but with a dark edge so it still reads over Titan's bright haze */
+.lbl.site { color: #a9d0de; text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.6); font-size: 10px; }
+.lbl.site small { color: rgba(185,215,226,.8); font-size: 9px; text-shadow: 0 0 2px rgba(0,0,0,.9); }
+.lbl.site:not(.focus) { opacity: .78; }
+body.idle .lbl.site:not(.focus) { opacity: .3; }
+.lbl.site:hover { color: #fff; opacity: 1; }
 
 #loadscreen { position: fixed; inset: 0; z-index: 2001; display: grid; place-items: center; padding: 0 16px; pointer-events: none;
   background: rgba(0,0,0,.8); opacity: 0; transition: opacity .35s ease; }
@@ -13213,7 +13223,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"6f4ab0f484b8";
+  const BUILD = /*BUILD*/"6c47fe03b87d";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13450,6 +13460,67 @@ void main() {
 
   window.cassiniTutorial = { add, tip, start, stop, get active() { return T.active; }, get step() { return T.cur && T.cur.id; },
     seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS };
+})();
+</script>
+<script>
+(() => {
+  const SITES = [
+    { key: "SITE_DRAGONFLY", body: "TITAN", name: "Dragonfly", note: "Future landing site · 2034",
+      lat: 3.7, lon_e: 161.8, color: [0.4, 0.55, 0.62],
+      source: "Lorenz et al. 2021, PSJ 2:24, doi:10.3847/PSJ/abd08f" },
+  ];
+  const byKey = {}; SITES.forEach(s => { byKey[s.key] = s; });
+  const NEAR = 12, R2D = Math.PI / 180;
+  const t = s => s ? (typeof utcToEt === "function" ? utcToEt(s) : null) : null;
+  // the site on the body's globe as the viewer draws it (the ellipsoid of its radii), in the body frame (km)
+  function bodyFixed(s) {
+    if (s.bf) return s.bf;
+    const b = bodies[s.body], lat = s.lat * R2D, lon = s.lon_e * R2D, r = b.radii;
+    const d = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+    const R = 1 / Math.hypot(d[0] / r[0], d[1] / r[1], d[2] / r[2]);
+    return s.bf = d.map(x => x * R);
+  }
+  // (this script runs before three.js loads: its vectors are made on first use)
+  const J = [0, 0, 0]; let V = null, C = null;
+  window.studySites = {
+    list: SITES,
+    is: n => !!byKey[n],
+    color: n => byKey[n].color,
+    label: n => byKey[n].name,
+    obj: n => byKey[n].obj || (byKey[n].obj = new THREE.Object3D()),
+    radius: () => 0.001,
+    // every frame, after the bodies: each site's place in the scene, turning with its body (and enlarged with it)
+    place() {
+      for (const s of SITES) {
+        const o = this.obj(s.key), b = bodies[s.body];
+        s.on = !!b && !!pos[s.body] && present(s.body);
+        if (!s.on) continue;
+        const R = iauMatrix(b, state.et), f = bodyFixed(s), k = enlargeOf(s.body);
+        for (let i = 0; i < 3; i++) J[i] = pos[s.body][i] - pos[state.focus][i] + k * (R[0][i] * f[0] + R[1][i] * f[1] + R[2][i] * f[2]);
+        toScene(J, o.position).multiplyScalar(1 / KM);
+      }
+    },
+    // the marker and the label: near the body, on its near side, inside the site's own time span
+    marked(n) {
+      const s = byKey[n];
+      if (!s || !s.on) return false;
+      const a = t(s.from), z = t(s.until);
+      if (a != null && state.et < a || z != null && state.et > z) return false;
+      const mesh = meshes[s.body]; if (!mesh) return false;
+      const c = mesh.group.position, p = s.obj.position;
+      if (!V) { V = new THREE.Vector3(); C = new THREE.Vector3(); }
+      if (camera.position.distanceTo(c) * KM > NEAR * Math.max(...bodies[s.body].radii) * enlargeOf(s.body)) return false;
+      return V.copy(p).sub(c).dot(C.copy(camera.position).sub(p)) > 0;
+    },
+    click(n) { setFocus(byKey[n].body); },
+  };
+  // the HUD's second line under a label (head-quiet.html) is the distance from Cassini; a site's says what it is
+  const prev = window.studyLabel;
+  window.studyLabel = (name, el, cx, cy, pr) => {
+    const s = byKey[name];
+    if (!s) return prev && prev(name, el, cx, cy, pr);
+    if (!el.dataset.hud) { el.dataset.hud = "1"; el.innerHTML = `${s.name}<small></small>`; el.lastChild.textContent = s.note; el.title = `${s.name}: ${s.note}. ${s.source}`; }
+  };
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -14658,10 +14729,11 @@ function build() {
     probeTrail = new THREE.Line(pg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     probeTrail.userData.N = N; probeTrail.frustumCulled = false; hudScene.add(probeTrail);
   }
+  if (window.studySites) for (const s of studySites.list) names.push(s.key);
   const mg = new THREE.BufferGeometry();
   mg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(names.length * 3), 3));
   const col = new Float32Array(names.length * 3);
-  names.forEach((n, i) => { const c = n === "CASSINI" ? THEME.mkCassini : n === "HUYGENS" ? [1, 0.82, 0.55] : n === "TITAN" ? THEME.mkTitan : THEME.mk; col.set(c, 3 * i); });
+  names.forEach((n, i) => { const c = n === "CASSINI" ? THEME.mkCassini : n === "HUYGENS" ? [1, 0.82, 0.55] : window.studySites && studySites.is(n) ? studySites.color(n) : n === "TITAN" ? THEME.mkTitan : THEME.mk; col.set(c, 3 * i); });
   mg.setAttribute("color", new THREE.BufferAttribute(col, 3));
   const dc = document.createElement("canvas"); dc.width = dc.height = 64;
   const dg = dc.getContext("2d"), dgr = dg.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -14716,9 +14788,10 @@ function build() {
   const host = document.getElementById("labels");
   for (const name of names) {
     const el = document.createElement("div");
-    el.className = "lbl" + (name === "CASSINI" ? " cassini" : name === "HUYGENS" ? " probe" : LABEL_PRIORITY(name) < 5 ? " major" : "");
-    el.textContent = titleCase(name);
-    el.addEventListener("click", () => setFocus(name));
+    const site = window.studySites && studySites.is(name);
+    el.className = "lbl" + (site ? " site" : name === "CASSINI" ? " cassini" : name === "HUYGENS" ? " probe" : LABEL_PRIORITY(name) < 5 ? " major" : "");
+    el.textContent = site ? studySites.label(name) : titleCase(name);
+    el.addEventListener("click", () => site ? studySites.click(name) : setFocus(name));
     host.appendChild(el); labels[name] = el;
   }
 }
@@ -14744,8 +14817,9 @@ function inContext(name) {
   return state.context === parentOf(name);
 }
 function probeActive() { return !!probe && state.et >= probe.track.start && state.et <= probe.track.end || !probe && !!window.studyCoast && studyCoast.active(state.et) || !!window.studyLanded && studyLanded.active(state.et); }
-function objPos(n) { return n === "CASSINI" ? cassini.position : n === "HUYGENS" ? probeObj.position : meshes[n].group.position; }
+function objPos(n) { return n === "CASSINI" ? cassini.position : window.studySites && studySites.is(n) ? studySites.obj(n).position : n === "HUYGENS" ? probeObj.position : meshes[n].group.position; }
 function shown(name) {
+  if (window.studySites && studySites.is(name)) return studySites.marked(name);
   if (name === "HUYGENS") return probeActive() && (!window.studyLanded || studyLanded.marked(state.et));
   if (!present(name)) return false;
   if (name === "CASSINI" || name === state.focus || name === state.target) return true;
@@ -14755,7 +14829,7 @@ function shown(name) {
 }
 // "Enlarge moons ×10" scales moons only: planets (Saturn, Jupiter, Earth, Venus), the Sun and the spacecraft stay true size
 const enlargeOf = name => state.enlarge && meshes[name] && !PLANETS.includes(name) ? 10 : 1;
-function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : name === "HUYGENS" ? 0.0013 : meshes[name] ? meshes[name].radius : 10; }
+function bodyRadius(name) { return name === "CASSINI" ? 0.0035 : window.studySites && studySites.is(name) ? studySites.radius(name) : name === "HUYGENS" ? 0.0013 : meshes[name] ? meshes[name].radius : 10; }
 function relScene(name, out) { sub(pos[name], pos[state.focus], tmp); return toScene(tmp, out).multiplyScalar(1 / KM); }
 
 function updateBodies() {
@@ -14769,6 +14843,7 @@ function updateBodies() {
     if (window.studyCoast) studyCoast.draw();
     if (window.studyLanded) studyLanded.draw();
   }
+  if (window.studySites) studySites.place();
   state.target = imagingTarget();
   state.context = systemOf();
   const sunv = norm(sub(pos.SUN, pos[present("SATURN") ? "SATURN" : "CASSINI"], tmp2));
@@ -15291,7 +15366,7 @@ function updateOrbits() {
 }
 
 // Labels are placed in priority order and skipped when they would overlap one already placed.
-const LABEL_PRIORITY = n => n === state.focus ? 0 : n === "CASSINI" || n === "HUYGENS" ? 1 : PLANETS.includes(n) ? 2 : n === "TITAN" ? 3 : MAJOR.includes(n) || GALILEAN.includes(n) || n === "MOON" ? 4 : 5;
+const LABEL_PRIORITY = n => window.studySites && studySites.is(n) ? 6 : n === state.focus ? 0 : n === "CASSINI" || n === "HUYGENS" ? 1 : PLANETS.includes(n) ? 2 : n === "TITAN" ? 3 : MAJOR.includes(n) || GALILEAN.includes(n) || n === "MOON" ? 4 : 5;
 function updateLabels() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const placed = [];
@@ -15305,7 +15380,7 @@ function updateLabels() {
     let hide = vA.z > 1 || vA.z < -1 || !shown(name) || (small && d > 400 && name !== state.target);
     const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
-    const box = [x, y - 8, x + name.length * 8 + 10, y + 8];
+    const box = [x, y - 8, x + (el.firstChild ? el.firstChild.textContent : name).length * 8 + 10, y + 8];
     // a label that was hidden for an overlap needs a few pixels of clear space to come back, so two labels whose
     // boxes just touch settle on one state instead of blinking as the view drifts by a fraction of a pixel
     const m = el.hidden ? 4 : 0;

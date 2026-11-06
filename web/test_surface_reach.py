@@ -86,4 +86,16 @@ for name, draw in (("before", before), ("after", after)):
         # a tile nothing on it moves (the epoch's own) comes back as it was
         same, box = after(a, pa, ep, ep)
         assert box == a["box"] and np.array_equal(same, pa), box
+# a tile whose ground moves further than SURFACE_REACH would lose that part of its picture (surface_redrawn keeps only
+# what lands within the reach): surface_lost measures the share, and past SURFACE_LOST the tile stays as taken. Rhea
+# ISS_162RH_REGMAP001's first pointings moved 1,100 px over the close flyby and kept 7% of their picture: a hole at
+# the mosaic's right edge with a wedge of ground floating beside it (spot check 7)
+w = np.ones((8, 8), np.float32)
+near = np.full((8, 8), om.SURFACE_REACH * 0.5, np.float32)
+far = np.full((8, 8), om.SURFACE_REACH * 4.0, np.float32)
+assert om.surface_lost(near, near * 0, w) == 0.0
+assert om.surface_lost(far, far * 0, w) == 1.0 > om.SURFACE_LOST
+half = np.where(np.arange(8)[None, :] < 4, near, far)
+assert abs(om.surface_lost(half, half * 0, w) - 0.5) < 1e-6
+assert om.surface_lost(far, far, w * 0) == 0.0   # nothing on the body: nothing to lose
 print("surface reach: ok")

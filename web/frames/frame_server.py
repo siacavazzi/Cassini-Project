@@ -218,6 +218,12 @@ import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+# one BLAS thread per request thread, set before numpy loads OpenBLAS: a request that forks (git for /version.json,
+# ffmpeg for an export) while another thread is inside a threaded BLAS call deadlocks in OpenBLAS's fork handler and
+# holds the GIL, so the whole server stops answering (8866, 2026-11-06). The server's parallelism is its request threads.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 from PIL import Image
 
 # data_source lives in the repo root: two folders up from this file, the folder it is run from, or CASSINI_REPO
@@ -959,8 +965,9 @@ SERVER_VERSION = git_version(REPO)   # the code this server runs: read once, as 
 
 
 def site_version(site):
-    """The version as it is now: the site is a checkout that git pull moves on without a restart, so its commit is read
-    again every 30 seconds; the page build is read from index.html when that file changes."""
+    """The version as it is now: the site is a checkout that git pull moves on without a restart, and build.py then
+    writes index.html again, so the commit and the page build are read when the server starts and again only when
+    index.html changes. git is not run per request: each run forks the server."""
     folder = site or REPO
     index = os.path.join(site, "index.html") if site else None
     try:
@@ -969,7 +976,7 @@ def site_version(site):
         mtime = None
     with _version_lock:
         got = _site_version.get(folder)
-        if got and time.monotonic() - got[0] < 30 and got[1] == mtime:
+        if got and got[1] == mtime:
             return got[2]
     page = None
     if mtime is not None:
@@ -1989,6 +1996,7 @@ def main():
     where = args.usage or ("~/Documents/cassini-usage" if args.port == 8765 else "off")
     counts = None if where == "off" else usage.Usage(os.path.abspath(os.path.expanduser(where)))
     print(f"Usage counts in {counts.folder}" if counts else "Usage counting off")
+    site_version(site)   # read git once now, before requests come in
     server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
     server.serve_forever()

@@ -166,6 +166,28 @@ on = apart(200)
 row = on[1600, 900:1012, 3].astype(int)
 assert row[0] == 255 and row[-1] == 0 and np.all(np.diff(row) <= 0) and (row > 0).sum() - (row == 255).sum() > 30, row
 print("a narrow gap between tiles is filled, a wide one keeps a soft edge; ok")
+# and the frames' soft edges along such a gap keep their own picture: only the gap and the frames' outermost
+# GAP_RIM_PX are filled. Filled up to GAP_TRUST, about 27 px of good picture on each side of every column gap of Saturn's
+# 3x3 movie (003SA 3X3MOVIEB001) were drawn as the smooth fill, a wide band with no detail (spot check 7)
+rng = np.random.default_rng(7)
+grain = rng.integers(120, 220, (2100, 2300)).astype(np.uint8)
+def apart_grain(gap):
+    frames = []
+    for x0, y0 in ((0, 0), (1000, 0), (-30, 1000), (994 + gap, 1000)):
+        f = np.zeros((2100, 2300, 4), np.uint8)
+        xa = max(x0, 0)
+        f[y0:y0 + 1024, xa:x0 + 1024, :3] = grain[y0:y0 + 1024, xa:x0 + 1024, None]
+        f[y0:y0 + 1024, xa:x0 + 1024, 3] = mask[:, xa - x0:]
+        frames.append(f)
+    return draw(frames)
+on = apart_grain(36)
+edge = 994 + 36                       # the right-hand tile's left edge
+soft = slice(edge + 8, edge + 24)     # inside its soft edge (mask under GAP_TRUST there), past GAP_RIM_PX
+assert (mask[500, 8:24] < mosaic.GAP_TRUST * 255).all(), mask[500, 8:24]
+kept = np.abs(on[1600, soft, 0].astype(int) - grain[1600, soft]).max()
+assert kept <= 2, (on[1600, soft, 0], grain[1600, soft])
+assert on[1600, 990:edge + 4, 3].min() == 255, on[1600, 990:edge + 4, 3]
+print("the soft edges along a narrow gap keep their own picture; ok")
 # but where the tiles' staggered edges end at the mosaic's outer edge, the shallow notch between two of them (a tile
 # set lower between two others, 76 px wide and 30 deep) is that outer edge: filled, it was drawn opaque, a flat box
 # standing out past the soft edge (00ARI RADCOLOR001 at full resolution, a white box above the C ring)
