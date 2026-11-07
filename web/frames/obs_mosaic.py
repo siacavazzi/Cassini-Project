@@ -6451,7 +6451,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         # (where the target is in each tile's picture: SPICE's place, or the pictures' where seen_places took them,
         # Dione 28 px off SPICE in 153DI MUTUALEVE002, whose copies otherwise went with Titan's)
         held = steady_held(u, cache, p) if steady and not track else {}
-        raws = {f: held.get(j) or (raw if j == n else tile(u, j, cache, p["display_scale"]))["offset"]
+        raws = {f: held.get(j) or (own if j == n else tile(u, j, cache, p["display_scale"]))["offset"]
                 for f, j in got.items()}
         planes, moved = _per_body_planes(u, [got[f] for f in used], [(newest[f]["offset"], raws[f]) for f in used],
                                          planes, rect, k, radius, s) if per_body else (planes, None)
