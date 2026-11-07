@@ -2108,7 +2108,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     <div class="exrow"><span>Cameras</span><div class="exseg" id="excams"><button data-v="NW">Both</button><button data-v="N">NAC</button><button data-v="W">WAC</button></div></div>
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
     <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="5" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
-    <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label><label class="chk" id="exboomw" title="Play the movie forward, then back to its first picture"><input type="checkbox" id="exboom"> Boomerang</label></div>
+    <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label><label class="chk" id="exboomw" title="Play the movie forward, then back to its first picture"><input type="checkbox" id="exboom"> Boomerang</label><label class="chk" title="HDR video (HDR10): highlights brighter than white on an HDR screen"><input type="checkbox" id="exhdr"> HDR</label></div>
     <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
     <div id="exdone" hidden>
@@ -5597,6 +5597,13 @@ function targetLabel(k) {
         rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
         if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
       }
+      // the picture in HDR (frame_server hdr=1: an AVIF made from the picture's recovery map; the usual WebP when it has
+      // none yet), for a color picture, a processed frame, a movie frame or a mosaic
+      if (/\/frames\/(color\.webp|processed\/|movie\/|mosaic\/[NW]\d{10}_\d+\.webp)/.test(u.pathname) && q.get("channel") === null) {
+        const h = new URL(u); for (const k of ["format", "download", "hdr"]) h.searchParams.delete(k);
+        h.searchParams.set("size", "1024"); h.searchParams.set("hdr", "1"); h.searchParams.set("download", "1");
+        rows.push("-", { label: "This picture in HDR", note: "AVIF · HDR10 · 1024 px", href: h.href });
+      }
       return rows;
     }
     // the full resolution mosaic's row: its size and about how big the file is (asked of the frame server when the menu
@@ -6011,7 +6018,7 @@ function targetLabel(k) {
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}`;
+    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // what this computer works out for frame k's movie picture ({steady, exposure}: steady-local.html), null when the server draws it
     const hereWant = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.want(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : null;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
@@ -6026,7 +6033,7 @@ function targetLabel(k) {
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
     // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
-    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
+    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -6166,7 +6173,7 @@ function targetLabel(k) {
         const patience = () => { if (over) return; if (L.next) { ctl.abort(); done(); } else setTimeout(patience, 1000); };
         setTimeout(patience, 8000);
       }
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz) : ""}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
@@ -8541,6 +8548,8 @@ function targetLabel(k) {
     D({ key: "export.sound", label: "Sound", type: "toggle", value: false, was: [true], hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
     D({ key: "export.boomerang", label: "Boomerang", type: "toggle", value: false,
         hint: "The film plays forward, then back to its first picture: twice as long, good for a movie of a few frames. Suggested when a film would last under a second." });
+    D({ key: "export.hdr", label: "HDR film", type: "toggle", value: false,
+        hint: "The film as HDR video (HEVC, HDR10): the bright parts the usual film rolls off at white (lit rings, bright limbs, glare) shine brighter than white on an HDR screen (an iPhone, a recent Mac or TV). Made by the frame server; plays as the usual film's brightness on other screens only where the player tone maps it, so keep it off for films meant for anywhere." });
     D({ key: "export.caption", label: "Captions", type: "toggle", value: true, hint: "A strip under each camera with the time, target, filters and kind of picture." });
     D({ key: "export.local", label: "Make films on this computer", type: "toggle", value: true,
         hint: "The film is put together and encoded by this browser from the pictures the frame server already has (and the movie steps worked out here), so making it costs the server nothing but the pictures. Off, or at sizes above 1024, Mosaics at full resolution or in a browser that cannot encode video, the frame server makes it." });
@@ -8656,6 +8665,8 @@ function targetLabel(k) {
       size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Boomerang (export.py boom=): only when on, so a film made without it keeps its name
     if (opt("export.boomerang", false)) q.set("boom", "1");
+    // HDR film (export.py hdr=): only when on, made by the server (filmHere)
+    if (opt("export.hdr", false)) q.set("hdr", "1");
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
     // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); Complete color pictures
     // only off (Settings > Playback): every channel of a color set as well (sets=0); the Movie Editor's cut
@@ -8861,7 +8872,7 @@ function targetLabel(k) {
   // whether this film is made here: the setting, a size the windows' pictures already come in (not Full, not "up
   // to"), a plan that lists its tries, a look the studio's renderer can draw, and a browser that encodes video
   async function canMakeHere(plan) {
-    if (!opt("export.local", true) || plan.full || !plan.pictures.length || !plan.pictures[0].tries) return false;
+    if (!opt("export.local", true) || opt("export.hdr", false) || plan.full || !plan.pictures.length || !plan.pictures[0].tries) return false;
     if (paneOf(plan) > 1024 || plan.height !== paneOf(plan) + capH(plan)) return false;
     if (editedHere(X.planKey) && !(window.cassiniStudio && window.cassiniStudio.renderer)) return false;
     return !!(await videoCodec(plan.width, plan.height));
@@ -9235,7 +9246,7 @@ function targetLabel(k) {
     const full = opt("export.full", false), sz = opt("export.size", 1024);
     const near = SIZES.slice(0, -1).reduce((m, v, i) => (Math.abs(v - sz) < Math.abs(SIZES[m] - sz) ? i : m), 0);
     $("exsize").value = full ? SIZES.length - 1 : near; $("exsizev").textContent = full ? "Full" : sz > 1024 ? `≤ ${sz} px` : `${sz} px`;
-    $("exsound").checked = opt("export.sound", false); $("excap").checked = opt("export.caption", true); $("exboom").checked = opt("export.boomerang", false);
+    $("exsound").checked = opt("export.sound", false); $("excap").checked = opt("export.caption", true); $("exboom").checked = opt("export.boomerang", false); $("exhdr").checked = opt("export.hdr", false);
     segs();
   }
   // o.full: opens on Picture size Full, or off it (the highlighted stretch's "Full resolution…" and "Save movie…", segment.html)
@@ -9263,6 +9274,7 @@ function targetLabel(k) {
   $("exsound").addEventListener("change", e => { setOpt("export.sound", e.target.checked); estimate(); });
   $("excap").addEventListener("change", e => { setOpt("export.caption", e.target.checked); estimate(); });
   $("exboom").addEventListener("change", e => { setOpt("export.boomerang", e.target.checked); estimate(); });
+  $("exhdr").addEventListener("change", e => { setOpt("export.hdr", e.target.checked); estimate(); });
   $("exgo").addEventListener("click", go);
   $("exclear").addEventListener("click", () => { clear(); X.cams = null; });
   card.addEventListener("click", e => { if (e.target.closest(".close")) { e.stopPropagation(); close(); } }, true);
@@ -13303,7 +13315,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"8b235e3735c7";
+  const BUILD = /*BUILD*/"e0c74b74c923";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
