@@ -2638,13 +2638,14 @@ def _tile_made(u, n, cache, scale, base):
     # (a pass with long exposures of their own white: this frame's exposure, from its label)
     exposure = _exposure(label_handler.label(path, as_png=True)) if (scale or {}).get("long") else None
     try:
-        image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
-                                                                                       on_disk(u, u["frames"][n]), exposure, t,
-                                                                                       not _ring(u)),
-                                                    repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
-                                                    around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
+        with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
+            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
+                                                                                           on_disk(u, u["frames"][n]), exposure, t,
+                                                                                           not _ring(u)),
+                                                        repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
+                                                        around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
     except Exception as e:
-        image, rep = None, {"why": f"{type(e).__name__}: {e}"[:200]}
+        image, rep, sink = None, {"why": f"{type(e).__name__}: {e}"[:200]}, None
     if (image is not None and u.get("mosaic") and rep.get("calibrated") is False and calibration.step("calibrate")
             and f in ((scale or {}).get("blacks") or {})):
         # a frame that can't be calibrated (an 8LSB frame: only its low 8 bits were sent, which wrap round into a black
@@ -2688,6 +2689,7 @@ def _tile_made(u, n, cache, scale, base):
             b, d = a + crop.shape[0], c + crop.shape[1]
             Image.fromarray(crop).save(base + ".png", compress_level=1)
             _keep_made(base + ".png", crop)
+            _keep_tile_map(sink, image, side, crop, base)
             out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
             _register(u, n, out, crop, cache, scale)
@@ -4928,11 +4930,14 @@ def so_far(u, n, cache, made=None, out=OUT):
         rgba = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
     else:
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
+    hdr = _mosaic_map(u, p, tiles, rect, used, base, rgba.shape, cache) if HDR_ON else None
     if sharpens(p["display_scale"]):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
+    if hdr is not None:
+        im.info["hdr"] = cv2.resize(hdr, im.size, interpolation=cv2.INTER_AREA)
     # the label counts the tiles of the filters the plan draws (its colour filters, or its grey one), taken so far
     # of all the pass takes, so its total stays the same while the grey mosaic turns to colour
     drawn = p["colour"] or [p["grey"]]
@@ -4941,6 +4946,25 @@ def so_far(u, n, cache, made=None, out=OUT):
     return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "luminance": bool(base), "width": im.width, "height": im.height}
+
+
+def _mosaic_map(u, p, tiles, rect, used, base, shape, cache):
+    """so_far's recovery map: the tiles of each filter it draws (and of its luminance base) placed as _over places
+    them, the ones drawn under the picture first; None when no tile has a map"""
+    try:
+        k = p["k"]
+        placed = []
+        for f in ([LUM] if base else []) + list(used):
+            mine = _mine(u, p, tiles, f)
+            under = lambda t: partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill"))
+            for t in [t for t in mine if under(t)] + [t for t in mine if not under(t)]:
+                bx, by, bw, bh = t["box"]
+                placed.append((f, _pic(u, cache, p["display_scale"], t), round((t["offset"][0] + bx - rect[0]) * k),
+                               round((t["offset"][1] + by - rect[1]) * k), max(1, round(bw * k)), max(1, round(bh * k))))
+        return hdr_map(placed, shape[1], shape[0])
+    except Exception as e:
+        print(f"No HDR map for the mosaic: {e}")
+        return None
 
 
 # the same layout, tile and size: named in the cache by folder and layout name (_mosaic_path)
@@ -5903,6 +5927,66 @@ def _on_disk(fp, radius):
     return dx * dx + dy * dy < radius * radius
 
 
+# ---------- HDR: recovery maps of tiles, movie frames and mosaics (calibration.hdr_capture) ----------
+# Each tile keeps its recovery map (<n>.hdr.webp beside <n>.png: per pixel of its highlights, log2 of how much brighter
+# the pass's linear scale had it than the tile drawn), cut and sized as the tile is. A movie frame's or a mosaic's map is
+# the maps of the tiles it draws, placed where it draws them (each filter's newest tile on top, the brightest of the
+# filters); the picture itself is drawn as before. Kept as <picture>.hdr.webp beside a movie frame or mosaic picture.
+# CASSINI_HDR=0: no maps.
+HDR_ON = os.environ.get("CASSINI_HDR", "1") != "0"
+_hdr_drawn = contextvars.ContextVar("hdr_drawn", default=None)   # movie_frame's tiles as _place draws them
+
+
+def _keep_tile_map(sink, image, side, crop, base):
+    """The tile's recovery map (sink's last: processed_frame placed it on image's canvas) cut and sized as _lit_crop cut
+    the tile, written as base.hdr.webp (grey, lossless); nothing when there is none"""
+    try:
+        m = sink[-1] if sink else None
+        if m is None or m.shape != image.shape[:2]:
+            return
+        lit = _lit_crop(np.dstack([m, m, m, image[..., 3]]), side)
+        if lit is None:
+            return
+        cut = lit[0][..., 0]
+        if cut.shape != crop.shape[:2]:
+            cut = cv2.resize(cut, (crop.shape[1], crop.shape[0]), interpolation=cv2.INTER_LINEAR)
+        Image.fromarray(np.ascontiguousarray(cut), "L").save(base + ".hdr.webp", "WEBP", lossless=True, quality=80, method=4)
+    except Exception as e:
+        print(f"No HDR map kept for {base}: {e}")
+
+
+def _map_part(path, w, h):
+    """A tile's recovery map (path: the tile's picture) at w x h, or None when it has none"""
+    mp = path[:-len(".png")] + ".hdr.webp"
+    if not os.path.exists(mp):
+        return None
+    return np.asarray(Image.open(mp).convert("L").resize((w, h), Image.BILINEAR))
+
+
+def hdr_map(placed, W, H):
+    """A picture's recovery map from the tiles it drew, placed: [(filter, tile picture path, left, top, sw, sh)] in
+    the order drawn, on its W x H canvas: within a filter the tile drawn last wins where it has any alpha, across
+    filters the brightest. None when no tile has a map"""
+    zero = calibration.HDR_ZERO
+    by = {}
+    found = False
+    for f, path, left, top, sw, sh in placed:
+        x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+        if not (x0 < x1 and y0 < y1):
+            continue
+        part = _part(path, sw, sh)
+        m = _map_part(path, sw, sh)
+        canvas = by.setdefault(f, np.full((H, W), zero, np.uint8))
+        a = part[y0 - top:y1 - top, x0 - left:x1 - left, 3] > 0
+        v = m[y0 - top:y1 - top, x0 - left:x1 - left] if m is not None else np.full(a.shape, zero, np.uint8)
+        found = found or m is not None
+        region = canvas[y0:y1, x0:x1]
+        region[a] = v[a]
+    if not found:
+        return None
+    return np.max(np.stack(list(by.values())), axis=0)
+
+
 def _place(u, t, rect, k, W, H, cache, scale):
     """Tile t (made on the display scale) drawn where SPICE puts it in the view rect, on a W x H canvas (k canvas
     pixels per reference pixel)."""
@@ -5915,6 +5999,9 @@ def _place(u, t, rect, k, W, H, cache, scale):
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+    drew = _hdr_drawn.get()
+    if drew is not None:
+        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh))
     return frame
 
 
@@ -6520,6 +6607,48 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     return Image.fromarray(rgba, "RGBA"), rep
 
 
+def _with_hdr_map(make):
+    """movie_frame with its recovery map (hdr_map of the tiles _place drew) in the picture's info["hdr"]"""
+    def made(*args, **kwargs):
+        if not HDR_ON:
+            return make(*args, **kwargs)
+        drew = []
+        token = _hdr_drawn.set(drew)
+        try:
+            im, rep = make(*args, **kwargs)
+        finally:
+            _hdr_drawn.reset(token)
+        if im is not None:
+            try:
+                m = hdr_map(drew, im.width, im.height)
+                if m is not None:
+                    im.info["hdr"] = m
+            except Exception as e:
+                print(f"No HDR map for the movie frame: {e}")
+        return im, rep
+    made.__doc__ = make.__doc__
+    return made
+
+
+def keep_picture_map(im, path):
+    """A movie frame's or mosaic picture's recovery map (im.info["hdr"], sized to im) beside its picture at path, as
+    <path less its extension>.hdr.webp (grey, lossless); nothing when it has none"""
+    m = im.info.get("hdr")
+    if m is None or not path.endswith(".webp"):
+        return
+    try:
+        if m.shape != (im.height, im.width):
+            m = cv2.resize(m, (im.width, im.height), interpolation=cv2.INTER_AREA)
+        buf = io.BytesIO()
+        Image.fromarray(np.ascontiguousarray(m), "L").save(buf, "WEBP", lossless=True, quality=80, method=4)
+        reel._cached(path[:-len(".webp")] + ".hdr.webp", buf.getvalue)
+    except Exception as e:
+        print(f"No HDR map kept for {path}: {e}")
+
+
+movie_frame = _with_hdr_map(movie_frame)
+
+
 # the same frame drawn the same way: named in the cache by folder, frame, trail, colour and centring (movie_webp)
 movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True:
                                   (folder(u, cache), n, trail, colour, out, centre, bool(u.get("track")), steady, exposure, sharpen, per_body)
@@ -6611,10 +6740,12 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
             im.thumbnail((size, size), Image.LANCZOS)
         buf = io.BytesIO()
         reel.save_webp(im, buf, quality=QUALITY, method=4)
+        keep_picture_map(im, path)
         return buf.getvalue()
 
     try:
         data = reel._cached(path, make)
+        calibration.hdr_note_served(path, path[:-len(".webp")] + ".hdr.webp")
     except LookupError:
         return None, report
     finally:
@@ -7877,7 +8008,10 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
             raise LookupError("nothing above black yet")
         report.update(rep)
         if post:
+            hdr = im.info.get("hdr")
             im = post(im)
+            if hdr is not None and "hdr" not in im.info:
+                im.info["hdr"] = hdr
         if not full and max(im.size) > size:
             im.thumbnail((size, size), Image.LANCZOS)
         buf = io.BytesIO()
@@ -7885,6 +8019,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
             im.save(buf, "PNG", compress_level=6)
         else:
             reel.save_webp(im, buf, quality=QUALITY, method=4)
+            keep_picture_map(im, path)
         reel._cached(meta, lambda: json.dumps(rep).encode())
         reel.keep_report(meta, rep)
         return buf.getvalue()
@@ -7893,6 +8028,8 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
         data = reel._cached(path, make)
     except LookupError:
         return None
+    if path.endswith(".webp"):
+        calibration.hdr_note_served(path, path[:-len(".webp")] + ".hdr.webp")
     if not report:
         report = reel.report_of(meta)
     return data, report
