@@ -487,6 +487,7 @@ def cmd_run(args):
             machine[k] = os.path.expanduser(machine[k])
     logdir = machine.get("logs") or os.path.join(machine["cache"], "..", "logs-" + me)
     os.makedirs(logdir, exist_ok=True)
+    os.makedirs(machine["cache"], exist_ok=True)   # prebuild's free-space hold reads it before it writes anything
     slots = max(1, int(args.slots or machine.get("slots", 1)))
     if slots > 1:
         machine["free"] = False
