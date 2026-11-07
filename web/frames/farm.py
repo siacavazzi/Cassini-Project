@@ -303,13 +303,14 @@ def candidates(plan, me, machine):
     return pinned + (rest[::-1] if machine.get("end") == "light" else rest)
 
 
-def next_unit(shared, plan, me, machine):
+def next_unit(shared, plan, me, machine, busy=()):
     """The unit this machine should build next: its own unfinished claim first (a restart), else the heaviest (or,
-    for "end": "light", the lightest) unit nobody has taken that it may take."""
+    for "end": "light", the lightest) unit nobody has taken that it may take. busy: units this run is building now
+    (another slot's), never handed out twice."""
     done = {n[:-5] for n in shared.listing("done") if n.endswith(".json")}
     claimed = set(shared.listing("claims"))
     for u in plan["units"]:
-        if u["unit"] in claimed and u["unit"] not in done:
+        if u["unit"] in claimed and u["unit"] not in done and u["unit"] not in busy:
             owner = json.loads(shared.read("claims", u["unit"], "owner.json") or "{}")
             if owner.get("machine") == me:
                 return u
@@ -427,7 +428,51 @@ class Shipper:
             self.thread.start()
 
 
+def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_run=False):
+    """Every phase of one unit, in order, each retried once; its result written to done/<unit>.json."""
+    result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
+    phases = unit.get("phases", plan.get("phases", PHASES))
+    name = f"farm-{me}-{unit['unit']}"
+    if not dry_run:
+        extra = ["--tmux", machine["tmux"]] if machine.get("tmux") and not shared.ssh else []
+        extra += ["--pid", str(os.getpid())] if not shared.ssh else []
+        extra += ["--thread", farm["job"]["thread"]] if farm.get("job", {}).get("thread") else []
+        job(shared, farm, "start", name, f"cache build: unit {unit['unit']} on {me} ({unit.get('pictures', 0):,} pictures)",
+            "--eta", unit_eta(farm, machine, unit), *extra)
+    for k, phase in enumerate(phases):
+        if not dry_run:
+            job(shared, farm, "update", name, f"{phase} ({k + 1}/{len(phases)})", "--pct", int(100 * k / len(phases)))
+        cmd = prebuild_cmd(machine, unit, phase, python)
+        if dry_run:
+            print(" ".join(map(shlex.quote, cmd)))
+            continue
+        for attempt in (1, 2):    # one retry: a made file is never made again, so a rerun picks up where it stopped
+            t0 = time.time()
+            shared.append(f"{unit['unit']} {phase} start {now()} {me}\n", "logs", me, "phases.log")
+            with open(os.path.join(logdir, f"{phase}-{unit['unit']}.log"), "a") as fh:
+                rc = subprocess.call(cmd, cwd=REPO, env=env, stdout=fh, stderr=subprocess.STDOUT)
+            took = int(time.time() - t0)
+            shared.append(f"{unit['unit']} {phase} done {now()} ({took}s) exit {rc} {me}\n", "logs", me, "phases.log")
+            if rc == 0:
+                break
+        result["phases"][phase] = {"exit": rc, "seconds": took, "attempts": attempt}
+    if dry_run:
+        return
+    result["finished"] = now()
+    shared.write(json.dumps(result, indent=1), "done", f"{unit['unit']}.json")
+    bad = [p for p, r in result["phases"].items() if r["exit"]]
+    secs = sum(r["seconds"] for r in result["phases"].values())
+    if bad:
+        job(shared, farm, "fail", name, f"{', '.join(bad)} failed after a retry (see farm status)")
+    else:
+        job(shared, farm, "done", name, f"all {len(phases)} phases in {secs / 3600:.1f} h")
+
+
 def cmd_run(args):
+    """Takes units and builds them. With slots > 1 (--slots or the machine's "slots") it builds that many units at once,
+    each with procs / slots processes and its own status folder, so one unit's single-process tail (its biggest mosaic or
+    movie pass) leaves the other cores to the next unit. Several slots never free the disk while shipping: a unit still
+    building may need files a finished one shares."""
     shared = Shared(args.shared)
     farm, plan = load_json(shared, "farm.json"), load_json(shared, "plan.json")
     me = args.machine
@@ -442,53 +487,40 @@ def cmd_run(args):
             machine[k] = os.path.expanduser(machine[k])
     logdir = machine.get("logs") or os.path.join(machine["cache"], "..", "logs-" + me)
     os.makedirs(logdir, exist_ok=True)
+    slots = max(1, int(args.slots or machine.get("slots", 1)))
+    if slots > 1:
+        machine["free"] = False
     shipper = Shipper(machine, os.path.join(logdir, "ship.log"))
-    while True:
-        if shared.exists(f"stop-{me}"):
-            print(f"stop-{me} is there: stopping")
-            break
-        unit = next_unit(shared, plan, me, machine) if not args.dry_run else \
-            (candidates(plan, me, machine) or [None])[0]
-        if unit is None:
-            print("no unit left")
-            break
-        result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
-        phases = unit.get("phases", plan.get("phases", PHASES))
-        name = f"farm-{me}-{unit['unit']}"
-        if not args.dry_run:
-            extra = ["--tmux", machine["tmux"]] if machine.get("tmux") and not shared.ssh else []
-            extra += ["--pid", str(os.getpid())] if not shared.ssh else []
-            extra += ["--thread", farm["job"]["thread"]] if farm.get("job", {}).get("thread") else []
-            job(shared, farm, "start", name, f"cache build: unit {unit['unit']} on {me} ({unit.get('pictures', 0):,} pictures)",
-                "--eta", unit_eta(farm, machine, unit), *extra)
-        for k, phase in enumerate(phases):
-            if not args.dry_run:
-                job(shared, farm, "update", name, f"{phase} ({k + 1}/{len(phases)})", "--pct", int(100 * k / len(phases)))
-            cmd = prebuild_cmd(machine, unit, phase, python)
+    lock, busy = threading.Lock(), set()
+
+    def worker(k):
+        m = dict(machine)
+        if slots > 1:
+            m["procs"] = max(1, -(-int(machine.get("procs", 1)) // slots))
+            m["status"] = os.path.join(machine.get("status") or os.path.join(machine["cache"], "..", "status-" + me), f"slot{k}")
+        while True:
+            if shared.exists(f"stop-{me}"):
+                print(f"slot {k}: stop-{me} is there: stopping")
+                return
+            with lock:
+                unit = next_unit(shared, plan, me, machine, busy) if not args.dry_run else \
+                    (candidates(plan, me, machine) or [None])[0]
+                if unit is None:
+                    print(f"slot {k}: no unit left")
+                    return
+                busy.add(unit["unit"])
+            build_unit(shared, farm, plan, me, m, unit, python, env, logdir, args.dry_run)
             if args.dry_run:
-                print(" ".join(map(shlex.quote, cmd)))
-                continue
-            for attempt in (1, 2):    # one retry: a made file is never made again, so a rerun picks up where it stopped
-                t0 = time.time()
-                shared.append(f"{unit['unit']} {phase} start {now()} {me}\n", "logs", me, "phases.log")
-                with open(os.path.join(logdir, f"{phase}-{unit['unit']}.log"), "a") as fh:
-                    rc = subprocess.call(cmd, cwd=REPO, env=env, stdout=fh, stderr=subprocess.STDOUT)
-                took = int(time.time() - t0)
-                shared.append(f"{unit['unit']} {phase} done {now()} ({took}s) exit {rc} {me}\n", "logs", me, "phases.log")
-                if rc == 0:
-                    break
-            result["phases"][phase] = {"exit": rc, "seconds": took, "attempts": attempt}
-        if args.dry_run:
-            break
-        result["finished"] = now()
-        shared.write(json.dumps(result, indent=1), "done", f"{unit['unit']}.json")
-        bad = [p for p, r in result["phases"].items() if r["exit"]]
-        secs = sum(r["seconds"] for r in result["phases"].values())
-        if bad:
-            job(shared, farm, "fail", name, f"{', '.join(bad)} failed after a retry (see farm status)")
-        else:
-            job(shared, farm, "done", name, f"all {len(phases)} phases in {secs / 3600:.1f} h")
-        shipper.boundary()
+                return
+            with lock:
+                busy.discard(unit["unit"])
+                shipper.boundary()
+
+    threads = [threading.Thread(target=worker, args=(k,)) for k in range(slots if not args.dry_run else 1)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     if not args.dry_run:
         shipper.boundary(final=True)
 
@@ -724,6 +756,7 @@ def main():
     p.add_argument("--shared", required=True)
     p.add_argument("--machine", required=True)
     p.add_argument("--dry-run", action="store_true", help="print the first unit's prebuild commands, take nothing")
+    p.add_argument("--slots", type=int, default=0, help="units built at once (default: the machine's \"slots\", else 1)")
     p = sub.add_parser("status")
     p.add_argument("--shared", required=True)
     p = sub.add_parser("verify")

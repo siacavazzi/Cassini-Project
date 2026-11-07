@@ -68,6 +68,34 @@ def test_claims(tmp):
     return 1
 
 
+def test_slots(tmp):
+    """Two slots of one machine never get the same unit; build_unit runs every phase and writes done/."""
+    shared = farm.Shared(os.path.join(tmp, "slotfarm"))
+    plan = {"phases": ["composites", "processed"], "units": [{"unit": "2017-08", "weight": 9}, {"unit": "2017-04", "weight": 8},
+                                                             {"unit": "2017-09", "weight": 1}]}
+    m = {"end": "heavy"}
+    a = farm.next_unit(shared, plan, "mbp", m)
+    b = farm.next_unit(shared, plan, "mbp", m, busy={a["unit"]})
+    assert (a["unit"], b["unit"]) == ("2017-08", "2017-04"), (a, b)
+    # a restart with both claims open: each slot resumes a different one of its own
+    c = farm.next_unit(shared, plan, "mbp", m)
+    d = farm.next_unit(shared, plan, "mbp", m, busy={c["unit"]})
+    assert {c["unit"], d["unit"]} == {"2017-08", "2017-04"}, (c, d)
+    fake = os.path.join(tmp, "fakepy")
+    write(fake, "#!/bin/sh\necho \"$@\"\n")
+    os.chmod(fake, 0o755)
+    logdir = os.path.join(tmp, "slotlogs")
+    os.makedirs(logdir)
+    mach = {"name": "mbp", "cache": os.path.join(tmp, "c"), "status": os.path.join(tmp, "s", "slot1"), "procs": 8}
+    farm.build_unit(shared, {}, plan, "mbp", mach, a, fake, dict(os.environ), logdir)
+    done = json.loads(shared.read("done", "2017-08.json"))
+    assert list(done["phases"]) == ["composites", "processed"] and all(r["exit"] == 0 for r in done["phases"].values())
+    assert "--procs 8" in open(os.path.join(logdir, "processed-2017-08.log")).read()
+    log = shared.read("logs", "mbp", "phases.log").splitlines()
+    assert len(log) == 4 and log[0].startswith("2017-08 composites start"), log
+    return 1
+
+
 def test_commands():
     m = {"name": "mbp", "cache": "/c", "status": "/s", "pause": "/p", "procs": 16, "max_load": 40, "min_free": 50}
     cmd = farm.prebuild_cmd(m, {"unit": "2007a", "from": "2007-01-01", "until": "2007-07-01"}, "movies", "py")
@@ -193,6 +221,7 @@ def main():
         ok += test_estimate()
         ok += test_claims(tmp)
         ok += test_commands()
+        ok += test_slots(tmp)
         ok += test_ship_and_free(tmp)
         ok += test_merge_compare_verify(tmp)
         ok += test_job(tmp)
