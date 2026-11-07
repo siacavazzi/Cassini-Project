@@ -2195,6 +2195,13 @@ function targetLabel(k) {
         rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
         if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
       }
+      // the picture in HDR (frame_server hdr=1: an AVIF made from the picture's recovery map; the usual WebP when it has
+      // none yet), for a color picture, a processed frame, a movie frame or a mosaic
+      if (/\/frames\/(color\.webp|processed\/|movie\/|mosaic\/[NW]\d{10}_\d+\.webp)/.test(u.pathname) && q.get("channel") === null) {
+        const h = new URL(u); for (const k of ["format", "download", "hdr"]) h.searchParams.delete(k);
+        h.searchParams.set("size", "1024"); h.searchParams.set("hdr", "1"); h.searchParams.set("download", "1");
+        rows.push("-", { label: "This picture in HDR", note: "AVIF · HDR10 · 1024 px", href: h.href });
+      }
       return rows;
     }
     // the full resolution mosaic's row: its size and about how big the file is (asked of the frame server when the menu
@@ -2609,7 +2616,7 @@ function targetLabel(k) {
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}`;
+    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // what this computer works out for frame k's movie picture ({steady, exposure}: steady-local.html), null when the server draws it
     const hereWant = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.want(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : null;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
@@ -2624,7 +2631,7 @@ function targetLabel(k) {
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
     // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
-    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
+    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -2764,7 +2771,7 @@ function targetLabel(k) {
         const patience = () => { if (over) return; if (L.next) { ctl.abort(); done(); } else setTimeout(patience, 1000); };
         setTimeout(patience, 8000);
       }
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz) : ""}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
