@@ -5,3 +5,4 @@ spice_cache
 __pycache__/
 zip_index
 cisscal_calibration
+.DS_Store

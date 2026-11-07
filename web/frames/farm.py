@@ -328,7 +328,7 @@ def check_code(plan, machine, python):
     head = git("rev-parse", "HEAD")
     if plan.get("commit") and head != plan["commit"]:
         raise SystemExit(f"this checkout is at {head[:8]}, the plan's commit is {plan['commit'][:8]}")
-    if git("status", "--porcelain", "--untracked-files=no"):
+    if [l for l in git("status", "--porcelain", "--untracked-files=no").splitlines() if not l.endswith(".DS_Store")]:
         raise SystemExit("this checkout has local changes: the build must run on the plan's commit as it is")
     got = packages_hash(python)
     if plan.get("packages") and got != plan["packages"]:
@@ -432,7 +432,7 @@ def cmd_run(args):
     farm, plan = load_json(shared, "farm.json"), load_json(shared, "plan.json")
     me = args.machine
     machine = dict(farm["machines"][me], name=me)
-    python = machine.get("python", farm.get("python", sys.executable))
+    python = os.path.expanduser(machine.get("python", farm.get("python", sys.executable)))
     if not args.dry_run:
         check_code(plan, machine, python)
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
@@ -440,7 +440,6 @@ def cmd_run(args):
     for k in ("cache", "status", "pause", "logs"):
         if machine.get(k):
             machine[k] = os.path.expanduser(machine[k])
-    python = os.path.expanduser(python)
     logdir = machine.get("logs") or os.path.join(machine["cache"], "..", "logs-" + me)
     os.makedirs(logdir, exist_ok=True)
     shipper = Shipper(machine, os.path.join(logdir, "ship.log"))
