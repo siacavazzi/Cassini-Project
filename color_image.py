@@ -1284,12 +1284,38 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
         # the same rotation without the shift: the frame north up at the middle of the canvas
         # (a close-up's shift would push it off the canvas)
         angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0]))
-        return lbl.translate("png", 0, 0, angle, border), lbl, report
+        drawn = lbl.translate("png", 0, 0, angle, border)
+        _place_hdr_map(lbl, alpha, angle)
+        return drawn, lbl, report
     except Exception as e:
         print(f"Can't centre {lbl.info.get('PRODUCT_ID')}: {e}")
         report["centred"] = False
         report["why"] = str(e)[:200]
         return cv2.cvtColor(image, cv2.COLOR_BGR2RGBA), lbl, report
+
+
+"""
+The picture's HDR recovery map (calibration.hdr_capture, when open) moved and turned with the picture onto its canvas
+(the same translate, on the map put in every channel), so map and picture stay pixel for pixel; left as it is when the
+picture could not be placed. A map that fails is dropped (None), never the picture.
+"""
+def _place_hdr_map(lbl, alpha, angle):
+    sink = cal.hdr_sink()
+    if not sink or sink[-1] is None:
+        return
+    try:
+        m = sink[-1]
+        if m.shape != alpha.shape:
+            m = cv2.resize(m, alpha.shape[::-1], interpolation=cv2.INTER_LINEAR)
+        kept = lbl.color_img
+        try:
+            lbl.set_color(np.dstack([m, m, m, alpha]))
+            sink[-1] = np.ascontiguousarray(lbl.translate("png", 0, 0, angle, border)[..., 0])
+        finally:
+            lbl.set_color(kept)
+    except Exception as e:
+        print(f"No HDR map placed: {e}")
+        sink[-1] = None
 
 
 """

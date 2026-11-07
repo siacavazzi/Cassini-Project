@@ -201,6 +201,7 @@ Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
 import base64
+import contextlib
 import collections
 import datetime
 import email.utils
@@ -562,17 +563,55 @@ def composite(ids, channel=None, centre=None):
         bands = im.split()
         return Image.merge("LA", (bands[channel], bands[-1])), dict(report, channel=channel)
     if centre:
-        return centred(ids, centre)
-    imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+        with _hdr_capture() as sink:
+            im, report = centred(ids, centre)
+        return _with_hdr(im, sink), report
+    with _hdr_capture() as sink:
+        imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
     # the last step of every picture: a light unsharp mask (color_image.unsharp)
     if len(chans) == 1:
-        return Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), report
+        return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), sink), report
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    return Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), report
+    return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), sink), report
+
+
+# HDR stills (calibration.hdr_capture): each composite and processed frame also keeps its recovery map, a grey
+# lossless WebP at the picture's own size in HDR_DIR beside its sizes' folders, named as the picture; the drawn
+# picture is the same bytes either way. CASSINI_HDR=0 turns the maps off. A failed map is skipped, never the picture
+HDR_DIR = "hdr-r1"
+HDR_ON = os.environ.get("CASSINI_HDR", "1") != "0"
+
+
+def _hdr_capture():
+    return calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)
+
+
+def _with_hdr(im, sink):
+    """im with its recovery map in im.info["hdr"] (cut like im when centred cut it), when one was made"""
+    m = sink[-1] if sink else None
+    if m is not None and m.shape[:2] == (im.size[1], im.size[0]):
+        im.info["hdr"] = m
+    return im
+
+
+def keep_hdr(im, folder, name):
+    """Write im's recovery map (if it has one) as folder/HDR_DIR/name.webp, once"""
+    m = im.info.get("hdr")
+    if m is None:
+        return
+    path = os.path.join(folder, HDR_DIR, name + ".webp")
+    if os.path.exists(path):
+        return
+    try:
+        out = io.BytesIO()
+        Image.fromarray(m, "L").save(out, "WEBP", lossless=True, quality=80, method=4)
+        _make_file(path, lambda: out.getvalue())
+    except Exception as e:
+        print(f"No HDR map kept for {name}: {e}")
 
 
 def body_radius(lbl):
@@ -628,6 +667,14 @@ def centred(ids, view):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
     if x0 < x1 and y0 < y1:
         out[y0 - top:y1 - top, x0 - left:x1 - left] = image[y0:y1, x0:x1]
+    sink = calibration.hdr_sink()
+    if sink and sink[-1] is not None:
+        # the HDR recovery map (color_image.processed_frame placed it like image), cut the same; 0 stops off the frame
+        m = sink[-1]
+        cut = np.full((side, side), calibration.HDR_ZERO, np.uint8)
+        if m.shape[:2] == (h, w) and x0 < x1 and y0 < y1:
+            cut[y0 - top:y1 - top, x0 - left:x1 - left] = m[y0:y1, x0:x1]
+        sink[-1] = cut if m.shape[:2] == (h, w) else None
     report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
                                                           "centre": bool(view.get("centre"))})
     # the last step of every picture: a light unsharp mask (color_image.unsharp); one frame on its one channel
@@ -677,6 +724,8 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
         # goes to full view gets the composite at once instead of making it again; a size encoded like another (a
         # 1024 px composite's 1024 and full) is the same bytes, made once
+        if channel is None:
+            keep_hdr(im, folder, "_".join(ids))
         enc = encoder(im)
         for other in WINDOW_SIZES if channel is None else ():   # a channel is asked for at the size it is shown
             if other != size:
@@ -703,6 +752,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
             # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
             # made once, not once a size
             im, made = _recent_composite([frame_id], centre)
+        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), frame_id)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         reel.keep_report(base + ".json", made)
