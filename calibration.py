@@ -1642,12 +1642,82 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
             gray = x.mean(axis=0)
             x += (gray - x) * (1 - k * k * (3 - 2 * k))
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
+    # HDR (hdr_capture): the picture's brightness before the shoulder and the clip below, white = 1 (a new array:
+    # x itself is not touched, so the picture drawn is the same with HDR on or off)
+    sink = _hdr_sink.get()
+    linear = x.max(axis=0) if sink is not None else None
     if shoulder:
         _shoulder(x, shoulder)
     if every is not None:
         x[:, every] = 1.0
     x = np.clip(x, 0, 1)
-    return [cv2.cvtColor((encode_eased(c, gamma, eased) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
+    drawn = [cv2.cvtColor((encode_eased(c, gamma, eased) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
+    if sink is not None:
+        try:
+            if every is not None:
+                linear[every] = HDR_SATURATED
+            sink.append(recovery_map(linear, drawn))
+        except Exception as e:
+            print(f"No HDR map: {e}")
+    return drawn
+
+
+"""
+HDR. tone draws an 8-bit picture: white at the lit body's WHITE_PCT percentile, what is brighter rolled off by the
+shoulder and clipped, then gamma encoded. With hdr_capture open, tone also keeps a recovery map of that picture: per
+pixel of its highlights (HDR_FROM), log2 of how much brighter the linear picture was than the one drawn (decoded at
+HDR_GAMMA), from HDR_LOG2[0] to
+HDR_LOG2[1] stops in 8 bits (0 stops at code HDR_ZERO). The drawn picture times 2 ** map is the picture with its highlights
+linear again, white = 1, what the camera saturated (HDR_SATURATED) included, and its mid tones and shadows as drawn, so an HDR still (PQ AVIF, a gain map
+JPEG) can be made from the cached picture and its map with no pipeline run, on any display curve. Shadows keep the 8-bit
+picture's steps. The drawn picture is the same bytes with the capture open or not.
+"""
+HDR_LOG2 = (-1.0, 4.0)   # recovery map range, stops (a code is 5/255 of a stop)
+HDR_GAMMA = 2.2          # the drawn picture decoded at this gamma for the map (the gamma tone draws on)
+HDR_SATURATED = 8.0      # what the camera saturated, in the map: this many times white (past any display's peak)
+HDR_FROM = (0.4, 0.7)    # the map's highlights: from this share of white (0 stops under it) to all of it at the second
+HDR_EPS = 1.0 / 1024     # added to both sides of the ratio, so black over black is 0 stops
+HDR_ZERO = int(round(-HDR_LOG2[0] / (HDR_LOG2[1] - HDR_LOG2[0]) * 255))
+_hdr_sink = contextvars.ContextVar("hdr_sink", default=None)
+
+
+@contextlib.contextmanager
+def hdr_capture():
+    """While open (in this thread or task), each tone call appends its recovery map (uint8, H x W) to the list
+    yielded; the last one is the picture's"""
+    sink = []
+    token = _hdr_sink.set(sink)
+    try:
+        yield sink
+    finally:
+        _hdr_sink.reset(token)
+
+
+def hdr_sink():
+    """The list hdr_capture opened here, or None"""
+    return _hdr_sink.get()
+
+
+def recovery_map(linear, drawn):
+    """linear (H x W, white = 1, before the shoulder and clip) over drawn (tone's BGR uint8 channels, their max),
+    as log2 stops in uint8 (HDR_LOG2)"""
+    shown = np.max([d[..., 0] for d in drawn], axis=0).astype(np.float32) / 255
+    shown = np.power(shown, np.float32(HDR_GAMMA))
+    stops = np.log2((np.maximum(linear, 0) + HDR_EPS) / (shown + HDR_EPS))
+    # only the highlights: 0 stops under HDR_FROM of white, all of it from HDR_FROM[1] up (smoothstep between), so the
+    # shadows and mid tones of an HDR still are the drawn picture's own and the map is small (mostly one code)
+    t = np.clip((linear - np.float32(HDR_FROM[0])) / np.float32(HDR_FROM[1] - HDR_FROM[0]), 0, 1)
+    stops *= t * t * (3 - 2 * t)
+    lo, hi = HDR_LOG2
+    return (np.clip((stops - lo) / (hi - lo), 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
+def recover(rgb, stops):
+    """The linear picture (H x W x 3 float32, white = 1) from a drawn picture (uint8, gamma encoded) and its recovery
+    map (uint8): what an HDR still is made from"""
+    lo, hi = HDR_LOG2
+    gain = np.exp2(stops.astype(np.float32) / 255 * (hi - lo) + lo)
+    return np.power(rgb.astype(np.float32) / 255, np.float32(HDR_GAMMA)) * gain[..., None]
 
 
 """
