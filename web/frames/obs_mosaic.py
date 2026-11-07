@@ -1800,6 +1800,24 @@ def _shade(part, t):
     return out
 
 
+def _shade_rgb(rgba, g, gamma):
+    """A colour picture (RGBA) times exposure gain g on linear brightness, as _shade does a band's tile, with white
+    kept white by its brightest band: the same share of every band, so a white body clipped in one band stays white
+    rather than taking that band's hue."""
+    v = np.arange(256, dtype=np.float64) / 255
+    lut = (calibration.encode(np.clip(calibration.decode(v, gamma) * g, 0, 1), gamma) * 255).astype(np.float32)
+    rgb = rgba[..., :3]
+    dim = lut[rgb]
+    if g < 1.0:
+        top = rgb.max(axis=2).astype(np.float32)
+        w = np.clip((top - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
+        w = (w * w * (3 - 2 * w))[..., None]
+        dim = dim + w * (rgb.astype(np.float32) - dim)
+    out = rgba.copy()
+    out[..., :3] = np.clip(dim + 0.5, 0, 255).astype(np.uint8)
+    return out
+
+
 def lum_base(u, p, tiles, used, base=None):
     """Whether the mosaic of these tiles, drawn in the filters used, needs its luminance base under it: a tile of
     the base sits where the picture would otherwise have nothing (no tile of every colour filter at its place, or,
@@ -4445,6 +4463,7 @@ PER_BODY_BETTER = 0.3   # how much better (correlation) the pictures' place of a
 PER_BODY_MEASURE = 600  # canvas px of radius: a bigger body (Saturn) is moved by SPICE's offsets alone, not looked for
 PER_BODY_LEAST = 10    # canvas px of radius: a smaller body (Pandora, Telesto, a speck) is not moved
 PER_BODY_SLOP = 10      # canvas px (_per_body_planes)
+PER_BODY_INSIDE = 0.25  # of the target's limb over the body's floor: inside SPICE's limb, that much over it is all target
 PER_BODY_FRONT = (4, 0.15)   # canvas px and share of its radius round the target's disk (its blurred limb and glare, and the hold a few px off: Dione 8 px off in 153DI)
                              # that is not moved with a body behind it, nor taken from it
 
@@ -4473,7 +4492,18 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
 
     def spice_target(i):
         (px, py), (sx, sy) = places[i]
-        return (px - sx - rect[0]) * k, (py - sy - rect[1]) * k
+        return (px - sx - rect[0]) * k + seen_off[0], (py - sy - rect[1]) * k + seen_off[1]
+    # (where the shown plane's picture has the target's limb, when it is clearly off SPICE's place: Dione drawn 29 px
+    # off it in 153DI MUTUALEVE002, so the zone round the target that a body behind it is not moved into sat off
+    # Dione, and the moved Titan cut a wedge out of it, drawn blue, yellow and green; the other bodies go with it, as
+    # SPICE's place of one from another is right)
+    seen_off = (0.0, 0.0)
+    if u["key"][0] not in PER_BODY_HAZY:
+        # (not a hazy target, Titan's soft limb in 153TE SFAD002 lost to Tethys's sharp one; nor on the other bodies)
+        at = spice_target(ref)
+        others_at = [(at[0] + x * k, at[1] + y * k, r * k * 1.15 + PER_BODY_LIMB * radius * k + PER_BODY_GROW)
+                     for x, y, r, _ in named[ref].values()]
+        seen_off = _limb_centre(planes[ref][..., 0].astype(np.float32), at, radius * k, others_at) or seen_off
     lined = {}
 
     def target(i):
@@ -4573,7 +4603,9 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
                 # another part of it: the shown plane's, or green and orange arcs ring the target)
                 # (where the body is, or was in this plane, its disks whole: was and new leave this zone out)
                 bodies_here = disk(ci, r * k * (1 + haze) + PER_BODY_GROW + 2) | disk(cr, rr * k * (1 + haze) + PER_BODY_GROW + 2)
-                ring = disk(ti, radius * k + front + 1) & ~disk(ti, radius * k - 1) & bodies_here
+                # (from PER_BODY_SLOP inside SPICE's limb: the hold puts the target a few px off, so its limb on the
+                # dark side lay inside SPICE's disk and this plane's own body showed there, an orange edge round Rhea)
+                ring = disk(ti, radius * k + front + 1) & ~disk(ti, radius * k - PER_BODY_SLOP) & bodies_here
                 # (from the target's color at its limb to the body's at the ring's outer edge)
                 # (off the body, over the sky, the target's own: Dione's glow beside Titan came out blue and green)
                 # (each pixel there is the target's blurred limb and the body behind it, mixed: its ratio is the
@@ -4586,7 +4618,16 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
                 lb = float(np.median(g_ref[b_out])) if b_out.sum() >= 20 else 0.0
                 on_body = disk(cr, rr * k * (1 + haze) + PER_BODY_GROW)
                 # (either way round: a dark Titan over a bright Saturn, 165TI, as a bright Rhea over Titan)
-                wt = np.clip((g_ref - lb) / (lt - lb), 0, 1) if abs(lt - lb) > 1 else np.ones_like(g_ref)
+                # (the body's brightness taken where it is seen just outside the zone in each pixel's own direction:
+                # one median for the whole zone put Titan's dimmer side under Rhea's glare as part target, a gray
+                # ring with a hard outer edge round Rhea, 154RH)
+                lb = _radial_floor(g_ref, ti, radius * k + front + 4, lb)
+                wt = np.clip((g_ref - lb) / np.maximum(lt - lb, 1.0), 0, 1) if np.any(np.abs(lt - lb) > 1) else np.ones_like(g_ref)
+                # (inside SPICE's limb the target's own dimmer limb, under the body's floor or a little over it, is
+                # still the target: only what is no brighter than the body there is taken as the body)
+                inside = disk(ti, radius * k - 1)
+                if np.any(np.abs(lt - lb) > 1):
+                    wt = np.where(inside, np.clip((g_ref - lb) / np.maximum((lt - lb) * PER_BODY_INSIDE, 1.0), 0, 1), wt)
                 wt = np.where(on_body, wt, 1.0)
                 h[ring] = g_ref[ring] * (r_target * wt[ring] + r_body * (1 - wt[ring]))
             plane = out[i].copy()
@@ -4596,6 +4637,90 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
     if moves:
         moves["_away"] = away
     return out, (moves or None)
+
+
+PER_BODY_HAZY = ("TITAN", "SATURN")   # targets whose limb is a haze: not looked for by _limb_centre
+PER_BODY_LIMB = 0.75    # _limb_centre: the most a target's limb is looked for from SPICE's place, of its radius ...
+PER_BODY_LIMB_LIT = 0.5     # ... of the brightest round it: the body's lit part, which ...
+PER_BODY_LIMB_SHARE = (0.9, 0.1)   # ... must lie this much in the circle found, and this much more than in SPICE's
+PER_BODY_LIMB_BETTER = 1.3   # ... and how much stronger its edges must lie on the circle there than at SPICE's place
+
+
+def _limb_centre(g, at, r, exclude=()):
+    """How far (canvas px) the centre of the circle of radius r that lies best on picture g's brightness edges is
+    from at (SPICE's place of a body of that radius), searched to PER_BODY_LIMB of r, a pixel then a quarter pixel;
+    None when it is no clearly better place (PER_BODY_LIMB_BETTER) or the body is too small or big to measure. The
+    lit half of a limb is enough: each circle is scored on the stronger half of the edges along it. exclude: disks
+    [(x, y, r)] whose edges are not counted (other bodies and their glow)."""
+    if r < 8 or r > PER_BODY_MEASURE:
+        return None
+    reach = PER_BODY_LIMB * r
+    half = int(r + reach + 6)
+    x0, y0 = max(int(at[0]) - half, 0), max(int(at[1]) - half, 0)
+    x1, y1 = min(int(at[0]) + half, g.shape[1]), min(int(at[1]) + half, g.shape[0])
+    if x1 - x0 < 16 or y1 - y0 < 16:
+        return None
+    a = cv2.GaussianBlur(np.ascontiguousarray(g[y0:y1, x0:x1]), (0, 0), 1.0)
+    e = np.hypot(cv2.Sobel(a, cv2.CV_32F, 1, 0), cv2.Sobel(a, cv2.CV_32F, 0, 1))
+    if exclude:
+        yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+        for ex, ey, er in exclude:
+            e[(xx - ex) ** 2 + (yy - ey) ** 2 <= er * er] = 0
+    th = np.linspace(0, 2 * np.pi, max(64, int(2 * np.pi * r)), endpoint=False).astype(np.float32)
+    cx, cy = np.cos(th) * r, np.sin(th) * r
+
+    def score(dx, dy):
+        mx = (at[0] - x0 + dx + cx).astype(np.float32)
+        my = (at[1] - y0 + dy + cy).astype(np.float32)
+        v = cv2.remap(e, mx[None], my[None], cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)[0]
+        v = np.sort(v)
+        return float(v[len(v) // 2:].mean())
+    base = score(0.0, 0.0)
+    best = (base, 0.0, 0.0)
+    n = int(reach)
+    for dx in range(-n, n + 1):
+        for dy in range(-n, n + 1):
+            if dx * dx + dy * dy <= reach * reach:
+                v = score(dx, dy)
+                if v > best[0]:
+                    best = (v, float(dx), float(dy))
+    for dx in np.arange(-0.75, 0.76, 0.25) + best[1]:
+        for dy in np.arange(-0.75, 0.76, 0.25) + best[2]:
+            v = score(dx, dy)
+            if v > best[0]:
+                best = (v, float(dx), float(dy))
+    if best[0] < PER_BODY_LIMB_BETTER * max(base, 1e-6) or math.hypot(best[1], best[2]) < 1.0:
+        return None
+    # (and the body's lit part must lie in that circle, clearly more of it than in SPICE's: an edge of Titan's haze,
+    # a ring line or a terminator lines up with a circle too, 158DI MUTUALEVE001 frame 20 pulled 33 px onto Titan)
+    yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+    free = np.ones(a.shape, bool)
+    for ex, ey, er in exclude:
+        free &= (xx - ex) ** 2 + (yy - ey) ** 2 > er * er
+    if not free.any():
+        return None
+    lit = (a > PER_BODY_LIMB_LIT * float(a[free].max())) & free
+    if lit.sum() < 50:
+        return None
+
+    def share(dx, dy):
+        return float((lit & ((xx - at[0] - dx) ** 2 + (yy - at[1] - dy) ** 2 <= (r * 1.05) ** 2)).sum()) / lit.sum()
+    if share(best[1], best[2]) < PER_BODY_LIMB_SHARE[0] or share(best[1], best[2]) < share(0.0, 0.0) + PER_BODY_LIMB_SHARE[1]:
+        return None
+    return best[1], best[2]
+
+
+def _radial_floor(g, c, r_out, fallback):
+    """g's brightness at radius r_out from c in each pixel's own direction (a picture the size of g), smoothed along
+    the circle; fallback where that point is off the picture."""
+    H, W = g.shape
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    d = np.maximum(np.hypot(xx - c[0], yy - c[1]), 1e-3)
+    mx = c[0] + (xx - c[0]) * (r_out / d)
+    my = c[1] + (yy - c[1]) * (r_out / d)
+    sm = cv2.GaussianBlur(np.ascontiguousarray(g, dtype=np.float32), (0, 0), 3.0)
+    out = cv2.remap(sm, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=-1.0)
+    return np.where(out < 0, np.float32(fallback), out)
 
 
 def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None, wide=False):
@@ -6293,12 +6418,22 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # a methane band) keeps it up; the frames before the first set show the first (set_of)
     if got:
         want = p["colour"]
+        own_gain = {}
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
-            newest[f] = at(raw if j == n else tile(u, j, cache, p["display_scale"]))
+            base = raw if j == n else tile(u, j, cache, p["display_scale"])
+            newest[f] = at(base)
+            own_gain[f] = base.get("gain")
         used = want
     if used:
-        planes = [_place(u, newest[f], rect, k, W, H, cache, p["display_scale"]) for f in used]
+        # (drawn without the frame's exposure gain, which is applied to the colour picture made of them: on each
+        # plane alone, _shade kept one band's clipped white while the others were dimmed under it, and a moon only
+        # one band clipped on came out with a lime-green blotch, Rhea in GRN, 154RH MUTUALEVE002 at gain 0.5; and
+        # colour_picture fills a clipped band from the others only where it still reads as clipped)
+        # (a gain over 1 as before: nothing is kept white then)
+        late = gain < 1.0
+        planes = [_place(u, dict(newest[f], gain=own_gain[f]) if late else newest[f], rect, k, W, H, cache,
+                         p["display_scale"]) for f in used]
         # another body in the set (a transit: Titan behind Rhea) moved against the target between the filters: each
         # filter's copy of it put where the shown frame has it (_per_body_planes), not three colored copies
         # (where the target is in each tile's picture: SPICE's place, or the pictures' where seen_places took them,
@@ -6325,6 +6460,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         # the 2009 south pole movie, is covered at the held frame's place.)
         if max(held_cover(at(own), planes, rect, k), held_cover(t, planes, rect, k)) >= HELD_COVER:
             rgba = colour_picture(u, p, used, planes, away)
+            if late:
+                rgba = _shade_rgb(rgba, gain, gamma)
             rep["color"] = used
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
