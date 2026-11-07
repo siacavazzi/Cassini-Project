@@ -17,6 +17,8 @@
      instead of buttons, for a long list); "action" (run, a
      button). reload: true marks a setting that takes effect when the page is opened again. -->
 <style>
+/* HDR highlights' glow (Settings > Processing > Highlight glow): how far above white an HDR picture may go */
+#app img { dynamic-range-limit: var(--hdr-limit, no-limit); }
 #settings { width: min(620px, calc(100% - 20px)); height: min(460px, calc(100% - 80px)); z-index: 900; }
 #settings .sbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 138px minmax(0, 1fr); border-top: 1px solid var(--q-line); }
 #settings nav { padding: 8px 6px; border-right: 1px solid var(--q-line); display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
@@ -286,6 +288,20 @@ body.phone .srow input[type=range] { width: 96px; }
       hint: "What shows where a picture's frame does not reach, as when Auto center keeps a body in the middle that the camera caught at its edge. Black by default." });
   window.cassiniBackground = () => S.get("cameras.background") || "#000000";
   S.on("cameras.background", v => document.documentElement.style.setProperty("--cam-bg", v || "#000000"));
+  // HDR stills (frame_server hdr=1: an AVIF made from the picture and its recovery map, calibration.hdr_capture): asked
+  // for only on a screen that says it shows HDR, so every other screen gets the same pictures at the same addresses
+  D({ key: "cameras.hdr", section: "Processing", label: "HDR highlights", type: "choice", value: "auto",
+      options: [["auto", "Auto"], ["off", "Off"]],
+      hint: "On a screen that shows HDR (an iPhone, a recent Mac, an HDR monitor), color pictures and processed frames come as HDR pictures: the bright parts the usual picture rolls off at white (a lit ring, a bright limb, glare the camera saturated) shine brighter than white, with their detail, while the rest looks as before. Other screens, and pictures not made in HDR yet, show the usual picture. Off always shows the usual picture." });
+  D({ key: "cameras.hdrGlow", section: "Processing", label: "Highlight glow", type: "range", value: 100, min: 0, max: 100, step: 10, unit: "%",
+      hint: "How far above white the HDR highlights may go (with HDR highlights on): 0% shows them at white like the usual picture, 100% as bright as the screen allows. Needs a browser that supports it (Safari 26, Chrome 136 or newer)." });
+  const hdrScreen = () => { try { return window.matchMedia("(dynamic-range: high)").matches; } catch (e) { return false; } };
+  // (sz: the size asked; a strip's small pictures stay as they are)
+  window.cassiniHdr = sz => S.get("cameras.hdr") !== "off" && hdrScreen() && !(+sz < 512) ? "&hdr=1" : "";
+  S.on("cameras.hdrGlow", v => {
+    const p = Math.max(0, Math.min(100, v ?? 100));
+    document.documentElement.style.setProperty("--hdr-limit", p >= 100 ? "no-limit" : p <= 0 ? "standard" : `dynamic-range-limit-mix(standard ${100 - p}%, no-limit ${p}%)`);
+  });
   // right under Auto center (as in each camera window's settings menu): how a movie pass is steadied
   D({ key: "movies.stabilize", section: "Processing", label: "Image stabilization", type: "toggle", value: false,
       hint: "SPICE places each frame of a movie pass from where Cassini was said to point, and that is a few pixels off, differently from frame to frame, so a moon or Jupiter's clouds can wobble. On, each frame is matched to the frame before it by what the pictures show (the pipeline's own alignment, with SPICE's place as the starting guess), and held to SPICE over a longer stretch so the body stays where it is. Feature tracks (a cloud followed across Saturn) are always steadied. Off shows every frame where SPICE puts it." });

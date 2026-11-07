@@ -247,7 +247,7 @@ def options(q):
     pictures = get("pictures", "movie") if get("pictures", "movie") in PICTURES else "movie"
     return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
             "levels": levels, "even": even, "fedit": fedit, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
-            "pictures": pictures, "list": get("list", "0") == "1",
+            "pictures": pictures, "list": get("list", "0") == "1", "hdr": get("hdr", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0", "boom": get("boom", "0") == "1",
             "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
@@ -281,6 +281,8 @@ def job_id(opt):
         key["pictures"] = opt["pictures"]
     if opt.get("boom"):
         key["boom"] = True
+    if opt.get("hdr"):
+        key["hdr"] = True
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -776,6 +778,41 @@ def height(opt):
 
 # ---------- pictures ----------
 
+def _served_map():
+    """The HDR recovery map of the picture the maker just served (calibration.hdr_served), an L image, or None"""
+    picture, stops = calibration.hdr_served()
+    if not stops or not os.path.exists(stops):
+        return None
+    try:
+        return Image.open(stops).convert("L")
+    except Exception:
+        return None
+
+
+def hdr_map_like(stops, size, alpha=None):
+    """A recovery map (L image) at size, 0 stops where alpha (the picture's, at size) has nothing"""
+    m = stops.resize(size, Image.BILINEAR) if stops.size != size else stops
+    if alpha is not None:
+        zero = Image.new("L", size, calibration.HDR_ZERO)
+        zero.paste(m, mask=alpha.point(lambda v: 255 if v else 0))
+        m = zero
+    return m
+
+
+def framed_map(m, size, crop, nudge):
+    """framed for a picture's recovery map (L image at the picture's size): the same move and cut, 0 stops where the
+    picture has nothing"""
+    dx, dy = nudge
+    if not crop and not dx and not dy:
+        return m
+    x0, y0, x1, y1 = crop or (0, 0, 1, 1)
+    W, H = size
+    cw, ch = (x1 - x0) * W, (y1 - y0) * H
+    k = max(W, H) / max(cw, ch)
+    return m.transform((max(1, round(cw * k)), max(1, round(ch * k))), Image.AFFINE,
+                       (1 / k, 0, (x0 - dx) * W, 0, 1 / k, (y0 - dy) * H), Image.BILINEAR, fillcolor=calibration.HDR_ZERO)
+
+
 class Pictures:
     """How the film gets each picture: the frame server's own makers (so its cache is shared), or the pipeline
     called here. Each make(...) returns WebP or PNG bytes, or None when it has no such picture."""
@@ -872,11 +909,14 @@ class Pictures:
         other picture made at 1024 and enlarged."""
         for kind, arg in e["try"]:
             try:
+                calibration.hdr_note_served(None, None)
                 if (full or cap) and kind in NATIVE_KINDS:
                     made = self.native(kind, arg, size) if full else self.canvas(kind, arg, cap)
                     if made:
-                        return self._on_black(made[0] if full else Image.open(io.BytesIO(made[0])), size), made[1]
+                        return self._on_black(made[0] if full else Image.open(io.BytesIO(made[0])), size,
+                                              None if full else _served_map()), made[1]
                     continue
+                calibration.hdr_note_served(None, None)
                 made = self.make(kind, arg, min(size, max(SIZES)))
             except FileNotFoundError:
                 continue
@@ -885,17 +925,20 @@ class Pictures:
                 continue
             if not made or not made[0]:
                 continue
-            return self._on_black(Image.open(io.BytesIO(made[0])), size), made[1]
+            return self._on_black(Image.open(io.BytesIO(made[0])), size, _served_map()), made[1]
         return None, ""
 
-    def _on_black(self, im, size):
-        """im (any mode) size px on its longest side, as RGB over black (or the film's Background, bg)."""
+    def _on_black(self, im, size, stops=None):
+        """im (any mode) size px on its longest side, as RGB over black (or the film's Background, bg). stops: its HDR
+        recovery map (an L image), sized with it into the picture's info["hdr"] (an HDR film's)."""
         im = im.convert("RGBA")
         if max(im.size) != size:
             s = size / max(im.size)
             im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
         black = Image.new("RGB", im.size, background(self.movie))
         black.paste(im, mask=im.getchannel("A"))
+        if stops is not None:
+            black.info["hdr"] = hdr_map_like(stops, black.size, im.getchannel("A"))
         return black
 
 
@@ -935,10 +978,24 @@ class Film:
         self.font = _font(max(10, round(self.ch * 0.36))) if self.ch else None
         self.small = _font(max(9, round(self.ch * 0.3))) if self.ch else None
         self.captions = {c: "" for c in opt["cams"]}
-        self.proc = subprocess.Popen(
-            [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{self.w}x{self.h}",
-             "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-             "-movflags", "+faststart", path], stdin=subprocess.PIPE)
+        # an HDR film (hdr=1): HEVC Main10, PQ, Rec.2020 (HDR10), from each picture and its recovery map
+        # (hdr_still.pq_rgb: the HDR stills' curve); the caption stays at SDR white
+        self.hdr = bool(opt.get("hdr"))
+        self.stops = Image.new("L", (self.w, self.h), calibration.HDR_ZERO) if self.hdr else None
+        self.frame = None
+        if self.hdr:
+            import hdr_still
+            self.proc = subprocess.Popen(
+                [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb48le", "-s", f"{self.w}x{self.h}",
+                 "-r", str(FPS), "-i", "-", "-vf", "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le",
+                 "-c:v", "libx265", "-preset", "fast", "-crf", "18", "-x265-params", hdr_still.x265_params(),
+                 "-tag:v", "hvc1", *hdr_still.HDR_TAGS, "-movflags", "+faststart", path],
+                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        else:
+            self.proc = subprocess.Popen(
+                [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{self.w}x{self.h}",
+                 "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+                 "-movflags", "+faststart", path], stdin=subprocess.PIPE)
 
     def put(self, e, im, what):
         """Picture im of entry e goes up in its camera's pane (which keeps it until the next)."""
@@ -947,6 +1004,14 @@ class Film:
         if im is not None:
             pane.paste(im, ((self.size - im.width) // 2, (self.size - im.height) // 2))
         self.canvas.paste(pane, (x0, 0))
+        if self.hdr:
+            stops = Image.new("L", (self.size, self.size), calibration.HDR_ZERO)
+            m = im.info.get("hdr") if im is not None else None
+            if m is not None:
+                stops.paste(m if m.size == im.size else m.resize(im.size, Image.BILINEAR),
+                            ((self.size - im.width) // 2, (self.size - im.height) // 2))
+            self.stops.paste(stops, (x0, 0))
+            self.frame = None
         self.captions[e["cam"]] = label(e, what)
         if self.ch:
             d = ImageDraw.Draw(self.canvas)
@@ -958,7 +1023,14 @@ class Film:
                        font=self.small, fill=(138, 182, 255), anchor="rm")
 
     def hold(self, frames):
-        data = self.canvas.tobytes()
+        if self.hdr:
+            if self.frame is None:
+                import hdr_still
+                linear = calibration.recover(np.asarray(self.canvas), np.asarray(self.stops))
+                self.frame = (np.clip(hdr_still.pq_rgb(linear), 0, 1) * 65535 + 0.5).astype("<u2").tobytes()
+            data = self.frame
+        else:
+            data = self.canvas.tobytes()
         for _ in range(frames):
             self.proc.stdin.write(data)
 
@@ -1015,6 +1087,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                                             opt["size"] if big(opt) and not full else None))
                     nxt += 1
                 im, what = todo.popleft().result()
+                stops = im.info.get("hdr") if im is not None and opt.get("hdr") else None
                 if cs and im is not None:
                     group, st = palette_of(n, (im, what))
                     later = [palette_of(n + 1 + q, todo[q].result()) for q in range(min(span, len(todo)))]
@@ -1030,12 +1103,17 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     measured.pop(n, None)
                 kinds[what or "none"] += 1
                 if im is not None:
-                    im = framed(im, crop_at(fr, mirror(n, fwd), fwd or len(pics)), fr["nudge"].get(e["id"], (0, 0)))
+                    at = crop_at(fr, mirror(n, fwd), fwd or len(pics)), fr["nudge"].get(e["id"], (0, 0))
+                    if stops is not None:
+                        stops = framed_map(stops, im.size, *at)
+                    im = framed(im, *at)
                 its = own[e["id"]] if e["id"] in own else look
                 if im is not None and (its or evs[n]):
                     # the movie editor's look (or the frame's own), as Cassini Studio draws it, at this picture's
                     # exposure level
                     im = studio_look.apply(im, its, evs[n])
+                if im is not None and stops is not None:
+                    im.info["hdr"] = stops
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
                 if what in ("mosaic", "mosaic movie"):
@@ -1055,9 +1133,19 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     return dict(kinds)
 
 
+def _hevc(video):
+    """Whether a film's video is HEVC (an HDR film's)"""
+    try:
+        got = subprocess.run([FFMPEG.replace("ffmpeg", "ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=codec_name", "-of", "csv=p=0", video], capture_output=True, text=True, timeout=30)
+        return got.stdout.strip() == "hevc"
+    except Exception:
+        return False
+
+
 def mux(video, wav, out):
     """The film with the soundtrack added as AAC (cut to the film's length)."""
-    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", video, "-i", wav, "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", video, "-i", wav, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-tag:v", "hvc1" if _hevc(video) else "avc1",
                     "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out], check=True)
 
 
@@ -1261,9 +1349,10 @@ def main():
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"))
     ap.add_argument("--plan", action="store_true", help="only print the plan")
     ap.add_argument("--out", default="export.mp4")
+    ap.add_argument("--hdr", action="store_true", help="an HDR film (HDR10), the pictures made by the frame server's makers")
     a = ap.parse_args()
     opt = options({"from": [a.start], "until": [a.end], "cams": [a.cams], "fps": [a.fps], "size": [str(a.size)],
-                   "caption": ["0" if a.no_caption else "1"], "sound": ["0"]})
+                   "caption": ["0" if a.no_caption else "1"], "sound": ["0"], "hdr": ["1" if a.hdr else "0"]})
     p = plan(opt)
     print(f"{p['count']} pictures, {p['seconds']} s of film, {p['width']}x{p['height']}", flush=True)
     if a.plan:
@@ -1272,7 +1361,14 @@ def main():
         return
     reel.data_source.KEEP_SPICE_CACHE = True
     started = time.time()
-    made = render(opt, p, Pictures(a.cache), a.out,
+    if a.hdr:
+        # the frame server's makers keep each picture's recovery map (as the server's own films are made)
+        import frame_server
+        pictures = Pictures(a.cache, color=frame_server.color_webp, processed=frame_server.processed_webp,
+                            frame=frame_server.webp, slots=frame_server._color_slots)
+    else:
+        pictures = Pictures(a.cache)
+    made = render(opt, p, pictures, a.out,
                   lambda d, t: print(f"{d}/{t} pictures, {time.time() - started:.0f} s", flush=True) if d % 50 == 0 or d == t else None)
     print(f"{a.out}: {made}, {time.time() - started:.0f} s", flush=True)
 
