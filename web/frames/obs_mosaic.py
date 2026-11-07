@@ -4371,7 +4371,12 @@ TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per 
 TINT_FEATHER = 0.012   # of the picture's side: how far a tinted frame eases over to the set where it clipped
 TINT_LOCAL = 0.06      # of the picture's side: the reach of the local brightness match that fill is brought to
 TINT_EDGE = 0.012   # of the picture's side: how far inside what the set saw its own hue starts
+LUM_REACH = 2 * sets_passes.SET_GAP   # s: (2 HOLD_AGE) how far a set's frame looks for the gray frame it is drawn from (shown_of): a set's
+#                            channels span minutes, so a polarizer run between two clear frames 10 minutes apart still
+#                            takes one (259EP EPIMETHEU001's P0/GRN frames played the misregistered, spiky set)
 TINT_SATURATED = 0.02   # of a frame: a gray frame saturated over more than this gives a set's frames no luminance
+TINT_TRUST = 1.25   # a pixel's hue this far from the set's mean (per channel, either way) is the set's own; further, it
+#                     fades to the mean by TINT_HUE
 TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
 TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
 TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
@@ -4414,6 +4419,11 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     # further off only within TINT_MATCH)
     match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
     own = rgb / np.maximum(y, 1e-6)[..., None]
+    # how far a pixel's hue strays from the set's mean, its largest per channel: past TINT_TRUST it fades to the mean,
+    # gone at TINT_HUE (a channel lit where the others are not, the set's channels apart on a limb against the frame's
+    # sharp one: a lime rim round Epimetheus, 259EP EPIMETHEU001; a cosmic ray in one channel)
+    dev = np.abs(np.log(np.maximum(own, 1e-6) / np.maximum(hue, 1e-6)[None, None, :])).max(axis=2)
+    trust = np.clip((math.log(TINT_HUE[1]) - dev) / (math.log(TINT_HUE[1]) - math.log(TINT_TRUST)), 0, 1)
     own = hue[None, None, :] * np.clip(own / np.maximum(hue, 1e-6)[None, None, :], *TINT_HUE)
     # the set's own hue where it is lit, held back from the edges of what it saw (its channels part there: magenta and
     # green seams); elsewhere, where the frame is lit (off the set's edge, or where the body has turned or moved since
@@ -4422,8 +4432,9 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     seen = (ca * np.clip(y / max(TINT_DARK * top_y, 1e-6), 0, 1)).astype(np.float32)
     k = max(3, int(round(TINT_EDGE * side)) | 1)
     seen = cv2.GaussianBlur(cv2.erode(seen, np.ones((k, k), np.uint8)), (0, 0), k / 2)
-    w = seen[..., None]
     frame_lit = np.clip(g / max(TINT_DARK * top_g, 1e-6), 0, 1)[..., None]
+    # (and only where the frame itself is lit: its dark sky takes no hue from the set's cosmic rays and hot pixels)
+    w = (seen * trust)[..., None] * frame_lit
     rest = hue[None, None, :] * frame_lit + (1 - frame_lit)
     h = own * w + rest * (1 - w)
     out = np.clip(h * (g * match)[..., None], 0, 1)
@@ -4446,7 +4457,9 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
             known = np.clip(cover / 0.05, 0, 1)
             local = local * (1 - known) + np.where(den > 1e-9, num / np.maximum(den, 1e-9), 1.0) * known
         local = np.clip(local, *TINT_MATCH).astype(np.float32)
-        fill = np.clip(rgb * local[..., None], 0, 1)
+        # (the set's brightness there in the trusted hue, h: its own colors as they are carried the set's limb
+        # misregistration in, a lime rim round Epimetheus' clipped clear frames, 259EP EPIMETHEU001)
+        fill = np.clip(h * (y * local)[..., None], 0, 1)
         out = out * (1 - clip[..., None]) + fill * clip[..., None]
     rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)
     return np.dstack([rgb8, grey[..., 3]])
@@ -6281,7 +6294,7 @@ def holds(tile_of, not_shown):
     return lambda j: "offset" in tile_of(j) and not not_shown(j) and not over_exposed(tile_of(j))
 
 
-def lum_of(frames, s, grey, whole, near):
+def lum_of(frames, s, grey, whole, near, reach=None):
     """The frame whose picture gives a tinted movie frame s its brightness and detail (shown_of): of the frames within
     HOLD_AGE of it that are whole (whole(j)), cover its place (near(j)) and are not of held_band's bands, the pass's
     gray filter's nearest in time, else any filter's nearest; s itself when it is not of those bands and none of the
@@ -6289,8 +6302,8 @@ def lum_of(frames, s, grey, whole, near):
     So the movie keeps one look instead of strobing filter to filter (00ATI MOVIEA001: CB3's surface, CB1's smooth
     haze, IR3's bands), and a polarizer or UV frame shows its moment through the filter beside it (153HY HYPERION001:
     its P0, P60, P120 and UV3 frames flashed gray between colour ones)."""
-    t = frames[s][3]
-    ok = [j for j in range(len(frames)) if abs(frames[j][3] - t) <= HOLD_AGE and not held_band(frames[j][2])
+    t, reach = frames[s][3], HOLD_AGE if reach is None else reach
+    ok = [j for j in range(len(frames)) if abs(frames[j][3] - t) <= reach and not held_band(frames[j][2])
           and (j == s or (whole(j) and near(j)))]
     by_time = lambda js: min(js, key=lambda j: (abs(frames[j][3] - t), j != s)) if js else None
     mine = by_time([j for j in ok if frames[j][2] == grey])
@@ -6323,7 +6336,7 @@ def shown_of(u, p, n, not_shown, tile_of):
             # flips between the sets' plain haze and its CB3 frames' surface (00ATI MOVIEA001, 117TI CLOUD001, 147TI
             # EUVFUV001), and Epimetheus (259EP EPIMETHEU001) shows its sharp clear frame, not the blurred IR1 set.
             # Not from a gray frame over-exposed in part (TINT_SATURATED: the transit's clear frames on Saturn)
-            j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
+            j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, LUM_REACH)
             if j is not None and frames[j][2] == p["grey"] and tile_of(j).get("saturated", 0.0) < TINT_SATURATED:
                 return j, got, "near"   # (the set's own moment: its brightness taken whole, tinted_frame's near)
         if got and tint:
