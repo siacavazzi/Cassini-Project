@@ -51,6 +51,7 @@ import json
 import math
 import os
 import re
+import threading
 
 import cv2
 import numpy as np
@@ -1393,13 +1394,17 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
             own = scale["black_of"](iof) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
-            out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe))
+            out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe, hdr=len(iofs) == 1))
         for picture, full in zip(out, saturated or []):
             # what the camera saturated is brighter than it could measure: white, as in a one frame picture
             # (draw_saturated), wherever the shared white puts its clipped value (a mosaic's white is its brightest
             # tile's, often a shorter exposure's, and a clipped crescent came out one flat gray)
             if full is not None:
                 picture[full] = 255
+        sink = _hdr_sink.get()
+        if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
+            # ... and HDR_SATURATED times white in its recovery map
+            sink[-1][saturated[0]] = hdr_code(np.log2(HDR_SATURATED))
         return out
     sky = None
     if off_disk is not None and len(iofs) > 1 and not _sky(iofs).mean() > sky_fraction:
@@ -1693,16 +1698,30 @@ def hdr_capture():
         _hdr_sink.reset(token)
 
 
+_hdr_served = threading.local()
+
+
+def hdr_note_served(picture, stops):
+    """A picture maker's note (this thread) of the cached picture it just served and its recovery map's path, for an
+    HDR version of it (the frame server's hdr=1, an HDR film); (None, None) to clear it"""
+    _hdr_served.pair = (picture, stops)
+
+
+def hdr_served():
+    """(picture, map) the last maker on this thread served (hdr_note_served), or (None, None)"""
+    return getattr(_hdr_served, "pair", (None, None))
+
+
 def hdr_sink():
     """The list hdr_capture opened here, or None"""
     return _hdr_sink.get()
 
 
-def recovery_map(linear, drawn):
-    """linear (H x W, white = 1, before the shoulder and clip) over drawn (tone's BGR uint8 channels, their max),
-    as log2 stops in uint8 (HDR_LOG2)"""
+def recovery_map(linear, drawn, gamma=HDR_GAMMA):
+    """linear (H x W, white = 1, before the shoulder and clip) over drawn (tone's BGR uint8 channels, their max,
+    decoded at gamma), as log2 stops in uint8 (HDR_LOG2)"""
     shown = np.max([d[..., 0] for d in drawn], axis=0).astype(np.float32) / 255
-    shown = np.power(shown, np.float32(HDR_GAMMA))
+    shown = np.power(shown, np.float32(gamma if isinstance(gamma, (int, float)) else HDR_GAMMA))
     stops = np.log2((np.maximum(linear, 0) + HDR_EPS) / (shown + HDR_EPS))
     # only the highlights: 0 stops under HDR_FROM of white, all of it from HDR_FROM[1] up (smoothstep between), so the
     # shadows and mid tones of an HDR still are the drawn picture's own and the map is small (mostly one code)
@@ -1710,6 +1729,12 @@ def recovery_map(linear, drawn):
     stops *= t * t * (3 - 2 * t)
     lo, hi = HDR_LOG2
     return (np.clip((stops - lo) / (hi - lo), 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
+def hdr_code(stops):
+    """The recovery map's code for so many stops"""
+    lo, hi = HDR_LOG2
+    return int(round(np.clip((stops - lo) / (hi - lo), 0, 1) * 255))
 
 
 def recover(rgb, stops):
@@ -2180,13 +2205,21 @@ def _shoulder(x, shoulder):
 An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded (or the sRGB curve,
 gamma "srgb"); with a shoulder, brightness past it rolls off softly (roll_off) instead of clipping
 """
-def display(iof, black, white, gamma=2.2, shoulder=None, toe=None):
+def display(iof, black, white, gamma=2.2, shoulder=None, toe=None, hdr=False):
     x = iof - black
     if toe:
         # a soft toe instead of a hard clip at black: values just above it fade in quadratically over toe (I/F),
         # so noise sitting at the black point is a smooth dark fade, not black salt among gray grain
         x = np.where(x <= 0, 0, np.where(x <= toe, x * x / (2 * toe), x - toe / 2))
     x = x / white
+    # hdr: with hdr_capture open, the picture's recovery map (as tone keeps one) from x before the shoulder and clip
+    sink = _hdr_sink.get() if hdr else None
+    linear = x.astype(np.float32) if sink is not None else None
     x = np.clip(roll_off(x, shoulder) if shoulder else x, 0, 1)
     gray = (encode(x, gamma) * 255 + 0.5).astype(np.uint8)
+    if sink is not None:
+        try:
+            sink.append(recovery_map(linear, [gray[..., None]], gamma))
+        except Exception as e:
+            print(f"No HDR map: {e}")
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
