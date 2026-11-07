@@ -2,7 +2,7 @@
 # parity.sh: prebuild composites + processed for parity-ids.txt with CASSINI_HDR=0 and =1, timed
 source /Volumes/SAM_IAC_PHOTO/cassini-work/hdr/env.sh
 cd $W
-for flag in ${FLAGS:-0 1}; do
+for flag in ${=FLAGS:-0 1}; do
   C=$H/parity-$flag; mkdir -p $C
   for ph in composites processed; do
     s=$(date +%s)
