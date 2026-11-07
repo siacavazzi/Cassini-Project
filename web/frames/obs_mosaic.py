@@ -4371,6 +4371,7 @@ TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per 
 TINT_FEATHER = 0.012   # of the picture's side: how far a tinted frame eases over to the set where it clipped
 TINT_LOCAL = 0.06      # of the picture's side: the reach of the local brightness match that fill is brought to
 TINT_EDGE = 0.012   # of the picture's side: how far inside what the set saw its own hue starts
+TINT_SATURATED = 0.02   # of a frame: a gray frame saturated over more than this gives a set's frames no luminance
 TINT_DARK = 0.08    # of the bright end: below it a set's hue fades to gray (sky noise, a shadow: no hue of their own)
 TINT_BLUR = 1.5     # px at the picture's size: the set's hue is smoothed this much, so its grain and edges stay the frame's
 TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved to the set's: both are on the pass's one
@@ -4378,7 +4379,7 @@ TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved t
 #                            frame on Saturn's night side) would otherwise set it (221EN PLMHPMR003 came out near black)
 
 
-def tinted_frame(colour, grey, gamma=2.2):
+def tinted_frame(colour, grey, gamma=2.2, same=False):
     """A movie frame's own picture (grey: RGBA, its first channel the frame on the pass's display scale) drawn in the
     colour of a colour set (colour: colour_picture's RGBA on the same canvas): in linear light, the set's hue (each
     channel over its luminance) times the frame's brightness, brought to the set's over the lit part both cover. Where
@@ -4409,7 +4410,9 @@ def tinted_frame(colour, grey, gamma=2.2):
     else:
         match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
         hue = np.ones(3, np.float32)
-    match = float(np.clip(match, *TINT_MATCH))
+    # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
+    # further off only within TINT_MATCH)
+    match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
     own = rgb / np.maximum(y, 1e-6)[..., None]
     own = hue[None, None, :] * np.clip(own / np.maximum(hue, 1e-6)[None, None, :], *TINT_HUE)
     # the set's own hue where it is lit, held back from the edges of what it saw (its channels part there: magenta and
@@ -6314,6 +6317,15 @@ def shown_of(u, p, n, not_shown, tile_of):
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got, tint = set_shown(u, n, want, not_shown, placed, covers)
+        if got and not tint and not held_band(p["grey"]):
+            # one look for the whole movie: a set's own frames, and those near it, are drawn from the pass's gray filter
+            # beside them too (lum_of) in the set's colors, as the frames between sets are, so a Titan movie no longer
+            # flips between the sets' plain haze and its CB3 frames' surface (00ATI MOVIEA001, 117TI CLOUD001, 147TI
+            # EUVFUV001), and Epimetheus (259EP EPIMETHEU001) shows its sharp clear frame, not the blurred IR1 set.
+            # Not from a gray frame over-exposed in part (TINT_SATURATED: the transit's clear frames on Saturn)
+            j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
+            if j is not None and frames[j][2] == p["grey"] and tile_of(j).get("saturated", 0.0) < TINT_SATURATED:
+                return j, got, "near"   # (the set's own moment: its brightness taken whole, tinted_frame's near)
         if got and tint:
             # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
@@ -6421,7 +6433,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         own_gain = {}
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
-            base = raw if j == n else tile(u, j, cache, p["display_scale"])
+            base = own if j == n else tile(u, j, cache, p["display_scale"])
             newest[f] = at(base)
             own_gain[f] = base.get("gain")
         used = want
@@ -6466,7 +6478,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
                 # frame n's own picture in the set's colour (set_shown): its brightness and detail, the set's hue
-                rgba = tinted_frame(rgba, _place(u, t, rect, k, W, H, cache, p["display_scale"]), gamma)
+                rgba = tinted_frame(rgba, _place(u, t, rect, k, W, H, cache, p["display_scale"]), gamma, tint == "near")
                 rep["tint"] = True
         else:
             used = None
