@@ -72,13 +72,13 @@ def save_png(rgb, path):
         fh.write(b[:33] + chunk + b[33:])   # after the signature and IHDR
 
 
-def save_avif(rgb, path, crf=8):
+def save_avif(rgb, path, crf=8, preset=6):
     """10-bit 4:2:0 AVIF, BT.2020 / PQ, by ffmpeg (SVT-AV1)"""
     h, w = rgb.shape[:2]
     raw = (np.clip(rgb, 0, 1) * 65535 + 0.5).astype("<u2").tobytes()
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb48le", "-s", f"{w}x{h}", "-i", "-",
                     "-vf", "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le", "-c:v", "libsvtav1",
-                    "-crf", str(crf), "-preset", "6", "-color_primaries", "bt2020", "-color_trc", "smpte2084",
+                    "-crf", str(crf), "-preset", str(preset), "-color_primaries", "bt2020", "-color_trc", "smpte2084",
                     "-colorspace", "bt2020nc", "-color_range", "tv", "-frames:v", "1", path], input=raw, check=True, stderr=subprocess.DEVNULL)
 
 
@@ -89,6 +89,24 @@ def linear_of(picture, stops):
     if m.shape != a.shape[:2]:
         m = cv2.resize(m, (a.shape[1], a.shape[0]), interpolation=cv2.INTER_LINEAR)
     return cal.recover(a[..., :3], m), a[..., 3]
+
+
+def make_avif(picture, stops, out, size=1024, highlight=HIGHLIGHT):
+    """The frame server's HDR still: picture and its map (paths) as an AVIF at size px (longest side), written to out
+    (by way of a temporary file, so a half-made one is never served)"""
+    im, m = Image.open(picture), Image.open(stops)
+    linear, _ = linear_of(im, m)
+    if max(linear.shape[:2]) > size:
+        f = size / max(linear.shape[:2])
+        linear = cv2.resize(linear, (round(linear.shape[1] * f), round(linear.shape[0] * f)), interpolation=cv2.INTER_AREA)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    tmp = f"{out}.{os.getpid()}.tmp.avif"
+    try:
+        save_avif(pq_rgb(linear, highlight), tmp, crf=10, preset=10)
+        os.replace(tmp, out)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def main():
