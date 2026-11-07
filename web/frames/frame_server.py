@@ -611,9 +611,21 @@ _hdr_slot = threading.Semaphore(1)
 def hdr_avif(folder, name, size):
     """The HDR AVIF of folder's picture name at size (512 or 1024, FULL as 1024), or None"""
     size = 512 if size != FULL and size <= 512 else 1024
-    stops = os.path.join(folder, HDR_DIR, name + ".webp")
-    picture = os.path.join(folder, size_dir(1024, "webp"), name + ".webp")
-    out = os.path.join(folder, HDR_DIR, HDR_AVIF, str(size), name + ".avif")
+    return hdr_avif_at(os.path.join(folder, size_dir(1024, "webp"), name + ".webp"), os.path.join(folder, HDR_DIR, name + ".webp"),
+                       os.path.join(folder, HDR_DIR, HDR_AVIF, str(size), name + ".avif"), size)
+
+
+def hdr_avif_served(path):
+    """The HDR AVIF of a movie frame or mosaic picture kept at path (calibration.hdr_served) and its recovery map
+    beside it (obs_mosaic.keep_picture_map), at the picture's own size, kept as <path>.hdr-<HDR_AVIF>.avif; or None"""
+    if not path or not path.endswith(".webp"):
+        return None
+    return hdr_avif_at(path, path[:-len(".webp")] + ".hdr.webp", f"{path[:-len('.webp')]}.hdr-{HDR_AVIF}.avif", 1 << 16)
+
+
+def hdr_avif_at(picture, stops, out, size):
+    """The HDR AVIF of picture with its recovery map stops, at most size px, kept at out; None when there is no map yet
+    or another is being made"""
     if os.path.exists(out):
         with open(out, "rb") as fh:
             return fh.read()
@@ -624,10 +636,19 @@ def hdr_avif(folder, name, size):
         with open(out, "rb") as fh:
             return fh.read()
     except Exception as e:
-        print(f"No HDR AVIF for {name}: {e}")
+        print(f"No HDR AVIF for {picture}: {e}")
         return None
     finally:
         _hdr_slot.release()
+
+
+def hdr_download(query, name):
+    """download=1 on an HDR picture: saved as name_HDR.avif"""
+    return {"Content-Disposition": f'attachment; filename="{name}_HDR.avif"'} if query.get("download", ["0"])[0] == "1" else {}
+
+
+def wants_hdr(query, fmt):
+    return query.get("hdr", ["0"])[0] == "1" and fmt == "webp"
 
 
 def keep_hdr(im, folder, name):
@@ -778,6 +799,9 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     data = cached(f"{base}.{fmt}", make)
     if not report:
         report = reel.report_of(base + ".json", {})
+    if channel is None:
+        calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), "_".join(ids) + ".webp"),
+                                    os.path.join(folder, HDR_DIR, "_".join(ids) + ".webp"))
     return data, report
 
 
@@ -800,6 +824,9 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     data = cached(f"{base}.{fmt}", make)
     if not report:
         report = reel.report_of(base + ".json", {})
+    folder = processed_folder(cache, centre)
+    calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), frame_id + ".webp"),
+                                os.path.join(folder, HDR_DIR, frame_id + ".webp"))
     return data, report
 
 
@@ -1373,11 +1400,19 @@ def make_handler(site, cache, flags=None):
         def send_hdr(self, folder, name, size, sdr, query, download, report):
             """hdr=1: the picture's HDR AVIF (hdr_avif), kept by the browser for good; or, when there is none yet, the SDR
             picture it was asked with, not kept (X-HDR says which)"""
-            if query.get("download", ["0"])[0] != "1":
-                data = hdr_avif(folder, name, size)
-                if data is not None:
-                    return self.send_bytes(data, "image/avif", True, {"X-Composite": json.dumps(report), "X-HDR": "1"})
+            data = hdr_avif(folder, name, size)
+            if data is not None:
+                return self.send_bytes(data, "image/avif", True, {"X-Composite": json.dumps(report), "X-HDR": "1", **hdr_download(query, download)})
             return self.send_picture(sdr, "webp", query, download, {"X-Composite": json.dumps(report), "X-HDR": "0"}, forever=False)
+
+        def send_served_hdr(self, sdr, query, download, headers, forever=True):
+            """hdr=1 on a movie frame or mosaic: its HDR AVIF (hdr_avif_served of what obs_mosaic just served,
+            calibration.hdr_served), or the
+            SDR picture, not kept (X-HDR says which)"""
+            data = hdr_avif_served(calibration.hdr_served()[0])
+            if data is not None:
+                return self.send_bytes(data, "image/avif", forever, {**headers, "X-HDR": "1", **hdr_download(query, download)})
+            return self.send_picture(sdr, "webp", query, download, {**headers, "X-HDR": "0"}, forever=False)
 
         def send_file(self, path, mime, query, name, headers=None, forever=True):
             """A picture kept in a file, sent a megabyte at a time (a native mosaic can be hundreds of MB)."""
@@ -1878,6 +1913,9 @@ def make_handler(site, cache, flags=None):
                                                        out=out,
                                                        fade=fade, wait=query.get("whole", ["0"])[0] == "1")
                         if made and made[0] is not None:
+                            if wants_hdr(query, fmt):
+                                return self.send_served_hdr(made[0], query, f"Cassini_{m.group(1)}_mosaic_movie",
+                                                            {"X-Movie": json.dumps(made[1])}, forever=not made[1].get("partial"))
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
                                                      forever=not made[1].get("partial"))
                     else:
@@ -1897,6 +1935,8 @@ def make_handler(site, cache, flags=None):
                         why = f"{why}, {made[1].get('made', 0)} of {made[1]['of']} frames"
                     return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, why)
                 data = made[0] if fmt == "webp" else encode(Image.open(io.BytesIO(made[0])), FULL, "png")
+                if wants_hdr(query, fmt):
+                    return self.send_served_hdr(data, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
                 return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
@@ -1939,6 +1979,8 @@ def make_handler(site, cache, flags=None):
                         made = None
                     if made:
                         # behind: the mosaic of the tiles made so far, not yet this frame's (asked for again later)
+                        if wants_hdr(query, fmt):
+                            return self.send_served_hdr(made[0], query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                         return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                     # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
                     found = obs_mosaic.unit_of(m.group(1))

@@ -3,8 +3,9 @@
 HDR_DIR, calibration.recovery_map) as a 10-bit PQ AVIF (Rec.2020) or a 16-bit PQ PNG (cICP), with no pipeline run.
 
 The display curve (the one new choice HDR makes; calibration draws the SDR picture as before):
-- up to the picture's lit median, the SDR picture's own brightness, SDR white at SDR_WHITE nits (ITU-R BT.2408)
-- above it, a power curve reaching HIGHLIGHT nits at the pipeline's white
+- up to MID of white, the SDR picture's own brightness, SDR white at SDR_WHITE nits (ITU-R BT.2408)
+- above it, a power curve reaching HIGHLIGHT nits at the pipeline's white (one curve for every picture, so a movie's
+  frames and a mosaic's pictures keep one brightness)
 - then a soft roll-off from KNEE to PEAK nits, where what the camera saturated lands
 Colors keep their ratios (the brightness curve is on each pixel's brightest channel).
 
@@ -27,6 +28,7 @@ import calibration as cal  # noqa: E402
 SDR_WHITE = 203.0
 HIGHLIGHT = 600.0
 KNEE, PEAK = 500.0, 1000.0
+MID = 0.5
 REC709_TO_2020 = np.array([[0.6274, 0.3293, 0.0433], [0.0691, 0.9195, 0.0114], [0.0164, 0.0880, 0.8956]], np.float32)
 
 
@@ -38,18 +40,11 @@ def pq(nits):
     return np.power((c1 + c2 * p) / (1 + c3 * p), m2)
 
 
-def lit_median(lum):
-    """The median of the lit picture's brightness (white = 1), what the camera saturated left out"""
-    v = lum[lum < cal.HDR_SATURATED / 2]
-    lit = v[v > 0.2 * np.percentile(v, 99)] if v.size else v
-    return float(np.median(lit)) if lit.size > 100 else 0.5
-
-
 def nits(linear, highlight=HIGHLIGHT):
     """Per channel nits (3 x H x W) of a linear picture (H x W x 3, white = 1)"""
     x = np.moveaxis(np.maximum(linear, 0), -1, 0)
     lum = np.maximum(x.max(axis=0), 1e-9)
-    m = lit_median(lum)
+    m = MID
     base = SDR_WHITE * lum
     k = max(np.log(highlight / (SDR_WHITE * m)) / np.log(1 / m), 1.0) if m < 0.99 else 1.0
     out = np.where(lum > m, SDR_WHITE * m * np.power(lum / m, k), base)
@@ -80,6 +75,16 @@ def save_avif(rgb, path, crf=8, preset=6):
                     "-vf", "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le", "-c:v", "libsvtav1",
                     "-crf", str(crf), "-preset", str(preset), "-color_primaries", "bt2020", "-color_trc", "smpte2084",
                     "-colorspace", "bt2020nc", "-color_range", "tv", "-frames:v", "1", path], input=raw, check=True, stderr=subprocess.DEVNULL)
+
+
+HDR_TAGS = ["-color_primaries", "bt2020", "-color_trc", "smpte2084", "-colorspace", "bt2020nc", "-color_range", "tv"]
+
+
+def x265_params(maxcll=1000, maxfall=200):
+    """HDR10 for x265: BT.2020, PQ, a 1,000 nit P3 master and its light levels"""
+    md = "G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(10000000,1)"
+    return (f"colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:range=limited:hdr10=1:"
+            f"master-display={md}:max-cll={maxcll},{maxfall}:repeat-headers=1:log-level=error")
 
 
 def linear_of(picture, stops):
