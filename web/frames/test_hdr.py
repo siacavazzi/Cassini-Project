@@ -63,6 +63,27 @@ def test_recover():
     assert (sink[-1][low] == cal.HDR_ZERO).all()
 
 
+def test_display_same_picture():
+    # a mosaic's or movie's tile (calibration.display on the pass's scale): the same bytes with the capture open or
+    # not, and the map gives the highlights past the shoulder back
+    chans, _ = channels()
+    iof = chans[0] * 0.02 + 0.001
+    black, white = 0.001, 0.02
+    plain = cal.display(iof, black, white, 2.2, 0.8, 0.0005)
+    with cal.hdr_capture() as sink:
+        kept = cal.display(iof, black, white, 2.2, 0.8, 0.0005, hdr=True)
+    assert np.array_equal(plain, kept) and len(sink) == 1
+    with cal.hdr_capture() as sink:
+        cal.display(iof, black, white, 2.2, 0.8, 0.0005)
+    assert sink == []   # only a caller that asks (load_channels on a pass's scale, one frame) keeps a map
+    with cal.hdr_capture() as sink:
+        kept = cal.display(iof, black, white, 2.2, 0.8, 0.0005, hdr=True)
+    lin = (iof - black) / white
+    back = cal.recover(kept, sink[-1]).max(axis=-1)
+    bright = lin > 0.9
+    assert bright.sum() > 100 and np.median(np.abs(np.log2(back[bright] / lin[bright]))) < 0.05
+
+
 if __name__ == "__main__":
     for name, f in list(globals().items()):
         if name.startswith("test_"):
