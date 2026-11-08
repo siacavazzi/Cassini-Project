@@ -76,7 +76,7 @@ def sweep(targets=None):
         for u in om.units(target, obs, cam):
             if not u["frames"] or not u.get("z"):
                 continue
-            seen = om.frames_seen(u["frames"], u["z"])
+            seen = om.frames_seen(u["frames"], u["z"], om.view_turn(u))
             if seen is None:
                 continue
             radius = om.RADIUS.get(target, 0) / (u["z"] * om.IFOV[cam])

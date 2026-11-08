@@ -519,10 +519,11 @@ COLOR_VERSIONS = {"balanced": "color-v54", "raw": "color-v37", "eye": "color-v54
 PROC_VERSIONS = {"balanced": "proc-v21", "raw": "proc-v21", "eye": "proc-v21", "false": "proc-v21", "classic": "proc-v15"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr7"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+CENTRE_VERSION = "ctr8"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
                           # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
                           # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
+                          # ctr8: turned to the pass's own orientation (obs_mosaic.pass_turn), not north up: no tilt
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -681,11 +682,12 @@ def body_radius(lbl):
 
 
 def centred(ids, view):
-    """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
+    """The composite of ids (or one frame) centred on the body, turned to the pass's own orientation (view["turn"],
+    obs_mosaic.pass_turn: north up less the pass's average roll, so the frame keeps its square): the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
     view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
     scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
-    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids], turn=view.get("turn", 0.0))
     if "frame_offset" not in report:
         raise LookupError(report.get("why", "not placed by SPICE"))
     # processed_frame puts the frame's middle at the canvas middle; the body's centre is frame_offset from it
@@ -741,7 +743,8 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids, centre=None):
-    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()))
+    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()),
+           centre and centre.get("turn"))
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
@@ -831,7 +834,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
 
 
 # ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
-THUMB_VERSION = "thumb-v5"   # v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
+THUMB_VERSION = "thumb-v6"   # v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
 THUMB_SIZE = 256
 
 

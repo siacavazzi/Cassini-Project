@@ -29,7 +29,7 @@ def sweep(targets=None):
             movie = u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])
             if not (movie and u["frames"] and u.get("z")) or u.get("track"):
                 continue
-            seen = om.frames_seen(u["frames"], u["z"])
+            seen = om.frames_seen(u["frames"], u["z"], om.view_turn(u))
             if seen is None:
                 continue
             radius = om.RADIUS.get(target, 0) / (u["z"] * om.IFOV[cam])

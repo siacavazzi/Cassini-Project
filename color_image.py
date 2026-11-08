@@ -1262,8 +1262,11 @@ that middle sits relative to the target's centre (canvas pixels, x right, y down
 panels keep their places on the body, so they can mosaic. report["centred"] is True when the
 target's centre is on the frame. Without SPICE, the 1024 px frame as it is.
 hdr, scale, repeat_window, around = as load_aligned (for whole-observation mosaics and movies)
+turn = degrees (as find_target's angle) the picture is drawn short of north up: a camera window's still is turned
+only to its pass's own orientation (obs_mosaic.pass_turn), so a pass the camera does not roll under keeps the
+square frame as Cassini took it; frame_offset is then on those turned axes. 0 (movies, mosaics, reels): north up
 """
-def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None):
+def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None, turn=0.0):
     imgs, valid, lbl, report = load_aligned(list(paths), hdr, scale, repeat_window, around=around)
     chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
     if len(chans) == 1:
@@ -1283,6 +1286,11 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
         middle = np.array([(shape[1] - 1) / 2, (shape[0] - 1) / 2])
         moved = (lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0]))[:2]
         offset = moved - middle
+        if turn:
+            # drawn turn degrees short of north up: the offset turned back by turn about the canvas's middle
+            t = np.radians(turn)
+            offset = np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]]) @ offset
+            report["turn"] = round(float(turn), 2)
         report["frame_offset"] = [round(float(v), 1) for v in offset]
         report["offset_px"] = round(float(np.hypot(*offset)), 1)
         report["centred"] = bool(report["offset_px"] <= max_offset)
@@ -1290,7 +1298,7 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
             report["why"] = f"the target's centre is off the frame (close-up), {report['offset_px']:.0f} px from its middle"
         # the same rotation without the shift: the frame north up at the middle of the canvas
         # (a close-up's shift would push it off the canvas)
-        angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0]))
+        angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0])) - turn
         drawn = lbl.translate("png", 0, 0, angle, border)
         _place_hdr_map(lbl, alpha, angle)
         return drawn, lbl, report
