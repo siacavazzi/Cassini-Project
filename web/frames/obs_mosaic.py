@@ -253,7 +253,8 @@ def units(target, obs, cam):
         g = where.get(r.id)
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
-            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t, "turns": turned}
+            zoomed = cur is not None and t - cur["last"] <= GAP
+            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t, "turns": turned, "zoomed": zoomed}
             out.append(cur)
         cur["last"] = t
         cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
@@ -302,6 +303,9 @@ def units(target, obs, cam):
             panned = panned or prev["panned"]
         else:
             laps.append(u)
+    # a raster's lap that ZOOM cut short takes the tiles that finish it back from the pass after it
+    if _lap_tails(laps):
+        relaid = True   # (the passes after it change, or are renumbered)
     # a movie that re-points to sky it never comes back to plays each view as a pass of its own, and a mosaic that
     # holds separate scans (islands) draws each as a mosaic of its own
     # (a map joined or kept apart on its frames' ground, or a time series judged on places turned frame by frame,
@@ -364,6 +368,84 @@ def units(target, obs, cam):
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+LAP_TAIL_BODIES = ("SATURN", "JUPITER")   # (_lap_tails) the planets, whose rasters go round lap after lap as Cassini
+                                          # closes in; a moon's flyby mosaics at two distances stay two (000PH, 194TI)
+
+
+def _lap_tails(laps):
+    """(units) A raster split at ZOOM in the middle of a lap (Cassini closing in, the camera going round the same
+    places): the frames at the start of the pass after the split that finish the lap, at places of the pass before it
+    its last lap has not taken yet, go back to that pass, and a pass that is all such frames joins it. The 2017-04-26
+    north pole movie (271SA_NPOLMOV001 W) was cut at 02:43 and 05:12: its third lap lost its last pointing to the next
+    pass, and its fifth lap's last four pointings were a pass of their own (a 4-tile mosaic). A frame's place there
+    is on the pass's own canvas (scaled to its distance, as tiles are) and must lie within half the pass's step of
+    one of its slots. The passes are judged again; a move that would change the first pass's kind (other than a
+    mosaic becoming a mosaic movie) is not made. True when frames moved (the passes are renumbered, LAID's folder)."""
+    moved, n = False, 0
+    while n + 1 < len(laps):
+        took = _lap_tail(laps[n], laps[n + 1])
+        moved = moved or took
+        if took and not laps[n + 1]["frames"]:
+            del laps[n + 1]   # (and the pass after it may finish the lap further)
+            continue
+        n += 1
+    return moved
+
+
+def _lap_tail(a, b):
+    """(_lap_tails) Moves the frames at the start of pass b that finish pass a's last lap into a; True when it did."""
+    if not (b.get("zoomed") and a["key"][0] in LAP_TAIL_BODIES and a.get("kind") in ("mosaic", "mosaic_movie") and a.get("z") and b["frames"]
+            and b["frames"][0][3] - a["last"] <= GAP):
+        return False
+    where = slots(a)
+    lap = lap_of(a)
+    at = {}
+    for fr, i in zip(a["frames"], where):
+        if i is not None and fr[7]:
+            at.setdefault(i, []).append((-fr[5] * fr[7] / a["z"], -fr[6] * fr[7] / a["z"]))
+    if len(at) < MIN_PLACES:
+        return False
+    centre = {i: np.mean(v, 0) for i, v in at.items()}
+    pts = list(centre.values())
+    step = float(np.median([min(max(abs(p[0] - q[0]), abs(p[1] - q[1])) for q in pts if q is not p) for p in pts]))
+    last = max(lap)
+    open_ = set(centre) - {i for i, n in zip(where, lap) if n == last and i is not None}
+    if not open_:
+        return False
+    take, here = 0, None
+    for fr in b["frames"]:
+        if not fr[7]:
+            break
+        p = (-fr[5] * fr[7] / a["z"], -fr[6] * fr[7] / a["z"])
+        i = min(centre, key=lambda k: max(abs(p[0] - centre[k][0]), abs(p[1] - centre[k][1])))
+        if max(abs(p[0] - centre[i][0]), abs(p[1] - centre[i][1])) > step / 2 or not (i in open_ or i == here):
+            break
+        open_.discard(i)
+        here = i
+        take += 1
+    if not take:
+        return False
+    t_end = b["frames"][take - 1][3]
+    cut = sum(1 for x in b["all"] if x[3] <= t_end)   # ("all" and "taken" hold every frame, in the same order)
+    trial = dict(a, frames=a["frames"] + b["frames"][:take], all=a["all"] + b["all"][:cut],
+                 taken=a["taken"] + b["taken"][:cut], last=t_end)
+    for k in ("slots", "lap_of", "_lum", "_lap_prev", "_lap_lead"):
+        trial.pop(k, None)
+    _judge(trial)
+    if trial["kind"] != a["kind"] and not (a["kind"] == "mosaic" and trial["kind"] == "mosaic_movie"):
+        return False
+    rest = {"frames": b["frames"][take:], "all": b["all"][cut:], "taken": b["taken"][cut:]}
+    a.clear()
+    a.update(trial, tails=True)
+    b.update(rest)
+    for k in ("slots", "lap_of", "_lum", "_lap_prev", "_lap_lead"):
+        b.pop(k, None)
+    if b["frames"]:
+        b["z"] = next((fr[7] for fr in b["frames"] if fr[7]), b["z"])
+        _judge(b)
+    return True
 
 
 def _pictures(frames, gap):
