@@ -1473,7 +1473,32 @@ def _filters(u):
         if mine is not None or colour is None:
             colour = mine
             u["set_colour"] = colour is not None
+    if colour is None:
+        # a pass its counts make grey whose sets are a pair with an approximate color (calibration.approximate_pair):
+        # Titan's cloud watches and maps take CB3 three times a set and MT1 once (133TI_CLOUD002: 120 CB3, 40 MT1),
+        # so MT1 never reached half of CB3's count and the pass played and mosaicked grey (Sam 11-08)
+        pair = _pair_colour(u, count, nms)
+        if pair is not None:
+            colour = pair
+            u["set_colour"] = u.get("kind") == "movie"
     return count, nms, aside, colour
+
+
+PAIR_SETS = 2   # sets of a pair (_pair_colour) a pass takes at least, as a movie's colour takes (COLOUR_STEPS)
+
+
+def _pair_colour(u, count, nms):
+    """The two colour filters, [longer, shorter], of a pass whose sets (colour_sets) take a pair drawn in approximate
+    color (calibration.approximate_pair: a body's surface window pair, Titan's CB3 with MT1, IR1, RED...), at least
+    PAIR_SETS times: the pair taken most; None without one."""
+    seen = {}
+    for run in colour_sets(u["frames"]):
+        fs = tuple(sorted({f for f, _ in run}, key=lambda f: -nms[f]))
+        if len(fs) == 2 and all(f in count for f in fs) and \
+                calibration.approximate_pair(u["key"][2], list(fs), u["key"][0]):
+            seen[fs] = seen.get(fs, 0) + 1
+    best = max(seen, key=seen.get) if seen else None
+    return list(best) if best and seen[best] >= PAIR_SETS else None
 
 
 def _set_coloured(u):
@@ -2506,6 +2531,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             levels.append(float(np.median(lit)) if lit.size else 0.0)
         mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels], obs=u["key"][1]) \
             if min(levels) > 0 else None
+        if mix is not None and not isinstance(mix, calibration.FalseMix):
+            # (an approximate color pair: its levels, for a band the body's table lacks, calibration.pair_mix)
+            out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
         if isinstance(mix, calibration.FalseMix):
             out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
             shown = [g * v for g, v in zip(np.diagonal(mix).tolist(), calibration.two_bands(levels))]

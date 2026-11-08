@@ -260,7 +260,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       if (tag && tag.textContent.trim()) return tag.textContent.trim().toLowerCase();
       // no window to read: the set in the catalog says what kind of color it is
       const ids = rec.match(ID) || [], set = typeof catalog !== "undefined" && catalog && catalog.sets ? catalog.sets.find(t => t.use.length === ids.length && t.use.every((k, j) => catalog.id[k] === ids[j])) : null;
-      return set ? ({ true: "true color", false: "false color", two: "two-filter color" })[set.kind] || "color picture" : "color picture";
+      return set ? ({ true: "true color", false: "false color", two: "two-filter color (approximate)" })[set.kind] || "color picture" : "color picture";
     }
     if (/\/frames\/processed\//.test(rec)) return "processed frame";
     if (/\/frames\/reel\//.test(rec)) return "body reel picture";
