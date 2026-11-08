@@ -572,12 +572,12 @@ def composite(ids, channel=None, centre=None):
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
-    # the last step of every picture: a light unsharp mask (color_image.unsharp)
+    # (no sharpening: #249's unsharp mask came out on 11-08, Sam: it added to the over-processed look)
     if len(chans) == 1:
-        return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), sink), report
+        return _with_hdr(Image.fromarray(np.dstack([chans[0], alpha]), "LA"), sink), report
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), sink), report
+    return _with_hdr(Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), sink), report
 
 
 # HDR stills (calibration.hdr_capture): each composite and processed frame also keeps its recovery map, a grey
@@ -730,10 +730,10 @@ def centred(ids, view):
         sink[-1] = cut if m.shape[:2] == (h, w) else None
     report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
                                                           "centre": bool(view.get("centre"))})
-    # the last step of every picture: a light unsharp mask (color_image.unsharp); one frame on its one channel
+    # one frame on its one channel (no sharpening since 11-08)
     if len(ids) == 1:
-        return Image.fromarray(color_image.unsharp(np.ascontiguousarray(out[..., [0, 3]])), "LA"), report
-    return Image.fromarray(color_image.unsharp(out), "RGBA"), report
+        return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
+    return Image.fromarray(out, "RGBA"), report
 
 
 # the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once
