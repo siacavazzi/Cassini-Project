@@ -1,0 +1,24 @@
+No-tilt fix (claude/project-thread-mu5ya4 @ 9e05b19, on regression-2017 65dad65): before/after evidence
+BEFORE = frame_server.centred with view['turn'] removed (today's north-up still); AFTER = view as centre_view returns it.
+Rendered offline on the T7 worktree, full SPICE kernels zip, nice 19, 1 BLAS thread, no server.
+
+Samples (tilt = how far the still is turned from the camera's square frame; 'looks' = off-square, i.e. mod 90):
+- JUPITER   2001-01-05  N1357349336_1,N1357349290_1  close-up/north  own north angle -155.67, pass turn -155.63, applied -155.63  tilt 155.7 (looks 24.3) -> 0.04  transparent 17.9% -> 7.8%
+- ENCELADUS 2010-05-17  N1652824841_1,N1652824983_1,N1652824913_1  centred  own north angle -178.25, pass turn -177.94, applied -177.94  tilt 178.2 (looks 1.8) -> 0.31  transparent 61.2% -> 61.2%
+- TITAN     2014-10-25  N1792952707_1,N1792952674_1,N1792952641_1  centred  own north angle -161.78, pass turn -161.78, applied -161.78  tilt 161.8 (looks 18.2) -> 0.00  transparent 50.3% -> 53.2%
+- DIONE     2010-07-27  N1658884355_1,N1658884407_1,N1658884460_1  centred  own north angle 0.10, pass turn 0.1, applied 0.1  tilt 0.1 (looks 0.1) -> 0.00  transparent 0.8% -> 1.0%
+- RHEA      2008-06-29  N1593405731_1,N1593405532_1,N1593405698_1  centred  own north angle 81.40, pass turn 81.41, applied 81.41  tilt 81.4 (looks 8.6) -> 0.01  transparent 12.7% -> 12.7%
+- SATURN    2013-08-04  W1754319367_1,W1754319334_1,W1754319301_1  centred  own north angle -55.85, pass turn -55.83, applied -55.83  tilt 55.9 (looks 34.2) -> 0.02  transparent 17.1% -> 5.0%
+- MIMAS     2006-11-20  N1542757111_1,N1542757392_1,N1542757056_1  centred  own north angle -136.06, pass turn -135.6, applied -135.6  tilt 136.1 (looks 43.9) -> 0.46  transparent 22.5% -> 16.4%
+- IAPETUS   2006-11-27  N1543340650_1,N1543340573_1,N1543340631_1  centred  own north angle -6.47, pass turn -6.47, applied -6.47  tilt 6.5 (looks 6.5) -> 0.00  transparent 6.4% -> 4.6%
+- TETHYS    2011-12-07  N1701995993_1,N1701996061_1,N1701996130_1  centred  own north angle -175.78, pass turn -175.76, applied -175.76  tilt 175.8 (looks 4.2) -> 0.02  transparent 4.1% -> 1.6%
+- TITAN     2013-04-05  N1743884761_1,N1743884704_1,N1743884656_1  close-up/north  own north angle 171.79, pass turn 171.89, applied 171.89  tilt 171.8 (looks 8.2) -> 0.10  transparent 16.3% -> 14.8%
+
+Notes: Jupiter (Sam's set) is a close-up north pass, no hold; after = 0.04 deg, corners kept (transparent 17.9% -> 7.8%; what is left is the two filters' alignment edge, not a turn). Titan 2014-10-25 is a centred set whose frame covers only half the view either way (50% -> 53%: the square shifts with centring).
+Titan 2013-04-05 close-up: the pass hold was skipped in both (SPICE vs pass disagree ~60 px), same as today. Enceladus 2010-05-17 is a plume set mostly off-frame when centred (61% empty both ways): centring, not the turn.
+Rhea (81.4 deg) and Dione (0.1 deg) were already near-square, so nothing visible changes.
+
+Mission scale (geometry cache + reel.north_angles only, every placed frame in a centred or north pass): 294150 frames, passes {'centre': 16131, 'north': 5543, 'other': 3666, 'err': 0}
+  turn from camera square, before: median 85.99, p90 173.87 deg; after: median 0.02, p90 0.69 deg
+  looks off square (mod 90), before: median 6.86, p90 29.11 deg; after: median 0.02, p90 0.69 deg
+  stills turned < 1 deg after: 92.2% (before 1.6%; looking square before 7.1%); < 5 deg after: 98.0%
