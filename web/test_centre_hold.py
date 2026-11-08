@@ -122,6 +122,50 @@ def test_pass_turn():
         om.reel.north_angles = lambda ids: {}
 
 
+def test_quarter_snap():
+    """The pass's axes are the camera's own turned the quarter that brings north closest to the top (Sam 2026-11-08:
+    no tilt, but planets and moons came out sideways): never more than 45 degrees from north up, always a whole
+    number of quarters from the camera's square; a pass that shows no body keeps the camera's axes."""
+    angles = {}
+    om.reel.north_angles = lambda ids: {i: angles[i] for i in ids if i in angles}
+    # the body's centre on the frames (a Saturn stare, a moon's disk), each frame 100 px apart
+    on = {"z": Z, "key": ("RHEA", "OBS", "N"),
+          "frames": [(None, f"R{i}", "CL1", float(i), 650, -100.0 * i, 0.0, Z) for i in range(3)]}
+    try:
+        for m, want in ((0.0, 0.0), (30.0, 30.0), (44.0, 44.0), (46.0, -44.0), (100.0, 10.0), (-120.0, -30.0),
+                        (155.7, -24.3), (-170.0, 10.0), (-135.5, -45.5 + 90.0)):
+            angles.update({f"R{i}": m for i in range(3)})
+            turn = om.pass_turn(on)
+            assert abs(turn - want) < 0.01, (m, turn, want)
+            assert abs(turn) <= 45.0
+            # drawn turned m - turn: a whole number of quarters
+            assert abs(((m - turn) / 90.0) - round((m - turn) / 90.0)) < 1e-6
+            assert om.quarter_of(turn, m) == int(round((m - turn) / 90.0)) % 4
+        # the body far off every frame (a star field with the body named its target): the camera's own axes
+        off = dict(on, frames=[fr[:5] + (5000.0, 5000.0, Z) for fr in on["frames"]])
+        angles.update({f"R{i}": 100.0 for i in range(3)})
+        assert om.pass_turn(off) == 100.0
+        # Saturn's rings count as Saturn in view: frames 100,000 km from its centre, off its disk
+        k = 100000 / (Z * om.IFOV["N"])
+        rings = {"z": Z, "key": ("SATURN", "RING", "N"), "frames": [(None, "S0", "CL1", 0.0, 650, k, 0.0, Z)]}
+        angles["S0"] = 100.0
+        assert om.pass_turn(rings) == 10.0
+        far = dict(rings, frames=[(None, "S0", "CL1", 0.0, 650, 3 * k, 0.0, Z)])
+        assert om.pass_turn(far) == 100.0
+        # a frame in no pass: its own turn, snapped when its body is on it
+        om.reel.geometry = lambda ids: {"R0": (0.0, 0.0, Z)}
+        angles["R0"] = 100.0
+        assert om.pass_turn(frame_id="R0", target="RHEA", cam="N") == 10.0
+        assert om.pass_turn(frame_id="R0", target=None, cam="N") == 100.0
+        assert om.view_shown({"centre": False, "quarter": 1}) and not om.view_shown({"centre": False})
+        # a frame the camera rolled far from its pass: shown square on the pass's quarter while north stays within
+        # 45 degrees of the top, else on its own nearest quarter
+        assert om.frame_quarter(30.0, 0) == 0 and om.frame_quarter(60.0, 0) == 1 and om.frame_quarter(-170.0, 1) == 2
+        assert om.frame_quarter(120.0, 1) == 1 and om.frame_quarter(-100.0, 3) == 3
+    finally:
+        om.reel.north_angles = lambda ids: {}
+
+
 def test_surface_turn():
     """surface_field on a pass drawn turn degrees short of north up: places go onto the sky and shifts come back, so a
     field that looks the same however the sky is turned (a swell and a swirl round the body's centre) comes out the
@@ -147,6 +191,7 @@ if __name__ == "__main__":
     test_surface_turn()
     test_hold_of()
     test_pass_turn()
+    test_quarter_snap()
     test_centred_is_centred()
     test_centred_holds()
     print("ok")

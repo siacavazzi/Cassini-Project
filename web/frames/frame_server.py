@@ -519,11 +519,13 @@ COLOR_VERSIONS = {"balanced": "color-v55", "raw": "color-v38", "eye": "color-v55
 PROC_VERSIONS = {"balanced": "proc-v22", "raw": "proc-v22", "eye": "proc-v22", "false": "proc-v22", "classic": "proc-v16"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr8"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+CENTRE_VERSION = "ctr9"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
                           # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
                           # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
                           # ctr8: turned to the pass's own orientation (obs_mosaic.pass_turn), not north up: no tilt
+                          # ctr9: the pass's axes turned the quarter nearest north up; ring and sky passes that show
+                          # their body turned by that quarter alone (obs_mosaic.centre_view "quarter")
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -834,7 +836,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
 
 
 # ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
-THUMB_VERSION = "thumb-v7"   # v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
+THUMB_VERSION = "thumb-v8"   # v8: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
 THUMB_SIZE = 256
 
 
@@ -1447,7 +1449,7 @@ def make_handler(site, cache, flags=None):
                 view = obs_mosaic.centre_view(frame_id)
             except Exception as e:
                 view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
-            if view.get("centre") or view.get("north"):
+            if obs_mosaic.view_shown(view):
                 return view
             self.not_centred(view)
             return False

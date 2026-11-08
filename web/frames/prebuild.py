@@ -125,7 +125,7 @@ def centred(frame_id):
         view = obs_mosaic.centre_view(frame_id)
     except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
         return None
-    return view if view.get("centre") or view.get("north") else None
+    return view if obs_mosaic.view_shown(view) else None
 
 
 def items(phase):

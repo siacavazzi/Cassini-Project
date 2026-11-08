@@ -127,7 +127,11 @@ U5 = {"key": ("SATURN", "X", "W", 5), "frames": frames(*sweep), "z": Z}
 angles.update({f"F{i}": 10.0 * i for i in range(12)})                  # the spacecraft rolling through the pass
 turn = om.view_turn(U5)
 rect, side, got = om.follow_view(U5, 5, t5)
-assert side == F and abs(got - (50.0 - turn)) < 1e-9
+# (turned back by its roll only: it keeps the pass's quarter, frame_quarter, so north stays near the top)
+q = om.frame_quarter(50.0, om.quarter_of(turn, om.view_axes(U5)))
+assert side == F and abs(got - (50.0 - turn - 90.0 * q)) < 1e-9
+# the frame ends up turned a whole q quarters from the camera's frame (drawn own - turn, turned back got): square
+assert abs((50.0 - turn - got) - 90.0 * q) < 1e-9 and abs(om.wrapped(50.0 - 90.0 * q)) <= 45.0
 a = math.radians(got)
 assert np.allclose(rect, (2000 - F * (abs(math.cos(a)) + abs(math.sin(a))) / 2, -rect[2] / 2, rect[2], rect[2]))
 # the tile as processed_frame draws it (turned by got about its middle) comes back the whole frame, nothing black
