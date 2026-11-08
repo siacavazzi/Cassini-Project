@@ -57,7 +57,9 @@ haze = 0.17 + 0.02 * smooth + rng.normal(0, 0.0003, (H, H))
 before, after = draw([haze], floor=False)[0], draw([haze])[0]
 print("haze p1/p10/p50/p99: before", pct(before, 1, 10, 50, 99), "after", pct(after, 1, 10, 50, 99))
 assert np.percentile(before, 10) > 230                        # today: near-white
-assert np.percentile(after, 50) < 215 and np.percentile(after, 1) > 60   # spread out, nothing crushed to black
+# spread out a little, but no further than FLOOR_GAIN (#193's 0.8 floor share took this to a median of 210 and Titan's
+# real haze to 2.4x its contrast: compression blocks and 8-bit steps, "pushing the data way too far", Sam 11-08)
+assert np.percentile(after, 50) < np.percentile(before, 50) - 4 and np.percentile(after, 1) > 150
 assert np.percentile(after, 99) > 225                         # the brightest stays near white
 
 # ---- a lit sky that fails the sky test (a plume's forward-scattered light): a glow over the whole frame, its darker
@@ -106,7 +108,7 @@ moon = np.where(xx + yy > 380, 0.6 + 0.08 * smooth, 0.0) + rng.normal(0, 0.0005,
 before, after = draw([moon], floor=False)[0], draw([moon])[0]
 body = (xx + yy) > 420
 print("moon body p10/p50: before", pct(before[body], 10, 50), "after", pct(after[body], 10, 50))
-assert np.percentile(before[body], 10) > 225 and np.percentile(after[body], 50) < 225
+assert np.percentile(before[body], 10) > 225 and np.percentile(after[body], 50) < np.percentile(before[body], 50) - 4   # gently (FLOOR_GAIN)
 assert np.percentile(after[(xx + yy) < 340], 99) < 10        # the sky stays black
 
 # ---- with sky: a lit disc with a terminator, and a ring shadow: no floor taken off, the same as before ----
@@ -132,7 +134,7 @@ finally:
 after = draw([ice])[0]
 print("ice cracks (%.1f%% of it) p50: at the 0.5 percentile floor %d, now %d" % (100 * crack.mean(), np.median(ink[crack]),
                                                                               np.median(after[crack])))
-assert crack.mean() < 0.005 and np.median(ink[crack]) < 5 and np.percentile(after[crack], 10) > 60
+assert crack.mean() < 0.005 and np.median(ink[crack]) < np.median(after[crack]) and np.percentile(after[crack], 10) > 60
 
 # ---- with sky: a small dim moon (and a narrow faint ring) under a bright even ring band (Mimas under the A ring): the
 # band's floor black would draw them black; the moon's median is the floor instead (FLOOR_BODY) ----
@@ -175,7 +177,13 @@ assert np.percentile(after[real_sky], 99) < 12                # the real sky's n
 # ---- color: one black for every channel, taken off the brightness, keeps an even surface's color ----
 ratios = np.array([1.0, 0.8, 0.6])
 cols = [(haze * k).astype(np.float32) for k in ratios]
-channels, margin, _ = cal.load_linear([Label() for _ in cols], [None] * 3, cols)
+# (on a haze spread off the shoulder, as #193's floor did, so the shoulder's roll-off near white does not count)
+keep = cal.FLOOR_SHARE, cal.FLOOR_GAIN
+cal.FLOOR_SHARE, cal.FLOOR_GAIN = 0.8, 1e6
+try:
+    channels, margin, _ = cal.load_linear([Label() for _ in cols], [None] * 3, cols)
+finally:
+    cal.FLOOR_SHARE, cal.FLOOR_GAIN = keep
 toned = [t[..., 0] for t in cal.tone(channels, margin)]       # without the channel mix, which changes color on purpose
 lin = np.array([cal.decode(np.median(t) / 255, 2.2) for t in toned])
 print("even surface channel ratios after:", (lin / lin[0]).round(3), "true", ratios)

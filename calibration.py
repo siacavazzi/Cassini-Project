@@ -719,12 +719,19 @@ STREAK_BODY = 2000    # _clean_streaks: a patch of this many pixels not sky is a
 SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
-FLOOR_SHARE = 0.8    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
+FLOOR_SHARE = 0.4    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
 FLOOR_PCT = 0.05     # its brightness (the channels' mean above their sky levels, after a 3x3 median), so a picture whose lit
                      # part is one even surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma
                      # lifting it to near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
                      # The floor is the lit part's darkest real feature: at the 0.5 percentile, the few cracks and crater
                      # shadows under it went black ink on Enceladus and Rhea close-ups (spot check round 3)
+                     # 0.8 until 11-08: through the gamma it took the darkest real feature down to a fifth of its light,
+                     # and every even surface's contrast with it, so the 2017 cache looked stretched, deep and blocky
+                     # everywhere (Titan haze, rings, cloud decks; Sam, 11-08: "pushing the data way too far")
+FLOOR_GAIN = 1.5     # ... but the floor black never stretches a picture more than this many times its contrast with the
+                     # black at its sky (or at zero): black at most (1 - 1 / FLOOR_GAIN) of the lit part's WHITE_PCT
+                     # percentile. Uncapped, an even surface (Titan's haze, a cloud deck) was spread 2-3x over the range,
+                     # past what MAX_STRETCH allows the white, and showed its compression blocks and 8-bit steps
 FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels from it (none when under FLOOR_MIN of the
 FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off (with sky or without): none when
 FLOOR_EVEN = (0.3, 0.6)  # the floor is under FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from
@@ -2021,7 +2028,7 @@ def _floor(iofs, levels, sky=None, glow=1.0):
         lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & _inner(lum.shape)
         lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
         floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
-        black = FLOOR_SHARE * max(floor, 0.0)
+        black = min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top))
         dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
         bright = max(bright - black, 0.0)
         if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
@@ -2049,7 +2056,12 @@ def _floor(iofs, levels, sky=None, glow=1.0):
             floor = min(floor, float(np.median(lum[y:y + h, x:x + w][box])))
     if floor <= 0 or top <= 0:
         return 0.0
-    return FLOOR_SHARE * _even(floor, top) * floor
+    return min(FLOOR_SHARE * _even(floor, top) * floor, _floor_cap(top))
+
+
+"""The highest floor black (FLOOR_GAIN) for a lit part whose WHITE_PCT percentile above the sky levels is top"""
+def _floor_cap(top):
+    return (1.0 - 1.0 / FLOOR_GAIN) * max(top, 0.0)
 
 
 """The pixels of a picture of shape (rows, columns) at least FLOOR_BORDER (scaled from 1024 px) from its edge"""
