@@ -111,8 +111,7 @@ def test_commands():
 
 
 def test_ship_and_free(tmp):
-    cache, hub = os.path.join(tmp, "mbp-cache"), os.path.join(tmp, "hub", "incoming-mbp")
-    os.makedirs(hub)
+    cache, hub = os.path.join(tmp, "mbp-cache"), os.path.join(tmp, "hub", "incoming-mbp")   # made by the shipper
     write(os.path.join(cache, "processed", "v1", "1024", "A.webp"), "a")
     write(os.path.join(cache, "obs", "SAT_1", "plan.json"), "{}")
     write(os.path.join(cache, "processed", "v1", "1024", "B.webp.part123"), "half")

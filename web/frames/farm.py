@@ -346,6 +346,18 @@ class Shipper:
         self.m, self.log = machine, logfile
         self.thread, self.manifests = None, []
 
+    def _dest(self):
+        """Makes the hub's folder for this machine's files (rsync won't make a missing parent), once."""
+        dest = self.m["ship_to"].rstrip("/")
+        if not getattr(self, "_made", False):
+            host, sep, path = dest.partition(":")
+            if sep and "/" not in host:
+                subprocess.call(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {shlex.quote(path)}"])
+            else:
+                os.makedirs(dest, exist_ok=True)
+            self._made = True
+        return dest + "/"
+
     def _rsync(self, extra, files_from=None):
         src = self.m["cache"].rstrip("/") + "/"
         cmd = [self.m.get("rsync", "rsync"), "-a", "--partial", "-e", "ssh -o BatchMode=yes"] + extra
@@ -353,7 +365,7 @@ class Shipper:
             cmd += ["--files-from", files_from]
         else:
             cmd += [f"--exclude={x}" for x in SKIP_SHIP] + ["--exclude=*.part*", "--exclude=*.tmp"]
-        cmd += [src, self.m["ship_to"].rstrip("/") + "/"]
+        cmd += [src, self._dest()]
         with open(self.log, "a") as fh:
             fh.write(f"{now()} {' '.join(map(shlex.quote, cmd))}\n")
             fh.flush()
@@ -384,7 +396,7 @@ class Shipper:
             with open(path, "w") as fh:
                 fh.write("".join(r + "\n" for r in rels))
             cmd = [self.m.get("rsync", "rsync"), "-ani", "-e", "ssh -o BatchMode=yes", "--files-from", path,
-                   root.rstrip("/") + "/", self.m["ship_to"].rstrip("/") + "/"]
+                   root.rstrip("/") + "/", self._dest()]
             got = subprocess.run(cmd, capture_output=True, text=True)
             pending = [l for l in got.stdout.splitlines() if l[:2] in (">f", "<f")]
             if got.returncode or pending:
@@ -409,7 +421,7 @@ class Shipper:
         sj = os.path.join(self.m["cache"], "slices.json")
         if os.path.exists(sj):
             subprocess.call([self.m.get("rsync", "rsync"), "-a", "-e", "ssh -o BatchMode=yes", sj,
-                             self.m["ship_to"].rstrip("/") + "/slices.json"])
+                             self._dest() + "slices.json"])
         if self.m.get("free"):
             path, n = self._manifest()
             if not n:
