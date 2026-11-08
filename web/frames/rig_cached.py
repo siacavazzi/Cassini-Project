@@ -78,7 +78,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                                                 "aligned": ["reference"] + ["aligned"] * (len(paths) - 1), "rig": True}
 
 
-def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None):
+def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None, turn=0.0):
     """As color_image.processed_frame: the frame north up in the middle of a canvas of its diagonal (RGBA), and
     frame_offset = where the frame's middle sits from the body's centre (the geometry cache's shift, turned)."""
     imgs, valid, _, report = load_aligned(paths, hdr, scale, repeat_window)

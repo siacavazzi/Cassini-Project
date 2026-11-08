@@ -111,11 +111,40 @@ def test_pass_turn():
         plain = [om.hold_of(U, n) for n in range(5)]
         for a, b in zip(turned, plain):
             assert np.allclose(a["hold"], b["hold"], atol=0.15) and np.allclose(a["at"], b["at"], atol=0.15)
+        # movies and mosaics are drawn on the same axes: what a view keeps of the frames (frames_seen) with the pass's
+        # turn taken out is the same as for a camera that had north up all along
+        angles.update({f"W{i}": 30.0 for i in range(5)})
+        on_t, pts_t = om.frames_seen(U["frames"], Z, 30.0)
+        angles.update({f"W{i}": 0.0 for i in range(5)})
+        on_0, pts_0 = om.frames_seen(U["frames"], Z, 0.0)
+        assert on_t == on_0 and np.allclose(pts_t, pts_0, atol=1e-6)
     finally:
         om.reel.north_angles = lambda ids: {}
 
 
+def test_surface_turn():
+    """surface_field on a pass drawn turn degrees short of north up: places go onto the sky and shifts come back, so a
+    field that looks the same however the sky is turned (a swell and a swirl round the body's centre) comes out the
+    same on the turned canvas, and one that does not (a drift east) comes out turned."""
+    class RP:
+        field = None
+
+        def sky_field(self, epoch, view, x, y, km_px):
+            dx, dy = self.field(x, y)
+            return dx, dy, np.ones_like(x)
+    rp, t = RP(), {"offset": [100.0, -40.0], "box": [-60, -60, 120, 120]}
+    rp.field = lambda x, y: (0.01 * x - 0.02 * y, 0.01 * y + 0.02 * x)
+    a = om.surface_field(rp, None, None, (120, 120), t, 1.0, 0.0)
+    b = om.surface_field(rp, None, None, (120, 120), t, 1.0, 37.0)
+    assert all(np.allclose(p, q, atol=1e-3) for p, q in zip(a, b))
+    rp.field = lambda x, y: (np.full_like(x, 5.0), np.zeros_like(y))
+    dx, dy, _ = om.surface_field(rp, None, None, (120, 120), t, 1.0, 90.0)
+    # (on a canvas turned a quarter, a shift along the sky's x lies along the canvas's y)
+    assert np.allclose(np.hypot(dx, dy), 5.0) and np.allclose(dx, 0.0, atol=1e-5)
+
+
 if __name__ == "__main__":
+    test_surface_turn()
     test_hold_of()
     test_pass_turn()
     test_centred_is_centred()
