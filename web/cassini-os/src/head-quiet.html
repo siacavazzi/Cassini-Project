@@ -1458,7 +1458,7 @@ function targetLabel(k) {
   // filters make a two-filter picture, longer as red, shorter as blue and green from both.
   const FILTER_NM = /*FILTER_NM*/{};
   const SET_GAP = 300, SET_REPEAT_GAP = 120, SET_REPEAT_MAX = 5;   // sets_passes.SET_GAP, REPEAT_GAP, REPEAT_MAX
-  const KIND = { true: "True color", false: "False color", two: "Two-filter color" };
+  const KIND = { true: "True color", false: "False color", two: "Two-filter color (approximate)" };
   const colourFilter = k => {
     const a = catalog.f1[k], b = catalog.f2[k];
     if (/^(P\d|IRP)/.test(a) || /^IRP/.test(b)) return null;

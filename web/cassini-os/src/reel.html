@@ -73,7 +73,7 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
   // so the two cameras never take turns in one place
   const wells = {};
   for (const cam of ["N", "W"]) { const cv = $("rlcanvas" + cam); wells[cam] = { el: $("rlwell" + cam), cv, g: cv.getContext("2d"), i: -1 }; }
-  const KIND = { true: "True color", false: "False color", two: "Two-filter color", bw: "Black and white" };
+  const KIND = { true: "True color", false: "False color", two: "Two-filter color (approximate)", bw: "Black and white" };
   // R: the reel playing. shots: its pictures; i: the one on screen; buf: pictures fetched (or on their way) by index
   const R = { open: false, target: null, shots: [], i: -1, playing: false, fps: 8, mosaic: true, due: 0, buf: new Map(), looping: false, hidden: [], waitSince: 0 };
   try { const f = +localStorage.getItem("cassini-os-reel-fps"); if (f >= 2 && f <= 24) R.fps = f; } catch (e) {}

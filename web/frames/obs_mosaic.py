@@ -1473,7 +1473,32 @@ def _filters(u):
         if mine is not None or colour is None:
             colour = mine
             u["set_colour"] = colour is not None
+    if colour is None:
+        # a pass its counts make grey whose sets are a pair with an approximate color (calibration.approximate_pair):
+        # Titan's cloud watches and maps take CB3 three times a set and MT1 once (133TI_CLOUD002: 120 CB3, 40 MT1),
+        # so MT1 never reached half of CB3's count and the pass played and mosaicked grey (Sam 11-08)
+        pair = _pair_colour(u, count, nms)
+        if pair is not None:
+            colour = pair
+            u["set_colour"] = u.get("kind") == "movie"
     return count, nms, aside, colour
+
+
+PAIR_SETS = 2   # sets of a pair (_pair_colour) a pass takes at least, as a movie's colour takes (COLOUR_STEPS)
+
+
+def _pair_colour(u, count, nms):
+    """The two colour filters, [longer, shorter], of a pass whose sets (colour_sets) take a pair drawn in approximate
+    color (calibration.approximate_pair: a body's surface window pair, Titan's CB3 with MT1, IR1, RED...), at least
+    PAIR_SETS times: the pair taken most; None without one."""
+    seen = {}
+    for run in colour_sets(u["frames"]):
+        fs = tuple(sorted({f for f, _ in run}, key=lambda f: -nms[f]))
+        if len(fs) == 2 and all(f in count for f in fs) and \
+                calibration.approximate_pair(u["key"][2], list(fs), u["key"][0]):
+            seen[fs] = seen.get(fs, 0) + 1
+    best = max(seen, key=seen.get) if seen else None
+    return list(best) if best and seen[best] >= PAIR_SETS else None
 
 
 def _set_coloured(u):
@@ -2506,6 +2531,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             levels.append(float(np.median(lit)) if lit.size else 0.0)
         mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels], obs=u["key"][1]) \
             if min(levels) > 0 else None
+        if mix is not None and not isinstance(mix, calibration.FalseMix):
+            # (an approximate color pair: its levels, for a band the body's table lacks, calibration.pair_mix)
+            out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
         if isinstance(mix, calibration.FalseMix):
             out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
             shown = [g * v for g, v in zip(np.diagonal(mix).tolist(), calibration.two_bands(levels))]
@@ -4405,6 +4433,64 @@ TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved t
 #                            frame on Saturn's night side) would otherwise set it (221EN PLMHPMR003 came out near black)
 
 
+TINT_SHIFT = 0.04      # of the picture's side: the furthest a set's picture is moved onto the frame it tints (_onto_frame)
+
+
+TINT_OUTLINE_GAIN = 0.8   # _outline_shift: a move kept only when the outlines then differ at most this share of as taken
+
+
+def _outline_shift(im1, im2, both, reach, step=4):
+    """(dx, dy) moving im2's lit outline onto im1's (as image_correction.limb_shift's shift), by the least difference of
+    their blurred lit masks (Otsu, over both) within reach px: a coarse search every step px, then every px round the
+    best; None unless it differs at most TINT_OUTLINE_GAIN of what it did as taken. For a set's filter whose limb the
+    pipeline's limb_shift refuses (its terminator or haze rim unlike the frame's: Titan's MT1 against CB3)."""
+    if both.mean() < 0.05:
+        return None
+
+    def lit(im):
+        v = cv2.GaussianBlur(im.astype(np.float32), (0, 0), 2)
+        t, _ = cv2.threshold(np.clip(v[both], 0, 255).astype(np.uint8).reshape(-1, 1), 0, 255,
+                             cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return cv2.GaussianBlur((v > t).astype(np.float32), (0, 0), 3)
+    a, b = lit(im1), lit(im2)
+    inner = cv2.erode(both.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
+    if inner.sum() < 1000:
+        return None
+    small = lambda x: cv2.resize(x, (x.shape[1] // step, x.shape[0] // step), interpolation=cv2.INTER_AREA)
+
+    def cost(x, y, dx, dy, m):
+        moved = cv2.warpAffine(y, np.float32([[1, 0, -dx], [0, 1, -dy]]), y.shape[::-1], flags=cv2.INTER_LINEAR)
+        return float(np.abs(x - moved)[m].mean())
+    sa, sb, sm = small(a), small(b), small(inner.astype(np.float32)) > 0.99
+    r = int(reach // step)
+    best = min((cost(sa, sb, dx, dy, sm), dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1))
+    best = min((cost(a, b, best[1] * step + dx, best[2] * step + dy, inner), best[1] * step + dx, best[2] * step + dy)
+               for dx in range(-step, step + 1) for dy in range(-step, step + 1))
+    if best[0] > TINT_OUTLINE_GAIN * cost(a, b, 0, 0, inner):
+        return None
+    return float(best[1]), float(best[2])
+
+
+def _onto_frame(colour, grey):
+    """A set's picture or one filter's plane (RGBA) moved onto the frame it tints (grey: RGBA) by the pipeline's limb
+    registration (image_correction.limb_shift: their lit outlines matched, the move kept only when the outlines then
+    differ less), when that is under TINT_SHIFT of the picture's side; else as it is. A set's filters are taken a minute
+    or more from each other and from the frame, each placed by its own pointing, so the body can sit 20 to 40 px apart
+    in them: their limbs, whose hue is the set's own (a hazy rim blue, a filter's lone edge orange), then crossed the
+    frame's disk as ghost arcs (133TI CLOUD002, CB3 + MT1; Sam 11-08)."""
+    look = lambda a: np.ascontiguousarray(a[..., :3].mean(axis=2) if a.shape[2] == 4 and not np.array_equal(
+        a[..., 0], a[..., 1]) else a[..., 0]).astype(np.uint8)
+    shift, _ = image_correction.limb_shift(look(grey), look(colour), grey[..., 3] > 0, colour[..., 3] > 0)
+    if shift is None:
+        shift = _outline_shift(look(grey), look(colour), (grey[..., 3] > 0) & (colour[..., 3] > 0),
+                               TINT_SHIFT * max(grey.shape[:2]))
+    if shift is None or math.hypot(*shift) > TINT_SHIFT * max(grey.shape[:2]) or math.hypot(*shift) < 0.5:
+        return colour
+    m = np.float32([[1, 0, -shift[0]], [0, 1, -shift[1]]])
+    return cv2.warpAffine(colour, m, (colour.shape[1], colour.shape[0]), flags=cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+
 def tinted_frame(colour, grey, gamma=2.2, same=False):
     """A movie frame's own picture (grey: RGBA, its first channel the frame on the pass's display scale) drawn in the
     colour of a colour set (colour: colour_picture's RGBA on the same canvas): in linear light, the set's hue (each
@@ -4412,6 +4498,7 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     the set has no picture, or is dark, the hue is the set's mean over its lit part, so the frame keeps its whole
     place in one colour. The frame's alpha. (set_shown: the frames between sets play their own moment in colour.)"""
     lin = lambda v: calibration.decode(v.astype(np.float32) / 255, gamma)
+    colour = _onto_frame(colour, grey)
     ca = colour[..., 3].astype(np.float32) / 255
     ga = grey[..., 3].astype(np.float32) / 255
     rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None] / 1.0)
@@ -6672,6 +6759,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         # the first cycle's, are covered at their own place only; an unfit clear frame held to the one before, as in
         # the 2009 south pole movie, is covered at the held frame's place.)
         if max(held_cover(at(own), planes, rect, k), held_cover(t, planes, rect, k)) >= HELD_COVER:
+            shown = None
+            if tint and not moved:
+                # each filter's plane moved onto the frame it tints, by its lit outline (_onto_frame): a set's filters a
+                # minute apart are placed by their own pointings and can sit 20 px from each other and from the frame,
+                # and their limbs then crossed the frame's disk as ghost arcs, blue on one side and orange on the other
+                # (133TI CLOUD002, CB3 + MT1; Sam 11-08)
+                shown = _place(u, t, rect, k, W, H, cache, p["display_scale"])
+                planes = [_onto_frame(plane, shown) for plane in planes]
             rgba = colour_picture(u, p, used, planes, away)
             if late:
                 rgba = _shade_rgb(rgba, gain, gamma)
@@ -6679,7 +6774,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
                 # frame n's own picture in the set's colour (set_shown): its brightness and detail, the set's hue
-                rgba = tinted_frame(rgba, _place(u, t, rect, k, W, H, cache, p["display_scale"]), gamma, tint == "near")
+                rgba = tinted_frame(rgba, shown if shown is not None else _place(u, t, rect, k, W, H, cache, p["display_scale"]),
+                                    gamma, tint == "near")
                 rep["tint"] = True
         else:
             used = None

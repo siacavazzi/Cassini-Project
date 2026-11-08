@@ -125,10 +125,33 @@ assert np.allclose(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.ey
 with cal.coloring("false"):
     assert isinstance(cal.color_mix("N", ["MT3", "BL1"], "TITAN", own=True), cal.FalseMix)
     assert isinstance(cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True), cal.FalseMix)
-# Titan's CB3 (its surface window) with another band stays straight, as before #188: its surface shows as the bands'
-# difference, which the balance flattened into one orange (042TI_GLOBMAP001, N1687507569_1)
-assert cal.color_mix("N", ["CB3", "MT1"], "TITAN", own=True) is None
-assert cal.color_mix("W", ["IR1", "CB3"], "TITAN", own=True) is None
+# Titan's CB3 (its surface window) with another band is never false color balanced: its surface shows as the bands'
+# difference, which the balance flattened into one orange (042TI_GLOBMAP001, N1687507569_1). It is drawn in approximate
+# color (pair_mix): each band against Titan's typical level in it, straight, times Titan's measured color (it was drawn
+# straight, cream to gray: Sam 11-08, "two-filter Titan renders black and white")
+def hue(v):
+    v = np.asarray(v, float)
+    return v / v.sum()
+for cam, bands in (("N", ["CB3", "MT1"]), ("W", ["CB3", "IR1"]), ("W", ["CB3", "RED"]), ("N", ["CB3", "MT3"])):
+    m = cal.color_mix(cam, bands, "TITAN", own=True)
+    assert not isinstance(m, cal.FalseMix) and m.shape == (3, 3) and np.allclose(m, np.diag(np.diagonal(m))), bands
+    typ = [cal.body_level("TITAN", b, cam) for b in bands]
+    # at its typical levels Titan comes out in its true color sets' color, as bright as the bands' mean
+    out = m @ np.asarray(cal.two_bands(typ))
+    assert np.allclose(hue(out), hue(cal.eye_tint("TITAN")), atol=1e-4) and abs(out.mean() / np.mean(typ) - 1) < 0.01, bands
+    # a darker marking in the longer band (the surface in CB3) leans bluer, by the straight pair's own amount
+    dark = m @ np.asarray(cal.two_bands([typ[0] * 0.8, typ[1]]))
+    assert dark[0] / dark[2] < 0.81 * out[0] / out[2], bands
+# a band the table lacks (WAC IR2/IR1): both bands at the set's own lit levels, so the ratio is still one picture's
+assert cal.body_level("TITAN", "IR2/IR1", "W") is None
+assert cal.color_mix("W", ["CB3", "IR2/IR1"], "TITAN", own=True) is None   # nothing to go on: straight, as before
+m = cal.color_mix("W", ["CB3", "IR2/IR1"], "TITAN", own=True, levels=[0.3, 0.2])
+assert np.allclose(hue(m @ np.asarray(cal.two_bands([0.3, 0.2]))), hue(cal.eye_tint("TITAN")), atol=1e-4)
+# a mosaic pass's own gains (pass_scale: each band to the pair's mean) stand in for levels the same way
+g = cal.color_mix("W", ["CB3", "IR2/IR1"], "TITAN", gains=[0.25 / 0.3, 0.25 / 0.2])
+assert np.allclose(hue(g @ np.asarray(cal.two_bands([0.3, 0.2]))), hue(cal.eye_tint("TITAN")), atol=1e-4)
+# no measured color (Phoebe is not in eye_colors.json): pair_mix has nothing to go on
+assert cal.pair_mix("N", ["CB3", "MT1"], "PHOEBE") is None
 assert isinstance(cal.color_mix("N", ["BL1", "UV3"], "TITAN", own=True), cal.FalseMix)
 assert isinstance(cal.color_mix("W", ["CB3", "VIO"], "SATURN", own=True), cal.FalseMix)
 assert not isinstance(cal.color_mix("N", ["CB3", "MT1", "UV3"], "TITAN", own=True), cal.FalseMix)
@@ -321,7 +344,7 @@ with cal.coloring("raw"):
     lin = lambda v: (v / 255) ** 2.2
     assert (r, b) == (160, 60) and abs(lin(g) - (lin(160) + lin(60)) / 2) < 0.005, (r, g, b)
 
-# ---------- Titan's CB3 + MT1 drawn straight: the markings show, in color ----------
+# ---------- Titan's CB3 + MT1 in approximate color: the markings show, in Titan's color ----------
 # CB3 sees the surface (dark markings 8% under the bright terrain), MT1 a featureless haze over the same disk
 H = 200
 yy2, xx2 = np.mgrid[:H, :H]
@@ -331,10 +354,10 @@ cb3 = np.where(disk, 0.10 * np.where(marks, 0.92, 1.0), 0).astype(np.float32)
 mt1 = np.where(disk, 0.20, 0).astype(np.float32)
 chans, margin, mix = cal.load_linear([Label("CB3", "TITAN", "ISSNA"), Label("MT1", "TITAN", "ISSNA")],
                                      [np.zeros((H, H, 3), np.uint8)] * 2, [cb3 + 0, mt1 + 0])
-assert mix is None
-out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float)   # (red CB3, blue MT1)
+assert np.allclose(mix, cal.pair_mix("N", ["CB3", "MT1"], "TITAN"))
+out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float)   # red, green, blue
 inner = disk & (np.hypot(yy2 - 100, xx2 - 100) < 55)
 dark, bright = out[:, inner & marks].mean(axis=1), out[:, inner & ~marks].mean(axis=1)
-print("Titan CB3+MT1 straight: terrain", bright.round(1), "markings", dark.round(1))
-assert bright[0] - dark[0] >= 4 and dark[0] / dark[1] < bright[0] / bright[1] - 0.01   # the markings darker, bluer (4: the gentler floor black, FLOOR_SHARE 0.4)
+print("Titan CB3+MT1 approximate color: terrain", bright.round(1), "markings", dark.round(1))
+assert bright[0] - dark[0] >= 4 and dark[0] / dark[2] < bright[0] / bright[2] - 0.01   # the markings darker, bluer
 print("ok")

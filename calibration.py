@@ -913,8 +913,9 @@ solid blue). Two visible color filters (NATURAL_PAIR: RED with BL1 or GRN) alrea
 """
 NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
 # A pair with the one filter a body's surface shows through, a window in its haze (Titan's CB3, 938 nm: its other filters
-# see the haze and clouds above), stays straight too: its surface shows as the difference between the bands (dark
-# markings bluer, the haze rim blue), which the false color balance flattens into one orange
+# see the haze and clouds above), is never false color balanced: its surface shows as the difference between the bands
+# (dark markings bluer, the haze rim blue), which the balance flattens into one orange. It is drawn in approximate
+# color (pair_mix: the body's own color, the bands' difference kept), straight where that has nothing to go on
 SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
@@ -952,7 +953,7 @@ def mix_target(target, bands, camera=None, obs=None):
     return body if body and _known_body(body, bands, camera) else target
 
 
-def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
+def color_mix(camera, bands, target=None, gains=None, own=False, obs=None, levels=None):
     if len(bands) in (2, 3) and (style() == "eye" or style() == "balanced" and emulated(bands, target)):
         if len(bands) == 3 and natural_mix(camera, bands) is not None:
             return natural_mix(camera, bands)
@@ -963,8 +964,12 @@ def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
     if not false_balanced() or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
-        if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
+        if all(b in NATURAL_PAIR for b in bands):
             return None
+        if SURFACE_WINDOW.get(str(target or "").upper()) in bands:
+            # (approximate color: the body's own color, its surface markings as the bands' difference; straight, as
+            # before, where the body has no measured color or the bands no typical level)
+            return pair_mix(camera, bands, target, levels or ([1 / g for g in gains] if gains else None))
         if gains:
             # gains bring each band to the set's mean: the levels they balance are as their inverses
             gains = balance(two_bands([1 / g for g in gains]), tint_of(target))
@@ -982,6 +987,45 @@ def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
     m.tint = tint_of(target)
     return m
+
+
+"""
+Approximate color for a two-filter set whose false color balance would flatten what it shows (a surface window pair,
+SURFACE_WINDOW: Titan's CB3 with MT1, IR1, RED...; 94% of Titan's two-filter sets). Drawn straight (longer red, the
+mean green, shorter blue) such a pair came out cream to gray, though Titan is orange-tan in every true color set.
+Each band is read against the body's typical brightness in it (body_level, the mission's measure), drawn straight as
+two_bands, and times the body's own color (eye_tint, as the pipeline's true color sets draw it): where both bands are
+at their typical share the body has its true color, and where they differ (a dark surface marking in CB3, the haze
+rim brighter in MT1) the color leans the way the straight pair leans, by as much. Nothing is invented between the
+bands: two filters can't measure a hue, so the hue is the body's measured one and only the bands' difference varies.
+levels: the set's own lit levels per band (load_linear, or a mosaic pass's pass_scale), used for both bands when the
+table lacks one (WAC IR2/IR1), so the ratio is still one picture's own. None (drawn straight) for a body with no
+measured color (eye_colors.json) or with no level for a band.
+camera = "N" or "W"; bands = the two filters, longer wavelength first; target = TARGET_NAME
+"""
+def approximate_pair(camera, bands, target=None):
+    """True when natural color draws the two-filter set in approximate color (pair_mix, given the set's levels where
+    the table lacks a band): a surface window pair of a body with a measured color, in the balanced natural look."""
+    t = str(target or "").upper()
+    eye_tint(t)   # (loads the eye colors)
+    return len(bands) == 2 and style() in ("balanced", "false", "eye") and SURFACE_WINDOW.get(t) in bands and t in _eye_colors
+
+
+def pair_mix(camera, bands, target=None, levels=None):
+    if len(bands) != 2:
+        return None
+    t = str(target or "").upper()
+    eye_tint(t)   # (loads the eye colors)
+    if t not in _eye_colors:
+        return None
+    ref = [body_level(t, b, camera) for b in bands]
+    if any(v is None for v in ref):
+        if not levels or len(levels) != 2 or min(levels) <= 0:
+            return None
+        ref = [float(v) for v in levels]
+    level = (ref[0] + ref[1]) / 2
+    gains = [level / v for v in two_bands(ref)]
+    return np.diag(np.asarray(_eye_colors[t]["rgb"], np.float64) * gains).astype(np.float32)
 
 
 """
@@ -1506,8 +1550,15 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
+    # a two-filter set's own lit level per band, for its approximate color where the table lacks a band (pair_mix)
+    pair = None
+    if len(channels) == 2:
+        both = np.mean(channels, axis=0)
+        lit = both > 0.2 * np.percentile(both, 99)
+        if lit.sum() > 100:
+            pair = [float(np.median(c[lit])) for c in channels]
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
-                    own=True, obs=_value(infos[0], "OBSERVATION_ID", ""))
+                    own=True, obs=_value(infos[0], "OBSERVATION_ID", ""), levels=pair)
     false = isinstance(mix, FalseMix)
     lum = None
     if false:

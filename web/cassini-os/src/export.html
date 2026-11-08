@@ -388,7 +388,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
 
   // ---------- the film made on this computer: export.py's render and Film, line for line, encoded by WebCodecs ----------
-  const FPS = 30, CAPTION = 48, KIND = { true: "true color", false: "false color", two: "two-filter color" };
+  const FPS = 30, CAPTION = 48, KIND = { true: "true color", false: "false color", two: "two-filter color (approximate)" };
   const MUXER = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.5/build/mp4-muxer.mjs";
   const WHAT = { movie: "movie", rolling: "mosaic movie", mosaic: "mosaic", color: "colour", processed: "processed", frame: "frame" };
   const editOf = key => new URLSearchParams(key).get("edit") || "";
