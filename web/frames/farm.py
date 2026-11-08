@@ -57,6 +57,68 @@ sys.path.insert(0, HERE)
 import slices  # noqa: E402  (stdlib only; prebuild/frame_server are imported only where versions are needed)
 
 REQUIRED_INPUTS = ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_SPICE_CACHE", "CASSINI_CISSCAL")
+KERNEL_PROBE_MIN = 20   # mission kernels a year's meta-kernel loads (2017: 109); without the kernels zip only the 3 USGS extras load
+
+
+def fingerprint(env):
+    """Sizes of the build's inputs as this machine sees them: the zips' bytes, the calibration folder's files and bytes."""
+    out = {}
+    for k in ("CASSINI_DATA", "CASSINI_KERNELS"):
+        p = env.get(k)
+        out[k] = os.path.getsize(p) if p and os.path.isfile(p) else None
+    root = env.get("CASSINI_CISSCAL")
+    if root and os.path.isdir(root):
+        n = b = 0
+        for d, _, fs in os.walk(root):
+            for f in fs:
+                n += 1
+                b += os.path.getsize(os.path.join(d, f))
+        out["CASSINI_CISSCAL"] = [n, b]
+    else:
+        out["CASSINI_CISSCAL"] = None
+    return out
+
+
+def preflight_problems(env, want, kernels_loaded=None):
+    """Why this machine must not build: an input missing, an input that differs from the hub's (plan.json "inputs"),
+    or a year whose meta-kernel loads too few kernels (kernels_loaded: {year: count})."""
+    problems = [f"{k} missing ({env.get(k) or 'not set'})" for k in REQUIRED_INPUTS if not (env.get(k) and os.path.exists(env[k]))]
+    have = fingerprint(env)
+    for k, v in (want or {}).items():
+        if v is not None and have.get(k) != v:
+            problems.append(f"{k} differs from the hub's: {have.get(k)} here, {v} there")
+    for year, n in sorted((kernels_loaded or {}).items()):
+        if n < KERNEL_PROBE_MIN:
+            problems.append(f"only {n} SPICE kernels load for {year} (the hub loads ~100): the kernels are not usable here")
+    return problems
+
+
+def kernel_probe(python, env, years):
+    """{year: kernels loaded} by the pipeline's own loader (bootleg_autonav.load_kernels) in a fresh process."""
+    out = {}
+    for y in years:
+        code = ("import sys; sys.path.insert(0, '.'); import bootleg_autonav as b, spiceypy as sp, io, contextlib\n"
+                f"with contextlib.redirect_stdout(io.StringIO()): b.load_kernels({y}, {y})\n"
+                "print(sp.ktotal('ALL'))")
+        got = subprocess.run([python, "-c", code], cwd=REPO, env=env, capture_output=True, text=True, timeout=900)
+        try:
+            out[y] = int(got.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            out[y] = 0
+    return out
+
+
+def plan_years(plan):
+    ys = set()
+    for u in plan["units"]:
+        for a, b in unit_spans(u):
+            if a:
+                ys.add(int(a[:4]))
+            if b:
+                ys.add(int(b[:4]) - (1 if b[5:10] == "01-01" else 0))
+    return sorted(ys) or [2004]
+
+
 PHASES = ["composites", "processed", "mosaics", "movies", "strips", "chains"]   # per unit, in this order (r48's)
 SKIP_SHIP = ("slices.json", "status.json", "shard-status", "farm-ship")          # never shipped or merged as files
 SPLIT_SHARE = 0.06      # a year heavier than this share of the mission is built as two halves (Jan-Jun, Jul-Dec)
@@ -214,7 +276,9 @@ def cmd_plan(args):
     for pin in farm.get("whole_mission", []):          # e.g. {"phase": "frames", "only": "mini"}
         units.insert(0, {"unit": f"all-{pin['phase']}", "phases": [pin["phase"]], "only": pin["only"],
                          "pictures": sum(u["pictures"] for u in units), "weight": 0, "hours": pin.get("hours", 1.0)})
-    plan = {"made": now(), "commit": git("rev-parse", "HEAD"), "packages": packages_hash(os.path.expanduser(farm.get("python", sys.executable))),
+    hub = next((dict(m.get("env", {})) for m in farm["machines"].values() if not m.get("ship_to")), {})
+    hub = {k: os.path.expanduser(str(v)) for k, v in hub.items()}
+    plan = {"made": now(), "inputs": fingerprint(hub) if hub else {}, "commit": git("rev-parse", "HEAD"), "packages": packages_hash(os.path.expanduser(farm.get("python", sys.executable))),
             "phases": farm.get("phases", PHASES), "units": units}
     if args.dry_run:
         print(json.dumps(plan, indent=1))
@@ -495,11 +559,17 @@ def cmd_run(args):
         check_code(plan, machine, python)
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
                **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
-    missing = [k for k in REQUIRED_INPUTS if not os.path.exists(env.get(k) or "/nonexistent")]
-    if missing and not args.dry_run:
-        # without the kernels zip, data_source looks for kernels in the frames zip and only what earlier renders unpacked
-        # is there: the 2017 test build's laptop months came out with other calibration numbers and failed movies
-        raise SystemExit(f"inputs missing on this machine: {', '.join(missing)} (farm.json env)")
+    if not args.dry_run:
+        # Sam's rule (2026-11-08): never build without the full SPICE kernels or any other crucial input. Without the
+        # kernels zip the pipeline's loader quietly loads 3 kernels instead of ~100 and the pictures come out wrong
+        # (the 2017 test build's laptop months). Checked before any unit is claimed; a failure stops the machine loudly.
+        years = plan_years(plan)
+        probe = kernel_probe(python, env, sorted({years[0], years[-1]}))
+        problems = preflight_problems(env, plan.get("inputs"), probe)
+        print(f"preflight: kernels loaded {probe}")
+        if problems:
+            job(shared, farm, "fail", f"farm-{me}-preflight", "; ".join(problems)[:400])
+            raise SystemExit("PREFLIGHT FAILED, nothing built:\n  " + "\n  ".join(problems))
     for k in ("cache", "status", "pause", "logs"):
         if machine.get(k):
             machine[k] = os.path.expanduser(machine[k])

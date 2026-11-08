@@ -96,6 +96,31 @@ def test_slots(tmp):
     return 1
 
 
+def test_preflight(tmp):
+    """A machine missing an input, with inputs that differ from the hub's, or loading too few kernels must not build."""
+    d = os.path.join(tmp, "inputs")
+    write(os.path.join(d, "data.zip"), "x" * 10)
+    write(os.path.join(d, "kernels.zip"), "k" * 20)
+    write(os.path.join(d, "cisscal", "a.dat"), "c" * 5)
+    write(os.path.join(d, "geometry.sqlite"), "g")
+    os.makedirs(os.path.join(d, "spice"))
+    env = {"CASSINI_DATA": os.path.join(d, "data.zip"), "CASSINI_KERNELS": os.path.join(d, "kernels.zip"),
+           "CASSINI_CISSCAL": os.path.join(d, "cisscal"), "CASSINI_GEOMETRY_CACHE": os.path.join(d, "geometry.sqlite"),
+           "CASSINI_SPICE_CACHE": os.path.join(d, "spice")}
+    want = farm.fingerprint(env)
+    assert want == {"CASSINI_DATA": 10, "CASSINI_KERNELS": 20, "CASSINI_CISSCAL": [1, 5]}, want
+    assert farm.preflight_problems(env, want, {2017: 109}) == []
+    no_k = dict(env)
+    del no_k["CASSINI_KERNELS"]
+    probs = farm.preflight_problems(no_k, want, {2017: 3})
+    assert any("CASSINI_KERNELS missing" in p for p in probs) and any("only 3 SPICE kernels" in p for p in probs), probs
+    write(os.path.join(d, "cisscal", "b.dat"), "c")
+    assert any("CASSINI_CISSCAL differs" in p for p in farm.preflight_problems(env, want, {2017: 109}))
+    assert farm.plan_years({"units": [{"unit": "2017-08", "from": "2017-08-01", "until": "2017-09-01"},
+                                      {"unit": "2004", "years": "2004"}]}) == [2004, 2017]
+    return 1
+
+
 def test_commands():
     m = {"name": "mbp", "cache": "/c", "status": "/s", "pause": "/p", "procs": 16, "max_load": 40, "min_free": 50}
     cmd = farm.prebuild_cmd(m, {"unit": "2007a", "from": "2007-01-01", "until": "2007-07-01"}, "movies", "py")
@@ -221,6 +246,7 @@ def main():
         ok += test_claims(tmp)
         ok += test_commands()
         ok += test_slots(tmp)
+        ok += test_preflight(tmp)
         ok += test_ship_and_free(tmp)
         ok += test_merge_compare_verify(tmp)
         ok += test_job(tmp)
