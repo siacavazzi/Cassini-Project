@@ -818,8 +818,48 @@ def _revisits(u):
         mine.append((i, x, y))
     if not (len(returns) >= 2 and back >= REVISIT_SHARE * again):
         return False
+    if _reraster(u):
+        return False
     u["rescanned"] = _scan(np.array([q[2:] for q in fr]), np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1))
     return not u["rescanned"]
+
+
+RERASTER_ORDER = 0.75   # (_reraster) of the steps between the places a raster takes again, this share at least follow
+                        # the order it first took them in ...
+RERASTER_STEP = 0.3     # ... and its first lap steps (median) at least this much of a frame from place to place, as a
+                        # mosaic's tiles do; a camera creeping along with the clouds steps less (234SA_WIND5HR005: 0.2)
+
+
+def _reraster(u):
+    """(_revisits) Pass u's returns are a raster taken again, not a time series: after its first return to a place,
+    the camera goes round at least MIN_PLACES of the places it took before, in the order it first took them (most
+    steps, RERASTER_ORDER, from one place to the place it first took next), as a mosaic movie's laps do. A time
+    series comes back to one view or a few (267SA_LIMBINT002, Titan's cloud monitors, a FTRACK's filters), or creeps
+    along with what it follows in steps smaller than a mosaic's (RERASTER_STEP: the 5-hour wind movies). The 2017
+    north pole movie, 271SA_NPOLMOV001, split at ZOOM as Cassini closed in: its fourth lap and the start of its fifth
+    were judged a time series, so its whole frames were single tiles."""
+    seq = []
+    for p in u.get("place") or []:
+        if p is not None and (not seq or seq[-1] != p):
+            seq.append(p)
+    first, seen = None, set()
+    for k, p in enumerate(seq):
+        if p in seen:
+            first = k
+            break
+        seen.add(p)
+    if first is None:
+        return False
+    order = {p: k for k, p in enumerate(dict.fromkeys(seq[:first]))}
+    at = u.get("places_at") or []
+    lap = [at[p] for p in order if p < len(at)]
+    if len(lap) < 2 or float(np.median([max(abs(a[0] - b[0]), abs(a[1] - b[1])) for a, b in zip(lap, lap[1:])])) < RERASTER_STEP * FRAME:
+        return False
+    again = [p for p in seq[first:] if p in order]
+    if len(set(again)) < MIN_PLACES:
+        return False
+    steps = list(zip(again, again[1:]))
+    return sum(order[b] == order[a] + 1 for a, b in steps) >= RERASTER_ORDER * len(steps)
 
 
 def _drifting(u):

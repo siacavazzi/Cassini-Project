@@ -69,7 +69,8 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("SATURN", "ISS_064RI_BEDG4FILT002_PRIME", "N"), ("SATURN", "IOSIC_079RI_TEMPN20LP001_SI", "W"),
        ("SATURN", "ISS_175SA_NPOLVORT001_PIE", "N"), ("TITAN", "ISS_006TI_HIGHRESNA001_PRIME", "N"),
        ("SATURN", "ISS_101SA_AURORA002_UVIS", "N"), ("SATURN", "ISS_281SA_HIRESWACS001_PIE", "W"),
-       ("SATURN", "ISS_081RI_AZSCANDRK001_PRIME", "N"), ("SATURN", "ISS_283RI_HRRADSCNU001_PIE", "N")]
+       ("SATURN", "ISS_081RI_AZSCANDRK001_PRIME", "N"), ("SATURN", "ISS_283RI_HRRADSCNU001_PIE", "N"),
+       ("SATURN", "ISS_271SA_NPOLMOV001_VIMS", "W"), ("SATURN", "ISS_234SA_WIND5HR005_PRIME", "N")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -295,6 +296,13 @@ def main():
     # the HIRESWACS strip keeps its mosaic; its two frames off the strip show as themselves
     wacs = passes(*OBS[37])
     assert kinds(wacs) == [("mosaic", 5), ("mosaic", 38)] and len(wacs[1]["off"]) == 2, kinds(wacs)
+    # a raster taken again is no time series (_reraster): the 2017 north pole movie's pass after its ZOOM split, its
+    # fourth lap and the start of its fifth, is a mosaic, not 15 single tiles; a wind movie creeping with the clouds
+    # in fifth-of-a-frame steps stays a movie
+    npol = passes(*OBS[40])
+    assert kinds(npol) == [("mosaic_movie", 193), ("mosaic", 112), ("mosaic", 30)], kinds(npol)
+    wind = passes(*OBS[41])
+    assert kinds(wind) == [("movie", 92)], kinds(wind)
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
