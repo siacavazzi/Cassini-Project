@@ -201,6 +201,10 @@ if old_cal is not None:
     old_cal._floor = cal._floor
     # nor the neutral toe (fix plan D, calibration.TOE_NEUTRAL): the sky's last tint fading to gray is not either
     cal.TOE_NEUTRAL = False
+    # nor the floor's share and cap (calibration.FLOOR_SHARE, FLOOR_GAIN, 11-08): at #193's share the floor black is past
+    # the toe's blend (calibration.TOE), where the toe is the same as then
+    keep = cal.FLOOR_SHARE, cal.FLOOR_GAIN
+    cal.FLOOR_SHARE, cal.FLOOR_GAIN = 0.8, 1e6
     for bands, levels, target in ((["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "DIONE"),
                                   (["MT3", "CB2", "MT2"], [0.0236, 0.40, 0.135], "SATURN"),
                                   (["MT3", "MT2", "BL1"], [0.03, 0.2, 0.35], "SATURN"), (["IR3", "GRN", "UV3"], [0.3, 0.2, 0.1], "TITAN")):
@@ -214,6 +218,7 @@ if old_cal is not None:
                 got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
         assert got[0] == got[1], (bands, target)
     cal.TOE_NEUTRAL = True
+    cal.FLOOR_SHARE, cal.FLOOR_GAIN = keep
     print("three-band composites: as before #188")
 
 # ---------- two-filter passes play and mosaic in colour (obs_mosaic.colour_of, colour_picture) ----------
@@ -331,5 +336,5 @@ out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float) 
 inner = disk & (np.hypot(yy2 - 100, xx2 - 100) < 55)
 dark, bright = out[:, inner & marks].mean(axis=1), out[:, inner & ~marks].mean(axis=1)
 print("Titan CB3+MT1 straight: terrain", bright.round(1), "markings", dark.round(1))
-assert bright[0] - dark[0] > 5 and dark[0] / dark[1] < bright[0] / bright[1] - 0.01   # the markings darker, bluer
+assert bright[0] - dark[0] >= 4 and dark[0] / dark[1] < bright[0] / bright[1] - 0.01   # the markings darker, bluer (4: the gentler floor black, FLOOR_SHARE 0.4)
 print("ok")
