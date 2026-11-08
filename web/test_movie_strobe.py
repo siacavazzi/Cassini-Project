@@ -121,6 +121,16 @@ sat8 = (0.03, 1.0, 1.0, 0.99, 0.92, 0.0, 1.0, 1.0, 0.39, 0.65, 0.0)
 got = shown(frames8, [{**placed, "saturated": s} for s in sat8])
 assert got[8] != 8 and got[9] != 8 and all(sat8[g] < 0.05 for g in got), got
 print("the least saturated frame of an over-exposed filter is held too:", got)
+# ... but a bright limb coming into a dark frame plays, however much of its lit part is saturated (293EN ENCSET001
+# 2017-09-13, Enceladus setting behind Saturn: clear frames 0-40% saturated, ~70% of their lit part; held on one frame)
+sat9 = (0, .001, .003, .007, .013, .021, .03, .04, .053, .066, .082, .097, .116, .135, .155, .176, .199, .219, .239, .259, .277,
+        .292, .307, .319, .331, .342, .352, .359, .366, .371, .377, .382, .385, .388, .391, .391, .393, .393, .394, .396, .397, .4)
+lit9 = (.006, .009, .014, .021, .029, .038, .05, .063, .077, .092, .11, .127, .147, .168, .191, .211, .234, .254, .274, .293, .311,
+        .33, .348, .364, .381, .397, .412, .427, .442, .455, .468, .479, .491, .501, .51, .519, .528, .537, .544, .553, .56, .566)
+frames9 = fr(["CL1/CL2"] * len(sat9))
+got = shown(frames9, [{**placed, "saturated": s, "lit": l} for s, l in zip(sat9, lit9)])
+assert got == list(range(len(sat9))), got
+print("a limb coming in plays every frame; ok")
 
 # ---- the steady table's "partial" list (the page's heldOf) is unfit's
 assert [m for m in range(8) if om.unfit(frames, m, lambda j: [{**placed, "saturated": 0.17 if n % 2 == 0 else 0.75}
