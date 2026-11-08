@@ -7572,6 +7572,34 @@ def colour_start(u, colour, report=None):
     return max(need) if need else 0
 
 
+CLIP_UNDER = 0.05   # of a frame: (clipped_under) a mosaic movie's tile the camera saturated over this much, and OVER_STEP
+                    # times as much as the median of the picture's other tiles of its filter, goes under them
+
+
+def clipped_under(tiles):
+    """(rolling_layout) The tiles (n) of a mosaic movie's picture drawn under the others: saturated CLIP_UNDER of the
+    frame or more, and OVER_STEP times the median of the picture's other tiles of its filter. Its saturated part is
+    drawn white in its band, while the other bands of its place did not saturate there, and the color mix turned it
+    a green or magenta blotch: the 2017-04-26 north pole movie's pointings at 03:53 and 05:22 (271SA_NPOLMOV001:
+    VIO 16-33%, GRN 11-29%, CB3 7-21%, RED 4-15% saturated, the others under 1%). Under, its neighbours' frames show
+    wherever they reach. A long exposure taken again in a colour set (long_repeats) goes under the same way."""
+    out, by = set(), {}
+    for t in tiles:
+        if "offset" in t:
+            by.setdefault(t["filter"], []).append(t)
+    for mine in by.values():
+        if len(mine) < MIN_PLACES:
+            continue
+        for t in mine:
+            s = t.get("saturated", 0.0)
+            if s < CLIP_UNDER:
+                continue
+            others = [o.get("saturated", 0.0) for o in mine if o["n"] != t["n"]]
+            if s >= OVER_STEP * float(np.median(others)):
+                out.add(t["n"])
+    return out
+
+
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
@@ -7640,6 +7668,9 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         seen[key] = seen.get(key, 0) + 1
         keep.append(t)
     keep += [t for key, t in spare.items() if not seen.get(key)]
+    # a copy the camera saturated much more than the picture's other tiles of its filter goes under them (clipped_under)
+    low = clipped_under(keep)
+    keep = [dict(t, under=True) if t["n"] in low else t for t in keep]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
     tiles = under_first(sorted(keep, key=lambda t: (rank.get(t["n"], t["n"]), t["n"])))
     count = {}
@@ -7662,7 +7693,8 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         out.append(t)
     tiles = out
     drawn = [t for t in tiles if t.get("drawn")]
-    ids = hashlib.sha1((LAP_RULE + ":" + ",".join(f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"]) for t in drawn)).encode()).hexdigest()[:12]
+    ids = hashlib.sha1((LAP_RULE + ":" + ",".join((f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"])) + ("u" if t["n"] in low else "")
+                                                  for t in drawn)).encode()).hexdigest()[:12]
     if not fade[0]:
         return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
     # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture
