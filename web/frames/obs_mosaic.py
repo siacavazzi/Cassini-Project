@@ -7200,7 +7200,14 @@ LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a matc
 LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
                          # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
 LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
-LAP_FREE = 0.12          # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
+LAP_CELLS = 3            # the shared ground is also measured in LAP_CELLS x LAP_CELLS parts ...
+LAP_EVEN = 0.5           # ... and a step is an exposure only when the parts agree: the spread (std) of their log steps
+                         # under LAP_EVEN x the step's own log. An exposure scales the whole frame alike (SPOLEDYN001's
+                         # 2.6-2.8x steps: parts within 0.01 log, 0.18 at worst); a step that differs part to part is
+                         # the scene's own (Cassini closing in on the 2017-04-26 north pole movie, 271SA NPOLMOV001: the
+                         # night side's column measured 0.7x a lap, its parts 0.23-0.86x, and its tiles were drawn at
+                         # half brightness by lap 3, dark blocks in the mosaic)
+LAP_FREE = 0.12         # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
                          # Taken out lap after lap, the slow brightening of the 2013 hexagon movie's places (2-5% a lap,
                          # more at some places than others) left them up to twice as bright as each other by its end
 LAP_RULE = "g3s"         # in the pictures' names: these gains, the base drawn under the picture, and whole colour sets (set_laps)
@@ -7254,8 +7261,29 @@ def _lap_step(u, p, cache, a, b):
             if lit.sum() >= LAP_MIN and lb[lit].mean() > 0:
                 step = float(la[lit].mean() / lb[lit].mean())
                 g = step if 1 / LAP_BELIEVE <= step <= LAP_BELIEVE else None
+                if g is not None and not _lap_even(la, lb, lit, step):
+                    g = 1.0   # (the scene's own change, kept as it is)
     memo[key] = g
     return g
+
+
+def _lap_even(la, lb, lit, step):
+    """(_lap_step) Whether a step between two copies is alike over their shared lit ground, as an exposure's is: the
+    ground cut in LAP_CELLS x LAP_CELLS parts, the spread of the parts' log steps under LAP_EVEN x |log step|. True
+    when fewer than three parts have lit ground enough to say (LAP_MIN / LAP_CELLS^2 pixels each)."""
+    H, W = lit.shape
+    logs = []
+    for i in range(LAP_CELLS):
+        for j in range(LAP_CELLS):
+            s = (slice(i * H // LAP_CELLS, (i + 1) * H // LAP_CELLS), slice(j * W // LAP_CELLS, (j + 1) * W // LAP_CELLS))
+            m = lit[s]
+            if m.sum() >= LAP_MIN / LAP_CELLS ** 2:
+                a, b = float(la[s][m].mean()), float(lb[s][m].mean())
+                if a > 0 and b > 0:
+                    logs.append(math.log(a / b))
+    if len(logs) < 3:
+        return True
+    return float(np.std(logs)) < LAP_EVEN * abs(math.log(step))
 
 
 def _lap_lead(u):
