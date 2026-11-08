@@ -107,4 +107,41 @@ flyby = [(66, 80), (62, 88), (67, 86), (63, 84), (67, 87), (66, 80)]
 assert om.centre_half(box(*flyby), 250, seen(*flyby)) < 0.53 * F
 angles.clear()
 assert om.kept_share(seen((0, 0)), F / 2) == 1.0
+# the view of a pass that is not centred (Sam 2026-11-08: a 271SA close-up sweep drawn in a window two frames across,
+# the frame a quarter of it): each frame's own box on the pass's axes (frames_boxes, the corners frames_seen turns) ...
+b = om.frames_boxes(frames((0, 0), (300, -120)), Z)
+assert np.allclose(b, [(-F / 2, -F / 2, F / 2, F / 2), (300 - F / 2, -120 - F / 2, 300 + F / 2, -120 + F / 2)])
+angles.update(F0=45.0)
+assert np.allclose(om.frames_boxes(frames((0, 0)), Z)[0], [-F / 2 ** 0.5, -F / 2 ** 0.5, F / 2 ** 0.5, F / 2 ** 0.5])
+assert np.allclose(om.frames_boxes(frames((0, 0)), Z, 45.0)[0], [-F / 2, -F / 2, F / 2, F / 2])   # on its pass's axes: square
+angles.clear()
+# ... a pass sweeping further than MOVIE_FIT frames follows the frame (follows), and draws it as Cassini took it:
+# the square round the frame turned by its own angle less the pass's (follow_view), turned back and cut to the frame
+sweep = [(i * 400.0, 0.0) for i in range(12)]
+fp = (-F / 2, -F / 2, 4400 + F / 2, F / 2)
+t5 = {"offset": (2000.0, 0.0), "id": "F5"}
+assert om.movie_rect(fp, t5) == (2000 - S / 2, -F / 2, S, F)            # the window MOVIE_FIT frames across ...
+assert om.follows(fp, om.movie_rect(fp, t5))                           # ... which follows the frame
+assert not om.follows((-F, -F, F, F), om.movie_rect((-F, -F, F, F), t5))  # a footprint within MOVIE_FIT frames holds still
+U5 = {"key": ("SATURN", "X", "W", 5), "frames": frames(*sweep), "z": Z}
+angles.update({f"F{i}": 10.0 * i for i in range(12)})                  # the spacecraft rolling through the pass
+turn = om.view_turn(U5)
+rect, side, got = om.follow_view(U5, 5, t5)
+assert side == F and abs(got - (50.0 - turn)) < 1e-9
+a = math.radians(got)
+assert np.allclose(rect, (2000 - F * (abs(math.cos(a)) + abs(math.sin(a))) / 2, -rect[2] / 2, rect[2], rect[2]))
+# the tile as processed_frame draws it (turned by got about its middle) comes back the whole frame, nothing black
+n = 512
+big = math.ceil(rect[2] / side * n)
+sq = np.zeros((big, big), np.uint8)
+o = (big - n) // 2
+sq[o:o + n, o:o + n] = 255
+turned = cv2.warpAffine(sq, label_handler.middle_rotation(sq.shape, got), (big, big), flags=cv2.INTER_LINEAR)
+back = om._unturn(turned, got, n, n)
+assert back.shape == (n, n) and (back[2:-2, 2:-2] > 200).all(), (back < 200).mean()
+angles.clear()
+# ... and a stare's footprint is its frames' own boxes, a frame across, so the whole footprint is the view
+stare_fp = om.frames_boxes(frames((0, 0), (10, -5)), Z)
+fp = (*stare_fp[:, :2].min(0), *stare_fp[:, 2:].max(0))
+assert max(fp[2] - fp[0], fp[3] - fp[1]) == F + 10
 print("ok")
