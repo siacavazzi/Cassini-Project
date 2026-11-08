@@ -58,7 +58,7 @@ def body_x(out):
 def centred_all(views, offsets):
     xs = []
     for n, (v, off) in enumerate(zip(views, offsets)):
-        fs.color_image.processed_frame = lambda paths, off=off, n=n: still(n, off)
+        fs.color_image.processed_frame = lambda paths, off=off, n=n, **k: still(n, off)
         im, rep = fs.centred([f"W{n}"], v)
         xs.append((body_x(im), rep))
     return xs
@@ -68,7 +68,7 @@ def test_centred_is_centred():
     centre = {"centre": True, "side": 1024, "radius": 500}
     tops = []
     for n, off in enumerate(PLACES):
-        fs.color_image.processed_frame = lambda paths, off=off, n=n: still(n, off)
+        fs.color_image.processed_frame = lambda paths, off=off, n=n, **k: still(n, off)
         im, rep = fs.centred([f"W{n}"], centre)
         tops.append(body_top(im))
         assert "centre_shift_capped" not in rep
@@ -94,8 +94,30 @@ def test_centred_holds():
     assert fs.centre_folder("c", north) != fs.centre_folder("c", dict(north, **om.hold_of(U, 0)))
 
 
+def test_pass_turn():
+    """Stills are turned only to the pass's own orientation (Sam 2026-11-08: tilted pictures, corners cut): the
+    circular mean of its frames' turns, a frame in no pass its own; the hold is on those turned axes."""
+    angles = {"W0": 359.0, "W1": 1.0, "W2": 3.0, "W3": -1.0, "W4": 0.0}
+    om.reel.north_angles = lambda ids: {i: angles[i] for i in ids if i in angles}
+    try:
+        assert abs(om.pass_turn(U) - 0.4) < 0.01
+        assert om.pass_turn(frame_id="W2") == 3.0
+        assert om.pass_turn(frame_id="X") == 0.0
+        # every frame turned the same 30 degrees: the hold on the turned axes is the north-up hold seen 30 degrees off,
+        # and with the pass's own turn taken out it is the hold on the camera's axes (all frames at 0)
+        angles.update({f"W{i}": 30.0 for i in range(5)})
+        turned = [om.hold_of(U, n, om.pass_turn(U)) for n in range(5)]
+        angles.update({f"W{i}": 0.0 for i in range(5)})
+        plain = [om.hold_of(U, n) for n in range(5)]
+        for a, b in zip(turned, plain):
+            assert np.allclose(a["hold"], b["hold"], atol=0.15) and np.allclose(a["at"], b["at"], atol=0.15)
+    finally:
+        om.reel.north_angles = lambda ids: {}
+
+
 if __name__ == "__main__":
     test_hold_of()
+    test_pass_turn()
     test_centred_is_centred()
     test_centred_holds()
     print("ok")

@@ -519,10 +519,11 @@ COLOR_VERSIONS = {"balanced": "color-v54", "raw": "color-v37", "eye": "color-v54
 PROC_VERSIONS = {"balanced": "proc-v21", "raw": "proc-v21", "eye": "proc-v21", "false": "proc-v21", "classic": "proc-v15"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr7"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+CENTRE_VERSION = "ctr8"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
                           # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
                           # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
+                          # ctr8: turned to the pass's own orientation (obs_mosaic.pass_turn), not north up: no tilt
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -681,11 +682,12 @@ def body_radius(lbl):
 
 
 def centred(ids, view):
-    """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
+    """The composite of ids (or one frame) centred on the body, turned to the pass's own orientation (view["turn"],
+    obs_mosaic.pass_turn: north up less the pass's average roll, so the frame keeps its square): the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
     view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
     scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
-    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids], turn=view.get("turn", 0.0))
     if "frame_offset" not in report:
         raise LookupError(report.get("why", "not placed by SPICE"))
     # processed_frame puts the frame's middle at the canvas middle; the body's centre is frame_offset from it
@@ -741,7 +743,8 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids, centre=None):
-    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()))
+    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()),
+           centre and centre.get("turn"))
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:

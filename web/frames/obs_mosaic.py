@@ -5820,6 +5820,21 @@ def pass_seen(u):
     return got
 
 
+def pass_turn(u=None, frame_id=None):
+    """The pass's own orientation (degrees, as reel.north_angles: the turn that would put celestial north up), which a
+    camera window's still is turned short of (color_image.processed_frame's turn), so each picture is turned only by
+    how far the camera rolled from the pass's average and a pass the camera does not roll under keeps the square frame
+    as Cassini took it, corners and all (Sam 2026-11-08: pictures came out tilted a few degrees with their corners cut).
+    The circular mean of the turns of pass u's placed frames, or frame_id's own turn for a frame in no pass (no turn at
+    all); 0.0 (north up) when the geometry cache has none."""
+    ids = [fr[1] for fr in u["frames"] if fr[7]] if u else [frame_id]
+    angles = list(reel.north_angles(ids).values())
+    if not angles:
+        return 0.0
+    a = np.radians(angles)
+    return round(float(np.degrees(np.arctan2(np.sin(a).mean(), np.cos(a).mean()))), 2)
+
+
 _centre_views = {}   # pass key -> centre_view's decision for it
 _centre_of = {}      # frame id -> centre_view's answer, for a frame SPICE places (a request per picture asks)
 
@@ -5832,7 +5847,8 @@ def centre_view(frame_id):
     round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
     is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
     {"centre": False, "north": True, "side": FRAME, "why": ...} for a close-up (frames on a body too big for the
-    view): turned north up where it is, so the surface holds still; {"centre": False, "why": ...} for a ring, spoke
+    view): placed where it is on the pass's axes, so the surface holds still; both with "turn" (pass_turn: the
+    pass's own orientation, so each still is turned only by how far the camera rolled during the pass, not north up); {"centre": False, "why": ...} for a ring, spoke
     or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
     picture as it is."""
     with _lock:
@@ -5875,6 +5891,8 @@ def centre_view(frame_id):
             # none of its frames is on it)
             on = sum(_on_disk(b, radius) for b in boxes) if radius else 0
             hit["north"] = bool(boxes) and on * 2 > len(boxes)
+        # each still turned only by how far the camera rolled from the pass's own orientation, not north up
+        hit["turn"] = pass_turn(u) if found else pass_turn(frame_id=frame_id)
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
@@ -5884,7 +5902,7 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
     # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
     if found and not hit["centre"] and hit.get("north"):
-        hold = hold_of(u, found[1])
+        hold = hold_of(u, found[1], hit.get("turn", 0.0))
         if hold:
             hit = dict(hit, **hold)
     with _lock:
@@ -5898,7 +5916,7 @@ HOLD_SPREAD = 0.25   # of a frame: the most a pass's frames may point away from 
 HOLD_RULE = "h1"     # names the held stills' cache folders (frame_server.centre_folder)
 
 
-def hold_of(u, n):
+def hold_of(u, n, turn=0.0):
     """Auto center's hold for frame n of pass u, when its still cannot be centred (the body's centre off the frame, a
     close-up turned north up, or a disk the frame cuts): the body kept where it sits on average over the pass, so it
     holds still from picture to picture as SPICE places it, as the pass's movie holds it (Sam 2026-10-30: a Saturn
@@ -5906,7 +5924,7 @@ def hold_of(u, n):
     middle moved from the frame's middle by (dx, dy), and where SPICE puts the frame's middle from the body's centre
     (both full resolution pixels of frame n), which centred checks against the picture's own placement; None for a
     pass whose frames point further apart than HOLD_SPREAD of a frame (a mosaic: its stills would be mostly black)
-    or a frame SPICE has not placed."""
+    or a frame SPICE has not placed. turn: the stills' orientation (pass_turn), the axes the hold is on."""
     frames = u["frames"]
     if not (0 <= n < len(frames)) or not frames[n][-1]:
         return None
@@ -5915,9 +5933,10 @@ def hold_of(u, n):
     angles = reel.north_angles([fr[1] for fr in placed])
 
     def middle(fr):
-        # where the frame's middle sits from the body's centre, north up, reference pixels (frames_seen's turn)
+        # where the frame's middle sits from the body's centre, on the stills' axes (turn short of north up),
+        # reference pixels
         x, y, fz = fr[5], fr[6], fr[7]
-        a = math.radians(angles.get(fr[1], 0.0))
+        a = math.radians(angles.get(fr[1], 0.0) - turn)
         c, s, k = math.cos(a), math.sin(a), fz / z
         return np.array(((c * x + s * y) * k, (c * y - s * x) * k))
     pts = np.array([middle(fr) for fr in placed])
