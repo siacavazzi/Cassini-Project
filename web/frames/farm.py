@@ -56,6 +56,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 import slices  # noqa: E402  (stdlib only; prebuild/frame_server are imported only where versions are needed)
 
+REQUIRED_INPUTS = ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_SPICE_CACHE", "CASSINI_CISSCAL")
 PHASES = ["composites", "processed", "mosaics", "movies", "strips", "chains"]   # per unit, in this order (r48's)
 SKIP_SHIP = ("slices.json", "status.json", "shard-status", "farm-ship")          # never shipped or merged as files
 SPLIT_SHARE = 0.06      # a year heavier than this share of the mission is built as two halves (Jan-Jun, Jul-Dec)
@@ -494,6 +495,11 @@ def cmd_run(args):
         check_code(plan, machine, python)
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
                **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+    missing = [k for k in REQUIRED_INPUTS if not os.path.exists(env.get(k) or "/nonexistent")]
+    if missing and not args.dry_run:
+        # without the kernels zip, data_source looks for kernels in the frames zip and only what earlier renders unpacked
+        # is there: the 2017 test build's laptop months came out with other calibration numbers and failed movies
+        raise SystemExit(f"inputs missing on this machine: {', '.join(missing)} (farm.json env)")
     for k in ("cache", "status", "pause", "logs"):
         if machine.get(k):
             machine[k] = os.path.expanduser(machine[k])
@@ -743,7 +749,11 @@ def cmd_doctor(args):
             there = os.path.exists(p)
             size = os.path.getsize(p) if there and os.path.isfile(p) else None
             print(f"{'ok ' if there else 'MISSING'} {k}={p}" + (f" ({size / 1e9:.1f} GB)" if size else ""))
-            ok &= there or k == "CASSINI_KERNELS"
+            ok &= there
+    for k in REQUIRED_INPUTS:
+        if k not in m.get("env", {}):
+            print(f"MISSING {k} (not set in farm.json env)")
+            ok = False
     cache = os.path.expanduser(m["cache"])
     os.makedirs(cache, exist_ok=True)
     free = shutil.disk_usage(cache).free / 1e9

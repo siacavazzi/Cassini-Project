@@ -35,7 +35,7 @@ farm/stop-<machine>    touch it: that machine finishes its unit and stops
 | geometry `geometry-usgs.sqlite` (the USGS-refilled one main needs, never `geometry.sqlite`) | `CASSINI_GEOMETRY_CACHE` | 54 MB | `archives/` | local copy (written to: never share one file) |
 | extracted SPICE cache (copy of `usgs_render_spice_cache`) | `CASSINI_SPICE_CACHE` | 16.4 GiB | `archives/spice_cache` | local copy |
 | CISSCAL calibration | `CASSINI_CISSCAL` | 1.4 GiB | `archives/cisscal` | local copy |
-| kernels `cassiniprojectJAN05.zip` | `CASSINI_KERNELS` | 131 GB | `archives/` | not copied; the rehearsal checks the build doesn't need it |
+| kernels `cassiniprojectJAN05.zip` | `CASSINI_KERNELS` | 131 GB | `archives/` | local copy, required: without it the laptop builds with only the kernels earlier renders unpacked (the 2017 test build's laptop months came out with other calibration numbers and failed movies). `run` refuses to start without it |
 | repo at the plan's commit + `.venv` | | 0.8 GB | worktree | clone, `pip install` the hub's `pip freeze` |
 
 `run` always sets `CASSINI_KEEP_SPICE_CACHE=1`.
@@ -74,7 +74,7 @@ packages' hash against the plan, and (for the laptop) that SSH to the hub works.
    (~91 GB: ~15-25 min at Wi-Fi's ~60-110 MB/s). Clone the repo at the commit; make the venv from the freeze.
 6. **Config**: write `farm/farm.json` from `web/frames/farm.example.json` (`procs`: Mini 9, laptop
    16 to start). `farm.py plan --shared farm` writes plan.json and prints the estimate.
-7. **Rehearsal (~1 h)**: both machines build the same short stretch into scratch caches:
+7. **Rehearsal (~1 h)**: both machines build the same short stretch, **from the years being built**, into scratch caches:
    `prebuild.py processed --from 2004-06-01 --until 2004-06-03 --cache <scratch> --procs N --balanced` and
    `movies` on the same stretch, then copy the laptop's scratch to the hub and `farm.py compare <mini scratch>
    <laptop scratch>`. Zero differences: go. Any: stop and report the files (the old plan found ≤0.0008 gray-level
