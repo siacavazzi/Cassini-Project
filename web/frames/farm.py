@@ -701,7 +701,7 @@ def walk_files(root):
     for d, dirs, fs in os.walk(root):
         dirs[:] = [x for x in dirs if x not in SKIP_SHIP]
         for f in fs:
-            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp"):
+            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp") or f.startswith("."):
                 continue
             yield os.path.relpath(os.path.join(d, f), root)
 
@@ -751,11 +751,11 @@ def join_slices(into, srcs):
     return added
 
 
-def merge(into, src, move=False, check=True):
+def merge(into, src, move=False, check=True, link=False):
     """src's files into `into`: a file `into` lacks is moved (same disk, --move) or copied; one it has is left as it
     is, and counted as differing if its size (or, with check, its bytes) differ. A folder `into` lacks entirely is
     moved in one rename."""
-    out = {"moved": 0, "copied": 0, "same": 0, "differ": []}
+    out = {"moved": 0, "copied": 0, "linked": 0, "same": 0, "differ": []}
     for d, dirs, fs in os.walk(src, topdown=True):
         rel = os.path.relpath(d, src)
         keep = []
@@ -763,7 +763,7 @@ def merge(into, src, move=False, check=True):
             if x in SKIP_SHIP:
                 continue
             target = os.path.normpath(os.path.join(into, rel, x))
-            if move and not os.path.exists(target):
+            if move and not link and not os.path.exists(target):
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 n = sum(len(f) for _, _, f in os.walk(os.path.join(d, x)))
                 os.rename(os.path.join(d, x), target)
@@ -772,7 +772,7 @@ def merge(into, src, move=False, check=True):
                 keep.append(x)
         dirs[:] = keep
         for f in fs:
-            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp"):
+            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp") or f.startswith("."):   # rsync's temp files are .name.XXXX
                 continue
             s, t = os.path.join(d, f), os.path.normpath(os.path.join(into, rel, f))
             if os.path.exists(t):
@@ -782,7 +782,10 @@ def merge(into, src, move=False, check=True):
                     out["same"] += 1
                 continue
             os.makedirs(os.path.dirname(t), exist_ok=True)
-            if move:
+            if link:   # a hard link: the source stays, so a later rsync into it finds the file and sends nothing again
+                os.link(s, t)
+                out["linked"] += 1
+            elif move:
                 os.rename(s, t)
                 out["moved"] += 1
             else:
@@ -793,8 +796,8 @@ def merge(into, src, move=False, check=True):
 
 def cmd_merge(args):
     for src in args.src:
-        got = merge(args.into, src, move=args.move, check=not args.fast)
-        print(f"{src}: {got['moved']} moved, {got['copied']} copied, {got['same']} already there, "
+        got = merge(args.into, src, move=args.move, check=not args.fast, link=args.link)
+        print(f"{src}: {got['moved']} moved, {got['linked']} linked, {got['copied']} copied, {got['same']} already there, "
               f"{len(got['differ'])} differ (kept the target's)")
         for p in got["differ"][:40]:
             print("  DIFFERS", p)
@@ -865,6 +868,8 @@ def main():
     p.add_argument("--into", required=True)
     p.add_argument("--move", action="store_true", help="move files (same disk) instead of copying")
     p.add_argument("--fast", action="store_true", help="compare sizes only where both hold a file")
+    p.add_argument("--link", action="store_true", help="hard-link files (same disk) and leave the source: for merging "
+                                                        "while a machine still ships into it")
     p.add_argument("src", nargs="+")
     p = sub.add_parser("doctor")
     p.add_argument("--shared", required=True)

@@ -192,6 +192,14 @@ def test_merge_compare_verify(tmp):
     slices.record(a, "processed", [("2004-01-01T00:00:00", "2005-01-01T00:00:00")], {"other": "v"}, errors=3)
     probs = farm.check_cache(a, units, ["processed"], vers)
     assert any("other version" in p for p in probs), probs
+    l_src, l_into = os.path.join(tmp, "lsrc"), os.path.join(tmp, "linto")
+    write(os.path.join(l_src, "obs", "P", "a.webp"), "a")
+    write(os.path.join(l_src, ".hidden.webp.Xy12"), "rsync temp")
+    out = farm.merge(l_into, l_src, move=True, link=True)
+    assert out["linked"] == 1 and os.path.exists(os.path.join(l_src, "obs", "P", "a.webp")), out      # source kept
+    assert os.stat(os.path.join(l_src, "obs", "P", "a.webp")).st_ino == os.stat(os.path.join(l_into, "obs", "P", "a.webp")).st_ino
+    assert not os.path.exists(os.path.join(l_into, ".hidden.webp.Xy12"))                                  # temp skipped
+    assert farm.merge(l_into, l_src, link=True)["same"] == 1                                              # rerun: nothing new
     c = os.path.join(tmp, "copy")
     out = farm.merge(c, a)
     assert out["copied"] == 4 and os.path.exists(os.path.join(a, "obs", "NY_PASS", "512", "f3.webp"))
