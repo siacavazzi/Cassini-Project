@@ -606,6 +606,10 @@ MOVED_LIT = 0.08       # of full brightness: lit
 MOVED_RATIO = 6.0      # the other frame at least this much fainter: something there in one frame only
 MOVED_RATIO_LOW = 1.5  # what is widened over: still this much fainter, next to a patch kept
 MOVED_AREA = 4         # px at MOVED_SIZE, once thinned by a px: smaller or thinner patches are left
+MOVED_BODY = 0.2       # of full brightness: a patch whose brighter frame's median is under this is dim light seen a little
+                       # differently by two filters (a faint ring band near IR3's noise, a glow), not a body that moved, and
+                       # stays in color: drawn gray from a reference frame that has it near black, it was a black hole (2017
+                       # set 41340, IR3/RED rings: an octagon of the C ring, 19% of the picture, Sam 11-08)
 MOVED_GROW = 8         # full resolution px the region is widened by (the soft edges of what moved)
 MOVED_SOFT = 16        # full resolution px over which the region fades
 MOVED_WHOLE = 0.4      # of the lit picture: the whole set drawn grey
@@ -666,6 +670,9 @@ def moved_region(channels, ref, valid=None, bands=None):
             patch = np.pad((labels[y:y + h, x:x + w] == i).astype(np.uint8), 1)
             if int((cv2.erode(patch, k) > 0).sum()) < MOVED_AREA:
                 # a line or a speck (a cosmic ray, a star's trail): no body
+                continue
+            if float(np.median(hi[y:y + h, x:x + w][labels[y:y + h, x:x + w] == i])) < MOVED_BODY:
+                # dim light, not a body (MOVED_BODY)
                 continue
             kept[y:y + h, x:x + w] |= patch[1:-1, 1:-1] > 0
             # how far it is widened below: no further than the patch is across (a limb's glow, not the sky's)
