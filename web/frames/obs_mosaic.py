@@ -4457,18 +4457,39 @@ def _outline_shift(im1, im2, both, reach, step=4):
     if inner.sum() < 1000:
         return None
     small = lambda x: cv2.resize(x, (x.shape[1] // step, x.shape[0] // step), interpolation=cv2.INTER_AREA)
-
-    def cost(x, y, dx, dy, m):
-        moved = cv2.warpAffine(y, np.float32([[1, 0, -dx], [0, 1, -dy]]), y.shape[::-1], flags=cv2.INTER_LINEAR)
-        return float(np.abs(x - moved)[m].mean())
     sa, sb, sm = small(a), small(b), small(inner.astype(np.float32)) > 0.99
+    cost, cost_small = _shift_cost(a, b, inner), _shift_cost(sa, sb, sm)
     r = int(reach // step)
-    best = min((cost(sa, sb, dx, dy, sm), dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1))
-    best = min((cost(a, b, best[1] * step + dx, best[2] * step + dy, inner), best[1] * step + dx, best[2] * step + dy)
+    best = min((cost_small(dx, dy), dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1))
+    best = min((cost(best[1] * step + dx, best[2] * step + dy), best[1] * step + dx, best[2] * step + dy)
                for dx in range(-step, step + 1) for dy in range(-step, step + 1))
-    if best[0] > TINT_OUTLINE_GAIN * cost(a, b, 0, 0, inner):
+    if best[0] > TINT_OUTLINE_GAIN * cost(0, 0):
         return None
     return float(best[1]), float(best[2])
+
+
+def _shift_cost(x, y, m):
+    """cost(dx, dy): how far y moved by whole pixels (dx, dy) differs from x under mask m, the mean absolute difference
+    of the two over m with y's pixels moved in from outside it 0, as a cv2.warpAffine of y by (-dx, -dy) (INTER_LINEAR,
+    its border 0) gave it, to the bit: y's pixels are copied into place over m's bounding box only, so each of
+    _outline_shift's ~520 tries a set's plane costs under half of what warping and comparing the whole picture did (a
+    Jupiter WAC color movie frame 2.7 s at nice 19 on the Mini, 80% of it this search, 2026-11-08). The same
+    differences in the same order, so the same mean and the same move chosen."""
+    if not m.any():
+        return lambda dx, dy: float("nan")   # (the mean of nothing, as before)
+    rows, cols = np.flatnonzero(m.any(axis=1)), np.flatnonzero(m.any(axis=0))
+    r0, r1, c0, c1 = int(rows[0]), int(rows[-1]) + 1, int(cols[0]), int(cols[-1]) + 1
+    H, W = y.shape
+    xb, mb = x[r0:r1, c0:c1], m[r0:r1, c0:c1]
+
+    def cost(dx, dy):
+        moved = np.zeros(xb.shape, y.dtype)
+        # moved[i, j] = y[r0 + i + dy, c0 + j + dx], where that is inside y
+        sr0, sr1, sc0, sc1 = max(r0 + dy, 0), min(r1 + dy, H), max(c0 + dx, 0), min(c1 + dx, W)
+        if sr1 > sr0 and sc1 > sc0:
+            moved[sr0 - dy - r0:sr1 - dy - r0, sc0 - dx - c0:sc1 - dx - c0] = y[sr0:sr1, sc0:sc1]
+        return float(np.abs(xb - moved)[mb].mean())
+    return cost
 
 
 def _onto_frame(colour, grey):
@@ -6883,6 +6904,28 @@ def _steady_ready(u, cache, rec):
     return (rec is not None and rec.get("steady") is not None) or os.path.exists(os.path.join(folder(u, cache), STEADY_FILE))
 
 
+_making_now, _making_lock = {}, threading.Lock()   # movie picture path -> [its lock, threads making or waiting]
+
+
+@contextlib.contextmanager
+def _making(path):
+    """One thread at a time makes the movie picture at path: another asking for it meanwhile waits for it and then
+    finds it in the cache (reel._cached), instead of drawing the same frame again beside it. The Movie Editor's levels
+    (export.measure, 3 threads) and a Pre-process (Segments, 4 threads) walk the same stretch from its start at once,
+    and a frame not made yet (a Jupiter WAC color frame with Exposure normalization: 3 to 4 s) was drawn by both."""
+    with _making_lock:
+        held = _making_now.setdefault(path, [threading.Lock(), 0])
+        held[1] += 1
+    try:
+        with held[0]:
+            yield
+    finally:
+        with _making_lock:
+            held[1] -= 1
+            if not held[1]:
+                del _making_now[path]
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -6941,7 +6984,8 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         return buf.getvalue()
 
     try:
-        data = reel._cached(path, make)
+        with _making(path):
+            data = reel._cached(path, make)
         calibration.hdr_note_served(path, path[:-len(".webp")] + ".hdr.webp")
     except LookupError:
         return None, report
