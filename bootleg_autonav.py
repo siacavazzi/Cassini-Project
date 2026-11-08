@@ -39,12 +39,22 @@ def date_to_clock(start,end):
 Loads all SPICE kernels from start_year to end_year
 """
 def load_kernels(start_year, end_year):
-    data = ds.listdir(Kernel_index_path)
+    try:
+        data = ds.listdir(Kernel_index_path)
+    except (FileNotFoundError, KeyError) as e:
+        data = []
+    found = set()
     for kernel_index in data:
         year = int(kernel_index.split("_")[1])
         if (year >= start_year) and (year <= end_year):
             print(f"Loading {year} kernels...")       
             ds.furnsh_metakernel(f"{Kernel_index_path}/{kernel_index}")
+            found.add(year)
+    # every year asked for has its meta-kernel, or nothing is worked out without it (ds.KernelsMissing)
+    lacking = [y for y in range(start_year, end_year + 1) if y not in found]
+    if lacking:
+        raise ds.KernelsMissing(f"no SPICE meta-kernel for {', '.join(map(str, lacking))} in {ds.get_kernel_source()} "
+                                f"(cosp_1000/index; set CASSINI_KERNELS to the kernels archive)")
     # loaded after the year's kernels so their segments win over the mission (and c-smithed) ones
     for kernel in extra_kernels():
         sp.furnsh(kernel)
