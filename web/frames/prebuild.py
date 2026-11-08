@@ -1099,6 +1099,13 @@ def main():
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
+    # the SPICE kernels of every year the build covers, or no build: pictures made without them are placed, calibrated
+    # and grouped wrongly with no error (Sam 2026-11-08, the 2017 test build's M5 months)
+    since = int(args.since[:4]) if args.since else 1997
+    until = int(args.until[:4]) if args.until else 2017
+    if args.until and args.until[5:10] in ("01-01", "") and until > since:
+        until -= 1
+    data_source.check_kernels(range(since, until + 1))
     (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 
