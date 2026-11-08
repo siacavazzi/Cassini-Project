@@ -1,0 +1,45 @@
+Movies and mosaics, no-tilt fix: BEFORE 0ebe157 (= regression-2017 for movies/mosaics) vs AFTER ef2f872 (claude/project-thread-mu5ya4)
+obs_mosaic.movie_webp(frame, 1024, cache, wait=True, ahead=0) (centre=True default) and obs_mosaic.mosaic_webp(last frame, 1024, cache) waited until nothing behind
+(= frame_server /frames/mosaic/<ID>.webp?size=1024). Offline on the T7 worktrees, full SPICE kernels zip, nice 19, 1 BLAS thread, fresh scratch caches, no server.
+turn vs axes = the frame's own north angle minus the pass's view_turn (AFTER: how far the tile is still turned; BEFORE: tiles turned by the full north angle).
+
+jupiter_C23JU_6ATM1X1295_WAC  movie  W1352097259_1 (tile 1/18)  2000-11-05 06:23
+   view_turn -16.89°  pass turns [-0.01, 0.01]° vs axes  this tile -0.01°   transparent 11.4% -> 2.4%
+   before [1024, 1024] 75.5s  | after [1024, 1024] 75.5s 
+jupiter_C23JU_6ATM1X1295_WAC  movie  W1352115259_1 (tile 10/18)  2000-11-05 11:23
+   view_turn -16.89°  pass turns [-0.01, 0.01]° vs axes  this tile 0.0°   transparent 11.6% -> 2.4%
+   before [1024, 1024] 14.2s  | after [1024, 1024] 13.6s 
+jupiter_C23JU_6ATM1X1295_WAC  movie  W1352127365_1 (tile 18/18)  2000-11-05 14:45
+   view_turn -16.89°  pass turns [-0.01, 0.01]° vs axes  this tile 0.01°   transparent 11.8% -> 2.8%
+   before [1024, 1024] 3.6s  | after [1024, 1024] 3.2s 
+saturn_260RI_CPLTSTRKF001_NAC  movie (twist)  N1865111586_1 (tile 1/25)  2017-02-06 21:25
+   view_turn -38.83°  pass turns [-10.01, 10.82]° vs axes  this tile 10.82°   transparent 75.0% -> 75.0%
+   before [1024, 1024] 46.6s  | after [1024, 1024] 36.5s 
+saturn_260RI_CPLTSTRKF001_NAC  movie (twist)  N1865114589_1 (tile 13/25)  2017-02-06 22:15
+   view_turn -38.83°  pass turns [-10.01, 10.82]° vs axes  this tile -0.27°   transparent 80.2% -> 80.2%
+   before [1024, 1024] 8.2s  | after [1024, 1024] 6.7s 
+saturn_260RI_CPLTSTRKF001_NAC  movie (twist)  N1865117547_1 (tile 25/25)  2017-02-06 23:04
+   view_turn -38.83°  pass turns [-10.01, 10.82]° vs axes  this tile -10.01°   transparent 84.4% -> 84.4%
+   before [1024, 1024] 0.2s  | after [1024, 1024] 0.2s 
+titan_268TI_CLOUD001_NAC  mosaic  N1870194818_1 (tile 12/12)  2017-04-06 17:24
+   view_turn -123.52°  pass turns [-1.09, 1.99]° vs axes  this tile 1.99°   transparent 53.4% -> 42.4%
+   before [912, 1024] 40.2s  | after [1024, 650] 43.3s 
+rings_272RI_FNTHPLE001_WAC  mosaic  W1872648190_1 (tile 12/12)  2017-05-05 02:54
+   view_turn -130.5°  pass turns [-0.08, 0.07]° vs axes  this tile -0.08°   transparent 48.6% -> 55.8%
+   before [1024, 672] 36.8s  | after [874, 1024] 39.3s 
+
+Picks (scripts/probe_mm.py over 2017 and the Jupiter approach; each under 60 tiles, under a minute per picture):
+- Jupiter C23JU_6ATM1X1295 WAC, 18-frame stare the camera holds its roll through (turns within +-0.01 deg of the pass's axes).
+- 260RI_CPLTSTRKF001 NAC, 25-frame ring movie with u["twist"] set: the spacecraft rolls about 21 deg during it (-28 -> -49 deg north angle).
+- Titan 268TI_CLOUD001 NAC, 12-tile mosaic, two pointings across the disk (the frames reach only the southern half; same in both).
+- 272RI_FNTHPLE001 WAC, 12-tile ring mosaic, two pointings (F ring high-phase), pass turned -130.5 deg.
+
+Findings:
+- Steady movie (Jupiter): every frame square to the picture, corners kept: transparent 11.4-11.8% -> 2.4-2.8% (what is left is the soft edge).
+- Rolling movie (260RI): the middle frame is square; the first and last are turned +10.8 / -10.0 deg, which is the real roll from the pass's
+  average (before: 28-49 deg). The picture is sized the same both ways (transparent 75-84% both: a thin strip centred on a large view).
+- Titan mosaic: the two tiles meet without a seam; the disk's edge is cut where the frames end (top), as in BEFORE, now a straight edge with a
+  1-2 deg step where the two pointings differ in roll. No surface smear. Transparent 53.4% -> 42.4%.
+- Ring mosaic: the tiles keep their relative place (the sky tile's streak runs on into the ring tile across the overlap, as in BEFORE, rotated
+  130.5 deg); both tiles square. Transparent 48.6% -> 55.8%: the two tiles sit diagonally on the square axes, so the bounding box holds more sky.
+- Nothing misplaced, no new seams. Labels are drawn by the page, not in these pictures, so other_bodies' change was not checked visually here.
