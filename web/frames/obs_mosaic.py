@@ -2630,7 +2630,14 @@ def _tile_made(u, n, cache, scale, base):
     """(_tile, holding the tile's lock) the report in base.json, or the tile made and its report."""
     if os.path.exists(base + ".json"):
         with open(base + ".json") as fh:
-            return json.load(fh)
+            out = json.load(fh)
+        if out.get("lost", 0.0) > MOVIE_LOST and "lost_inside" not in out and os.path.exists(base + ".png"):
+            # (a tile made before its report kept lost_inside: worked out from its picture, as lost_held reads it)
+            try:
+                out["lost_inside"] = lost_inside(np.asarray(Image.open(base + ".png"))[..., 3])
+            except (OSError, IndexError, ValueError):
+                pass
+        return out
     path, fid, f, t, nm, x, y, z = u["frames"][n]
     k = z / u["z"] if z else 1.0
     seen = {}
@@ -2694,6 +2701,8 @@ def _tile_made(u, n, cache, scale, base):
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
             _register(u, n, out, crop, cache, scale)
             out["outline"] = _corners(out, crop[..., 3])
+            if out.get("lost", 0.0) > MOVIE_LOST:
+                out["lost_inside"] = lost_inside(crop[..., 3])
     else:
         out["why"] = rep.get("why", "not placed by SPICE")
     data = json.dumps(out, default=str)
@@ -6056,6 +6065,36 @@ def empty(t):
     return t["top"] - t.get("floor", 0) < EMPTY_SPREAD and t.get("floor", 0) < EMPTY_FLOOR
 
 
+MOVIE_HOLD_LOST = 0.25   # of a frame: a movie frame with more than this lost in downlink (and not made up) is held (unfit).
+#                          Under it a frame whose lost lines are a strip along an edge plays, the strip left out; lines
+#                          lost across the picture (lost_inside past MOVIE_LOST) still hold it. 286RI FNTHPLE001
+#                          (2017-07-24, the F ring turning) lost 6-22% of each of its last twelve frames as a strip along
+#                          one edge, and MOVIE_LOST held the movie on frame 5 for all twelve. A mosaic movie keeps
+#                          MOVIE_LOST (patchy); a colour set with such a frame is drawn where all its frames have the
+#                          picture (colour_picture, HELD_COVER)
+
+
+def lost_inside(alpha):
+    """The share of a tile's picture (alpha: its tile's alpha, > 0 where drawn) lost inside it: the holes within the
+    hull of what is drawn. A strip lost along an edge (286RI FNTHPLE001's) leaves the hull, so it counts ~0; lines lost
+    across the frame (265RF FMOVIE001 2017-04-02: 7-34% lost, every few lines, which drew the F ring as a comb) count."""
+    drawn = (alpha > 0).astype(np.uint8)
+    cnts, _ = cv2.findContours(drawn, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return 0.0
+    hull = np.zeros_like(drawn)
+    cv2.fillPoly(hull, [cv2.convexHull(np.vstack(cnts))], 1)
+    return round(float((hull & (1 - drawn)).sum()) / max(1, int(hull.sum())), 4)
+
+
+def lost_held(t):
+    """True when tile report t is a movie frame unfit holds for its lost lines or for showing nothing lit (empty):
+    lost past MOVIE_HOLD_LOST, or past MOVIE_LOST inside its picture (lost_inside: lines lost across it, not a strip
+    along an edge; its "lost" when the report has none)."""
+    lost = t.get("lost", 0.0)
+    return "offset" in t and (lost > MOVIE_HOLD_LOST or t.get("lost_inside", lost) > MOVIE_LOST or empty(t))
+
+
 def patchy(t):
     """True when tile report t is a movie frame with lines lost past MOVIE_LOST, or nothing lit (empty): a mosaic
     movie draws it only where its place has no other copy (rolling_layout), a movie holds the frame before it."""
@@ -6080,6 +6119,10 @@ def _silhouette(t):
 
 BLANK_SHARE = 0.5    # a frame whose levels span (top over floor) less than this share of both its filter's nearest
 #                      frames either side shows little of what they show (blank)
+BLANK_CLIPPED = 0.01   # of a frame: a frame of the filter saturated over this much is no measure for blank_frame: its top is
+#                        the camera's clip, not the scene (263RI HIPHASE001, 2017-03-04: short and long exposures in turn
+#                        through each filter; the short ones, rings at levels 0-76 to 99, read as blank against the long
+#                        ones' clipped 255, and were held along with the long ones, a whole filter pair at a time)
 
 
 def _span(t):
@@ -6098,7 +6141,8 @@ def blank_frame(frames, n, tile_of):
     f = frames[n][2]
     near = []
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
-        j = next((j for j in js if frames[j][2] == f and _span(tile_of(j)) is not None), None)
+        j = next((j for j in js if frames[j][2] == f and _span(tile_of(j)) is not None
+                  and tile_of(j).get("saturated", 0.0) < BLANK_CLIPPED), None)
         if j is None:
             return False
         near.append(_span(tile_of(j)))
@@ -6114,12 +6158,12 @@ def unfit(frames, n, tile_of):
     and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
     much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
     the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing, or one
-    with lines lost past MOVIE_LOST or nothing lit (patchy), or a blank among its filter's frames (blank_frame). One rule
+    with lines lost past MOVIE_HOLD_LOST or nothing lit (lost_held), or a blank among its filter's frames (blank_frame). One rule
     for the server's movies and the page's (steady table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
-    if partial(t) or patchy(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
+    if partial(t) or lost_held(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
         return True
     s = t.get("saturated", 0.0)
     if s < OVER_LEAST:
@@ -6138,7 +6182,7 @@ def unfit(frames, n, tile_of):
     # Saturn: clear frames 5-40% saturated, all of it the limb; 34 of 45 counted as blown held the movie on one frame)
     mine = [j for j in range(len(frames)) if frames[j][2] == f and "offset" in tile_of(j)]
     blown = sum(1 for j in mine if tile_of(j).get("saturated", 0.0) >= OVER_EXPOSED
-                or patchy(tile_of(j)) or blank_frame(frames, j, tile_of))
+                or lost_held(tile_of(j)) or blank_frame(frames, j, tile_of))
     if len(mine) >= 3 and blown > BLOWN * len(mine):
         return True
     # its filter's nearest frames either side that show a picture: one saturated all over is held itself, so it is no
