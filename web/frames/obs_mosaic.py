@@ -818,7 +818,7 @@ def _revisits(u):
         mine.append((i, x, y))
     if not (len(returns) >= 2 and back >= REVISIT_SHARE * again):
         return False
-    if _reraster(u):
+    if _reraster(u) or _named_map(u):
         return False
     u["rescanned"] = _scan(np.array([q[2:] for q in fr]), np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1))
     return not u["rescanned"]
@@ -860,6 +860,20 @@ def _reraster(u):
         return False
     steps = list(zip(again, again[1:]))
     return sum(order[b] == order[a] + 1 for a, b in steps) >= RERASTER_ORDER * len(steps)
+
+
+MAP_NAMES = ("MAP", "MOSAIC")   # (_named_map) a Saturn observation's purpose naming a map or a mosaic
+
+
+def _named_map(u):
+    """(_revisits) Pass u's observation is named a map or a mosaic (MAP_NAMES in its purpose, _name): its frames
+    retaking neighbouring views after pauses are a tight map, one pointing every few minutes, not a time series. The
+    2017 north pole maps (261SA_NPOLMAP001, 267SA_NPOLMAP002, 292SA_NPOLEMAP001: WAC frames overlapping by 0.6-0.8
+    of a frame, each pointing after a pause) played as movies of single tiles. A time series is named for what it
+    watches (LIMBINT, FEATRAK, FTRACK, MONITOR, CLOUD). Saturn only: a Titan map's WAC frames each holding most of
+    the disk, a fifth of a frame apart, stay movies (059TI_GLOBMAP001, 153TI_FIRNADMAP001)."""
+    name = _name(u["key"][1])
+    return bool(u["key"][0] == "SATURN" and name and any(m in name[3:] for m in MAP_NAMES))
 
 
 def _drifting(u):
