@@ -6132,9 +6132,12 @@ def unfit(frames, n, tile_of):
     # frames saturated OVER_LEAST or more are held too, as the rest of them are, so its least saturated one is not
     # left to play alone, half white (SPOLEDYN001 2009: clear frames 92-100% saturated round W1609834686_1, 39%,
     # which played twice, held in the 65% one's place, late in the dark south pole movie). A run in a pass whose
-    # filter is mostly well exposed still plays (a bright limb coming in)
+    # filter is mostly well exposed still plays (a bright limb coming in). Over-exposed here is saturated over
+    # OVER_EXPOSED of the whole frame, not of its lit part: a limb coming into a dark frame is saturated over most of
+    # its lit part from its first frames, yet shows the scene (293EN ENCSET001 2017-09-13, Enceladus setting behind
+    # Saturn: clear frames 5-40% saturated, all of it the limb; 34 of 45 counted as blown held the movie on one frame)
     mine = [j for j in range(len(frames)) if frames[j][2] == f and "offset" in tile_of(j)]
-    blown = sum(1 for j in mine if over_exposed(tile_of(j)) or tile_of(j).get("saturated", 0.0) >= SATURATED_ALL
+    blown = sum(1 for j in mine if tile_of(j).get("saturated", 0.0) >= OVER_EXPOSED
                 or patchy(tile_of(j)) or blank_frame(frames, j, tile_of))
     if len(mine) >= 3 and blown > BLOWN * len(mine):
         return True
