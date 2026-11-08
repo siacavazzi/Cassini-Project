@@ -68,6 +68,59 @@ def test_claims(tmp):
     return 1
 
 
+def test_slots(tmp):
+    """Two slots of one machine never get the same unit; build_unit runs every phase and writes done/."""
+    shared = farm.Shared(os.path.join(tmp, "slotfarm"))
+    plan = {"phases": ["composites", "processed"], "units": [{"unit": "2017-08", "weight": 9}, {"unit": "2017-04", "weight": 8},
+                                                             {"unit": "2017-09", "weight": 1}]}
+    m = {"end": "heavy"}
+    a = farm.next_unit(shared, plan, "mbp", m)
+    b = farm.next_unit(shared, plan, "mbp", m, busy={a["unit"]})
+    assert (a["unit"], b["unit"]) == ("2017-08", "2017-04"), (a, b)
+    # a restart with both claims open: each slot resumes a different one of its own
+    c = farm.next_unit(shared, plan, "mbp", m)
+    d = farm.next_unit(shared, plan, "mbp", m, busy={c["unit"]})
+    assert {c["unit"], d["unit"]} == {"2017-08", "2017-04"}, (c, d)
+    fake = os.path.join(tmp, "fakepy")
+    write(fake, "#!/bin/sh\necho \"$@\"\n")
+    os.chmod(fake, 0o755)
+    logdir = os.path.join(tmp, "slotlogs")
+    os.makedirs(logdir)
+    mach = {"name": "mbp", "cache": os.path.join(tmp, "c"), "status": os.path.join(tmp, "s", "slot1"), "procs": 8}
+    farm.build_unit(shared, {}, plan, "mbp", mach, a, fake, dict(os.environ), logdir)
+    done = json.loads(shared.read("done", "2017-08.json"))
+    assert list(done["phases"]) == ["composites", "processed"] and all(r["exit"] == 0 for r in done["phases"].values())
+    assert "--procs 8" in open(os.path.join(logdir, "processed-2017-08.log")).read()
+    log = shared.read("logs", "mbp", "phases.log").splitlines()
+    assert len(log) == 4 and log[0].startswith("2017-08 composites start"), log
+    return 1
+
+
+def test_preflight(tmp):
+    """A machine missing an input, with inputs that differ from the hub's, or loading too few kernels must not build."""
+    d = os.path.join(tmp, "inputs")
+    write(os.path.join(d, "data.zip"), "x" * 10)
+    write(os.path.join(d, "kernels.zip"), "k" * 20)
+    write(os.path.join(d, "cisscal", "a.dat"), "c" * 5)
+    write(os.path.join(d, "geometry.sqlite"), "g")
+    os.makedirs(os.path.join(d, "spice"))
+    env = {"CASSINI_DATA": os.path.join(d, "data.zip"), "CASSINI_KERNELS": os.path.join(d, "kernels.zip"),
+           "CASSINI_CISSCAL": os.path.join(d, "cisscal"), "CASSINI_GEOMETRY_CACHE": os.path.join(d, "geometry.sqlite"),
+           "CASSINI_SPICE_CACHE": os.path.join(d, "spice")}
+    want = farm.fingerprint(env)
+    assert want == {"CASSINI_DATA": 10, "CASSINI_KERNELS": 20, "CASSINI_CISSCAL": [1, 5]}, want
+    assert farm.preflight_problems(env, want, {2017: 109}) == []
+    no_k = dict(env)
+    del no_k["CASSINI_KERNELS"]
+    probs = farm.preflight_problems(no_k, want, {2017: 3})
+    assert any("CASSINI_KERNELS missing" in p for p in probs) and any("only 3 SPICE kernels" in p for p in probs), probs
+    write(os.path.join(d, "cisscal", "b.dat"), "c")
+    assert any("CASSINI_CISSCAL differs" in p for p in farm.preflight_problems(env, want, {2017: 109}))
+    assert farm.plan_years({"units": [{"unit": "2017-08", "from": "2017-08-01", "until": "2017-09-01"},
+                                      {"unit": "2004", "years": "2004"}]}) == [2004, 2017]
+    return 1
+
+
 def test_commands():
     m = {"name": "mbp", "cache": "/c", "status": "/s", "pause": "/p", "procs": 16, "max_load": 40, "min_free": 50}
     cmd = farm.prebuild_cmd(m, {"unit": "2007a", "from": "2007-01-01", "until": "2007-07-01"}, "movies", "py")
@@ -83,8 +136,7 @@ def test_commands():
 
 
 def test_ship_and_free(tmp):
-    cache, hub = os.path.join(tmp, "mbp-cache"), os.path.join(tmp, "hub", "incoming-mbp")
-    os.makedirs(hub)
+    cache, hub = os.path.join(tmp, "mbp-cache"), os.path.join(tmp, "hub", "incoming-mbp")   # made by the shipper
     write(os.path.join(cache, "processed", "v1", "1024", "A.webp"), "a")
     write(os.path.join(cache, "obs", "SAT_1", "plan.json"), "{}")
     write(os.path.join(cache, "processed", "v1", "1024", "B.webp.part123"), "half")
@@ -193,6 +245,8 @@ def main():
         ok += test_estimate()
         ok += test_claims(tmp)
         ok += test_commands()
+        ok += test_slots(tmp)
+        ok += test_preflight(tmp)
         ok += test_ship_and_free(tmp)
         ok += test_merge_compare_verify(tmp)
         ok += test_job(tmp)
