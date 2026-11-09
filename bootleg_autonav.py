@@ -200,6 +200,44 @@ def north_angle(cam, vector, scale):
     return math.degrees(math.atan2(north_sample - sample, line - north_line))
 
 """
+The exposure (seconds) of the frame label is, from its EXPOSURE_DURATION (ms), or None (the geometry cache's
+index rows have none)
+"""
+def exposure_s(label):
+    try:
+        return float(label.info["EXPOSURE_DURATION"]) / 1000
+    except (KeyError, TypeError, ValueError):
+        return None
+
+# find_target's error for a target behind the camera, and what it adds once it has looked through the frame's exposure
+BEHIND = " is behind the camera"
+EXPOSURE_WIDE = " all through its exposure"
+
+# how far (s) from the middle of the exposure the image's pointing is looked for when the exposure is not known: past
+# the rounding of IMAGE_MID_TIME to the millisecond
+POINTING_SLACK = 0.002
+
+"""
+(et, J2000 to camera matrix) of Cassini's pointing (-82000) during label's exposure, from the last loaded CK with a
+segment within half the exposure (plus POINTING_SLACK) of its middle et, or None. The C-smithed ISS CKs (*_ISS.bc)
+hold the image's own pointing in a segment that covers only its exposure, and IMAGE_MID_TIME can fall just outside
+it: W1354495588_1 (5 ms, Jupiter, ISS_C23JU_18ATM2X2B139_PRIME) has its middle 0.9 ms before its segment opens, where
+the reconstructed CK (00275_01001rc.bc) points 91 degrees from Jupiter, so its composite failed as "JUPITER is behind
+the camera" (2026-11-09); N1354496161_2 (3.8 s) has its segment at the end of its exposure, 1.9 s on. et is the
+pointing's own time, which the camera frame is turned at.
+"""
+def exposure_pointing(label, et, frame):
+    half = (exposure_s(label) or 0.0) / 2 + POINTING_SLACK
+    try:
+        clock = sp.sce2c(-82, et)
+        ticks = sp.sce2c(-82, et + half) - clock
+        _, found = sp.ckgp(-82000, clock, ticks, "J2000")
+        at = sp.sct2e(-82, found)
+        return at, sp.pxform("J2000", frame, at)
+    except Exception:   # noqa: BLE001  (no pointing during the exposure: the frame is as SPICE had it)
+        return None
+
+"""
 label = image label object
 plot = TRUE for plot generation
 output = target output directory
@@ -219,7 +257,14 @@ def find_target(label,plot,output):
     cam = sp.pxform("J2000", frame, et)
     vector = sp.mxv(cam, position)
     if vector[2] <= 0:
-        raise ValueError(f"{target} is behind the camera")
+        # the pointing at the middle of the exposure may not be the image's own (exposure_pointing): its time then
+        # is the pointing's, so reproject.py and bodies_in_frame turn the frame as it is placed here
+        found = exposure_pointing(label, et, frame)
+        if found is not None:
+            et, cam = found
+            vector = sp.mxv(cam, position)
+    if vector[2] <= 0:
+        raise ValueError(f"{target}{BEHIND}" + (EXPOSURE_WIDE if exposure_s(label) else ""))
 
     scale = pixel_scale(frame)
     sample, line = project(vector, scale)
@@ -315,6 +360,10 @@ def cached_target(label):
         return None
     if row[8] is not None:
         if UNKNOWN_NAME in row[8] and _known(label.info["TARGET_NAME"]):
+            return None
+        if BEHIND in row[8] and EXPOSURE_WIDE not in row[8] and exposure_s(label):
+            # cached before find_target looked for the pointing through the exposure (exposure_pointing), or by the
+            # cache's fill, which knows no exposures: worked out again once, with the label's exposure
             return None
         raise ValueError(row[8])
     label.geometry = {"et": row[4], "camera": row[5], "target": row[6], "center": CCD_CENTER, "scale": row[7]}
