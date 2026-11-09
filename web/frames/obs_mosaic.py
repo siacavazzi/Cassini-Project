@@ -6914,6 +6914,48 @@ def held_band(f):
 
 
 def set_shown(u, n, want, not_shown, placed, covers=None):
+    """_set_shown's set, its exposures matched (matched_exposures)."""
+    got, tint = _set_shown(u, n, want, not_shown, placed, covers)
+    return (matched_exposures(u, got, not_shown, placed) if got else got), tint
+
+
+def _frame_exposure(u, j):
+    """Frame j of pass u's exposure in s (its label), or None; read once per pass."""
+    kept = u.setdefault("_exposures", {})
+    if j not in kept:
+        try:
+            kept[j] = _exposure(label_handler.label(u["frames"][j][0], as_png=True))
+        except Exception:   # (no label: a synthetic pass, a frame missing from the archive)
+            kept[j] = None
+    return kept[j]
+
+
+def matched_exposures(u, got, not_shown, placed):
+    """Colour set got ({filter: frame}) with a frame exposed LONG_EXPOSURE times longer than the set's shortest
+    swapped for its filter's frame nearest in time (within HOLD_AGE, shown and placed) exposed under that, when there
+    is one. A pass alternating short and long exposures through each filter groups a long frame with short ones of the
+    other filters: its saturated part (the clipped arc of the rings) was mixed against the short frames' unclipped one,
+    and came out red where the others had no picture to match (263RI HIPHASE001 2017-03-04: a 2 s RED with 0.1 s GRN
+    and 0.18 s BL1, the bright arc pure red and every frame tinted pink from it). got as it is when the exposures are
+    not known or there is no such frame."""
+    es = {f: _frame_exposure(u, j) for f, j in got.items()}
+    if any(e is None or e <= 0 for e in es.values()):
+        return got
+    least = min(es.values())
+    frames, out = u["frames"], dict(got)
+    for f, j in got.items():
+        if es[f] < LONG_EXPOSURE * least:
+            continue
+        t = frames[j][3]
+        near = [i for i in range(len(frames)) if frames[i][2] == f and i != j and abs(frames[i][3] - t) <= HOLD_AGE
+                and placed(i) and not not_shown(i)]
+        near = [i for i in near if (_frame_exposure(u, i) or 0) > 0 and _frame_exposure(u, i) < LONG_EXPOSURE * least]
+        if near:
+            out[f] = min(near, key=lambda i: abs(frames[i][3] - t))
+    return out
+
+
+def _set_shown(u, n, want, not_shown, placed, covers=None):
     """(the colour set frame n of a movie playing in colour shows, or None; True when it shows it as the colour of
     frame n's own picture) (pure but for the pass's sets: movie_frame's and the page's, _colour_by). The set is
     set_of's. A frame of the set, or one taken within HOLD_AGE of it (the same moment: a cycle's other filters, which
