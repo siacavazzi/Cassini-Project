@@ -87,7 +87,15 @@ def test_slots(tmp):
     logdir = os.path.join(tmp, "slotlogs")
     os.makedirs(logdir)
     mach = {"name": "mbp", "cache": os.path.join(tmp, "c"), "status": os.path.join(tmp, "s", "slot1"), "procs": 8}
-    farm.build_unit(shared, {}, plan, "mbp", mach, a, fake, dict(os.environ), logdir)
+    write(os.path.join(tmp, "s", "slot1", "errors-processed-1of8.jsonl"), '{"item": "OLD", "error": "from an earlier unit", "at": 1}\n')
+    fake_err = os.path.join(tmp, "fakepy-err")
+    write(fake_err, "#!/bin/sh\necho \"$@\"\nphase=$3; while [ $# -gt 0 ]; do [ \"$1\" = --status ] && st=$2; shift; done\n"
+                    "mkdir -p $st; echo \"{\\\"item\\\": \\\"NEW\\\", \\\"error\\\": \\\"IndexError\\\", \\\"at\\\": $(date +%s)}\" "
+                    "> $st/errors-$phase-0of8.jsonl\n")
+    os.chmod(fake_err, 0o755)
+    farm.build_unit(shared, {}, plan, "mbp", mach, a, fake_err, dict(os.environ), logdir)
+    kept = open(os.path.join(logdir, "errors-2017-08-processed.jsonl")).read()
+    assert "NEW" in kept and "OLD" not in kept, kept
     done = json.loads(shared.read("done", "2017-08.json"))
     assert list(done["phases"]) == ["composites", "processed"] and all(r["exit"] == 0 for r in done["phases"].values())
     assert "--procs 8" in open(os.path.join(logdir, "processed-2017-08.log")).read()
@@ -118,6 +126,49 @@ def test_preflight(tmp):
     assert any("CASSINI_CISSCAL differs" in p for p in farm.preflight_problems(env, want, {2017: 109}))
     assert farm.plan_years({"units": [{"unit": "2017-08", "from": "2017-08-01", "until": "2017-09-01"},
                                       {"unit": "2004", "years": "2004"}]}) == [2004, 2017]
+    return 1
+
+
+def test_exec(tmp):
+    """A submitted command runs on a worker at its commit, writes into $FARM_OUT, and its output lands in exec_results;
+    a job for another machine or another commit is left alone."""
+    import argparse
+    root = os.path.join(tmp, "execfarm")
+    results = os.path.join(tmp, "exec-results")
+    os.makedirs(root)
+    write(os.path.join(root, "farm.json"), json.dumps({"exec_results": results, "machines": {
+        "mini": {"cache": os.path.join(tmp, "execcache", "c"), "env": {}}}}))
+    shared = farm.Shared(root)
+    head = farm.git("rev-parse", "HEAD")
+    ns = lambda **k: argparse.Namespace(**dict(dict(shared=root, machine="mini", only=None, name=None, by="test", commit=None,
+                                                    once=True, argv=[]), **k))
+    cli = lambda *a: subprocess.run([sys.executable, farm.__file__, *a], capture_output=True, text=True)
+    got = cli("exec", "submit", "--shared", root, "--name", "hello", "--by", "test", "--",
+              "sh", "-c", "echo hi > $FARM_OUT/out.txt")          # as documented: options, then -- and the command
+    assert got.returncode == 0, got.stderr
+    farm.cmd_exec(ns(action="submit", name="typo", argv=["no-such-program-xyz", "--flag"]))
+    farm.cmd_exec(ns(action="submit", name="other", only="mbp", argv=["true"]))
+    farm.cmd_exec(ns(action="submit", name="oldcode", commit="0" * 40, argv=["true"]))
+    write(os.path.join(root, "exec", "queue", "20990101T000000-half.json.part123"), '{"argv": ["tr')
+    write(os.path.join(root, "exec", "queue", "20990101T000000-broken.json"), '{"argv": ["tr')
+    status = cli("exec", "status", "--shared", root)
+    assert status.returncode == 0 and "hello" in status.stdout and "waiting" in status.stdout, status
+    saved = farm.kernel_probe, farm.preflight_problems
+    farm.kernel_probe, farm.preflight_problems = (lambda *a: {2004: 147}), (lambda *a: [])
+    try:
+        for _ in range(3):                                # hello, typo, then nothing else it may run: returns
+            farm.exec_worker(shared, ns(action="worker"))
+    finally:
+        farm.kernel_probe, farm.preflight_problems = saved
+    done = sorted(shared.listing("exec", "done"))
+    assert len(done) == 2 and any("hello" in n for n in done) and any("typo" in n for n in done), done
+    typo = json.loads(shared.read("exec", "done", [n for n in done if "typo" in n][0]))
+    assert typo["exit"] == 127, typo                    # a bad command fails its job; the worker went on
+    d = json.loads(shared.read("exec", "done", [n for n in done if "hello" in n][0]))
+    assert d["exit"] == 0 and d["machine"] == "mini"
+    assert open(os.path.join(d["out"], "out.txt")).read().strip() == "hi"
+    assert len([n for n in shared.listing("exec", "queue") if n.endswith(".json")]) == 5 and head
+    assert farm.new_job_id("same") != farm.new_job_id("same")   # two submits in one second never share an id
     return 1
 
 
@@ -192,6 +243,17 @@ def test_merge_compare_verify(tmp):
     slices.record(a, "processed", [("2004-01-01T00:00:00", "2005-01-01T00:00:00")], {"other": "v"}, errors=3)
     probs = farm.check_cache(a, units, ["processed"], vers)
     assert any("other version" in p for p in probs), probs
+    l_src, l_into = os.path.join(tmp, "lsrc"), os.path.join(tmp, "linto")
+    write(os.path.join(l_src, "obs", "P", "a.webp"), "a")
+    write(os.path.join(l_src, ".hidden.webp.Xy12"), "rsync temp")
+    out = farm.merge(l_into, l_src, move=True, link=True)
+    assert out["linked"] == 1 and os.path.exists(os.path.join(l_src, "obs", "P", "a.webp")), out      # source kept
+    assert os.stat(os.path.join(l_src, "obs", "P", "a.webp")).st_ino == os.stat(os.path.join(l_into, "obs", "P", "a.webp")).st_ino
+    assert not os.path.exists(os.path.join(l_into, ".hidden.webp.Xy12"))                                  # temp skipped
+    assert farm.merge(l_into, l_src, link=True)["same"] == 1                                              # rerun: nothing new
+    write(os.path.join(l_src, ".rsync-partial", "b.webp"), "truncat")    # an interrupted transfer is never merged
+    farm.merge(l_into, l_src, link=True)
+    assert not os.path.exists(os.path.join(l_into, ".rsync-partial"))
     c = os.path.join(tmp, "copy")
     out = farm.merge(c, a)
     assert out["copied"] == 4 and os.path.exists(os.path.join(a, "obs", "NY_PASS", "512", "f3.webp"))
@@ -247,6 +309,7 @@ def main():
         ok += test_commands()
         ok += test_slots(tmp)
         ok += test_preflight(tmp)
+        ok += test_exec(tmp)
         ok += test_ship_and_free(tmp)
         ok += test_merge_compare_verify(tmp)
         ok += test_job(tmp)

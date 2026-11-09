@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import shlex
 import shutil
 import socket
@@ -182,13 +183,15 @@ class Shared:
         with open(p, "a") as fh:
             fh.write(text)
 
-    def claim(self, unit):
-        """True if this call took the unit (mkdir is atomic on the hub's disk, locally or over SSH)."""
-        p = self.path("claims", unit)
+    def claim(self, *parts):
+        """True if this call took it: claim(unit) for claims/<unit>, claim("exec", "claims", id) for an exec job
+        (mkdir is atomic on the hub's disk, locally or over SSH)."""
+        parts = ("claims",) + parts if len(parts) == 1 else parts
+        p, parent = self.path(*parts), self.path(*parts[:-1])
         if self.ssh:
-            rc, _ = self._remote(f"mkdir -p {shlex.quote(self.path('claims'))} && mkdir {shlex.quote(p)}")
+            rc, _ = self._remote(f"mkdir -p {shlex.quote(parent)} && mkdir {shlex.quote(p)}")
             return rc == 0
-        os.makedirs(self.path("claims"), exist_ok=True)
+        os.makedirs(parent, exist_ok=True)
         try:
             os.mkdir(p)
             return True
@@ -425,7 +428,9 @@ class Shipper:
 
     def _rsync(self, extra, files_from=None):
         src = self.m["cache"].rstrip("/") + "/"
-        cmd = [self.m.get("rsync", "rsync"), "-a", "--partial", "-e", "ssh -o BatchMode=yes"] + extra
+        # an interrupted file waits in .rsync-partial/, never under its own name, so a merge --link can't take a
+        # truncated copy into the cache
+        cmd = [self.m.get("rsync", "rsync"), "-a", "--partial-dir=.rsync-partial", "-e", "ssh -o BatchMode=yes"] + extra
         if files_from:
             cmd += ["--files-from", files_from]
         else:
@@ -505,6 +510,35 @@ class Shipper:
             self.thread.start()
 
 
+def keep_errors(machine, logdir, unit, phase, since):
+    """prebuild's per-item error files (status/errors-<phase>-<k>of<n>.jsonl) are rewritten by the next run of the
+    phase, and a shard with no error leaves an earlier run's file in place: a copy per unit and phase of the lines
+    written since this phase started (their "at") keeps the failed items' names for the report."""
+    status = machine.get("status")
+    if not status or not os.path.isdir(status):
+        return
+    lines = []
+    for f in sorted(os.listdir(status)):
+        if f.startswith(f"errors-{phase}-") and f.endswith(".jsonl"):
+            with open(os.path.join(status, f)) as fh:
+                for l in fh:
+                    try:
+                        if json.loads(l).get("at", 0) >= since - 1:   # a second of slack for whole-second clocks
+                            lines.append(l if l.endswith("\n") else l + "\n")
+                    except ValueError:
+                        continue
+    if lines:
+        with open(os.path.join(logdir, f"errors-{unit}-{phase}.jsonl"), "w") as fh:
+            fh.writelines(lines)
+
+
+def machine_env(machine):
+    """The environment run and exec give the pipeline on a machine: one BLAS thread, the SPICE cache kept, its inputs."""
+    return dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1",
+                VECLIB_MAXIMUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
+                **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+
+
 def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_run=False):
     """Every phase of one unit, in order, each retried once; its result written to done/<unit>.json."""
     result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
@@ -523,6 +557,7 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
         if dry_run:
             print(" ".join(map(shlex.quote, cmd)))
             continue
+        phase_t0 = time.time()
         for attempt in (1, 2):    # one retry: a made file is never made again, so a rerun picks up where it stopped
             t0 = time.time()
             shared.append(f"{unit['unit']} {phase} start {now()} {me}\n", "logs", me, "phases.log")
@@ -533,6 +568,7 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
             if rc == 0:
                 break
         result["phases"][phase] = {"exit": rc, "seconds": took, "attempts": attempt}
+        keep_errors(machine, logdir, unit["unit"], phase, phase_t0)
     if dry_run:
         return
     result["finished"] = now()
@@ -557,8 +593,7 @@ def cmd_run(args):
     python = os.path.expanduser(machine.get("python", farm.get("python", sys.executable)))
     if not args.dry_run:
         check_code(plan, machine, python)
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
-               **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+    env = machine_env(machine)
     if not args.dry_run:
         # Sam's rule (2026-11-08): never build without the full SPICE kernels or any other crucial input. Without the
         # kernels zip the pipeline's loader quietly loads 3 kernels instead of ~100 and the pictures come out wrong
@@ -612,6 +647,134 @@ def cmd_run(args):
         t.join()
     if not args.dry_run:
         shipper.boundary(final=True)
+
+
+# ---------- exec: any command, queued for whichever machine is free (renders, posters, checks) ----------
+# Sam's rule (2026-11-09): render work uses both machines. A thread on the hub submits a command; every machine running
+# `exec worker` takes the next one it may run, runs it in its own checkout with its own inputs (farm.json env), and
+# sends back what the command wrote into $FARM_OUT. The laptop reaches the queue over SSH; the hub never needs to reach
+# the laptop. A job runs only on a worker whose checkout is at the job's commit, after the same preflight as `run`.
+#
+#   <shared>/exec/queue/<id>.json     {"argv", "commit", "only", "name", "by", "at"}
+#   <shared>/exec/claims/<id>/        taken (mkdir), owner.json
+#   <shared>/exec/done/<id>.json      {"exit", "seconds", "machine", "out"}
+#   <exec_results>/<id>/              what the job wrote to $FARM_OUT (farm.json "exec_results", on the hub)
+
+def new_job_id(name):
+    return (datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" +
+            re.sub(r"[^A-Za-z0-9_-]+", "-", name)[:40] + "-" + os.urandom(3).hex())   # two submits in one second differ
+
+
+def cmd_exec(args):
+    shared = Shared(args.shared)
+    if args.action == "submit":
+        if not args.argv:
+            raise SystemExit("exec submit [options] -- <command> ...")
+        argv = args.argv
+        jid = new_job_id(args.name or os.path.basename(argv[0]))
+        job_ = {"argv": argv, "commit": args.commit or git("rev-parse", "HEAD"), "only": args.only, "name": args.name or "",
+                "by": args.by or "", "at": now()}
+        shared.write(json.dumps(job_, indent=1), "exec", "queue", jid + ".json")
+        print(jid)
+        return
+    if args.action == "status":
+        done = {n[:-5] for n in shared.listing("exec", "done") if n.endswith(".json")}
+        claims = set(shared.listing("exec", "claims"))
+        for n in shared.listing("exec", "queue"):
+            if not n.endswith(".json"):
+                continue
+            jid = n[:-5]
+            try:
+                d = json.loads(shared.read("exec", "done", n) or "{}")
+            except ValueError:
+                d = {}
+            state = (f"exit {d.get('exit')} on {d.get('machine')} in {d.get('seconds')}s" if jid in done else
+                     "running" if jid in claims else "waiting")
+            print(f"{jid:<60} {state}")
+        return
+    exec_worker(shared, args)
+
+
+def exec_worker(shared, args):
+    farm = load_json(shared, "farm.json")
+    me = args.machine
+    machine = dict(farm["machines"][me], name=me)
+    python = os.path.expanduser(machine.get("python", farm.get("python", sys.executable)))
+    env = machine_env(machine)
+    plan = json.loads(shared.read("plan.json") or "{}")
+    probe = kernel_probe(python, env, [2004, 2017])
+    problems = preflight_problems(env, plan.get("inputs"), probe)
+    print(f"exec preflight: kernels loaded {probe}", flush=True)
+    if problems:
+        job(shared, farm, "fail", f"farm-{me}-exec-preflight", "; ".join(problems)[:400])
+        raise SystemExit("PREFLIGHT FAILED, nothing run:\n  " + "\n  ".join(problems))
+    head = git("rev-parse", "HEAD")
+    work = os.path.expanduser(machine.get("exec_dir", os.path.join(machine["cache"], "..", "exec-" + me)))
+    results = farm.get("exec_results", "")   # a hub path; ~ is the hub user's home
+    if results and not shared.ssh:
+        results = os.path.expanduser(results)
+    idle = 0
+    while not shared.exists(f"stop-exec-{me}"):
+        done = {n[:-5] for n in shared.listing("exec", "done") if n.endswith(".json")}
+        claims = set(shared.listing("exec", "claims"))
+        took = None
+        for n in shared.listing("exec", "queue"):
+            if not n.endswith(".json"):          # a .part being written
+                continue
+            jid = n[:-5]
+            if jid in done or jid in claims:
+                continue
+            try:
+                j = json.loads(shared.read("exec", "queue", n) or "")
+            except ValueError:                   # half-written or damaged: skip it this round
+                continue
+            if not isinstance(j, dict) or not isinstance(j.get("argv"), list) or not j["argv"]:
+                continue
+            if j.get("only") not in (None, "", "any", me) or (j.get("commit") and j["commit"] != head):
+                continue
+            if shared.claim("exec", "claims", jid):
+                took = (jid, j)
+                break
+        if not took:
+            if args.once:
+                return
+            idle += 1
+            time.sleep(min(60, 5 * idle))
+            continue
+        idle = 0
+        jid, j = took
+        shared.write(json.dumps({"machine": me, "at": now()}), "exec", "claims", jid, "owner.json")
+        out = os.path.join(work, jid)
+        os.makedirs(out, exist_ok=True)
+        job(shared, farm, "start", f"exec-{me}-{jid[:40]}", f"{j.get('name') or j['argv'][0]} (by {j.get('by') or '?'})",
+            "--eta", (datetime.datetime.now() + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M"))
+        t0 = time.time()
+        with open(os.path.join(out, "farm-exec.log"), "w") as fh:
+            try:
+                rc = subprocess.call(j["argv"], cwd=REPO, env=dict(env, FARM_OUT=out, FARM_JOB=jid), stdout=fh,
+                                     stderr=subprocess.STDOUT)
+            except (OSError, ValueError) as e:   # a typo in the command (no such program): the job fails, the worker goes on
+                fh.write(f"farm exec: could not start {j['argv'][0]!r}: {e}\n")
+                rc = 127
+        secs = int(time.time() - t0)
+        dest, copied = "", True
+        if results:
+            dest = os.path.join(results, jid)
+            if shared.ssh:
+                host = shared.ssh
+                copied = subprocess.call(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {dest}"]) == 0 and \
+                    subprocess.call([machine.get("rsync", "rsync"), "-a", "-e", "ssh -o BatchMode=yes", out + "/",
+                                     f"{host}:{dest}/"]) == 0      # unquoted, so the hub's shell expands a ~
+            else:
+                os.makedirs(dest, exist_ok=True)
+                copied = subprocess.call(["rsync", "-a", out + "/", dest + "/"]) == 0
+        record = {"exit": rc, "seconds": secs, "machine": me, "out": dest if (dest and copied) else out, "finished": now()}
+        if dest and not copied:
+            record["copy_failed"] = f"output kept on {me} at {out}"
+        shared.write(json.dumps(record, indent=1), "exec", "done", jid + ".json")
+        job(shared, farm, "done" if rc == 0 else "fail", f"exec-{me}-{jid[:40]}", f"exit {rc} in {secs}s, output {dest or out}")
+        if args.once:
+            return
 
 
 # ---------- status ----------
@@ -701,7 +864,7 @@ def walk_files(root):
     for d, dirs, fs in os.walk(root):
         dirs[:] = [x for x in dirs if x not in SKIP_SHIP]
         for f in fs:
-            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp"):
+            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp") or f.startswith("."):
                 continue
             yield os.path.relpath(os.path.join(d, f), root)
 
@@ -751,19 +914,19 @@ def join_slices(into, srcs):
     return added
 
 
-def merge(into, src, move=False, check=True):
+def merge(into, src, move=False, check=True, link=False):
     """src's files into `into`: a file `into` lacks is moved (same disk, --move) or copied; one it has is left as it
     is, and counted as differing if its size (or, with check, its bytes) differ. A folder `into` lacks entirely is
     moved in one rename."""
-    out = {"moved": 0, "copied": 0, "same": 0, "differ": []}
+    out = {"moved": 0, "copied": 0, "linked": 0, "same": 0, "differ": []}
     for d, dirs, fs in os.walk(src, topdown=True):
         rel = os.path.relpath(d, src)
         keep = []
         for x in dirs:
-            if x in SKIP_SHIP:
+            if x in SKIP_SHIP or x.startswith("."):   # .rsync-partial and other hidden folders
                 continue
             target = os.path.normpath(os.path.join(into, rel, x))
-            if move and not os.path.exists(target):
+            if move and not link and not os.path.exists(target):
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 n = sum(len(f) for _, _, f in os.walk(os.path.join(d, x)))
                 os.rename(os.path.join(d, x), target)
@@ -772,17 +935,23 @@ def merge(into, src, move=False, check=True):
                 keep.append(x)
         dirs[:] = keep
         for f in fs:
-            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp"):
+            if f in SKIP_SHIP or ".part" in f or f.endswith(".tmp") or f.startswith("."):   # rsync's temp files are .name.XXXX
                 continue
             s, t = os.path.join(d, f), os.path.normpath(os.path.join(into, rel, f))
             if os.path.exists(t):
+                if os.path.samefile(s, t):       # linked by an earlier pass: nothing to read
+                    out["same"] += 1
+                    continue
                 if os.path.getsize(s) != os.path.getsize(t) or (check and sha1(s) != sha1(t)):
                     out["differ"].append(os.path.normpath(os.path.join(rel, f)))
                 else:
                     out["same"] += 1
                 continue
             os.makedirs(os.path.dirname(t), exist_ok=True)
-            if move:
+            if link:   # a hard link: the source stays, so a later rsync into it finds the file and sends nothing again
+                os.link(s, t)
+                out["linked"] += 1
+            elif move:
                 os.rename(s, t)
                 out["moved"] += 1
             else:
@@ -793,8 +962,8 @@ def merge(into, src, move=False, check=True):
 
 def cmd_merge(args):
     for src in args.src:
-        got = merge(args.into, src, move=args.move, check=not args.fast)
-        print(f"{src}: {got['moved']} moved, {got['copied']} copied, {got['same']} already there, "
+        got = merge(args.into, src, move=args.move, check=not args.fast, link=args.link)
+        print(f"{src}: {got['moved']} moved, {got['linked']} linked, {got['copied']} copied, {got['same']} already there, "
               f"{len(got['differ'])} differ (kept the target's)")
         for p in got["differ"][:40]:
             print("  DIFFERS", p)
@@ -838,7 +1007,7 @@ def cmd_doctor(args):
     sys.exit(0 if ok else 1)
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
@@ -865,13 +1034,31 @@ def main():
     p.add_argument("--into", required=True)
     p.add_argument("--move", action="store_true", help="move files (same disk) instead of copying")
     p.add_argument("--fast", action="store_true", help="compare sizes only where both hold a file")
+    p.add_argument("--link", action="store_true", help="hard-link files (same disk) and leave the source: for merging "
+                                                        "while a machine still ships into it")
     p.add_argument("src", nargs="+")
+    p = sub.add_parser("exec", help="a queue of commands either machine runs (renders, posters, checks)")
+    p.add_argument("action", choices=["submit", "worker", "status"])
+    p.add_argument("--shared", required=True)
+    p.add_argument("--machine", help="worker: this machine's name in farm.json")
+    p.add_argument("--only", help="submit: run only on this machine (default: any)")
+    p.add_argument("--name", help="submit: a short name for the dashboard")
+    p.add_argument("--by", help="submit: who asked (thread)")
+    p.add_argument("--commit", help="submit: the commit the command needs (default: this checkout's)")
+    p.add_argument("--once", action="store_true", help="worker: run at most one job, then stop")
+    # the command itself comes after "--" and is split off before parsing (main), so options may sit anywhere before it
     p = sub.add_parser("doctor")
     p.add_argument("--shared", required=True)
     p.add_argument("--machine", required=True)
-    args = ap.parse_args()
+    argv = sys.argv[1:] if argv is None else argv
+    command = []
+    if "--" in argv:
+        k = argv.index("--")
+        argv, command = argv[:k], argv[k + 1:]
+    args = ap.parse_args(argv)
+    args.argv = command
     {"plan": cmd_plan, "run": cmd_run, "status": cmd_status, "verify": cmd_verify, "compare": cmd_compare,
-     "merge": cmd_merge, "doctor": cmd_doctor}[args.cmd](args)
+     "merge": cmd_merge, "doctor": cmd_doctor, "exec": cmd_exec}[args.cmd](args)
 
 
 if __name__ == "__main__":
