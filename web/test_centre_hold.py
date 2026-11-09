@@ -153,17 +153,24 @@ def test_quarter_snap():
         far = dict(rings, frames=[(None, "S0", "CL1", 0.0, 650, 3 * k, 0.0, Z)])
         assert om.pass_turn(far) == 100.0
         # a frame in no pass: its own turn, snapped when its body is on it
-        om.reel.geometry = lambda ids: {"R0": (0.0, 0.0, Z)}
+        geometry, om.reel.geometry = om.reel.geometry, lambda ids: {"R0": (0.0, 0.0, Z)}
         angles["R0"] = 100.0
         assert om.pass_turn(frame_id="R0", target="RHEA", cam="N") == 10.0
-        assert om.pass_turn(frame_id="R0", target=None, cam="N") == 100.0
+        assert om.pass_turn(frame_id="R0", target="", cam="N") == 100.0   # no body known
         assert om.view_shown({"centre": False, "quarter": 1}) and not om.view_shown({"centre": False})
         # a frame the camera rolled far from its pass: shown square on the pass's quarter while north stays within
         # 45 degrees of the top, else on its own nearest quarter
         assert om.frame_quarter(30.0, 0) == 0 and om.frame_quarter(60.0, 0) == 1 and om.frame_quarter(-170.0, 1) == 2
         assert om.frame_quarter(120.0, 1) == 1 and om.frame_quarter(-100.0, 3) == 3
+        # one rule for drawing a frame square on its own: a whole quarter from the camera's frame, -180 to 180
+        for own, q in ((-96.02, 3), (170.0, 2), (-170.0, 2), (50.0, 0), (10.0, 1)):
+            t = om.square_turn(own, q)
+            assert -180.0 < t <= 180.0 and abs(om.wrapped(own - t)) % 90 < 1e-6 and abs(t) <= 45.0
+        assert om.view_shown({"centre": False, "quarter": 0})
     finally:
         om.reel.north_angles = lambda ids: {}
+        if "geometry" in locals():
+            om.reel.geometry = geometry
 
 
 def test_surface_turn():

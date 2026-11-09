@@ -42,15 +42,18 @@ Routes:
   ...&channel=0|1|2            one channel of that composite (0 red, 1 green, 2 blue), black and white, cut
                                from the same composite so it keeps the composite's shared brightness scale and
                                alignment: what a composite's channel looks like opened on its own (drill-down)
-  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, north up,
-                               by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
+  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, square and
+                               turned the whole quarter that brings north toward the top (obs_mosaic.pass_turn), by
+                               SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
                                the rule of a movie centred on its body). Centred is centred: the body's centre is
                                the picture's middle however much of it the frame leaves empty (transparent).
-                               A close-up pass (frames on a body too big for the view) is turned north up where it
-                               is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
-                               spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
-                               frame SPICE has no place for, and the window shows the picture as it is. Also on
+                               A close-up pass (frames on a body too big for the view) is placed where it is on the
+                               pass's axes, so the surface holds still. A ring or spoke pass (Cassini kept those
+                               upright in the camera, the steady view) is turned by a whole quarter only, where that
+                               brings north toward the top. 404 with X-Center {"centre": false, "why"} for a sky pass
+                               that shows no body or a frame SPICE has no place for ("frame": true when only this
+                               frame, not its pass), and the window shows the picture as it is. Also on
                                /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
@@ -684,8 +687,9 @@ def body_radius(lbl):
 
 
 def centred(ids, view):
-    """The composite of ids (or one frame) centred on the body, turned to the pass's own orientation (view["turn"],
-    obs_mosaic.pass_turn: north up less the pass's average roll, so the frame keeps its square): the pipeline's color path and SPICE
+    """The composite of ids (or one frame) centred on the body (view["centre"]; else kept on the frame's middle, or
+    held), turned to the pass's axes (view["turn"], obs_mosaic.pass_turn: the camera's own, turned the whole quarter
+    that brings north toward the top, so the frame keeps its square): the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
     view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
     scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
@@ -1440,9 +1444,10 @@ def make_handler(site, cache, flags=None):
 
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
-            or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
-            sky pass or a frame SPICE has no place for: the answer (404, X-Center says why) is sent, so the window
-            shows the picture as it is for the whole pass."""
+            placed where it is for a close-up, or turned a whole quarter for a ring or spoke pass; view_shown), or
+            None for the picture as it is. False for a sky pass that shows no body or a frame SPICE has no place
+            for: the answer (404, X-Center says why) is sent, so the window shows the picture as it is (for the
+            whole pass unless X-Center has "frame": true)."""
             if query.get("center", ["0"])[0] != "1" or reel._index is None:
                 return None
             try:

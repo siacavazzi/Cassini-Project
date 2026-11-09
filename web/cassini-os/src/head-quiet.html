@@ -1942,7 +1942,7 @@ function targetLabel(k) {
       const def = (window.cassiniSettings && window.cassiniSettings.get("cameras.autoCenter")) ?? true;
       sw.setAttribute("aria-checked", String(!!st.centre));
       note.textContent = !st.centre ? (def ? "Off for this window" : "Off (the Settings default)")
-        : st.centred ? "Body in the middle, north up" : "Moons and planets that fit go north up in the middle";
+        : st.centred ? "Square, north toward the top; the body in the middle when it fits" : "Square pictures, north toward the top; moons and planets that fit in the middle";
       for (const row of el.querySelectorAll(".wmsub")) {
         const on = !!S.get(row.dataset.key), range = row.querySelector("input"), v = S.get(range.dataset.smooth);
         row.querySelector(".sw").setAttribute("aria-checked", String(on));

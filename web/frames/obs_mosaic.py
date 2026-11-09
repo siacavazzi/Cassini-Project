@@ -5988,7 +5988,8 @@ def follow_view(u, s, t):
     # frame, so it faces as the pass's other pictures do (north within 45 degrees of the top)
     vt = view_turn(u)
     axes = view_axes(u) if own is not None else None
-    turn = 0.0 if own is None else own - vt - 90.0 * frame_quarter(own, quarter_of(vt, own if axes is None else axes))
+    # (drawn own - vt; square on its own it is own - square_turn: turned back by the difference)
+    turn = 0.0 if own is None else wrapped(square_turn(own, quarter_of(vt, own if axes is None else axes)) - vt)
     a = math.radians(turn)
     big = side * (abs(math.cos(a)) + abs(math.sin(a)))
     cx, cy = t["offset"]
@@ -6094,6 +6095,12 @@ def frame_quarter(own, q):
     return int(round(own / 90.0)) % 4
 
 
+def square_turn(own, q):
+    """The turn (degrees, -180 to 180, as processed_frame's turn) that draws a frame of turn own square on its own:
+    a whole frame_quarter(own, q) quarters from the camera's frame."""
+    return round(wrapped(own - 90.0 * frame_quarter(own, q)), 2)
+
+
 def quarter_of(turn, m):
     """The quarter turns (0 to 3, counter clockwise) a pass drawn turn degrees short of north up turns its frames by
     from the camera's own axes m (pass_turn's circular mean)."""
@@ -6101,9 +6108,9 @@ def quarter_of(turn, m):
 
 
 def view_shown(view):
-    """Auto center draws the still for view (centre_view's answer): centred, held north up where it is, or turned a
-    quarter; otherwise the picture is shown as it is."""
-    return bool(view and (view.get("centre") or view.get("north") or view.get("quarter")))
+    """Auto center draws the still for view (centre_view's answer): centred, placed where it is on the pass's axes,
+    or turned a whole quarter ("quarter", which may be 0 for the pass); otherwise the picture is shown as it is."""
+    return bool(view and (view.get("centre") or view.get("north") or view.get("quarter") is not None))
 
 
 _view_turns = {}   # pass key -> view_turn's answer
@@ -6187,7 +6194,8 @@ def centre_view(frame_id):
     if hit is None:
         radius = RADIUS.get(target, 0) / (z * IFOV[cam])
         fp = _box(u, z) if found else (-g[0] - HALF, -g[1] - HALF, -g[0] + HALF, -g[1] + HALF)
-        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, pass_turn(frame_id=frame_id, target=target, cam=cam))) \
+        turn = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
+        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, turn)) \
             if fp and radius else None
         half = centre_half(fp, radius, seen) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
@@ -6205,16 +6213,17 @@ def centre_view(frame_id):
             hit["north"] = bool(boxes) and on * 2 > len(boxes)
         # each still drawn on the pass's axes (pass_turn: the camera's own, turned the quarter that brings north
         # closest to the top), turned only by how far the camera rolled from them
-        hit["turn"] = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
+        hit["turn"] = turn
         axes = view_axes(u) if found else mean_turn([frame_id])
         if axes is not None:
             hit["axes"] = axes   # the camera's own axes over the pass (mean_turn)
-        if not half and not hit.get("north"):
-            # a ring, spoke or sky pass (the camera's own orientation is the steady one): its stills are turned by
-            # the pass's quarter turn only, so they face as its movie and mosaic do; none, shown as it is
-            q = quarter_of(hit["turn"], axes) if axes is not None else 0
-            if q:
-                hit["quarter"] = q
+        places = [(fr[5], fr[6], fr[7]) for fr in u["frames"] if fr[7]] if found else [tuple(g[:3])]
+        if not half and not hit.get("north") and axes is not None and body_in_view(target, cam, places):
+            # a ring or spoke pass, or sky beside its body (the camera's own orientation is the steady one): each
+            # still turned by a whole quarter only (square_turn: the pass's, so they face as its movie and mosaic
+            # do, unless the camera rolled north past 45 degrees from the top); a sky pass that shows no body is
+            # shown as it is
+            hit["quarter"] = quarter_of(hit["turn"], axes)
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
@@ -6222,25 +6231,32 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
     else:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
-        if hit.get("quarter"):
-            # turned by a whole quarter alone (frame_quarter: the pass's, unless the camera rolled north past 45 degrees
-            # from the top), so its roll stays as the camera had it
+        if hit.get("quarter") is not None:
+            # turned by a whole quarter alone, so its roll stays as the camera had it. A frame that needs no turn (it
+            # already has north toward the top) or has no turn of its own is shown as it is, as this frame only
+            # ("frame": the page keeps asking for the pass's other stills)
             own = reel.north_angles([frame_id]).get(frame_id)
-            hit = dict(hit, side=FRAME, turn=round(wrapped(own - 90.0 * frame_quarter(own, hit["quarter"])), 2)) if own is not None \
-                else {k: v for k, v in hit.items() if k != "quarter"}
+            turn = square_turn(own, hit["quarter"]) if own is not None else None
+            if turn is None or frame_quarter(own, hit["quarter"]) == 0:
+                hit = {k: v for k, v in hit.items() if k != "quarter"}
+                hit.update(frame=True, why="this picture already has north toward the top" if turn is not None
+                           else "SPICE has no turn for this picture")
+            else:
+                hit = dict(hit, side=FRAME, turn=turn)
+    rolled = None
+    if (hit.get("centre") or hit.get("north")) and hit.get("axes") is not None:
+        # a frame the camera rolled more than ROLL_SQUARE from the pass's axes: its still square on its own, a whole
+        # quarter (square_turn) from the camera's frame, not tilted by its roll (it no longer holds with the pass)
+        own = reel.north_angles([frame_id]).get(frame_id)
+        if own is not None and abs(wrapped(own - hit["axes"])) > ROLL_SQUARE:
+            rolled = square_turn(own, quarter_of(hit["turn"], hit["axes"]))
     # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
-    if found and not hit["centre"] and hit.get("north"):
+    if found and not hit["centre"] and hit.get("north") and rolled is None:
         hold = hold_of(u, found[1], hit.get("turn", 0.0))
         if hold:
             hit = dict(hit, **hold)
-    if (hit.get("centre") or hit.get("north")) and hit.get("axes") is not None:
-        # a frame the camera rolled more than ROLL_SQUARE from the pass's axes: its still square on its own, a whole
-        # quarter (frame_quarter) from the camera's frame, not tilted by its roll (it no longer holds with the pass)
-        own = reel.north_angles([frame_id]).get(frame_id)
-        if own is not None and abs(wrapped(own - hit["axes"])) > ROLL_SQUARE:
-            q = frame_quarter(own, quarter_of(hit["turn"], hit["axes"]))
-            hit = {k: v for k, v in hit.items() if k not in ("hold", "at")}
-            hit.update(turn=round(wrapped(own - 90.0 * q), 2), square=True)
+    if rolled is not None:
+        hit = dict(hit, turn=rolled, square=True)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:
             _centre_of.clear()
