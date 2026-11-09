@@ -183,13 +183,15 @@ class Shared:
         with open(p, "a") as fh:
             fh.write(text)
 
-    def claim(self, unit):
-        """True if this call took the unit (mkdir is atomic on the hub's disk, locally or over SSH)."""
-        p = self.path("claims", unit)
+    def claim(self, *parts):
+        """True if this call took it: claim(unit) for claims/<unit>, claim("exec", "claims", id) for an exec job
+        (mkdir is atomic on the hub's disk, locally or over SSH)."""
+        parts = ("claims",) + parts if len(parts) == 1 else parts
+        p, parent = self.path(*parts), self.path(*parts[:-1])
         if self.ssh:
-            rc, _ = self._remote(f"mkdir -p {shlex.quote(self.path('claims'))} && mkdir {shlex.quote(p)}")
+            rc, _ = self._remote(f"mkdir -p {shlex.quote(parent)} && mkdir {shlex.quote(p)}")
             return rc == 0
-        os.makedirs(self.path("claims"), exist_ok=True)
+        os.makedirs(parent, exist_ok=True)
         try:
             os.mkdir(p)
             return True
@@ -426,7 +428,9 @@ class Shipper:
 
     def _rsync(self, extra, files_from=None):
         src = self.m["cache"].rstrip("/") + "/"
-        cmd = [self.m.get("rsync", "rsync"), "-a", "--partial", "-e", "ssh -o BatchMode=yes"] + extra
+        # an interrupted file waits in .rsync-partial/, never under its own name, so a merge --link can't take a
+        # truncated copy into the cache
+        cmd = [self.m.get("rsync", "rsync"), "-a", "--partial-dir=.rsync-partial", "-e", "ssh -o BatchMode=yes"] + extra
         if files_from:
             cmd += ["--files-from", files_from]
         else:
@@ -528,6 +532,13 @@ def keep_errors(machine, logdir, unit, phase, since):
             fh.writelines(lines)
 
 
+def machine_env(machine):
+    """The environment run and exec give the pipeline on a machine: one BLAS thread, the SPICE cache kept, its inputs."""
+    return dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1",
+                VECLIB_MAXIMUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
+                **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+
+
 def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_run=False):
     """Every phase of one unit, in order, each retried once; its result written to done/<unit>.json."""
     result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
@@ -582,8 +593,7 @@ def cmd_run(args):
     python = os.path.expanduser(machine.get("python", farm.get("python", sys.executable)))
     if not args.dry_run:
         check_code(plan, machine, python)
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
-               **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+    env = machine_env(machine)
     if not args.dry_run:
         # Sam's rule (2026-11-08): never build without the full SPICE kernels or any other crucial input. Without the
         # kernels zip the pipeline's loader quietly loads 3 kernels instead of ~100 and the pictures come out wrong
@@ -651,7 +661,8 @@ def cmd_run(args):
 #   <exec_results>/<id>/              what the job wrote to $FARM_OUT (farm.json "exec_results", on the hub)
 
 def new_job_id(name):
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + re.sub(r"[^A-Za-z0-9_-]+", "-", name)[:40]
+    return (datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" +
+            re.sub(r"[^A-Za-z0-9_-]+", "-", name)[:40] + "-" + os.urandom(3).hex())   # two submits in one second differ
 
 
 def cmd_exec(args):
@@ -689,9 +700,7 @@ def exec_worker(shared, args):
     me = args.machine
     machine = dict(farm["machines"][me], name=me)
     python = os.path.expanduser(machine.get("python", farm.get("python", sys.executable)))
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1",
-               VECLIB_MAXIMUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
-               **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+    env = machine_env(machine)
     plan = json.loads(shared.read("plan.json") or "{}")
     probe = kernel_probe(python, env, [2004, 2017])
     problems = preflight_problems(env, plan.get("inputs"), probe)
@@ -701,7 +710,9 @@ def exec_worker(shared, args):
         raise SystemExit("PREFLIGHT FAILED, nothing run:\n  " + "\n  ".join(problems))
     head = git("rev-parse", "HEAD")
     work = os.path.expanduser(machine.get("exec_dir", os.path.join(machine["cache"], "..", "exec-" + me)))
-    results = farm.get("exec_results", "")
+    results = farm.get("exec_results", "")   # a hub path; ~ is the hub user's home
+    if results and not shared.ssh:
+        results = os.path.expanduser(results)
     idle = 0
     while not shared.exists(f"stop-exec-{me}"):
         done = {n[:-5] for n in shared.listing("exec", "done") if n.endswith(".json")}
@@ -721,10 +732,7 @@ def exec_worker(shared, args):
                 continue
             if j.get("only") not in (None, "", "any", me) or (j.get("commit") and j["commit"] != head):
                 continue
-            p = shared.path("exec", "claims", jid)
-            ok = shared._remote(f"mkdir -p {shlex.quote(shared.path('exec', 'claims'))} && mkdir {shlex.quote(p)}")[0] == 0 \
-                if shared.ssh else (os.makedirs(shared.path("exec", "claims"), exist_ok=True) or _mkdir(p))
-            if ok:
+            if shared.claim("exec", "claims", jid):
                 took = (jid, j)
                 break
         if not took:
@@ -742,32 +750,31 @@ def exec_worker(shared, args):
             "--eta", (datetime.datetime.now() + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M"))
         t0 = time.time()
         with open(os.path.join(out, "farm-exec.log"), "w") as fh:
-            rc = subprocess.call(j["argv"], cwd=REPO, env=dict(env, FARM_OUT=out, FARM_JOB=jid), stdout=fh,
-                                 stderr=subprocess.STDOUT)
+            try:
+                rc = subprocess.call(j["argv"], cwd=REPO, env=dict(env, FARM_OUT=out, FARM_JOB=jid), stdout=fh,
+                                     stderr=subprocess.STDOUT)
+            except (OSError, ValueError) as e:   # a typo in the command (no such program): the job fails, the worker goes on
+                fh.write(f"farm exec: could not start {j['argv'][0]!r}: {e}\n")
+                rc = 127
         secs = int(time.time() - t0)
-        dest = ""
+        dest, copied = "", True
         if results:
             dest = os.path.join(results, jid)
             if shared.ssh:
                 host = shared.ssh
-                subprocess.call(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {shlex.quote(dest)}"])
-                subprocess.call([machine.get("rsync", "rsync"), "-a", "-e", "ssh -o BatchMode=yes", out + "/", f"{host}:{dest}/"])
+                copied = subprocess.call(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {dest}"]) == 0 and \
+                    subprocess.call([machine.get("rsync", "rsync"), "-a", "-e", "ssh -o BatchMode=yes", out + "/",
+                                     f"{host}:{dest}/"]) == 0      # unquoted, so the hub's shell expands a ~
             else:
                 os.makedirs(dest, exist_ok=True)
-                subprocess.call(["rsync", "-a", out + "/", dest + "/"])
-        shared.write(json.dumps({"exit": rc, "seconds": secs, "machine": me, "out": dest or out, "finished": now()}, indent=1),
-                     "exec", "done", jid + ".json")
+                copied = subprocess.call(["rsync", "-a", out + "/", dest + "/"]) == 0
+        record = {"exit": rc, "seconds": secs, "machine": me, "out": dest if (dest and copied) else out, "finished": now()}
+        if dest and not copied:
+            record["copy_failed"] = f"output kept on {me} at {out}"
+        shared.write(json.dumps(record, indent=1), "exec", "done", jid + ".json")
         job(shared, farm, "done" if rc == 0 else "fail", f"exec-{me}-{jid[:40]}", f"exit {rc} in {secs}s, output {dest or out}")
         if args.once:
             return
-
-
-def _mkdir(p):
-    try:
-        os.mkdir(p)
-        return True
-    except FileExistsError:
-        return False
 
 
 # ---------- status ----------
@@ -916,7 +923,7 @@ def merge(into, src, move=False, check=True, link=False):
         rel = os.path.relpath(d, src)
         keep = []
         for x in dirs:
-            if x in SKIP_SHIP:
+            if x in SKIP_SHIP or x.startswith("."):   # .rsync-partial and other hidden folders
                 continue
             target = os.path.normpath(os.path.join(into, rel, x))
             if move and not link and not os.path.exists(target):
@@ -932,6 +939,9 @@ def merge(into, src, move=False, check=True, link=False):
                 continue
             s, t = os.path.join(d, f), os.path.normpath(os.path.join(into, rel, f))
             if os.path.exists(t):
+                if os.path.samefile(s, t):       # linked by an earlier pass: nothing to read
+                    out["same"] += 1
+                    continue
                 if os.path.getsize(s) != os.path.getsize(t) or (check and sha1(s) != sha1(t)):
                     out["differ"].append(os.path.normpath(os.path.join(rel, f)))
                 else:
