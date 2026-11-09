@@ -4021,35 +4021,13 @@ def _window(u, p, mine, rect, cache):
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
-        part = _long_part(_shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t), t)
+        part = _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
         window.append((frame, None, None, None))
         shown.append(t)
     return window, shown
-
-
-LONG_CLIP = 250   # (_long_part) a long repeat's level from which it is the camera's clipped white
-LONG_CLIP_GROW = 2   # canvas px: and this far round it (the soft rim of a clipped area)
-
-
-def _long_part(part, t):
-    """A colour set's long exposure taken again (long_repeats, "long"): its picture with its clipped white
-    (LONG_CLIP and up, grown by LONG_CLIP_GROW) left out (alpha 0), so it fills only with what it measured. Drawn under
-    the set's own frames, its white still showed through their soft edges and filled where they fall short, at half
-    strength or more: a lime patch above the rings by Saturn's limb on Day the Earth Smiled (195RI HIPHASEC001: GRN
-    W1752980760_1 under the top edges of W1752975815_1 and W1752976190_1). Any other tile: part as it is."""
-    if not t.get("long"):
-        return part
-    clip = part[..., :3].max(axis=2) >= LONG_CLIP
-    if not clip.any():
-        return part
-    if LONG_CLIP_GROW:
-        clip = cv2.dilate(clip.astype(np.uint8), np.ones((2 * LONG_CLIP_GROW + 1,) * 2, np.uint8)).astype(bool)
-    out = part.copy()
-    out[..., 3][clip] = 0
-    return out
 
 
 SAME_PLACE = 0.25   # of a frame: tiles of different filters this close are the same pointing (seams)
@@ -4147,7 +4125,7 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-    draw_over(rgba, lambda: _long_part(_shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t), t),
+    draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
               left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill")))
 
 
