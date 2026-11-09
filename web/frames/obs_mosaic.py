@@ -7669,7 +7669,13 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         keep.append(t)
     keep += [t for key, t in spare.items() if not seen.get(key)]
     # a copy the camera saturated much more than the picture's other tiles of its filter goes under them (clipped_under)
+    # (every filter of that pointing alike: one band under and the others over put the pole's eye in two places, a
+    # blue spot at 05:32 on the 2017-04-26 north pole movie)
     low = clipped_under(keep)
+    if low:
+        lap = lap_of(u)
+        at = {(where[j], lap[j]) for j in low if where[j] is not None}
+        low |= {t["n"] for t in keep if (where[t["n"]], lap[t["n"]]) in at}
     keep = [dict(t, under=True) if t["n"] in low else t for t in keep]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
     tiles = under_first(sorted(keep, key=lambda t: (rank.get(t["n"], t["n"]), t["n"])))
