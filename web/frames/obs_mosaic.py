@@ -5916,6 +5916,20 @@ def page_evens(u, cache, colour=True, centre=True):
                 and not (colour and t.get("colour") and not t.get("sets")))
 
 
+def one_white(tiles, scale):
+    """{id(tile): gain} that puts a colour set's tiles drawn on a run of long exposures' white (tile_scale: their
+    "white", pass_scale's "long") on the pass's white, when the set mixes them with tiles drawn on the pass's own;
+    empty when its tiles share one white. A set mixing them came out in one filter's color: 263RI HIPHASE001
+    (2017-03-04) alternates short and long exposures through each filter, and its sets took a 2 s RED frame (long
+    white 0.086 I/F) with 0.1-0.18 s GRN and BL1 frames (pass white 0.31): RED drawn 3.6 times as bright, the rings
+    pink. scale None: only whether they are mixed (a gain of 1 per long tile)."""
+    long = [t for t in tiles if t.get("white")]
+    if not long or len(long) == len(tiles):
+        return {}
+    white = (scale or {}).get("white")
+    return {id(t): (t["white"] / white if white else 1.0) for t in long}
+
+
 def _colour_recipes(u, p, cache, ns, tiles):
     """How movie_frame draws each frame of a colour pass, for the page: {"filters", "mix" (colour_picture's 3x3
     natural mix, or None to draw the filters straight), "gamma", "shoulder", "by": {frame n: the tiles of its colour
@@ -5942,7 +5956,8 @@ def _colour_by(u, want, ns, tiles, grey):
     for n in ns:
         covers = lambda got: set_cover(tiles[n], [tiles[j] for j in got.values()]) >= HELD_COVER
         got, tinted = set_shown(u, n, want, not_shown, lambda j: j in placed, covers)
-        if got and not tinted:
+        if got and not tinted and not one_white([tiles[j] for j in got.values()], None):
+            # (a set whose frames are drawn on two whites is evened by the server: one_white)
             by[str(n)] = [got[f] for f in want]
     return by
 
@@ -7155,9 +7170,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     if got:
         want = p["colour"]
         own_gain = {}
+        bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
+        to_white = one_white(list(bases.values()), p["display_scale"])
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
-            base = own if j == n else tile(u, j, cache, p["display_scale"])
+            base = bases[f]
+            if to_white.get(id(base)):
+                base = dict(base, gain=round((base.get("gain") or 1.0) * to_white[id(base)], 4),
+                            gamma=base.get("gamma", gamma))
             newest[f] = at(base)
             own_gain[f] = base.get("gain")
         used = want

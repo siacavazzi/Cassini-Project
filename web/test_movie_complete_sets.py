@@ -294,3 +294,11 @@ assert om.set_cover(here, old) < om.HELD_COVER                            # the 
 assert om.set_cover(here, [_turned(1, 1), _turned(2, 0), _turned(0, 2)]) > 0.9
 assert om.set_cover(here, [here]) > 0.999
 print("a colour set covers a frame's place only where all its frames do at once (%.2f); ok" % om.set_cover(here, old))
+
+# a colour set mixing a tile drawn on a long run's white with tiles on the pass's (263RI HIPHASE001: a 2 s RED on
+# white 0.086 with 0.1 s GRN and BL1 on 0.31) puts the long one on the pass's white; one white needs nothing
+longt, short = {**placed, "white": 0.086}, dict(placed)
+g = om.one_white([longt, short, dict(short)], {"white": 0.31})
+assert list(g.values()) == [0.086 / 0.31] and id(longt) in g, g
+assert om.one_white([short, dict(short)], {"white": 0.31}) == {} and om.one_white([longt, dict(longt)], {"white": 0.31}) == {}
+print("a colour set is drawn on one white; ok")
