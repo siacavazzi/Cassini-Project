@@ -5111,6 +5111,10 @@ def movie_footprint(u, cache, p=None):
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
     if track:
         picks = sorted(track)
+    else:
+        # (and every tile of the pass already made: its own place, where the geometry cache's can be tens of px off)
+        there = _tiles(u, cache, p["display_scale"])
+        picks = sorted(set(picks) | {j for j in range(n) if os.path.exists(os.path.join(there, f"{j}.json"))})
     boxes = []
     # the samples made side by side (MOVIE_WORKERS at once): a cold pass's first steady frame waits on them
     mode = calibration.mode()
@@ -5126,13 +5130,15 @@ def movie_footprint(u, cache, p=None):
             bx, by, bw, bh = t["box"]
             boxes.append((ox + bx, oy + by, ox + bx + bw, oy + by + bh))
     # every frame's own drawn box on the pass's axes (pass_boxes, from the geometry cache), so no frame between the
-    # samples falls outside the footprint; a track's footprint has every frame at its steady place (places the
-    # geometry cache does not know), with MOVIE_MARGIN round it, as has a pass the geometry cache has none of
+    # tiles made falls outside the footprint, with STEADY_REACH round it: the furthest stabilization moves a tile
+    # from its SPICE place (and about what the geometry cache is off from the tiles' places at worst); a track's
+    # footprint has every frame at its steady place (places the geometry cache does not know), with MOVIE_MARGIN
+    # round it, as has a pass the geometry cache has none of
     own = None if track else pass_boxes(u)
     if own is not None:
         boxes.append((*own[:, :2].min(0), *own[:, 2:].max(0)))
     if boxes:
-        m = MOVIE_MARGIN * FRAME if own is None else 0.0
+        m = MOVIE_MARGIN * FRAME if own is None else STEADY_REACH
         fp = [min(b[0] for b in boxes) - m, min(b[1] for b in boxes) - m, max(b[2] for b in boxes) + m, max(b[3] for b in boxes) + m]
         # the plan's footprint too where the frames' own boxes are not known (the geometry cache has none of them)
         g = p["footprint"]
@@ -5511,7 +5517,7 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure5-{}-" + PLAN_FILE
+EXPOSURE_FILE = "exposure6-{}-" + PLAN_FILE   # exposure6: measured on movie-3's views (movie_footprint2, follow_view)
 EXPOSURE_ROLL = 0.75     # of a stretch's slow drift past EXPOSURE_FREE: how much the rolling scale takes out (evened_gains)
 EXPOSURE_FREE = 0.26     # log brightness (about 30% either way of the stretch's middle): slow drift kept as it is
 EXPOSURE_RULE = 8        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
@@ -5696,12 +5702,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     chain = steady_chain(u, cache, p)
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     fp = movie_footprint(u, cache, p)
-    x0, y0, x1, y1 = fp
     seen = pass_seen(u) if centre else None
-    fixed = bool((centre and centre_half(fp, radius, seen)) or max(x1 - x0, y1 - y0) <= MOVIE_FIT * FRAME)
-    if not fixed:
-        return {"local": False}
     ns = sorted(chain)
+    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen)):
+        return {"local": False}   # (a view following the frame: the server draws it, follow_view)
     held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
     rect = movie_rect(fp, tiles[ns[0]], radius, centre, seen)
@@ -5892,23 +5896,31 @@ def frames_seen(frames, z, turn=0.0):
     and put where the frame sits round the body's centre (reference pixels), so the share of the frames' area a
     view keeps is the share of the points in it. None when SPICE places none of the frames. turn: the axes the pass is
     drawn on (view_turn: its own orientation, short of north up)."""
-    placed = [fr for fr in frames if fr[7]]
-    if not placed:
-        return None
-    angles = reel.north_angles([fr[1] for fr in placed])
     g = ((np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5) * FRAME
     gx, gy = (a.ravel() for a in np.meshgrid(g, g))
     on, pts = False, []
+    for fr, put in _on_axes(frames, z, turn):
+        on = on or (abs(fr[5]) <= FRAME / 2 and abs(fr[6]) <= FRAME / 2)
+        pts.append(np.stack(put(gx, gy), 1))
+    return (on, np.concatenate(pts)) if pts else None
+
+
+def _on_axes(frames, z, turn):
+    """(frame, put) for each placed frame of frames (units' tuples; z, the pass's reference distance; turn, view_turn):
+    put(dx, dy) takes points dx, dy from the frame's middle on the camera's axes to where they are drawn round the
+    body's centre (reference pixels), turned by the frame's own angle less turn as cv2.getRotationMatrix2D turns its
+    tile (label_handler.middle_rotation) and scaled to the pass's distance (frames_seen, frames_boxes)."""
+    placed = [fr for fr in frames if fr[7]]
+    angles = reel.north_angles([fr[1] for fr in placed]) if placed else {}
     for fr in placed:
         x, y, fz = fr[5], fr[6], fr[7]
-        on = on or (abs(x) <= FRAME / 2 and abs(y) <= FRAME / 2)
-        # the frame's points from the body's centre on the camera's axes, turned as cv2.getRotationMatrix2D turns
-        # them (label_handler.middle_rotation) and scaled to the pass's distance
         a = math.radians(angles.get(fr[1], 0.0) - turn)
         c, s, k = math.cos(a), math.sin(a), fz / z
-        px, py = x + gx, y + gy
-        pts.append(np.stack([(c * px + s * py) * k, (c * py - s * px) * k], 1))
-    return on, np.concatenate(pts)
+
+        def put(dx, dy, x=x, y=y, c=c, s=s, k=k):
+            px, py = x + dx, y + dy
+            return (c * px + s * py) * k, (c * py - s * px) * k
+        yield fr, put
 
 
 _seen = {}   # pass key -> pass_seen's answer
@@ -5933,20 +5945,12 @@ def frames_boxes(frames, z, turn=0.0):
     pass's reference distance; turn, view_turn): the four corners of the frame, turned by its own angle less the
     pass's and scaled to the pass's distance as its tile is (frames_seen's points), put where the frame sits round
     the body's centre: an array of (x0, y0, x1, y1) rows, reference pixels. None when SPICE places none of them."""
-    placed = [fr for fr in frames if fr[7]]
-    if not placed:
-        return None
-    angles = reel.north_angles([fr[1] for fr in placed])
     cx, cy = np.array([-1, 1, 1, -1]) * FRAME / 2, np.array([-1, -1, 1, 1]) * FRAME / 2
     out = []
-    for fr in placed:
-        x, y, fz = fr[5], fr[6], fr[7]
-        a = math.radians(angles.get(fr[1], 0.0) - turn)
-        c, s, k = math.cos(a), math.sin(a), fz / z
-        px, py = x + cx, y + cy
-        X, Y = (c * px + s * py) * k, (c * py - s * px) * k
+    for _, put in _on_axes(frames, z, turn):
+        X, Y = put(cx, cy)
         out.append((X.min(), Y.min(), X.max(), Y.max()))
-    return np.array(out, float)
+    return np.array(out, float) if out else None
 
 
 _boxes = {}   # pass key -> pass_boxes's answer
@@ -5973,32 +5977,66 @@ def follows(fp, rect):
     return max(x1 - x0, y1 - y0) > MOVIE_FIT * FRAME and not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
 
 
-def follow_view(u, s, t):
+FOLLOW_SLACK = 2   # px: a following frame is drawn this much bigger than the picture and its middle cut out, so its
+#                    edges (placed to the nearest pixel, then turned) never show a part-transparent row (_unturn)
+
+
+def follow_view(u, s, t, out, pic=None):
     """How a movie that follows the frame (follows: a creeping ring or limb movie, a close-up sweeping across a
-    planet) draws frame s (its tile t, at its place): the frame as Cassini took it, filling the picture (Sam
-    2026-11-08: a 271SA close-up sweep was drawn in a window two frames across, the frame a quarter of it and turned
-    24 degrees by the pass's roll, black round it). (rect, side, turn): the square round the frame turned by turn
-    (degrees: its own angle less the pass's, view_turn, the turn its tile was drawn with), side reference pixels
-    across (the frame at the pass's distance), which _unturn turns back and cuts to the frame. Earlier frames drawn
-    under it (the trail) go with it, on its axes."""
+    planet) draws frame s (its tile t, at its place) out px across: the frame as Cassini took it, filling the picture
+    (Sam 2026-11-08: a 271SA close-up sweep was drawn in a window two frames across, the frame a quarter of it and
+    turned 24 degrees by the pass's roll, black round it). (rect, k, turn): the square round the frame turned by turn
+    (degrees: its own angle less the pass's, view_turn, the turn its tile was drawn with) and k canvas px per reference
+    px, FOLLOW_SLACK px more than out across the frame, which _unturn turns back and cuts to it. A frame the geometry
+    cache has no angle for takes the turn its tile shows (pic: the tile's picture path, _drawn_turn)."""
     fz = u["frames"][s][7] if 0 <= s < len(u["frames"]) else 0
     side = FRAME * (fz / u["z"] if fz and u.get("z") else 1.0)
     turn = reel.north_angles([t["id"]]).get(t["id"])
-    turn = 0.0 if turn is None else turn - view_turn(u)
+    if turn is not None:
+        turn -= view_turn(u)
+    else:
+        turn = _drawn_turn(pic) if pic else 0.0
     a = math.radians(turn)
     big = side * (abs(math.cos(a)) + abs(math.sin(a)))
     cx, cy = t["offset"]
-    return (cx - big / 2, cy - big / 2, big, big), side, turn
+    return (cx - big / 2, cy - big / 2, big, big), (out + FOLLOW_SLACK) / side, turn
 
 
-def _unturn(a, turn, w, h):
-    """Picture a (H x W [x C] array) drawn on a pass's axes, turned back by turn degrees about its middle (the turn
-    follow_view took out) and cut to its middle w x h: the frame on its own axes."""
+def _drawn_turn(path):
+    """The turn (degrees, within 45 of none) a tile's picture at path was drawn with: the angle of the smallest
+    rectangle round its drawn part. 0.0 when it cannot be read."""
+    try:
+        a = np.asarray(Image.open(path))[..., -1]
+        pts = cv2.findNonZero((a > 127).astype(np.uint8))
+        if pts is None or len(pts) < 16:
+            return 0.0
+        r = cv2.minAreaRect(pts)[2]
+    except (OSError, IndexError, ValueError, cv2.error):
+        return 0.0
+    # (a rectangle's angle is known only up to a quarter turn: the one nearest none; drawn counter clockwise as
+    # cv2.getRotationMatrix2D turns it, minAreaRect's angle runs the other way)
+    return float(-((r + 45.0) % 90.0 - 45.0))
+
+
+def follow_middle(t, rect, k):
+    """Where tile t's middle is drawn on a canvas of view rect (k px per reference px), in pixel coordinates (cv2's:
+    pixel i's centre at i), as _place puts it."""
+    bx, by, bw, bh = t["box"]
+    left = round((t["offset"][0] + bx - rect[0]) * k)
+    top = round((t["offset"][1] + by - rect[1]) * k)
+    return left + max(1, round(bw * k)) / 2 - 0.5, top + max(1, round(bh * k)) / 2 - 0.5
+
+
+def _unturn(a, turn, middle, w, h):
+    """Picture a (H x W [x C] array) drawn on a pass's axes, turned back by turn degrees about middle (the frame's
+    middle, follow_middle: the turn follow_view took out) and cut to the w x h round it: the frame on its own axes."""
     H, W = a.shape[:2]
+    cx, cy = middle
     if turn:
-        m = cv2.getRotationMatrix2D(((W - 1) / 2, (H - 1) / 2), -turn, 1.0)
+        m = cv2.getRotationMatrix2D((cx, cy), -turn, 1.0)
         a = cv2.warpAffine(a, m, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-    x0, y0 = max(0, (W - w) // 2), max(0, (H - h) // 2)
+    x0, y0 = int(round(cx + 0.5 - w / 2)), int(round(cy + 0.5 - h / 2))
+    x0, y0 = min(max(0, x0), max(0, W - w)), min(max(0, y0), max(0, H - h))
     return np.ascontiguousarray(a[y0:y0 + h, x0:x0 + w])
 
 
@@ -6794,11 +6832,12 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
     k = out / max(rect[2], rect[3])
     # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view)
+    # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view); with a
+    # rolling trail asked for, the window MOVIE_FIT frames across as before, so the frames before it show round it
     unturn = None
-    if not track and follows(fp, rect):
-        rect, side, turn = follow_view(u, s, t)
-        k = out / side
-        unturn = (turn, out, out)
+    if not track and not trail and follows(fp, rect):
+        rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
+        unturn = (turn, follow_middle(t, rect, k), out, out)
         rep["follow"] = {"turn": round(turn, 2)}
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the colour set's, the trail

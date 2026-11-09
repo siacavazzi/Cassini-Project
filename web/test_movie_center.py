@@ -126,19 +126,39 @@ assert not om.follows((-F, -F, F, F), om.movie_rect((-F, -F, F, F), t5))  # a fo
 U5 = {"key": ("SATURN", "X", "W", 5), "frames": frames(*sweep), "z": Z}
 angles.update({f"F{i}": 10.0 * i for i in range(12)})                  # the spacecraft rolling through the pass
 turn = om.view_turn(U5)
-rect, side, got = om.follow_view(U5, 5, t5)
-assert side == F and abs(got - (50.0 - turn)) < 1e-9
+n = 512
+rect, k, got = om.follow_view(U5, 5, t5, n)
+assert abs(k * F - (n + om.FOLLOW_SLACK)) < 1e-9 and abs(got - (50.0 - turn)) < 1e-9
 a = math.radians(got)
 assert np.allclose(rect, (2000 - F * (abs(math.cos(a)) + abs(math.sin(a))) / 2, -rect[2] / 2, rect[2], rect[2]))
-# the tile as processed_frame draws it (turned by got about its middle) comes back the whole frame, nothing black
-n = 512
-big = math.ceil(rect[2] / side * n)
-sq = np.zeros((big, big), np.uint8)
-o = (big - n) // 2
-sq[o:o + n, o:o + n] = 255
-turned = cv2.warpAffine(sq, label_handler.middle_rotation(sq.shape, got), (big, big), flags=cv2.INTER_LINEAR)
-back = om._unturn(turned, got, n, n)
-assert back.shape == (n, n) and (back[2:-2, 2:-2] > 200).all(), (back < 200).mean()
+# the tile as processed_frame draws it (the frame turned by got about its middle, its box round it) and _place puts
+# it comes back the whole frame, every edge row and column drawn (no part-transparent seam for detail() to darken)
+for got in (got, 10.0, -33.0, 0.0):
+    a = math.radians(got)
+    big = F * (abs(math.cos(a)) + abs(math.sin(a)))
+    rect = (2000 - big / 2, -big / 2, big, big)
+    tb = math.ceil(big)                                     # the tile: the frame turned on a canvas its box wide
+    sq = np.zeros((tb, tb), np.uint8)
+    o0 = (tb - F) / 2
+    sq[math.floor(o0):math.floor(o0) + F, math.floor(o0):math.floor(o0) + F] = 255
+    tile_pic = cv2.warpAffine(sq, label_handler.middle_rotation(sq.shape, got), (tb, tb), flags=cv2.INTER_LINEAR)
+    t6 = {"offset": (2000.0, 0.0), "box": [-tb / 2, -tb / 2, tb, tb]}
+    W = math.ceil(big * k)
+    sw = max(1, round(tb * k))
+    left = round((t6["offset"][0] + t6["box"][0] - rect[0]) * k)
+    canvas = np.zeros((W + 2, W + 2), np.uint8)
+    part = cv2.resize(tile_pic, (sw, sw), interpolation=cv2.INTER_AREA)
+    canvas[left:left + sw, left:left + sw] = part[:W + 2 - left, :W + 2 - left]
+    back = om._unturn(canvas, got, om.follow_middle(t6, rect, k), n, n)
+    assert back.shape == (n, n) and back.min() > 200, (got, back.min(), (back < 200).mean())
+    # ... and the turn a tile shows is found from its picture when the geometry cache has none (_drawn_turn)
+    import tempfile
+    from PIL import Image
+    with tempfile.NamedTemporaryFile(suffix=".png") as fh:
+        rgba = np.zeros((tb, tb, 4), np.uint8)
+        rgba[..., 3] = tile_pic
+        Image.fromarray(rgba, "RGBA").save(fh.name)
+        assert abs(om._drawn_turn(fh.name) - got) < 0.6, (om._drawn_turn(fh.name), got)
 angles.clear()
 # ... and a stare's footprint is its frames' own boxes, a frame across, so the whole footprint is the view
 stare_fp = om.frames_boxes(frames((0, 0), (10, -5)), Z)
