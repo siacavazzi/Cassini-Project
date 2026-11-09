@@ -42,15 +42,18 @@ Routes:
   ...&channel=0|1|2            one channel of that composite (0 red, 1 green, 2 blue), black and white, cut
                                from the same composite so it keeps the composite's shared brightness scale and
                                alignment: what a composite's channel looks like opened on its own (drill-down)
-  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, north up,
-                               by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
+  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, square and
+                               turned the whole quarter that brings north toward the top (obs_mosaic.pass_turn), by
+                               SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
                                the rule of a movie centred on its body). Centred is centred: the body's centre is
                                the picture's middle however much of it the frame leaves empty (transparent).
-                               A close-up pass (frames on a body too big for the view) is turned north up where it
-                               is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
-                               spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
-                               frame SPICE has no place for, and the window shows the picture as it is. Also on
+                               A close-up pass (frames on a body too big for the view) is placed where it is on the
+                               pass's axes, so the surface holds still. A ring or spoke pass (Cassini kept those
+                               upright in the camera, the steady view) is turned by a whole quarter only, where that
+                               brings north toward the top. 404 with X-Center {"centre": false, "why"} for a sky pass
+                               that shows no body or a frame SPICE has no place for ("frame": true when only this
+                               frame, not its pass), and the window shows the picture as it is. Also on
                                /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
@@ -519,11 +522,13 @@ COLOR_VERSIONS = {"balanced": "color-v55", "raw": "color-v38", "eye": "color-v55
 PROC_VERSIONS = {"balanced": "proc-v22", "raw": "proc-v22", "eye": "proc-v22", "false": "proc-v22", "classic": "proc-v16"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr8"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+CENTRE_VERSION = "ctr9"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
                           # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
                           # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
                           # ctr8: turned to the pass's own orientation (obs_mosaic.pass_turn), not north up: no tilt
+                          # ctr9: the pass's axes turned the quarter nearest north up; ring and sky passes that show
+                          # their body turned by that quarter alone (obs_mosaic.centre_view "quarter")
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -682,8 +687,9 @@ def body_radius(lbl):
 
 
 def centred(ids, view):
-    """The composite of ids (or one frame) centred on the body, turned to the pass's own orientation (view["turn"],
-    obs_mosaic.pass_turn: north up less the pass's average roll, so the frame keeps its square): the pipeline's color path and SPICE
+    """The composite of ids (or one frame) centred on the body (view["centre"]; else kept on the frame's middle, or
+    held), turned to the pass's axes (view["turn"], obs_mosaic.pass_turn: the camera's own, turned the whole quarter
+    that brings north toward the top, so the frame keeps its square): the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
     view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
     scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
@@ -834,7 +840,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
 
 
 # ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
-THUMB_VERSION = "thumb-v7"   # v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
+THUMB_VERSION = "thumb-v8"   # v8: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
 THUMB_SIZE = 256
 
 
@@ -1438,16 +1444,17 @@ def make_handler(site, cache, flags=None):
 
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
-            or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
-            sky pass or a frame SPICE has no place for: the answer (404, X-Center says why) is sent, so the window
-            shows the picture as it is for the whole pass."""
+            placed where it is for a close-up, or turned a whole quarter for a ring or spoke pass; view_shown), or
+            None for the picture as it is. False for a sky pass that shows no body or a frame SPICE has no place
+            for: the answer (404, X-Center says why) is sent, so the window shows the picture as it is (for the
+            whole pass unless X-Center has "frame": true)."""
             if query.get("center", ["0"])[0] != "1" or reel._index is None:
                 return None
             try:
                 view = obs_mosaic.centre_view(frame_id)
             except Exception as e:
                 view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
-            if view.get("centre") or view.get("north"):
+            if obs_mosaic.view_shown(view):
                 return view
             self.not_centred(view)
             return False

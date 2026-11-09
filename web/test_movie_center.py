@@ -128,7 +128,11 @@ angles.update({f"F{i}": 10.0 * i for i in range(12)})                  # the spa
 turn = om.view_turn(U5)
 n = 512
 rect, k, got = om.follow_view(U5, 5, t5, n)
-assert abs(k * F - (n + om.FOLLOW_SLACK)) < 1e-9 and abs(got - (50.0 - turn)) < 1e-9
+# (turned back by its roll only: it keeps the pass's quarter, square_turn, so north stays near the top)
+want = om.wrapped(om.square_turn(50.0, om.quarter_of(turn, om.view_axes(U5))) - turn)
+assert abs(k * F - (n + om.FOLLOW_SLACK)) < 1e-9 and abs(got - want) < 1e-9
+# the frame ends up turned a whole number of quarters from the camera's frame (drawn 50 - turn, turned back got)
+assert abs(((50.0 - turn - got) / 90.0) - round((50.0 - turn - got) / 90.0)) < 1e-9 and abs(om.wrapped(50.0 - (50.0 - turn - got))) <= 45.0
 a = math.radians(got)
 assert np.allclose(rect, (2000 - F * (abs(math.cos(a)) + abs(math.sin(a))) / 2, -rect[2] / 2, rect[2], rect[2]))
 # the tile as processed_frame draws it (the frame turned by got about its middle, its box round it) and _place puts

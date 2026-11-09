@@ -66,8 +66,8 @@ import label_handler  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v91", "raw": "obs-v74", "eye": "obs-v91-eye", "false": "obs-v91-false", "classic": "obs-v61-classic"}
+# obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v92", "raw": "obs-v75", "eye": "obs-v92-eye", "false": "obs-v92-false", "classic": "obs-v62-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -6153,11 +6153,15 @@ def follow_view(u, s, t, out, pic=None):
     cache has no angle for takes the turn its tile shows (pic: the tile's picture path, _drawn_turn)."""
     fz = u["frames"][s][7] if 0 <= s < len(u["frames"]) else 0
     side = FRAME * (fz / u["z"] if fz and u.get("z") else 1.0)
-    turn = reel.north_angles([t["id"]]).get(t["id"])
-    if turn is not None:
-        turn -= view_turn(u)
-    else:
-        turn = _drawn_turn(pic) if pic else 0.0
+    own = reel.north_angles([t["id"]]).get(t["id"])
+    vt = view_turn(u)
+    if own is None and pic:
+        own = _drawn_turn(pic) + vt   # (the turn its tile shows, on the pass's axes)
+    # turned back by its roll, not its quarter: the frame square, a whole quarter (square_turn) from the camera's frame,
+    # so it faces as the pass's other pictures do (north within 45 degrees of the top); drawn own - vt, square on its
+    # own own - square_turn, so turned back by the difference
+    axes = view_axes(u) if own is not None else None
+    turn = 0.0 if own is None else wrapped(square_turn(own, quarter_of(vt, own if axes is None else axes)) - vt)
     a = math.radians(turn)
     big = side * (abs(math.cos(a)) + abs(math.sin(a)))
     cx, cy = t["offset"]
@@ -6202,22 +6206,110 @@ def _unturn(a, turn, middle, w, h):
     return np.ascontiguousarray(a[y0:y0 + h, x0:x0 + w])
 
 
-def pass_turn(u=None, frame_id=None):
-    """The pass's own orientation (degrees, as reel.north_angles: the turn that would put celestial north up), which
+RING_REACH = 140500   # km from Saturn's centre: the F ring's outer edge; a Saturn pass whose frames reach this far shows
+                     # Saturn's rings, which take Saturn's north as their up (body_in_view)
+
+
+def body_in_view(target, cam, places):
+    """True when a frame of places ((x, y, fz) each: find_target's shift that centres the body, full resolution
+    pixels, and the frame's distance in km) shows its target: the body's disk (RADIUS), for Saturn its rings
+    (RING_REACH), reaches into the frame, or for a body of no known size its centre is on the frame."""
+    if not target:
+        return False
+    r_km = RING_REACH if target == "SATURN" else RADIUS.get(target, 0)
+    for x, y, fz in places:
+        r = r_km / (fz * IFOV.get(cam, IFOV["N"])) if fz else 0.0
+        dx, dy = max(abs(x) - FRAME / 2, 0.0), max(abs(y) - FRAME / 2, 0.0)
+        if dx * dx + dy * dy <= r * r:
+            return True
+    return False
+
+
+def pass_turn(u=None, frame_id=None, target=None, cam=None):
+    """The pass's orientation (degrees, as reel.north_angles: the turn that would put celestial north up), which
     every picture of the pass (a camera window's still, a movie's or mosaic's tile) is turned short of
-    (color_image.processed_frame's turn), so each is turned only by how far the camera rolled from the pass's average
-    and a pass the camera does not roll under keeps the square frame as Cassini took it, corners and all (Sam
-    2026-11-08: pictures came out tilted a few degrees with their corners cut). The canvas of a pass is then the sky
-    turned by this much: everything worked out on it (frames_seen, other_bodies, hold_of, footprint, surface_field)
-    takes it out of the frames' own turns.
-    The circular mean of the turns of pass u's placed frames, or frame_id's own turn for a frame in no pass (no turn at
-    all); 0.0 (north up) when the geometry cache has none."""
-    ids = [fr[1] for fr in u["frames"] if fr[7]] if u else [frame_id]
-    angles = list(reel.north_angles(ids).values())
-    if not angles:
+    (color_image.processed_frame's turn). Every picture of a pass is drawn on the same axes, so a pass the camera
+    does not roll under keeps the square frame as Cassini took it, corners and all, and one it rolls under turns
+    only by how far the camera rolled from the pass's average (Sam 2026-11-08: pictures came out tilted a few
+    degrees with their corners cut). The canvas of a pass is then the sky turned by this much: everything worked out
+    on it (frames_seen, other_bodies, hold_of, footprint, surface_field) takes it out of the frames' own turns.
+    Those axes are the camera's own (the circular mean m of the turns of pass u's placed frames, or frame_id's own
+    turn for a frame in no pass) turned by the quarter turn (0, 90, 180 or 270 degrees) that brings north closest to
+    the top: m less the multiple of 90 nearest it, so a picture is never turned more than 45 degrees from north up
+    and never by an angle that cuts its corners (Sam 2026-11-08: square, untilted pictures, but many planets and moons
+    came out sideways). North is SPICE's celestial north; the Saturn system's bodies and rings have their north within
+    about 7 degrees of it, Jupiter within about 25. A pass that shows no body (body_in_view: sky, stars, a target
+    off the frames) keeps the camera's axes (m). 0.0 (north up) when the geometry cache has none of its frames.
+    target, cam: frame_id's (from the index when not given)."""
+    if u:
+        placed = [fr for fr in u["frames"] if fr[7]]
+        places = [(fr[5], fr[6], fr[7]) for fr in placed]
+        ids = [fr[1] for fr in placed]
+        target, cam = (u.get("key") or (None, None, None))[0], (u.get("key") or (None, None, None))[2]
+    else:
+        ids = [frame_id]
+        g = reel.geometry([frame_id]).get(frame_id)
+        places = [tuple(g[:3])] if g and g[2] else []
+        if target is None:
+            try:
+                idx, row = _row_of()
+                r = idx.iloc[row[frame_id]]
+                target, cam = r["TARGET_NAME"], "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
+            except Exception:   # noqa: BLE001  (no index, or a frame not in it: no body known)
+                target = None
+    m = mean_turn(ids)
+    if m is None:
         return 0.0
+    if not body_in_view(target, cam, places):
+        return m
+    return round(m - 90.0 * round(m / 90.0), 2)
+
+
+def mean_turn(ids):
+    """The camera's own axes over the frames ids: the circular mean of their turns (reel.north_angles, degrees,
+    rounded to 0.01), None when the geometry cache has none of them."""
+    angles = list(reel.north_angles(list(ids)).values())
+    if not angles:
+        return None
     a = np.radians(angles)
     return round(float(np.degrees(np.arctan2(np.sin(a).mean(), np.cos(a).mean()))), 2)
+
+
+ROLL_SQUARE = 5.0   # degrees: a frame the camera rolled further than this from its pass's axes is shown on its own
+                    # (a still, a movie following the frame) square, turned a whole quarter (frame_quarter), not by
+                    # its roll (Sam 2026-11-08: 271SA HIRESWACS001 rolls 70 degrees; its stills came out 24 off)
+
+
+def wrapped(a):
+    """a degrees as -180 to 180"""
+    return (a + 180.0) % 360.0 - 180.0
+
+
+def frame_quarter(own, q):
+    """The quarter turns (0 to 3) a frame of turn own (reel.north_angles) is drawn by when shown square on its own:
+    its pass's q (quarter_of) while that keeps north within 45 degrees of the top, else the quarter nearest north up
+    for the frame itself, so a rolling pass changes quarter only where it has to."""
+    if abs(wrapped(own - 90.0 * q)) <= 45.0:
+        return q % 4
+    return int(round(own / 90.0)) % 4
+
+
+def square_turn(own, q):
+    """The turn (degrees, -180 to 180, as processed_frame's turn) that draws a frame of turn own square on its own:
+    a whole frame_quarter(own, q) quarters from the camera's frame."""
+    return round(wrapped(own - 90.0 * frame_quarter(own, q)), 2)
+
+
+def quarter_of(turn, m):
+    """The quarter turns (0 to 3, counter clockwise) a pass drawn turn degrees short of north up turns its frames by
+    from the camera's own axes m (pass_turn's circular mean)."""
+    return int(round((m - turn) / 90.0)) % 4
+
+
+def view_shown(view):
+    """Auto center draws the still for view (centre_view's answer): centred, placed where it is on the pass's axes,
+    or turned a whole quarter ("quarter", which may be 0 for the pass); otherwise the picture is shown as it is."""
+    return bool(view and (view.get("centre") or view.get("north") or view.get("quarter") is not None))
 
 
 _view_turns = {}   # pass key -> view_turn's answer
@@ -6239,6 +6331,24 @@ def view_turn(u):
     return hit
 
 
+_view_axes = {}   # pass key -> view_axes's answer
+
+
+def view_axes(u):
+    """mean_turn of pass u's placed frames (the camera's own axes), worked out once for the pass."""
+    key = (tuple(u.get("key") or ()), len(u["frames"]))
+    with _lock:
+        if key in _view_axes:
+            return _view_axes[key]
+    got = mean_turn([fr[1] for fr in u["frames"] if fr[7]])
+    if u.get("key"):
+        with _lock:
+            if len(_view_axes) > 100000:
+                _view_axes.clear()
+            _view_axes[key] = got
+    return got
+
+
 _centre_views = {}   # pass key -> centre_view's decision for it
 _centre_of = {}      # frame id -> centre_view's answer, for a frame SPICE places (a request per picture asks)
 
@@ -6252,9 +6362,12 @@ def centre_view(frame_id):
     is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
     {"centre": False, "north": True, "side": FRAME, "why": ...} for a close-up (frames on a body too big for the
     view): placed where it is on the pass's axes, so the surface holds still; both with "turn" (pass_turn: the
-    pass's own orientation, so each still is turned only by how far the camera rolled during the pass, not north up); {"centre": False, "why": ...} for a ring, spoke
-    or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
-    picture as it is."""
+    pass's axes, the camera's own turned the quarter that brings north closest to the top, so each still is turned
+    only by that quarter and how far the camera rolled during the pass); {"centre": False, "why": ...} for a ring,
+    spoke or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
+    picture as it is, or, for such a pass that shows its body or Saturn's rings, {"centre": False, "quarter": q,
+    "side": FRAME, "turn": ...}: the picture turned by the pass's quarter turn alone (q quarters counter clockwise),
+    as the pass's movie and mosaic face (view_shown says which views draw a still)."""
     with _lock:
         hit = _centre_of.get(frame_id)
     if hit is not None:
@@ -6280,7 +6393,8 @@ def centre_view(frame_id):
     if hit is None:
         radius = RADIUS.get(target, 0) / (z * IFOV[cam])
         fp = _box(u, z) if found else (-g[0] - HALF, -g[1] - HALF, -g[0] + HALF, -g[1] + HALF)
-        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, pass_turn(frame_id=frame_id))) \
+        turn = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
+        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, turn)) \
             if fp and radius else None
         half = centre_half(fp, radius, seen) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
@@ -6296,8 +6410,19 @@ def centre_view(frame_id):
             # none of its frames is on it)
             on = sum(_on_disk(b, radius) for b in boxes) if radius else 0
             hit["north"] = bool(boxes) and on * 2 > len(boxes)
-        # each still turned only by how far the camera rolled from the pass's own orientation, not north up
-        hit["turn"] = view_turn(u) if found else pass_turn(frame_id=frame_id)
+        # each still drawn on the pass's axes (pass_turn: the camera's own, turned the quarter that brings north
+        # closest to the top), turned only by how far the camera rolled from them
+        hit["turn"] = turn
+        axes = view_axes(u) if found else mean_turn([frame_id])
+        if axes is not None:
+            hit["axes"] = axes   # the camera's own axes over the pass (mean_turn)
+        places = [(fr[5], fr[6], fr[7]) for fr in u["frames"] if fr[7]] if found else [tuple(g[:3])]
+        if not half and not hit.get("north") and axes is not None and body_in_view(target, cam, places):
+            # a ring or spoke pass, or sky beside its body (the camera's own orientation is the steady one): each
+            # still turned by a whole quarter only (square_turn: the pass's, so they face as its movie and mosaic
+            # do, unless the camera rolled north past 45 degrees from the top); a sky pass that shows no body is
+            # shown as it is
+            hit["quarter"] = quarter_of(hit["turn"], axes)
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
@@ -6305,11 +6430,32 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
     else:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
+        if hit.get("quarter") is not None:
+            # turned by a whole quarter alone, so its roll stays as the camera had it. A frame that needs no turn (it
+            # already has north toward the top) or has no turn of its own is shown as it is, as this frame only
+            # ("frame": the page keeps asking for the pass's other stills)
+            own = reel.north_angles([frame_id]).get(frame_id)
+            turn = square_turn(own, hit["quarter"]) if own is not None else None
+            if turn is None or frame_quarter(own, hit["quarter"]) == 0:
+                hit = {k: v for k, v in hit.items() if k != "quarter"}
+                hit.update(frame=True, why="this picture already has north toward the top" if turn is not None
+                           else "SPICE has no turn for this picture")
+            else:
+                hit = dict(hit, side=FRAME, turn=turn)
+    rolled = None
+    if (hit.get("centre") or hit.get("north")) and hit.get("axes") is not None:
+        # a frame the camera rolled more than ROLL_SQUARE from the pass's axes: its still square on its own, a whole
+        # quarter (square_turn) from the camera's frame, not tilted by its roll (it no longer holds with the pass)
+        own = reel.north_angles([frame_id]).get(frame_id)
+        if own is not None and abs(wrapped(own - hit["axes"])) > ROLL_SQUARE:
+            rolled = square_turn(own, quarter_of(hit["turn"], hit["axes"]))
     # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
-    if found and not hit["centre"] and hit.get("north"):
+    if found and not hit["centre"] and hit.get("north") and rolled is None:
         hold = hold_of(u, found[1], hit.get("turn", 0.0))
         if hold:
             hit = dict(hit, **hold)
+    if rolled is not None:
+        hit = dict(hit, turn=rolled, square=True)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:
             _centre_of.clear()
