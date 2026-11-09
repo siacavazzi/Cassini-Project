@@ -3542,7 +3542,8 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
 
     def prof(n, d):
         v, radius, on, sy, sx = data[n]
-        return _ring_profile(v, radius[sy + d[1], sx + d[0]])
+        dx, dy = int(round(d[0])), int(round(d[1]))
+        return _ring_profile(v, radius[sy + dy, sx + dx])
 
     out = {}
     given = ref is not None
@@ -3577,7 +3578,17 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
             ok = best >= RING_FIT_NCC and (math.hypot(*at) <= 0.5 or best >= before + RING_FIT_GAIN) \
                 and max(abs(at[0]), abs(at[1])) < reach
             new[n] = at if ok else (0, 0)
-            out[n] = {"move": list(new[n]), "ncc": [round(before, 3), round(best, 3)], "found": list(at), "ok": bool(ok)}
+            # (to a tenth of a pixel: a parabola through the best and its neighbours, each way)
+            fine = list(at)
+            if ok:
+                for axis in (0, 1):
+                    lo_, hi_ = list(at), list(at)
+                    lo_[axis] -= 1
+                    hi_[axis] += 1
+                    a_, c_ = score(tuple(lo_)), score(tuple(hi_))
+                    if a_ - 2 * best + c_ < 0:
+                        fine[axis] = round(at[axis] + 0.5 * (a_ - c_) / (a_ - 2 * best + c_), 1)
+            out[n] = {"move": fine if ok else [0, 0], "ncc": [round(before, 3), round(best, 3)], "found": list(at), "ok": bool(ok)}
         moves = new
     return out, ref
 
