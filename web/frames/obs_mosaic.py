@@ -2182,7 +2182,9 @@ def visit_tiles(u, tiles, colour):
     if _rolling.get() or any("base" in t for t in tiles):
         return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
     keep = visit_frames(u, colour)
-    longs = long_repeats(tiles, colour)
+    # (and a pointing the camera saturated far more than its filters' other tiles: clipped_pointings, as a mosaic
+    # movie's picture draws it)
+    longs = long_repeats(tiles, colour) | (clipped_pointings(u, [t for t in tiles if t["filter"] in colour]) if colour else set())
     out = [dict(t, long=True) if t["n"] in longs else t for t in tiles if t["filter"] not in colour or t["n"] in keep]
     return tiles if len(out) == len(tiles) and not longs else out
 
@@ -4238,6 +4240,7 @@ def _roll(u, p, key, mine, rect, cache):
     return rgba
 
 
+CLIPPED_TAG = "_cu"   # in a mosaic picture's name: a saturated pointing is drawn under the others (clipped_pointings)
 VISIT_TAG = "-v"   # in the name of a colour filter's mosaic drawn without the partial visits (visit_tiles)
 
 
@@ -4472,6 +4475,8 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
+    if colour and used == colour and clipped_pointings(u, [t for t in tiles if t["filter"] in colour]):
+        name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
     return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
@@ -7600,6 +7605,17 @@ def clipped_under(tiles):
     return out
 
 
+def clipped_pointings(u, tiles):
+    """(clipped_under) The tiles of pass u that go under: those clipped_under picks and every tile of the same pointing
+    (slot and lap), so the pointing's filters stay together."""
+    low = clipped_under(tiles)
+    if low:
+        where, lap = slots(u), lap_of(u)
+        at = {(where[j], lap[j]) for j in low if where[j] is not None}
+        low |= {t["n"] for t in tiles if where[t["n"]] is not None and (where[t["n"]], lap[t["n"]]) in at}
+    return low
+
+
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
@@ -7671,11 +7687,7 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
     # a copy the camera saturated much more than the picture's other tiles of its filter goes under them (clipped_under)
     # (every filter of that pointing alike: one band under and the others over put the pole's eye in two places, a
     # blue spot at 05:32 on the 2017-04-26 north pole movie)
-    low = clipped_under(keep)
-    if low:
-        lap = lap_of(u)
-        at = {(where[j], lap[j]) for j in low if where[j] is not None}
-        low |= {t["n"] for t in keep if (where[t["n"]], lap[t["n"]]) in at}
+    low = clipped_pointings(u, keep)
     keep = [dict(t, under=True) if t["n"] in low else t for t in keep]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
     tiles = under_first(sorted(keep, key=lambda t: (rank.get(t["n"], t["n"]), t["n"])))
