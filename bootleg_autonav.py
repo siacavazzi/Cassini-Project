@@ -160,8 +160,7 @@ def image_et(label):
     info = label.info
     if "IMAGE_MID_TIME" in info:
         return sp.str2et(info["IMAGE_MID_TIME"])
-    exposure = float(info.get("EXPOSURE_DURATION", 0)) / 1000  # ms -> s
-    return sp.str2et(info["IMAGE_TIME"]) - exposure / 2
+    return sp.str2et(info["IMAGE_TIME"]) - (exposure_s(label) or 0.0) / 2
 
 def camera_frame(label):
     if label.info["INSTRUMENT_NAME"].find("WIDE") != -1:
@@ -200,6 +199,42 @@ def north_angle(cam, vector, scale):
     return math.degrees(math.atan2(north_sample - sample, line - north_line))
 
 """
+The exposure (seconds) of the frame label is, from its EXPOSURE_DURATION (ms), or None (the geometry cache's fill
+works from index rows, which have none)
+"""
+def exposure_s(label):
+    try:
+        return float(label.info.get("EXPOSURE_DURATION")) / 1000
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+# how far (s) past half the exposure the image's pointing is looked for: past the rounding of IMAGE_MID_TIME to the
+# millisecond (all the fill, which knows no exposures, looks past)
+POINTING_SLACK = 0.002
+
+"""
+(et, J2000 to camera matrix) of Cassini's pointing (-82000) during the exposure of exposure seconds (None: unknown)
+whose middle is et, from the last loaded CK with pointing within half of it (plus POINTING_SLACK), or None. For a
+frame SPICE cannot place at its middle (the target behind the camera, or no pointing there at all): the C-smithed ISS
+CKs (*_ISS.bc) hold an image's own pointing in a segment that covers only its exposure, and IMAGE_MID_TIME can fall
+just outside it. W1354495588_1 (5 ms, Jupiter, ISS_C23JU_18ATM2X2B139_PRIME) has its middle 0.9 ms before its segment
+opens, where the reconstructed CK (00275_01001rc.bc) points 91 degrees from Jupiter, so its composite failed as
+"JUPITER is behind the camera" (2026-11-09); N1354496161_2 (3.8 s) has its segment at the end of its exposure, 1.9 s
+on. The matrix is ckgp's own pointing turned onto the camera (no second look-up at a time that, converted back and
+forth, could fall a fraction of a tick outside the segment); et is the pointing's time.
+"""
+def exposure_pointing(et, frame, exposure):
+    half = (exposure or 0.0) / 2 + POINTING_SLACK
+    try:
+        clock = sp.sce2c(-82, et)
+        ticks = sp.sce2c(-82, et + half) - clock
+        cmat, found = sp.ckgp(-82000, clock, ticks, "J2000")
+        at = sp.sct2e(-82, found)
+        return at, sp.mxm(sp.pxform("CASSINI_SC_COORD", frame, at), cmat)
+    except Exception:   # noqa: BLE001  (no pointing during the exposure: the frame is as SPICE had it)
+        return None
+
+"""
 label = image label object
 plot = TRUE for plot generation
 output = target output directory
@@ -216,7 +251,20 @@ def find_target(label,plot,output):
 
     # apparent position of the target seen from Cassini, in the camera frame
     position, light_time = sp.spkpos(target, et, "J2000", ABCORR, "CASSINI")
-    cam = sp.pxform("J2000", frame, et)
+    try:
+        cam = sp.pxform("J2000", frame, et)
+    except Exception:   # noqa: BLE001  (no pointing at the middle: looked for through the exposure below)
+        cam = None
+    if cam is None or sp.mxv(cam, position)[2] <= 0:
+        # the pointing at the middle of the exposure may not be the image's own (exposure_pointing). Then the frame is
+        # worked out at the pointing's time, the target's place too, which label.geometry keeps, so reproject.py and
+        # bodies_in_frame turn and place the frame as it is placed here
+        found = exposure_pointing(et, frame, exposure_s(label))
+        if found is not None:
+            et, cam = found
+            position, light_time = sp.spkpos(target, et, "J2000", ABCORR, "CASSINI")
+        elif cam is None:
+            cam = sp.pxform("J2000", frame, et)   # (SPICE's own error for no pointing)
     vector = sp.mxv(cam, position)
     if vector[2] <= 0:
         raise ValueError(f"{target} is behind the camera")
@@ -473,6 +521,45 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
 
 
 """
+Works out again every frame the geometry cache holds as behind the camera, with its label's exposure: the fill knows
+no exposures (it looks only POINTING_SLACK past the middle), and rows from before exposure_pointing never looked. A
+frame whose pointing during its exposure has the target in front is stored placed; the rest keep their error. Run
+once on a cache filled before 2026-11-09 (`python bootleg_autonav.py geometry --behind`); 247 rows, 2 placed.
+"""
+def recheck_behind():
+    import contextlib
+    import io
+    import pandas as pd
+    import label_handler
+    rows = [f for f, in _geometry_db().execute("SELECT frame FROM target WHERE version = ? AND error LIKE ?",
+                                               (GEOMETRY_VERSION, "%is behind the camera%"))]
+    index = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "Image_index.csv"),
+                        usecols=["path"], low_memory=False)
+    paths = {os.path.basename(p).split(".")[0]: p for p in index["path"].dropna()}
+    out, placed, years = [], 0, {}
+    for frame in rows:
+        if frame not in paths:
+            continue
+        label = label_handler.label(paths[frame], as_png=True)
+        years.setdefault(int(label.info["IMAGE_TIME"][:4]), []).append(label)
+    for year, labels in sorted(years.items()):
+        with contextlib.redirect_stdout(io.StringIO()):
+            unload_kernels()
+            load_kernels(year, year)
+        for label in labels:
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    out.append(_row(frame_id(label), find_target(label, False, "graphs"), label.geometry))
+                placed += 1
+                print(f"placed {frame_id(label)}", flush=True)
+            except Exception as e:
+                out.append(_row(frame_id(label), error=f"{type(e).__name__}: {e}"))
+    _store_rows(out)
+    unload_kernels()
+    print(f"{len(out)} behind-the-camera frames worked out again, {placed} placed", flush=True)
+
+
+"""
 The other bodies in each frame, beside its target: where SPICE puts every Saturn moon (NAIF 601-653), Saturn and
 Jupiter whose disk touches the frame, kept in the geometry cache's bodies table, so a movie's stabilization can be
 held on its target when a second moon is in the picture (obs_mosaic.steady_chain: Sam 2026-11-04, a moon transiting
@@ -616,6 +703,8 @@ if __name__ == "__main__":
     ap.add_argument("--target", help="only frames of this target, e.g. ENCELADUS")
     ap.add_argument("--observations", nargs="*", help="bodies: only the frames of these OBSERVATION_IDs")
     ap.add_argument("--usgs-titan", action="store_true", help="only the frames the USGS Titan kernels cover")
+    ap.add_argument("--behind", action="store_true", help="geometry: work out again the frames cached as behind the "
+                    "camera, with their labels' exposures (recheck_behind)")
     args = ap.parse_args()
     if not GEOMETRY_CACHE:
         ap.error("set CASSINI_GEOMETRY_CACHE to the cache file, e.g. /Volumes/LaCie/claude_scratch_spk/geometry.sqlite")
@@ -628,4 +717,7 @@ if __name__ == "__main__":
     else:
         if args.usgs_titan and not usgs_titan_frames():
             ap.error(f"no USGS Titan kernels in {USGS_TITAN_DIR} (or CASSINI_USGS_TITAN=0)")
-        build_geometry_cache(years, args.target, args.usgs_titan)
+        if args.behind:
+            recheck_behind()
+        else:
+            build_geometry_cache(years, args.target, args.usgs_titan)
