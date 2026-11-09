@@ -5916,6 +5916,20 @@ def page_evens(u, cache, colour=True, centre=True):
                 and not (colour and t.get("colour") and not t.get("sets")))
 
 
+def one_white(tiles, scale):
+    """{id(tile): gain} that puts a colour set's tiles drawn on a run of long exposures' white (tile_scale: their
+    "white", pass_scale's "long") on the pass's white, when the set mixes them with tiles drawn on the pass's own;
+    empty when its tiles share one white. A set mixing them came out in one filter's color: 263RI HIPHASE001
+    (2017-03-04) alternates short and long exposures through each filter, and its sets took a 2 s RED frame (long
+    white 0.086 I/F) with 0.1-0.18 s GRN and BL1 frames (pass white 0.31): RED drawn 3.6 times as bright, the rings
+    pink. scale None: only whether they are mixed (a gain of 1 per long tile)."""
+    long = [t for t in tiles if t.get("white")]
+    if not long or len(long) == len(tiles):
+        return {}
+    white = (scale or {}).get("white")
+    return {id(t): (t["white"] / white if white else 1.0) for t in long}
+
+
 def _colour_recipes(u, p, cache, ns, tiles):
     """How movie_frame draws each frame of a colour pass, for the page: {"filters", "mix" (colour_picture's 3x3
     natural mix, or None to draw the filters straight), "gamma", "shoulder", "by": {frame n: the tiles of its colour
@@ -5942,7 +5956,8 @@ def _colour_by(u, want, ns, tiles, grey):
     for n in ns:
         covers = lambda got: set_cover(tiles[n], [tiles[j] for j in got.values()]) >= HELD_COVER
         got, tinted = set_shown(u, n, want, not_shown, lambda j: j in placed, covers)
-        if got and not tinted:
+        if got and not tinted and not one_white([tiles[j] for j in got.values()], None):
+            # (a set whose frames are drawn on two whites is evened by the server: one_white)
             by[str(n)] = [got[f] for f in want]
     return by
 
@@ -6899,6 +6914,48 @@ def held_band(f):
 
 
 def set_shown(u, n, want, not_shown, placed, covers=None):
+    """_set_shown's set, its exposures matched (matched_exposures)."""
+    got, tint = _set_shown(u, n, want, not_shown, placed, covers)
+    return (matched_exposures(u, got, not_shown, placed) if got else got), tint
+
+
+def _frame_exposure(u, j):
+    """Frame j of pass u's exposure in s (its label), or None; read once per pass."""
+    kept = u.setdefault("_exposures", {})
+    if j not in kept:
+        try:
+            kept[j] = _exposure(label_handler.label(u["frames"][j][0], as_png=True))
+        except Exception:   # (no label: a synthetic pass, a frame missing from the archive)
+            kept[j] = None
+    return kept[j]
+
+
+def matched_exposures(u, got, not_shown, placed):
+    """Colour set got ({filter: frame}) with a frame exposed LONG_EXPOSURE times longer than the set's shortest
+    swapped for its filter's frame nearest in time (within HOLD_AGE, shown and placed) exposed under that, when there
+    is one. A pass alternating short and long exposures through each filter groups a long frame with short ones of the
+    other filters: its saturated part (the clipped arc of the rings) was mixed against the short frames' unclipped one,
+    and came out red where the others had no picture to match (263RI HIPHASE001 2017-03-04: a 2 s RED with 0.1 s GRN
+    and 0.18 s BL1, the bright arc pure red and every frame tinted pink from it). got as it is when the exposures are
+    not known or there is no such frame."""
+    es = {f: _frame_exposure(u, j) for f, j in got.items()}
+    if any(e is None or e <= 0 for e in es.values()):
+        return got
+    least = min(es.values())
+    frames, out = u["frames"], dict(got)
+    for f, j in got.items():
+        if es[f] < LONG_EXPOSURE * least:
+            continue
+        t = frames[j][3]
+        near = [i for i in range(len(frames)) if frames[i][2] == f and i != j and abs(frames[i][3] - t) <= HOLD_AGE
+                and placed(i) and not not_shown(i)]
+        near = [i for i in near if (_frame_exposure(u, i) or 0) > 0 and _frame_exposure(u, i) < LONG_EXPOSURE * least]
+        if near:
+            out[f] = min(near, key=lambda i: abs(frames[i][3] - t))
+    return out
+
+
+def _set_shown(u, n, want, not_shown, placed, covers=None):
     """(the colour set frame n of a movie playing in colour shows, or None; True when it shows it as the colour of
     frame n's own picture) (pure but for the pass's sets: movie_frame's and the page's, _colour_by). The set is
     set_of's. A frame of the set, or one taken within HOLD_AGE of it (the same moment: a cycle's other filters, which
@@ -7155,9 +7212,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     if got:
         want = p["colour"]
         own_gain = {}
+        bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
+        to_white = one_white(list(bases.values()), p["display_scale"])
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
-            base = own if j == n else tile(u, j, cache, p["display_scale"])
+            base = bases[f]
+            if to_white.get(id(base)):
+                base = dict(base, gain=round((base.get("gain") or 1.0) * to_white[id(base)], 4),
+                            gamma=base.get("gamma", gamma))
             newest[f] = at(base)
             own_gain[f] = base.get("gain")
         used = want
