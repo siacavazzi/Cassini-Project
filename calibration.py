@@ -158,13 +158,17 @@ _filters = None
 def filter_table():
     global _filters
     if _filters is None:
-        _filters = {}
+        # filled in its own dict and only then published: the threads that calibrate a pass's first frames at once
+        # (obs_mosaic.pass_scale's pool) saw a half-filled table, found no factor for their filter and dropped the frame
+        # (calibrate None): the MacBook's 269RI_HIPHASEFB001 plan without its first IR3 frame (2026-11-09)
+        table = {}
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_calibration.csv")
         with open(path) as f:
             next(f)
             for line in f:
                 camera, filters, wavelength, factor, k = line.strip().split(",")
-                _filters[(camera, filters)] = float(k)
+                table[(camera, filters)] = float(k)
+        _filters = table
     return _filters
 
 
@@ -1079,7 +1083,7 @@ def band_wavelength(camera, band):
     two stacked filters ("IR2/IR1") the pair's (filter_calibration.csv), or None."""
     global _wavelengths
     if _wavelengths is None:
-        _wavelengths = {}
+        table = {}   # filled, then published (filter_table)
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_calibration.csv")) as f:
             next(f)
             for line in f:
@@ -1088,10 +1092,11 @@ def band_wavelength(camera, band):
                     for name in (filters[3:] if filters.startswith(clear) else None,
                                  filters[:3] if filters.endswith(clear) and len(filters) == 6 else None):
                         if name and name not in ("CL1", "CL2"):
-                            _wavelengths[(cam[3], name)] = float(nm)
+                            table[(cam[3], name)] = float(nm)
                 if len(filters) == 6 and "CL" not in (filters[:2], filters[3:5]):
                     # two color filters stacked, one on each wheel ("IR2/IR1", as band_of names it): the pair's own
-                    _wavelengths[(cam[3], filters[:3] + "/" + filters[3:])] = float(nm)
+                    table[(cam[3], filters[:3] + "/" + filters[3:])] = float(nm)
+        _wavelengths = table
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     return _wavelengths.get((cam, band)) or _wavelengths.get(("W" if cam == "N" else "N", band))
 
@@ -1102,10 +1107,11 @@ def body_level(target, band, camera=None, sure=True):
     global _bodies
     if _bodies is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
-        _bodies = {}
+        table = {}   # filled, then published (filter_table)
         if os.path.exists(path):
             with open(path) as f:
-                _bodies = json.load(f)
+                table = json.load(f)
+        _bodies = table
     body = _bodies.get(str(target or "").upper(), {})
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     for m in (body.get(cam, {}).get(band), body.get(band)):
@@ -1157,10 +1163,11 @@ def eye_tint(target):
     global _eye_colors
     if _eye_colors is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eye_colors.json")
-        _eye_colors = {}
+        table = {}   # filled, then published (filter_table)
         if os.path.exists(path):
             with open(path) as f:
-                _eye_colors = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+                table = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+        _eye_colors = table
     got = _eye_colors.get(str(target or "").upper())
     return got["rgb"] if got else tint_of(target) or [1.0, 1.0, 1.0]
 
@@ -1237,10 +1244,11 @@ def false_gains(target, bands, camera=None):
     global _bodies
     if _bodies is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
-        _bodies = {}
+        table = {}   # filled, then published (filter_table)
         if os.path.exists(path):
             with open(path) as f:
-                _bodies = json.load(f)
+                table = json.load(f)
+        _bodies = table
     body = _bodies.get(str(target or "").upper(), {})
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     meds = []
