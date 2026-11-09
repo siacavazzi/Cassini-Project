@@ -116,3 +116,25 @@ years only: `plan`, then delete from plan.json the units you don't want (or `ver
 - macOS ships openrsync: `--remove-source-files` mis-handles folders, so the farm frees the laptop's disk itself,
   after a dry run shows every file is on the hub.
 - Never `pkill` by a pattern that also matches the tmux wrapper; kill the Python child.
+
+## Other render work on both machines: `farm.py exec`
+
+Sam's rule (2026-11-09): render work uses the laptop as well as the Mini. Any thread on the Mini can queue a command;
+each machine running an exec worker takes the next one it may run, in its own checkout with its own inputs (farm.json
+env), after the same preflight as `run` (inputs match, kernels load). What the command writes into `$FARM_OUT` is copied
+back to the hub's `exec_results` folder (farm.json). The laptop pulls jobs over SSH, so the Mini never has to reach it.
+
+```
+# on the Mini, from a checkout at the commit the job needs (a worker only runs jobs at its own commit)
+python web/frames/farm.py exec submit --shared ~/server/farm-2017h2 --name titan-posters --by "Titan posters" -- \
+    python my_render.py --out '$FARM_OUT'          # --only mbp to send it to the laptop, default: any machine
+python web/frames/farm.py exec status --shared ~/server/farm-2017h2
+
+# workers (one per machine, in tmux/screen)
+python web/frames/farm.py exec worker --shared ~/server/farm-2017h2 --machine mini
+python web/frames/farm.py exec worker --shared ssh://mini/Users/lazarus/server/farm-2017h2 --machine mbp
+```
+
+A job's command runs with `cwd` = the worker's checkout and gets `FARM_OUT` (its output folder) and `FARM_JOB` (its id)
+in the environment; quote `'$FARM_OUT'` so the submitting shell doesn't expand it. Each job shows on the dashboard as
+`exec-<machine>-<id>`. Touch `<shared>/stop-exec-<machine>` to stop a worker after its current job.

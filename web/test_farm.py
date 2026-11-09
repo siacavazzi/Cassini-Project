@@ -121,6 +121,38 @@ def test_preflight(tmp):
     return 1
 
 
+def test_exec(tmp):
+    """A submitted command runs on a worker at its commit, writes into $FARM_OUT, and its output lands in exec_results;
+    a job for another machine or another commit is left alone."""
+    import argparse
+    root = os.path.join(tmp, "execfarm")
+    results = os.path.join(tmp, "exec-results")
+    os.makedirs(root)
+    write(os.path.join(root, "farm.json"), json.dumps({"exec_results": results, "machines": {
+        "mini": {"cache": os.path.join(tmp, "execcache", "c"), "env": {}}}}))
+    shared = farm.Shared(root)
+    head = farm.git("rev-parse", "HEAD")
+    ns = lambda **k: argparse.Namespace(**dict(dict(shared=root, machine="mini", only=None, name=None, by="test", commit=None,
+                                                    once=True, argv=[]), **k))
+    farm.cmd_exec(ns(action="submit", name="hello", argv=["--", "sh", "-c", "echo hi > $FARM_OUT/out.txt"]))
+    farm.cmd_exec(ns(action="submit", name="other", only="mbp", argv=["--", "true"]))
+    farm.cmd_exec(ns(action="submit", name="oldcode", commit="0" * 40, argv=["--", "true"]))
+    saved = farm.kernel_probe, farm.preflight_problems
+    farm.kernel_probe, farm.preflight_problems = (lambda *a: {2004: 147}), (lambda *a: [])
+    try:
+        farm.exec_worker(shared, ns(action="worker"))
+        farm.exec_worker(shared, ns(action="worker"))     # nothing else it may run: returns
+    finally:
+        farm.kernel_probe, farm.preflight_problems = saved
+    done = shared.listing("exec", "done")
+    assert len(done) == 1 and "hello" in done[0], done
+    d = json.loads(shared.read("exec", "done", done[0]))
+    assert d["exit"] == 0 and d["machine"] == "mini"
+    assert open(os.path.join(d["out"], "out.txt")).read().strip() == "hi"
+    assert len(shared.listing("exec", "queue")) == 3 and head
+    return 1
+
+
 def test_commands():
     m = {"name": "mbp", "cache": "/c", "status": "/s", "pause": "/p", "procs": 16, "max_load": 40, "min_free": 50}
     cmd = farm.prebuild_cmd(m, {"unit": "2007a", "from": "2007-01-01", "until": "2007-07-01"}, "movies", "py")
@@ -255,6 +287,7 @@ def main():
         ok += test_commands()
         ok += test_slots(tmp)
         ok += test_preflight(tmp)
+        ok += test_exec(tmp)
         ok += test_ship_and_free(tmp)
         ok += test_merge_compare_verify(tmp)
         ok += test_job(tmp)

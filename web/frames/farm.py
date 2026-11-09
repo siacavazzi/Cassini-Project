@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import shlex
 import shutil
 import socket
@@ -614,6 +615,125 @@ def cmd_run(args):
         shipper.boundary(final=True)
 
 
+# ---------- exec: any command, queued for whichever machine is free (renders, posters, checks) ----------
+# Sam's rule (2026-11-09): render work uses both machines. A thread on the hub submits a command; every machine running
+# `exec worker` takes the next one it may run, runs it in its own checkout with its own inputs (farm.json env), and
+# sends back what the command wrote into $FARM_OUT. The laptop reaches the queue over SSH; the hub never needs to reach
+# the laptop. A job runs only on a worker whose checkout is at the job's commit, after the same preflight as `run`.
+#
+#   <shared>/exec/queue/<id>.json     {"argv", "commit", "only", "name", "by", "at"}
+#   <shared>/exec/claims/<id>/        taken (mkdir), owner.json
+#   <shared>/exec/done/<id>.json      {"exit", "seconds", "machine", "out"}
+#   <exec_results>/<id>/              what the job wrote to $FARM_OUT (farm.json "exec_results", on the hub)
+
+def new_job_id(name):
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + re.sub(r"[^A-Za-z0-9_-]+", "-", name)[:40]
+
+
+def cmd_exec(args):
+    shared = Shared(args.shared)
+    if args.action == "submit":
+        if not args.argv:
+            raise SystemExit("exec submit -- <command> ...")
+        argv = args.argv[1:] if args.argv[0] == "--" else args.argv
+        jid = new_job_id(args.name or os.path.basename(argv[0]))
+        job_ = {"argv": argv, "commit": args.commit or git("rev-parse", "HEAD"), "only": args.only, "name": args.name or "",
+                "by": args.by or "", "at": now()}
+        shared.write(json.dumps(job_, indent=1), "exec", "queue", jid + ".json")
+        print(jid)
+        return
+    if args.action == "status":
+        done = {n[:-5] for n in shared.listing("exec", "done")}
+        claims = set(shared.listing("exec", "claims"))
+        for n in shared.listing("exec", "queue"):
+            jid = n[:-5]
+            d = json.loads(shared.read("exec", "done", n) or "{}")
+            state = (f"exit {d.get('exit')} on {d.get('machine')} in {d.get('seconds')}s" if jid in done else
+                     "running" if jid in claims else "waiting")
+            print(f"{jid:<60} {state}")
+        return
+    exec_worker(shared, args)
+
+
+def exec_worker(shared, args):
+    farm = load_json(shared, "farm.json")
+    me = args.machine
+    machine = dict(farm["machines"][me], name=me)
+    python = os.path.expanduser(machine.get("python", farm.get("python", sys.executable)))
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1",
+               VECLIB_MAXIMUM_THREADS="1", CASSINI_KEEP_SPICE_CACHE="1",
+               **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
+    plan = json.loads(shared.read("plan.json") or "{}")
+    probe = kernel_probe(python, env, [2004, 2017])
+    problems = preflight_problems(env, plan.get("inputs"), probe)
+    print(f"exec preflight: kernels loaded {probe}", flush=True)
+    if problems:
+        job(shared, farm, "fail", f"farm-{me}-exec-preflight", "; ".join(problems)[:400])
+        raise SystemExit("PREFLIGHT FAILED, nothing run:\n  " + "\n  ".join(problems))
+    head = git("rev-parse", "HEAD")
+    work = os.path.expanduser(machine.get("exec_dir", os.path.join(machine["cache"], "..", "exec-" + me)))
+    results = farm.get("exec_results", "")
+    idle = 0
+    while not shared.exists(f"stop-exec-{me}"):
+        done = {n[:-5] for n in shared.listing("exec", "done")}
+        claims = set(shared.listing("exec", "claims"))
+        took = None
+        for n in shared.listing("exec", "queue"):
+            jid = n[:-5]
+            if jid in done or jid in claims:
+                continue
+            j = json.loads(shared.read("exec", "queue", n) or "{}")
+            if j.get("only") not in (None, "", "any", me) or (j.get("commit") and j["commit"] != head):
+                continue
+            p = shared.path("exec", "claims", jid)
+            ok = shared._remote(f"mkdir -p {shlex.quote(shared.path('exec', 'claims'))} && mkdir {shlex.quote(p)}")[0] == 0 \
+                if shared.ssh else (os.makedirs(shared.path("exec", "claims"), exist_ok=True) or _mkdir(p))
+            if ok:
+                took = (jid, j)
+                break
+        if not took:
+            if args.once:
+                return
+            idle += 1
+            time.sleep(min(60, 5 * idle))
+            continue
+        idle = 0
+        jid, j = took
+        shared.write(json.dumps({"machine": me, "at": now()}), "exec", "claims", jid, "owner.json")
+        out = os.path.join(work, jid)
+        os.makedirs(out, exist_ok=True)
+        job(shared, farm, "start", f"exec-{me}-{jid[:40]}", f"{j.get('name') or j['argv'][0]} (by {j.get('by') or '?'})",
+            "--eta", (datetime.datetime.now() + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M"))
+        t0 = time.time()
+        with open(os.path.join(out, "farm-exec.log"), "w") as fh:
+            rc = subprocess.call(j["argv"], cwd=REPO, env=dict(env, FARM_OUT=out, FARM_JOB=jid), stdout=fh,
+                                 stderr=subprocess.STDOUT)
+        secs = int(time.time() - t0)
+        dest = ""
+        if results:
+            dest = os.path.join(results, jid)
+            if shared.ssh:
+                host = shared.ssh
+                subprocess.call(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {shlex.quote(dest)}"])
+                subprocess.call([machine.get("rsync", "rsync"), "-a", "-e", "ssh -o BatchMode=yes", out + "/", f"{host}:{dest}/"])
+            else:
+                os.makedirs(dest, exist_ok=True)
+                subprocess.call(["rsync", "-a", out + "/", dest + "/"])
+        shared.write(json.dumps({"exit": rc, "seconds": secs, "machine": me, "out": dest or out, "finished": now()}, indent=1),
+                     "exec", "done", jid + ".json")
+        job(shared, farm, "done" if rc == 0 else "fail", f"exec-{me}-{jid[:40]}", f"exit {rc} in {secs}s, output {dest or out}")
+        if args.once:
+            return
+
+
+def _mkdir(p):
+    try:
+        os.mkdir(p)
+        return True
+    except FileExistsError:
+        return False
+
+
 # ---------- status ----------
 
 def cmd_status(args):
@@ -871,12 +991,22 @@ def main():
     p.add_argument("--link", action="store_true", help="hard-link files (same disk) and leave the source: for merging "
                                                         "while a machine still ships into it")
     p.add_argument("src", nargs="+")
+    p = sub.add_parser("exec", help="a queue of commands either machine runs (renders, posters, checks)")
+    p.add_argument("action", choices=["submit", "worker", "status"])
+    p.add_argument("--shared", required=True)
+    p.add_argument("--machine", help="worker: this machine's name in farm.json")
+    p.add_argument("--only", help="submit: run only on this machine (default: any)")
+    p.add_argument("--name", help="submit: a short name for the dashboard")
+    p.add_argument("--by", help="submit: who asked (thread)")
+    p.add_argument("--commit", help="submit: the commit the command needs (default: this checkout's)")
+    p.add_argument("--once", action="store_true", help="worker: run at most one job, then stop")
+    p.add_argument("argv", nargs=argparse.REMAINDER)
     p = sub.add_parser("doctor")
     p.add_argument("--shared", required=True)
     p.add_argument("--machine", required=True)
     args = ap.parse_args()
     {"plan": cmd_plan, "run": cmd_run, "status": cmd_status, "verify": cmd_verify, "compare": cmd_compare,
-     "merge": cmd_merge, "doctor": cmd_doctor}[args.cmd](args)
+     "merge": cmd_merge, "doctor": cmd_doctor, "exec": cmd_exec}[args.cmd](args)
 
 
 if __name__ == "__main__":
