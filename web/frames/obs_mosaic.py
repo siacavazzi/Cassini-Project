@@ -3222,8 +3222,8 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 # CB3, probe 10-29): edges are measured between tiles of one filter only
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
 EDGE_TAG = "-pe4"
-RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose rings matched by profile (ring_shift)
-RING_FILE = "rings1-"    # before EDGE_FILE: such a pass's registration    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose tiles ring registration moved (ring_places)
+RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -3441,118 +3441,18 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
     return shift, seen
 
 
-RING_BODIES = ("SATURN",)   # (ring_shift) bodies whose rings SPICE places (reproject.ring_plane)
-RING_SHARE = 0.3     # of an overlap: the least on the ring plane for its tiles to be matched on the rings
-RING_LEAST = 1500    # sample points on the rings an overlap needs at least
-RING_STEP = 3        # px: the overlap is sampled this far apart
-RING_SEARCH = 32 / 1024   # of a frame: how far the profile match searches (PANEL_FAR's reach)
-RING_NCC = 0.85      # the least the two radial profiles must agree once moved ...
-RING_GAIN = 0.01     # ... and how much better than at SPICE's places, for a move of over half a pixel
-RING_FLAT = 0.002    # profile agreement within this of the best is the same match: a valley this flat along the rings
-RING_SLIDE = 3.0     # px: longer than this one way means the match slides along the rings (only across is measured)
-RING_PENALTY = 1e-5  # per px^2 of move: of two near-equal matches the one nearer SPICE's place
-
-
-def ring_shift(q, ref, at_q, t, crop, at_t, rings):
-    """edge_shift for the part of an overlap on Saturn's rings: how far tile t is from tile q, measured on the rings'
-    brightness against their radius (rings: canvas places -> (radius km, on the ring plane), _ring_geometry). SPICE says
-    which pixels of the overlap lie on the ring plane and how far out; q's pixels there make a radial profile, and t is
-    moved (RING_SEARCH each way, a pixel at a time, then to a tenth by a parabola) to where its pixels give the same
-    profile (normalized correlation over the radii both hold). Backlit rings are smooth bands, so phase correlation and
-    the clouded rule's edges (no edge, or too weak) left most of Day the Earth Smiled's pointings where SPICE put them,
-    a few px apart, every ring line stepping at the seams (195RI HIPHASEC001: 3 of 41 pointings moved). A profile says
-    how far t is across the rings; along them it is as good at any place (the valley of near-best moves, RING_FLAT, longer
-    than RING_SLIDE one way): then only the move across is measured, as a straight edge's (seen["normal"]).
-    (dx, dy) and seen as edge_shift's, or (None, why); (None, "rings: ...") when too little of it is on the rings."""
-    corners = [(at[0] + u_["box"][0], at[1] + u_["box"][1], im, u_["box"][2] / im.shape[1])
-               for u_, at, im in ((q, at_q, ref), (t, at_t, crop))]
-    x0 = max(c[0] for c in corners) + EDGE_INSET
-    y0 = max(c[1] for c in corners) + EDGE_INSET
-    x1 = min(c[0] + c[2].shape[1] * c[3] for c in corners) - EDGE_INSET
-    y1 = min(c[1] + c[2].shape[0] * c[3] for c in corners) - EDGE_INSET
-    if x1 - x0 < PANEL_NARROW or y1 - y0 < PANEL_NARROW:
-        return None, "rings: apart"
-    reach = int(round(RING_SEARCH * FRAME))
-    # radius on a 1 px grid over the overlap and the reach round it, so a move is a look-up
-    gx, gy = np.meshgrid(np.arange(x0 - reach, x1 + reach + 1), np.arange(y0 - reach, y1 + reach + 1))
-    # (each tile's own geometry, at its own time: hours apart, Cassini moved and the rings' ellipse with it)
-    radius, on = rings(gx.astype(np.float64), gy.astype(np.float64), q["id"])
-    radius_t, on_t = rings(gx.astype(np.float64), gy.astype(np.float64), t["id"])
-    sy, sx = np.mgrid[reach:reach + int(y1 - y0):RING_STEP, reach:reach + int(x1 - x0):RING_STEP]
-    sy, sx = sy.ravel(), sx.ravel()
-
-    def sample(c):
-        cx, cy, im, k = c
-        ix = np.clip(((gx[sy, sx] - cx) / k).astype(int), 0, im.shape[1] - 1)
-        iy = np.clip(((gy[sy, sx] - cy) / k).astype(int), 0, im.shape[0] - 1)
-        px = im[iy, ix]
-        return px[:, :3].astype(np.float32).mean(axis=1), px[:, 3] > 0
-    gq, aq = sample(corners[0])
-    gt, at_ = sample(corners[1])
-    use = on[sy, sx] & on_t[sy, sx] & aq & at_
-    if use.sum() < RING_LEAST or use.mean() < RING_SHARE:
-        return None, f"rings: {use.mean():.0%} of the overlap"
-    sy, sx, gq, gt = sy[use], sx[use], gq[use], gt[use]
-    # a radius bin: the radius a pixel spans across the rings (the steepest way), at the median over the samples
-    gyr, gxr = np.gradient(radius)
-    km = float(np.median(np.hypot(gxr, gyr)[sy, sx])) or 1.0
-    lo = float(radius[sy, sx].min()) - reach * km * 2
-
-    def profile(r, g):
-        b = ((r - lo) / km).astype(int)
-        b = np.clip(b, 0, None)
-        n = np.bincount(b)
-        tot = np.bincount(b, weights=g)
-        return n, tot
-    nq, tq = profile(radius[sy, sx], gq)
-
-    def agree(dx, dy):
-        r = radius_t[sy + dy, sx + dx]
-        if not on_t[sy + dy, sx + dx].mean() > 0.9:
-            return -1.0
-        nt, tt = profile(r, gt)
-        m = min(len(nq), len(nt))
-        both = (nq[:m] >= 3) & (nt[:m] >= 3)
-        if both.sum() < 20:
-            return -1.0
-        a = _ring_detail(tq[:m], nq[:m])[both]
-        b = _ring_detail(tt[:m], nt[:m])[both]
-        a, b = a - a.mean(), b - b.mean()
-        d = math.sqrt(float((a * a).sum() * (b * b).sum()))
-        return float((a * b).sum() / d) if d > 0 else -1.0
-    # a profile says only how far t is across the rings: the move is searched along the rings' radial direction over
-    # the overlap (the mean gradient of radius), and kept as a move across them (seen["normal"], as a straight edge's)
-    gn = np.array([float(np.mean(gxr[sy, sx])), float(np.mean(gyr[sy, sx]))])
-    if not np.linalg.norm(gn):
-        return None, "rings: no radial direction"
-    normal = gn / np.linalg.norm(gn)
-    spread = float(np.hypot(*np.std(np.vstack([gxr[sy, sx], gyr[sy, sx]]) / np.maximum(np.hypot(gxr[sy, sx], gyr[sy, sx]), 1e-9), axis=1)))
-    # (t moved by d along the normal shows its pixel X at X + d: its samples' radii are looked up there)
-    steps = np.arange(-reach, reach + 0.01, 1.0)
-    score = np.array([agree(int(round(d * normal[0])), int(round(d * normal[1]))) - RING_PENALTY * d * d for d in steps])
-    k = int(np.argmax(score))
-    best = float(score[k])
-    before = agree(0, 0)
-    d = float(steps[k])
-    if 0 < k < len(steps) - 1:
-        a_, b_, c_ = score[k - 1], score[k], score[k + 1]
-        if a_ - 2 * b_ + c_ < 0:
-            d += 0.5 * (a_ - c_) / (a_ - 2 * b_ + c_)
-    if k in (0, len(steps) - 1):
-        return None, f"rings: at the search's end {d:+.1f} ncc {before:.3f}->{best:.3f}"
-    seen = {"ncc": [round(before, 3), round(best, 3)], "area": int(use.sum()) * RING_STEP ** 2, "rings": True,
-            "normal": [round(float(normal[0]), 4), round(float(normal[1]), 4)], "spread": round(spread, 3)}
-    shift = (-d * float(normal[0]), -d * float(normal[1]))
-    if best < RING_NCC or (math.hypot(*shift) > 0.5 and best < before + RING_GAIN):
-        return None, f"rings: not believed {shift[0]:+.1f},{shift[1]:+.1f} ncc {before:.3f}->{best:.3f}"
-    return shift, seen
+RING_BODIES = ("SATURN",)   # (ring_places) bodies whose rings SPICE places (reproject.ring_plane)
+RING_STEP = 3        # px: (ring_places) a tile is sampled this far apart
+RING_FIT_MIN = 6     # tiles with rings a pass needs before ring registration starts
+RING_AGREE = 3.0     # px: a tile's fitted move further than this from its pointing's median takes the median
+RING_SEARCH = 32 / 1024   # of a frame: how far ring registration searches (PANEL_FAR's reach)
 
 
 RING_DETAIL = 6.0   # radius bins: (_ring_detail) the profile's slow change taken out, over this many bins (a Gaussian)
 
 
 def _ring_detail(tot, n):
-    """(ring_shift) A radial profile's detail: the mean per radius bin (tot / n, bins with no samples filled from their
+    """(ring_places) A radial profile's detail: the mean per radius bin (tot / n, bins with no samples filled from their
     neighbours) less its Gaussian blur over RING_DETAIL bins, so two tiles at different exposures, or a profile that
     brightens toward one side, match on the ringlets and gaps and not on the slope."""
     have = n > 0
@@ -3562,6 +3462,206 @@ def _ring_detail(tot, n):
     mean = np.interp(idx, idx[have], tot[have] / n[have])
     smooth = cv2.GaussianBlur(mean.reshape(1, -1).astype(np.float64), (0, 0), RING_DETAIL).ravel()
     return mean - smooth
+
+
+RING_BIN = 100.0        # km: (ring_places) the radial profile's bins
+RING_FIT_STEP = 2       # px: the coarse search's step (then a pixel, then a parabola)
+RING_FIT_NCC = 0.6      # the least a tile's profile, moved, must agree with the pass's reference profile
+RING_FIT_GAIN = 0.02    # ... and how much better than where it was placed, for a move of over half a pixel
+RING_FIT_LEAST = 3000   # samples on the rings a tile needs
+RING_FIT_ROUNDS = 2     # the reference profile is made again from the tiles as moved this many times
+
+
+def _tile_ring_samples(u, t, im, rings, reach):
+    """(ring_places) Tile t's samples on the rings: (its values, the radius grid round it at 1 px over its box and
+    reach px each way, on-ring grid, the samples' grid rows and columns), or None with too few."""
+    k = t["box"][2] / im.shape[1]
+    x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    h, w = im.shape[:2]
+    gx, gy = np.meshgrid(np.arange(-reach, w + reach + 1) * k + x0, np.arange(-reach, h + reach + 1) * k + y0)
+    radius, on = rings(gx, gy, t["id"])
+    sy, sx = np.mgrid[reach:reach + h:RING_STEP, reach:reach + w:RING_STEP]
+    sy, sx = sy.ravel(), sx.ravel()
+    px = im[sy - reach, sx - reach]
+    use = on[sy, sx] & (px[:, 3] > 0)
+    if use.sum() < RING_FIT_LEAST:
+        return None
+    return px[use, :3].astype(np.float32).mean(axis=1), radius, on, sy[use], sx[use]
+
+
+def _ring_profile(values, radius):
+    """(ring_places) values binned by radius (RING_BIN km, from RING_INNER): (sums, counts) over the rings' bins."""
+    import reproject as rp
+    nb = int((rp.RING_OUTER - rp.RING_INNER) / RING_BIN) + 1
+    b = ((radius - rp.RING_INNER) / RING_BIN).astype(int)
+    ok = (b >= 0) & (b < nb)
+    return (np.bincount(b[ok], weights=values[ok], minlength=nb), np.bincount(b[ok], minlength=nb))
+
+
+def _profile_ncc(tot, n, ref):
+    """(ring_places) normalized correlation of a profile's detail (_ring_detail) with ref's over the bins both hold"""
+    both = (n >= 3) & ~np.isnan(ref)
+    if both.sum() < 30:
+        return -1.0
+    a = _ring_detail(tot, n)[both]
+    b = ref[both]
+    a, b = a - a.mean(), b - b.mean()
+    d = math.sqrt(float((a * a).sum() * (b * b).sum()))
+    return float((a * b).sum() / d) if d > 0 else -1.0
+
+
+def ring_places(u, tiles, picture, fixed=None, ref=None):
+    """Ring registration: {tile n: [dx, dy]} for a ringed body's pass (RING_BODIES), each tile moved to where SPICE's ring
+    plane (reproject.ring_plane, at the tile's own time) has its rings: the radial profile of its ring pixels (their
+    detail, _ring_detail) matched to the pass's reference profile, the median of every tile's (made again from the tiles
+    as moved, RING_FIT_ROUNDS times). Each tile on its own, every filter, so a pointing's filters land together and on
+    their neighbours (Day the Earth Smiled, 195RI HIPHASEC001: the A ring's outer edge sat +-1100 km, up to 15 px,
+    from where SPICE's pointing put it, tile to tile; edges only moved 3 of 41 pointings and the filters' own matches
+    pushed some further off). A tile with too little ring, or whose match is not clearly better than where it was put
+    (RING_FIT_NCC, RING_FIT_GAIN), keeps its place. picture: n -> the tile's RGBA picture. fixed: {n: [dx, dy, ...]}
+    of tiles already registered, which keep their moves (and make the reference with them): only the others are
+    searched. ref: the reference profile already made (as answered before): only the tiles not fixed are read and
+    fitted to it, once. Answers ({n: {"move", "ncc", "found", "ok"}} for the tiles searched, the reference profile).
+    ({}, None) for a pass with too few ring tiles."""
+    fixed = fixed or {}
+    rings = _ring_geometry(u)
+    if rings is None:
+        return {}, None
+    reach = int(round(RING_SEARCH * FRAME))
+    data = {}
+    for t in tiles:
+        if "offset" not in t or ref is not None and t["n"] in fixed:
+            continue
+        im = picture(t["n"])
+        got = _tile_ring_samples(u, t, im, rings, reach) if im is not None else None
+        if got is not None:
+            data[t["n"]] = got
+    if ref is None and len(data) < RING_FIT_MIN:
+        return {}, None
+    moves = {n: tuple(fixed[n][:2]) if n in fixed else (0, 0) for n in data}
+
+    def prof(n, d):
+        v, radius, on, sy, sx = data[n]
+        return _ring_profile(v, radius[sy + d[1], sx + d[0]])
+
+    out = {}
+    given = ref is not None
+    for _ in range(1 if given else RING_FIT_ROUNDS):
+        if not given:
+            details = []
+            for n in data:
+                tot, cnt = prof(n, moves[n])
+                dd = _ring_detail(tot, cnt)
+                dd[cnt < 3] = np.nan
+                details.append(dd)
+            ref = np.nanmedian(np.vstack(details), axis=0)
+        new = dict(moves)
+        for n in data:
+            if n in fixed:
+                continue
+            v, radius, on, sy, sx = data[n]
+            score = lambda d: _profile_ncc(*prof(n, d), ref)
+            before = score((0, 0))
+            best, at = -2.0, (0, 0)
+            for dy in range(-reach, reach + 1, RING_FIT_STEP):
+                for dx in range(-reach, reach + 1, RING_FIT_STEP):
+                    sc = score((dx, dy))
+                    if sc > best:
+                        best, at = sc, (dx, dy)
+            for dy in range(at[1] - RING_FIT_STEP + 1, at[1] + RING_FIT_STEP):
+                for dx in range(at[0] - RING_FIT_STEP + 1, at[0] + RING_FIT_STEP):
+                    if abs(dx) <= reach and abs(dy) <= reach:
+                        sc = score((dx, dy))
+                        if sc > best:
+                            best, at = sc, (dx, dy)
+            ok = best >= RING_FIT_NCC and (math.hypot(*at) <= 0.5 or best >= before + RING_FIT_GAIN) \
+                and max(abs(at[0]), abs(at[1])) < reach
+            new[n] = at if ok else (0, 0)
+            out[n] = {"move": list(new[n]), "ncc": [round(before, 3), round(best, 3)], "found": list(at), "ok": bool(ok)}
+        moves = new
+    return out, ref
+
+
+def ring_moves(u, cache, p, tiles):
+    """ring_places for pass u's tiles, kept with the pass (RING_FILE): {tile n: [dx, dy]} from each tile's own place
+    (its offset as made: SPICE's, or where filter registration put it), only for tiles it moved. A tile is registered
+    once, when it is first drawn with RING_FIT_MIN ring tiles or more, and keeps its move. {} for a pass with no rings,
+    or with Settings > Processing's align or panels step off."""
+    if not (calibration.step("align") and calibration.step("panels")) or _ring_geometry(u) is None:
+        return {}
+    path = os.path.join(folder(u, cache), RING_FILE + PLAN_FILE)
+    with _ulock(u):
+        kept, ref = {}, None
+        if os.path.exists(path):
+            with open(path) as fh:
+                rec = json.load(fh)
+            kept = {int(n): v for n, v in rec.get("tiles", {}).items()}
+            ref = np.array([np.nan if v is None else v for v in rec["ref"]]) if rec.get("ref") else None
+        todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
+        if todo:
+            there = _tiles(u, cache, p["display_scale"])
+
+            def picture(j):
+                fp = os.path.join(there, f"{j}.png")
+                with _lock:
+                    got = _made_pictures.get(fp)
+                if got is None and os.path.exists(fp):
+                    got = np.asarray(Image.open(fp).convert("RGBA"))
+                return got
+            # (the reference profile is made once, from the first RING_FIT_MIN ring tiles or more; later tiles are fitted
+            # to it alone, so a mosaic grown a tile at a time reads each tile once)
+            found, made = ring_places(u, [t for t in tiles if "offset" in t], picture, fixed=kept, ref=ref)
+            if made is not None:
+                ref = made
+            if found:
+                # a pointing's filters move together: each pointing's fitted tiles (with those kept before) give its
+                # move, their median, and a tile of it not fitted, or fitted further than RING_AGREE from it, takes it
+                # (Day the Earth Smiled's B ring: BL1 fitted and RED not, blue and yellow ringlets)
+                roots = {}
+                for t in tiles:
+                    if "offset" in t:
+                        roots[t["n"]] = _pointing_root(u, t["n"], roots)
+                fits = {n: v["move"] for n, v in found.items() if v["ok"]}
+                fits.update({n: v[:2] for n, v in kept.items() if len(v) > 3 and v[3]})
+                by = {}
+                for n, m in fits.items():
+                    by.setdefault(roots.get(n, n), []).append(m)
+                for n, v in found.items():
+                    ms = by.get(roots.get(n, n))
+                    if not ms:
+                        continue
+                    mid = [float(np.median([m[0] for m in ms])), float(np.median([m[1] for m in ms]))]
+                    if not v["ok"] or math.hypot(v["move"][0] - mid[0], v["move"][1] - mid[1]) > RING_AGREE:
+                        v["move"] = [round(mid[0], 2), round(mid[1], 2)]
+                for n, v in found.items():
+                    kept[n] = v["move"] + [v["ncc"][1], bool(v["ok"])]
+            if ref is not None:
+                # (too little ring: read once, and moved with its pointing's fitted filters, or kept where it is)
+                roots = {}
+                for t in tiles:
+                    if "offset" in t:
+                        roots[t["n"]] = _pointing_root(u, t["n"], roots)
+                by = {}
+                for n, v in kept.items():
+                    if len(v) > 3 and v[3]:
+                        by.setdefault(roots.get(n, n), []).append(v[:2])
+                for t in todo:
+                    if t["n"] not in kept:
+                        ms = by.get(roots.get(t["n"], t["n"]))
+                        mid = [round(float(np.median([m[0] for m in ms])), 2), round(float(np.median([m[1] for m in ms])), 2)] \
+                            if ms else [0, 0]
+                        kept[t["n"]] = mid + [None, False]
+            if found or ref is not None:
+                part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+                try:
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(part, "w") as fh:
+                        json.dump({"ref": [None if not np.isfinite(v) else round(float(v), 4) for v in ref],
+                                   "tiles": {str(n): v for n, v in sorted(kept.items())}}, fh)
+                    os.replace(part, path)
+                except OSError as e:
+                    print(f"cannot keep {path} in the cache ({e})", flush=True)
+    return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
 
 
 _ring_geometries = {}   # pass key -> _ring_geometry's answer
@@ -3949,12 +4049,10 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
-    rings = _ring_geometry(u) if edges else None
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (RING_FILE if rings else "") +
-                        (EDGE_FILE if edges else "") + PANEL_FILE)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _ulock(u):
-        name = "panels" + SURFACE_TAG * surfaced + (RING_EDGE_TAG if rings else EDGE_TAG) * edges
+        name = "panels" + SURFACE_TAG * surfaced + EDGE_TAG * edges
         kept = rec.get(name) if rec is not None else None
         if kept is None:
             kept = {}
@@ -4008,16 +4106,8 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
                 s = by_n[j]
                 # measured where SPICE put both (the overlap SPICE says, the same however far the earlier one has
                 # been moved), and taken from where the earlier one now is
-                shift, how = None, None
-                if rings is not None:
-                    # (on the rings, by their profile against radius; where the overlap is not rings, its edges)
-                    shift, how = ring_shift(s, ref, s["offset"], t, mine, here, rings)
-                if shift is None and not (how or "").startswith("rings: not believed"):
-                    ring_how = how
-                    shift, how = (edge_shift(s, ref, s["offset"], t, mine, here) if edges else
-                                  panel_shift(s, ref, s["offset"], t, mine, here, PANEL_FAR if surfaced else None))
-                    if shift is None and ring_how:
-                        how = f"{how}; {ring_how}"
+                shift, how = (edge_shift(s, ref, s["offset"], t, mine, here) if edges else
+                              panel_shift(s, ref, s["offset"], t, mine, here, PANEL_FAR if surfaced else None))
                 seen[j] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
                 if shift is not None:
                     was = kept.get(j, [0, 0])
@@ -4642,7 +4732,12 @@ def layout(u, n, cache):
     if surfaced:
         tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
                  for t in tiles]
+    # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
+    # keep that place, and their pointings' panel moves are not added
+    rung = ring_moves(u, cache, p, tiles)
     moved = panel_places(u, cache, p, tiles)
+    if rung:
+        moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
                  if t["n"] in moved and "offset" in t else t for t in tiles]
@@ -4668,7 +4763,7 @@ def layout(u, n, cache):
         name += f"_L{len(base)}"
     if colour and used == colour and clipped_still(u, tiles, colour):
         name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + (((RING_EDGE_TAG if _ring_geometry(u) else EDGE_TAG) if clouded(u) else PANEL_TAG) if moved else "")
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((RING_EDGE_TAG if rung else EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
