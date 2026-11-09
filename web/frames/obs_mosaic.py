@@ -2184,11 +2184,26 @@ def visit_tiles(u, tiles, colour):
     if _rolling.get() or any("base" in t for t in tiles):
         return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
     keep = visit_frames(u, colour)
-    # (and a pointing the camera saturated far more than its filters' other tiles: clipped_pointings, as a mosaic
-    # movie's picture draws it)
-    longs = long_repeats(tiles, colour) | (clipped_pointings(u, [t for t in tiles if t["filter"] in colour]) if colour else set())
+    # (and a pointing the camera saturated far more than its filters' other tiles: clipped_still, as a mosaic movie's
+    # picture draws it)
+    longs = long_repeats(tiles, colour) | clipped_still(u, tiles, colour)
     out = [dict(t, long=True) if t["n"] in longs else t for t in tiles if t["filter"] not in colour or t["n"] in keep]
     return tiles if len(out) == len(tiles) and not longs else out
+
+
+def clipped_still(u, tiles, colour):
+    """(visit_tiles, layout) The tiles of a still mosaic's colour filters that go under as a saturated pointing
+    (clipped_pointings: the 2017-04-26 north pole movie's still, 271SA NPOLMOV001; 118RI PHOTLIT001's blown disk),
+    leaving out the long exposures taken again in a colour set (long_repeats): those go under on their own, the set's
+    own frames of the other filters staying on top. Taken as saturated pointings, a HIPHASE ring mosaic's filter taken
+    again for the faint rings pulled its whole pointing under, and the neighbouring pointings' edges drew the bright
+    rings in two places in mismatched colours (Day the Earth Smiled, 195RI HIPHASEC001: two GRN repeats took eleven
+    RED, BL1, VIO and polarizer tiles down with them, a lime and purple copy of the rings beside Saturn's limb; 260RI
+    HIPHASEFA001 and 269RI HIPHASEFB001 alike)."""
+    if not colour:
+        return set()
+    longs = long_repeats(tiles, colour)
+    return clipped_pointings(u, [t for t in tiles if t["filter"] in colour and t["n"] not in longs])
 
 
 def set_times(shape, placed):
@@ -4241,7 +4256,9 @@ def _roll(u, p, key, mine, rect, cache):
 
 
 CLIPPED_TAG = "_cu"   # in a mosaic picture's name: a saturated pointing is drawn under the others (clipped_pointings)
-VISIT_TAG = "-v"   # in the name of a colour filter's mosaic drawn without the partial visits (visit_tiles)
+# in the name of a colour filter's mosaic drawn without the partial visits or with tiles under (visit_tiles); "-v2"
+# since clipped_still: the "-v" planes #384 drew pulled a long repeat's whole pointing under (195RI HIPHASEC001)
+VISIT_TAG = "-v2"
 
 
 def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag=""):
@@ -4475,7 +4492,7 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    if colour and used == colour and clipped_pointings(u, [t for t in tiles if t["filter"] in colour]):
+    if colour and used == colour and clipped_still(u, tiles, colour):
         name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
     return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
