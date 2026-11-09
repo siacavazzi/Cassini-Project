@@ -253,7 +253,8 @@ def units(target, obs, cam):
         g = where.get(r.id)
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
-            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t, "turns": turned}
+            zoomed = cur is not None and t - cur["last"] <= GAP
+            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t, "turns": turned, "zoomed": zoomed}
             out.append(cur)
         cur["last"] = t
         cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
@@ -302,6 +303,9 @@ def units(target, obs, cam):
             panned = panned or prev["panned"]
         else:
             laps.append(u)
+    # a raster's lap that ZOOM cut short takes the tiles that finish it back from the pass after it
+    if _lap_tails(laps):
+        relaid = True   # (the passes after it change, or are renumbered)
     # a movie that re-points to sky it never comes back to plays each view as a pass of its own, and a mosaic that
     # holds separate scans (islands) draws each as a mosaic of its own
     # (a map joined or kept apart on its frames' ground, or a time series judged on places turned frame by frame,
@@ -364,6 +368,84 @@ def units(target, obs, cam):
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+LAP_TAIL_BODIES = ("SATURN", "JUPITER")   # (_lap_tails) the planets, whose rasters go round lap after lap as Cassini
+                                          # closes in; a moon's flyby mosaics at two distances stay two (000PH, 194TI)
+
+
+def _lap_tails(laps):
+    """(units) A raster split at ZOOM in the middle of a lap (Cassini closing in, the camera going round the same
+    places): the frames at the start of the pass after the split that finish the lap, at places of the pass before it
+    its last lap has not taken yet, go back to that pass, and a pass that is all such frames joins it. The 2017-04-26
+    north pole movie (271SA_NPOLMOV001 W) was cut at 02:43 and 05:12: its third lap lost its last pointing to the next
+    pass, and its fifth lap's last four pointings were a pass of their own (a 4-tile mosaic). A frame's place there
+    is on the pass's own canvas (scaled to its distance, as tiles are) and must lie within half the pass's step of
+    one of its slots. The passes are judged again; a move that would change the first pass's kind (other than a
+    mosaic becoming a mosaic movie) is not made. True when frames moved (the passes are renumbered, LAID's folder)."""
+    moved, n = False, 0
+    while n + 1 < len(laps):
+        took = _lap_tail(laps[n], laps[n + 1])
+        moved = moved or took
+        if took and not laps[n + 1]["frames"]:
+            del laps[n + 1]   # (and the pass after it may finish the lap further)
+            continue
+        n += 1
+    return moved
+
+
+def _lap_tail(a, b):
+    """(_lap_tails) Moves the frames at the start of pass b that finish pass a's last lap into a; True when it did."""
+    if not (b.get("zoomed") and a["key"][0] in LAP_TAIL_BODIES and a.get("kind") in ("mosaic", "mosaic_movie") and a.get("z") and b["frames"]
+            and b["frames"][0][3] - a["last"] <= GAP):
+        return False
+    where = slots(a)
+    lap = lap_of(a)
+    at = {}
+    for fr, i in zip(a["frames"], where):
+        if i is not None and fr[7]:
+            at.setdefault(i, []).append((-fr[5] * fr[7] / a["z"], -fr[6] * fr[7] / a["z"]))
+    if len(at) < MIN_PLACES:
+        return False
+    centre = {i: np.mean(v, 0) for i, v in at.items()}
+    pts = list(centre.values())
+    step = float(np.median([min(max(abs(p[0] - q[0]), abs(p[1] - q[1])) for q in pts if q is not p) for p in pts]))
+    last = max(lap)
+    open_ = set(centre) - {i for i, n in zip(where, lap) if n == last and i is not None}
+    if not open_:
+        return False
+    take, here = 0, None
+    for fr in b["frames"]:
+        if not fr[7]:
+            break
+        p = (-fr[5] * fr[7] / a["z"], -fr[6] * fr[7] / a["z"])
+        i = min(centre, key=lambda k: max(abs(p[0] - centre[k][0]), abs(p[1] - centre[k][1])))
+        if max(abs(p[0] - centre[i][0]), abs(p[1] - centre[i][1])) > step / 2 or not (i in open_ or i == here):
+            break
+        open_.discard(i)
+        here = i
+        take += 1
+    if not take:
+        return False
+    t_end = b["frames"][take - 1][3]
+    cut = sum(1 for x in b["all"] if x[3] <= t_end)   # ("all" and "taken" hold every frame, in the same order)
+    trial = dict(a, frames=a["frames"] + b["frames"][:take], all=a["all"] + b["all"][:cut],
+                 taken=a["taken"] + b["taken"][:cut], last=t_end)
+    for k in ("slots", "lap_of", "_lum", "_lap_prev", "_lap_lead"):
+        trial.pop(k, None)
+    _judge(trial)
+    if trial["kind"] != a["kind"] and not (a["kind"] == "mosaic" and trial["kind"] == "mosaic_movie"):
+        return False
+    rest = {"frames": b["frames"][take:], "all": b["all"][cut:], "taken": b["taken"][cut:]}
+    a.clear()
+    a.update(trial, tails=True)
+    b.update(rest)
+    for k in ("slots", "lap_of", "_lum", "_lap_prev", "_lap_lead"):
+        b.pop(k, None)
+    if b["frames"]:
+        b["z"] = next((fr[7] for fr in b["frames"] if fr[7]), b["z"])
+        _judge(b)
+    return True
 
 
 def _pictures(frames, gap):
@@ -818,8 +900,62 @@ def _revisits(u):
         mine.append((i, x, y))
     if not (len(returns) >= 2 and back >= REVISIT_SHARE * again):
         return False
+    if _reraster(u) or _named_map(u):
+        return False
     u["rescanned"] = _scan(np.array([q[2:] for q in fr]), np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1))
     return not u["rescanned"]
+
+
+RERASTER_ORDER = 0.75   # (_reraster) of the steps between the places a raster takes again, this share at least follow
+                        # the order it first took them in ...
+RERASTER_STEP = 0.3     # ... and its first lap steps (median) at least this much of a frame from place to place, as a
+                        # mosaic's tiles do; a camera creeping along with the clouds steps less (234SA_WIND5HR005: 0.2)
+
+
+def _reraster(u):
+    """(_revisits) Pass u's returns are a raster taken again, not a time series: after its first return to a place,
+    the camera goes round at least MIN_PLACES of the places it took before, in the order it first took them (most
+    steps, RERASTER_ORDER, from one place to the place it first took next), as a mosaic movie's laps do. A time
+    series comes back to one view or a few (267SA_LIMBINT002, Titan's cloud monitors, a FTRACK's filters), or creeps
+    along with what it follows in steps smaller than a mosaic's (RERASTER_STEP: the 5-hour wind movies). The 2017
+    north pole movie, 271SA_NPOLMOV001, split at ZOOM as Cassini closed in: its fourth lap and the start of its fifth
+    were judged a time series, so its whole frames were single tiles."""
+    seq = []
+    for p in u.get("place") or []:
+        if p is not None and (not seq or seq[-1] != p):
+            seq.append(p)
+    first, seen = None, set()
+    for k, p in enumerate(seq):
+        if p in seen:
+            first = k
+            break
+        seen.add(p)
+    if first is None:
+        return False
+    order = {p: k for k, p in enumerate(dict.fromkeys(seq[:first]))}
+    at = u.get("places_at") or []
+    lap = [at[p] for p in order if p < len(at)]
+    if len(lap) < 2 or float(np.median([max(abs(a[0] - b[0]), abs(a[1] - b[1])) for a, b in zip(lap, lap[1:])])) < RERASTER_STEP * FRAME:
+        return False
+    again = [p for p in seq[first:] if p in order]
+    if len(set(again)) < MIN_PLACES:
+        return False
+    steps = list(zip(again, again[1:]))
+    return sum(order[b] == order[a] + 1 for a, b in steps) >= RERASTER_ORDER * len(steps)
+
+
+MAP_NAMES = ("MAP", "MOSAIC")   # (_named_map) a Saturn observation's purpose naming a map or a mosaic
+
+
+def _named_map(u):
+    """(_revisits) Pass u's observation is named a map or a mosaic (MAP_NAMES in its purpose, _name): its frames
+    retaking neighbouring views after pauses are a tight map, one pointing every few minutes, not a time series. The
+    2017 north pole maps (261SA_NPOLMAP001, 267SA_NPOLMAP002, 292SA_NPOLEMAP001: WAC frames overlapping by 0.6-0.8
+    of a frame, each pointing after a pause) played as movies of single tiles. A time series is named for what it
+    watches (LIMBINT, FEATRAK, FTRACK, MONITOR, CLOUD). Saturn only: a Titan map's WAC frames each holding most of
+    the disk, a fifth of a frame apart, stay movies (059TI_GLOBMAP001, 153TI_FIRNADMAP001)."""
+    name = _name(u["key"][1])
+    return bool(u["key"][0] == "SATURN" and name and any(m in name[3:] for m in MAP_NAMES))
 
 
 def _drifting(u):
@@ -2046,7 +2182,9 @@ def visit_tiles(u, tiles, colour):
     if _rolling.get() or any("base" in t for t in tiles):
         return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
     keep = visit_frames(u, colour)
-    longs = long_repeats(tiles, colour)
+    # (and a pointing the camera saturated far more than its filters' other tiles: clipped_pointings, as a mosaic
+    # movie's picture draws it)
+    longs = long_repeats(tiles, colour) | (clipped_pointings(u, [t for t in tiles if t["filter"] in colour]) if colour else set())
     out = [dict(t, long=True) if t["n"] in longs else t for t in tiles if t["filter"] not in colour or t["n"] in keep]
     return tiles if len(out) == len(tiles) and not longs else out
 
@@ -4102,6 +4240,7 @@ def _roll(u, p, key, mine, rect, cache):
     return rgba
 
 
+CLIPPED_TAG = "_cu"   # in a mosaic picture's name: a saturated pointing is drawn under the others (clipped_pointings)
 VISIT_TAG = "-v"   # in the name of a colour filter's mosaic drawn without the partial visits (visit_tiles)
 
 
@@ -4336,6 +4475,8 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
+    if colour and used == colour and clipped_pointings(u, [t for t in tiles if t["filter"] in colour]):
+        name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
     return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
@@ -7200,7 +7341,14 @@ LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a matc
 LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
                          # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
 LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
-LAP_FREE = 0.12          # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
+LAP_CELLS = 3            # the shared ground is also measured in LAP_CELLS x LAP_CELLS parts ...
+LAP_EVEN = 0.5           # ... and a step is an exposure only when the parts agree: the spread (std) of their log steps
+                         # under LAP_EVEN x the step's own log. An exposure scales the whole frame alike (SPOLEDYN001's
+                         # 2.6-2.8x steps: parts within 0.01 log, 0.18 at worst); a step that differs part to part is
+                         # the scene's own (Cassini closing in on the 2017-04-26 north pole movie, 271SA NPOLMOV001: the
+                         # night side's column measured 0.7x a lap, its parts 0.23-0.86x, and its tiles were drawn at
+                         # half brightness by lap 3, dark blocks in the mosaic)
+LAP_FREE = 0.12         # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
                          # Taken out lap after lap, the slow brightening of the 2013 hexagon movie's places (2-5% a lap,
                          # more at some places than others) left them up to twice as bright as each other by its end
 LAP_RULE = "g3s"         # in the pictures' names: these gains, the base drawn under the picture, and whole colour sets (set_laps)
@@ -7254,8 +7402,29 @@ def _lap_step(u, p, cache, a, b):
             if lit.sum() >= LAP_MIN and lb[lit].mean() > 0:
                 step = float(la[lit].mean() / lb[lit].mean())
                 g = step if 1 / LAP_BELIEVE <= step <= LAP_BELIEVE else None
+                if g is not None and not _lap_even(la, lb, lit, step):
+                    g = 1.0   # (the scene's own change, kept as it is)
     memo[key] = g
     return g
+
+
+def _lap_even(la, lb, lit, step):
+    """(_lap_step) Whether a step between two copies is alike over their shared lit ground, as an exposure's is: the
+    ground cut in LAP_CELLS x LAP_CELLS parts, the spread of the parts' log steps under LAP_EVEN x |log step|. True
+    when fewer than three parts have lit ground enough to say (LAP_MIN / LAP_CELLS^2 pixels each)."""
+    H, W = lit.shape
+    logs = []
+    for i in range(LAP_CELLS):
+        for j in range(LAP_CELLS):
+            s = (slice(i * H // LAP_CELLS, (i + 1) * H // LAP_CELLS), slice(j * W // LAP_CELLS, (j + 1) * W // LAP_CELLS))
+            m = lit[s]
+            if m.sum() >= LAP_MIN / LAP_CELLS ** 2:
+                a, b = float(la[s][m].mean()), float(lb[s][m].mean())
+                if a > 0 and b > 0:
+                    logs.append(math.log(a / b))
+    if len(logs) < 3:
+        return True
+    return float(np.std(logs)) < LAP_EVEN * abs(math.log(step))
 
 
 def _lap_lead(u):
@@ -7408,6 +7577,45 @@ def colour_start(u, colour, report=None):
     return max(need) if need else 0
 
 
+CLIP_UNDER = 0.05   # of a frame: (clipped_under) a mosaic movie's tile the camera saturated over this much, and OVER_STEP
+                    # times as much as the median of the picture's other tiles of its filter, goes under them
+
+
+def clipped_under(tiles):
+    """(rolling_layout) The tiles (n) of a mosaic movie's picture drawn under the others: saturated CLIP_UNDER of the
+    frame or more, and OVER_STEP times the median of the picture's other tiles of its filter. Its saturated part is
+    drawn white in its band, while the other bands of its place did not saturate there, and the color mix turned it
+    a green or magenta blotch: the 2017-04-26 north pole movie's pointings at 03:53 and 05:22 (271SA_NPOLMOV001:
+    VIO 16-33%, GRN 11-29%, CB3 7-21%, RED 4-15% saturated, the others under 1%). Under, its neighbours' frames show
+    wherever they reach. A long exposure taken again in a colour set (long_repeats) goes under the same way."""
+    out, by = set(), {}
+    for t in tiles:
+        if "offset" in t:
+            by.setdefault(t["filter"], []).append(t)
+    for mine in by.values():
+        if len(mine) < MIN_PLACES:
+            continue
+        for t in mine:
+            s = t.get("saturated", 0.0)
+            if s < CLIP_UNDER:
+                continue
+            others = [o.get("saturated", 0.0) for o in mine if o["n"] != t["n"]]
+            if s >= OVER_STEP * float(np.median(others)):
+                out.add(t["n"])
+    return out
+
+
+def clipped_pointings(u, tiles):
+    """(clipped_under) The tiles of pass u that go under: those clipped_under picks and every tile of the same pointing
+    (slot and lap), so the pointing's filters stay together."""
+    low = clipped_under(tiles)
+    if low:
+        where, lap = slots(u), lap_of(u)
+        at = {(where[j], lap[j]) for j in low if where[j] is not None}
+        low |= {t["n"] for t in tiles if where[t["n"]] is not None and (where[t["n"]], lap[t["n"]]) in at}
+    return low
+
+
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
@@ -7476,6 +7684,11 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         seen[key] = seen.get(key, 0) + 1
         keep.append(t)
     keep += [t for key, t in spare.items() if not seen.get(key)]
+    # a copy the camera saturated much more than the picture's other tiles of its filter goes under them (clipped_under)
+    # (every filter of that pointing alike: one band under and the others over put the pole's eye in two places, a
+    # blue spot at 05:32 on the 2017-04-26 north pole movie)
+    low = clipped_pointings(u, keep)
+    keep = [dict(t, under=True) if t["n"] in low else t for t in keep]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
     tiles = under_first(sorted(keep, key=lambda t: (rank.get(t["n"], t["n"]), t["n"])))
     count = {}
@@ -7498,7 +7711,8 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         out.append(t)
     tiles = out
     drawn = [t for t in tiles if t.get("drawn")]
-    ids = hashlib.sha1((LAP_RULE + ":" + ",".join(f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"]) for t in drawn)).encode()).hexdigest()[:12]
+    ids = hashlib.sha1((LAP_RULE + ":" + ",".join((f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"])) + ("u" if t["n"] in low else "")
+                                                  for t in drawn)).encode()).hexdigest()[:12]
     if not fade[0]:
         return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
     # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture

@@ -10,7 +10,8 @@ of those observations as the Mac Mini's index and geometry cache have them (web/
   mosaic movie);
 - a filter set drifting over one view is one picture (STORMW riders, _one_view), and taken lap after lap a movie
   (Saturn's approach, C44SA_APPRMOVB001: its colour set every 104 minutes);
-- a map split by ZOOM is joined again (042TI_GLOBMAP001, _zoom_join); a movie that re-points to sky it never comes back
+- a map split by ZOOM is joined again (042TI_GLOBMAP001, _zoom_join), and a planet's raster lap ZOOM cut short takes its
+  last pointings back (271SA_NPOLMOV001, _lap_tails); a movie that re-points to sky it never comes back
   to plays each view as a pass (287RI_PROPRETRG001, _retargets);
 - a lone frame near the middle no longer puts the other filters aside (044RI_PHOTDRK003, _aside);
 - a mosaic the camera turns under has a footprint holding every tile the v46 cache placed (033RI_AZDKMRHPH001,
@@ -69,7 +70,9 @@ OBS = [("SATURN", "ISS_267SA_LIMBINT002_PRIME", "N"), ("SATURN", "ISS_191SA_FEAT
        ("SATURN", "ISS_064RI_BEDG4FILT002_PRIME", "N"), ("SATURN", "IOSIC_079RI_TEMPN20LP001_SI", "W"),
        ("SATURN", "ISS_175SA_NPOLVORT001_PIE", "N"), ("TITAN", "ISS_006TI_HIGHRESNA001_PRIME", "N"),
        ("SATURN", "ISS_101SA_AURORA002_UVIS", "N"), ("SATURN", "ISS_281SA_HIRESWACS001_PIE", "W"),
-       ("SATURN", "ISS_081RI_AZSCANDRK001_PRIME", "N"), ("SATURN", "ISS_283RI_HRRADSCNU001_PIE", "N")]
+       ("SATURN", "ISS_081RI_AZSCANDRK001_PRIME", "N"), ("SATURN", "ISS_283RI_HRRADSCNU001_PIE", "N"),
+       ("SATURN", "ISS_271SA_NPOLMOV001_VIMS", "W"), ("SATURN", "ISS_234SA_WIND5HR005_PRIME", "N"),
+       ("SATURN", "ISS_261SA_NPOLMAP001_VIMS", "W")]
 # the v46 cache's plan (angle, the frame it was measured on) and tile outlines of three passes the camera turns under
 # (/mnt/project-files/mosaic-layout/qc-data/v46-json)
 V46 = "/mnt/project-files/mosaic-layout/qc-data/v46-json"
@@ -295,6 +298,18 @@ def main():
     # the HIRESWACS strip keeps its mosaic; its two frames off the strip show as themselves
     wacs = passes(*OBS[37])
     assert kinds(wacs) == [("mosaic", 5), ("mosaic", 38)] and len(wacs[1]["off"]) == 2, kinds(wacs)
+    # a raster taken again is no time series (_reraster): the 2017 north pole movie's pass after its ZOOM split, its
+    # fourth lap and its fifth, is a mosaic movie, not 15 single tiles, and the laps ZOOM cut short take their last
+    # pointings back (_lap_tails: lap 3's from 02:43, lap 5's four from 05:12), every lap whole; a wind movie
+    # creeping with the clouds in fifth-of-a-frame steps stays a movie
+    npol = passes(*OBS[40])
+    assert kinds(npol) == [("mosaic_movie", 201), ("mosaic_movie", 134)], kinds(npol)
+    assert [len(om.lap_ends(u)) for u in npol] == [3, 2], [om.lap_ends(u) for u in npol]
+    wind = passes(*OBS[41])
+    assert kinds(wind) == [("movie", 92)], kinds(wind)
+    # a Saturn map whose tight pointings each come after a pause is a map, not a time series (_named_map)
+    npm = passes(*OBS[42])
+    assert kinds(npm) == [("mosaic", 96)], kinds(npm)
 
     print("mosaic layout ok:", {o: kinds(passes(t, o, c)) for t, o, c in OBS})
 
