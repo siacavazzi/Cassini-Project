@@ -1410,10 +1410,10 @@ def find_small_body(image, cx, cy, radius, reach=FIND_REACH):
     lum = cv2.GaussianBlur(rgb.mean(axis=2), (0, 0), FIND_SMOOTH)
     inside = cv2.erode(valid.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
     values = lum[inside]
-    if values.size < 1000:
-        # (a sliver of picture, a tile a few rows tall where a frame's data stops, has 1000 valid pixels but none 3 px
-        # from its edge: no moon is found on it, as on a tile too small to look in, never an empty percentile that
-        # stopped JUPITER_ISS_C23JU_18ATM2X2A013_PRIME_W_6's chains on its 5-row tile, 2026-11-09)
+    if not values.size:
+        # (a sliver of picture between blank rows, a tile a few rows tall where a frame's data stops, has 1000 valid
+        # pixels but none 3 px inside its edge: nothing to look in, never an empty percentile, which stopped
+        # JUPITER_ISS_C23JU_18ATM2X2A013_PRIME_W_6's chains on its 5-row tile, 2026-11-09)
         return None
     sky = float(np.median(values))
     noise = 1.4826 * float(np.median(np.abs(values - sky))) + 0.5

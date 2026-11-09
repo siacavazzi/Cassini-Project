@@ -2547,11 +2547,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
 
 
 def _exposure(lbl):
-    """A frame's exposure in s from its label (EXPOSURE_DURATION, ms), or None."""
-    try:
-        return float(lbl.info.get("EXPOSURE_DURATION")) / 1000
-    except (AttributeError, TypeError, ValueError):
-        return None
+    """A frame's exposure in s from its label (EXPOSURE_DURATION, ms), or None (bootleg_autonav.exposure_s)."""
+    import bootleg_autonav as ba
+    return ba.exposure_s(lbl)
 
 
 def _long_white(each, blacks, white):

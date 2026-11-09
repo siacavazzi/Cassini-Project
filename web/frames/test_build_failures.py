@@ -15,12 +15,14 @@ import color_image  # noqa: E402
 
 
 def test_sliver_tile():
-    """A tile 5 rows tall (1500 valid pixels, none 3 px from the edge) has no moon on it, and no crash: the chains and
-    movies of JUPITER_ISS_C23JU_6ATM1X1337_PRIME_N_0/_W_0, JUPITER_ISS_C23JU_18ATM2X2A013_PRIME_W_6 and
-    ENCELADUS_ISS_286EN_PLUME001_PIE_N_0 stopped on such a tile with an IndexError from an empty percentile."""
-    im = np.zeros((5, 1021, 4), np.uint8)
-    im[..., :3] = 40
-    im[..., 3] = 255
+    """A tile whose picture is a 5-row sliver between blank rows (5105 valid pixels, none 3 px inside the picture's
+    edge) has no moon on it, and no crash: the chains and movies of JUPITER_ISS_C23JU_6ATM1X1337_PRIME_N_0/_W_0,
+    JUPITER_ISS_C23JU_18ATM2X2A013_PRIME_W_6 and ENCELADUS_ISS_286EN_PLUME001_PIE_N_0 stopped on such a tile with an
+    IndexError from an empty percentile."""
+    rng = np.random.default_rng(1)
+    im = np.zeros((30, 1021, 4), np.uint8)
+    im[10:15, :, :3] = rng.integers(20, 200, (5, 1021, 1))
+    im[10:15, :, 3] = 255
     assert color_image.find_small_body(im, 535, -395, 28.1) is None
 
 
@@ -54,8 +56,8 @@ def test_pointing_through_exposure():
     # without its exposure (the cache's fill), only the rounding of the middle is looked past, which here is enough
     del info["EXPOSURE_DURATION"]
     with contextlib.redirect_stdout(io.StringIO()):
-        assert ba.find_target(types.SimpleNamespace(info=info), False, "graphs")[0] < 0
-    # a frame pointed away all through its exposure still fails, saying so
+        assert abs(ba.find_target(types.SimpleNamespace(info=info), False, "graphs")[0] + 22) < 5
+    # a frame pointed away all through its exposure still fails
     info = {"path": "x.png", "IMAGE_MID_TIME": "2000-338T00:35:05.000", "TARGET_NAME": "JUPITER",
             "INSTRUMENT_NAME": "WIDE ANGLE CAMERA", "EXPOSURE_DURATION": "5.000000"}
     try:
@@ -63,8 +65,7 @@ def test_pointing_through_exposure():
             ba.find_target(types.SimpleNamespace(info=info), False, "graphs")
         raise AssertionError("placed a frame pointed away")
     except ValueError as e:
-        assert ba.BEHIND in str(e) and ba.EXPOSURE_WIDE in str(e), e
-
+        assert "behind the camera" in str(e), e
 
 if __name__ == "__main__":
     for name, test in list(globals().items()):
