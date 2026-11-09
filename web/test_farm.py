@@ -87,9 +87,15 @@ def test_slots(tmp):
     logdir = os.path.join(tmp, "slotlogs")
     os.makedirs(logdir)
     mach = {"name": "mbp", "cache": os.path.join(tmp, "c"), "status": os.path.join(tmp, "s", "slot1"), "procs": 8}
-    write(os.path.join(tmp, "s", "slot1", "errors-processed-0of8.jsonl"), '{"item": "X", "error": "IndexError"}\n')
-    farm.build_unit(shared, {}, plan, "mbp", mach, a, fake, dict(os.environ), logdir)
-    assert "IndexError" in open(os.path.join(logdir, "errors-2017-08-processed.jsonl")).read()
+    write(os.path.join(tmp, "s", "slot1", "errors-processed-1of8.jsonl"), '{"item": "OLD", "error": "from an earlier unit", "at": 1}\n')
+    fake_err = os.path.join(tmp, "fakepy-err")
+    write(fake_err, "#!/bin/sh\necho \"$@\"\nphase=$3; while [ $# -gt 0 ]; do [ \"$1\" = --status ] && st=$2; shift; done\n"
+                    "mkdir -p $st; echo \"{\\\"item\\\": \\\"NEW\\\", \\\"error\\\": \\\"IndexError\\\", \\\"at\\\": $(date +%s)}\" "
+                    "> $st/errors-$phase-0of8.jsonl\n")
+    os.chmod(fake_err, 0o755)
+    farm.build_unit(shared, {}, plan, "mbp", mach, a, fake_err, dict(os.environ), logdir)
+    kept = open(os.path.join(logdir, "errors-2017-08-processed.jsonl")).read()
+    assert "NEW" in kept and "OLD" not in kept, kept
     done = json.loads(shared.read("done", "2017-08.json"))
     assert list(done["phases"]) == ["composites", "processed"] and all(r["exit"] == 0 for r in done["phases"].values())
     assert "--procs 8" in open(os.path.join(logdir, "processed-2017-08.log")).read()
@@ -136,9 +142,16 @@ def test_exec(tmp):
     head = farm.git("rev-parse", "HEAD")
     ns = lambda **k: argparse.Namespace(**dict(dict(shared=root, machine="mini", only=None, name=None, by="test", commit=None,
                                                     once=True, argv=[]), **k))
-    farm.cmd_exec(ns(action="submit", name="hello", argv=["--", "sh", "-c", "echo hi > $FARM_OUT/out.txt"]))
-    farm.cmd_exec(ns(action="submit", name="other", only="mbp", argv=["--", "true"]))
-    farm.cmd_exec(ns(action="submit", name="oldcode", commit="0" * 40, argv=["--", "true"]))
+    cli = lambda *a: subprocess.run([sys.executable, farm.__file__, *a], capture_output=True, text=True)
+    got = cli("exec", "submit", "--shared", root, "--name", "hello", "--by", "test", "--",
+              "sh", "-c", "echo hi > $FARM_OUT/out.txt")          # as documented: options, then -- and the command
+    assert got.returncode == 0, got.stderr
+    farm.cmd_exec(ns(action="submit", name="other", only="mbp", argv=["true"]))
+    farm.cmd_exec(ns(action="submit", name="oldcode", commit="0" * 40, argv=["true"]))
+    write(os.path.join(root, "exec", "queue", "20990101T000000-half.json.part123"), '{"argv": ["tr')
+    write(os.path.join(root, "exec", "queue", "20990101T000000-broken.json"), '{"argv": ["tr')
+    status = cli("exec", "status", "--shared", root)
+    assert status.returncode == 0 and "hello" in status.stdout and "waiting" in status.stdout, status
     saved = farm.kernel_probe, farm.preflight_problems
     farm.kernel_probe, farm.preflight_problems = (lambda *a: {2004: 147}), (lambda *a: [])
     try:
@@ -151,7 +164,7 @@ def test_exec(tmp):
     d = json.loads(shared.read("exec", "done", done[0]))
     assert d["exit"] == 0 and d["machine"] == "mini"
     assert open(os.path.join(d["out"], "out.txt")).read().strip() == "hi"
-    assert len(shared.listing("exec", "queue")) == 3 and head
+    assert len([n for n in shared.listing("exec", "queue") if n.endswith(".json")]) == 4 and head
     return 1
 
 

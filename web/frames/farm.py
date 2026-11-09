@@ -506,9 +506,10 @@ class Shipper:
             self.thread.start()
 
 
-def keep_errors(machine, logdir, unit, phase):
+def keep_errors(machine, logdir, unit, phase, since):
     """prebuild's per-item error files (status/errors-<phase>-<k>of<n>.jsonl) are rewritten by the next run of the
-    phase; a copy per unit and phase keeps the failed items' names for the report."""
+    phase, and a shard with no error leaves an earlier run's file in place: a copy per unit and phase of the lines
+    written since this phase started (their "at") keeps the failed items' names for the report."""
     status = machine.get("status")
     if not status or not os.path.isdir(status):
         return
@@ -516,7 +517,12 @@ def keep_errors(machine, logdir, unit, phase):
     for f in sorted(os.listdir(status)):
         if f.startswith(f"errors-{phase}-") and f.endswith(".jsonl"):
             with open(os.path.join(status, f)) as fh:
-                lines += [l for l in fh if l.strip()]
+                for l in fh:
+                    try:
+                        if json.loads(l).get("at", 0) >= since - 1:   # a second of slack for whole-second clocks
+                            lines.append(l if l.endswith("\n") else l + "\n")
+                    except ValueError:
+                        continue
     if lines:
         with open(os.path.join(logdir, f"errors-{unit}-{phase}.jsonl"), "w") as fh:
             fh.writelines(lines)
@@ -540,6 +546,7 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
         if dry_run:
             print(" ".join(map(shlex.quote, cmd)))
             continue
+        phase_t0 = time.time()
         for attempt in (1, 2):    # one retry: a made file is never made again, so a rerun picks up where it stopped
             t0 = time.time()
             shared.append(f"{unit['unit']} {phase} start {now()} {me}\n", "logs", me, "phases.log")
@@ -550,7 +557,7 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
             if rc == 0:
                 break
         result["phases"][phase] = {"exit": rc, "seconds": took, "attempts": attempt}
-        keep_errors(machine, logdir, unit["unit"], phase)
+        keep_errors(machine, logdir, unit["unit"], phase, phase_t0)
     if dry_run:
         return
     result["finished"] = now()
@@ -651,8 +658,8 @@ def cmd_exec(args):
     shared = Shared(args.shared)
     if args.action == "submit":
         if not args.argv:
-            raise SystemExit("exec submit -- <command> ...")
-        argv = args.argv[1:] if args.argv[0] == "--" else args.argv
+            raise SystemExit("exec submit [options] -- <command> ...")
+        argv = args.argv
         jid = new_job_id(args.name or os.path.basename(argv[0]))
         job_ = {"argv": argv, "commit": args.commit or git("rev-parse", "HEAD"), "only": args.only, "name": args.name or "",
                 "by": args.by or "", "at": now()}
@@ -660,11 +667,16 @@ def cmd_exec(args):
         print(jid)
         return
     if args.action == "status":
-        done = {n[:-5] for n in shared.listing("exec", "done")}
+        done = {n[:-5] for n in shared.listing("exec", "done") if n.endswith(".json")}
         claims = set(shared.listing("exec", "claims"))
         for n in shared.listing("exec", "queue"):
+            if not n.endswith(".json"):
+                continue
             jid = n[:-5]
-            d = json.loads(shared.read("exec", "done", n) or "{}")
+            try:
+                d = json.loads(shared.read("exec", "done", n) or "{}")
+            except ValueError:
+                d = {}
             state = (f"exit {d.get('exit')} on {d.get('machine')} in {d.get('seconds')}s" if jid in done else
                      "running" if jid in claims else "waiting")
             print(f"{jid:<60} {state}")
@@ -692,14 +704,21 @@ def exec_worker(shared, args):
     results = farm.get("exec_results", "")
     idle = 0
     while not shared.exists(f"stop-exec-{me}"):
-        done = {n[:-5] for n in shared.listing("exec", "done")}
+        done = {n[:-5] for n in shared.listing("exec", "done") if n.endswith(".json")}
         claims = set(shared.listing("exec", "claims"))
         took = None
         for n in shared.listing("exec", "queue"):
+            if not n.endswith(".json"):          # a .part being written
+                continue
             jid = n[:-5]
             if jid in done or jid in claims:
                 continue
-            j = json.loads(shared.read("exec", "queue", n) or "{}")
+            try:
+                j = json.loads(shared.read("exec", "queue", n) or "")
+            except ValueError:                   # half-written or damaged: skip it this round
+                continue
+            if not isinstance(j, dict) or not isinstance(j.get("argv"), list) or not j["argv"]:
+                continue
             if j.get("only") not in (None, "", "any", me) or (j.get("commit") and j["commit"] != head):
                 continue
             p = shared.path("exec", "claims", jid)
@@ -978,7 +997,7 @@ def cmd_doctor(args):
     sys.exit(0 if ok else 1)
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
@@ -1017,11 +1036,17 @@ def main():
     p.add_argument("--by", help="submit: who asked (thread)")
     p.add_argument("--commit", help="submit: the commit the command needs (default: this checkout's)")
     p.add_argument("--once", action="store_true", help="worker: run at most one job, then stop")
-    p.add_argument("argv", nargs=argparse.REMAINDER)
+    # the command itself comes after "--" and is split off before parsing (main), so options may sit anywhere before it
     p = sub.add_parser("doctor")
     p.add_argument("--shared", required=True)
     p.add_argument("--machine", required=True)
-    args = ap.parse_args()
+    argv = sys.argv[1:] if argv is None else argv
+    command = []
+    if "--" in argv:
+        k = argv.index("--")
+        argv, command = argv[:k], argv[k + 1:]
+    args = ap.parse_args(argv)
+    args.argv = command
     {"plan": cmd_plan, "run": cmd_run, "status": cmd_status, "verify": cmd_verify, "compare": cmd_compare,
      "merge": cmd_merge, "doctor": cmd_doctor, "exec": cmd_exec}[args.cmd](args)
 
