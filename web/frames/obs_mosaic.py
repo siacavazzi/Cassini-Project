@@ -6226,7 +6226,7 @@ def centre_view(frame_id):
             # turned by a whole quarter alone (frame_quarter: the pass's, unless the camera rolled north past 45 degrees
             # from the top), so its roll stays as the camera had it
             own = reel.north_angles([frame_id]).get(frame_id)
-            hit = dict(hit, side=FRAME, turn=round(own - 90.0 * frame_quarter(own, hit["quarter"]), 2)) if own is not None \
+            hit = dict(hit, side=FRAME, turn=round(wrapped(own - 90.0 * frame_quarter(own, hit["quarter"])), 2)) if own is not None \
                 else {k: v for k, v in hit.items() if k != "quarter"}
     # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
     if found and not hit["centre"] and hit.get("north"):
@@ -6240,7 +6240,7 @@ def centre_view(frame_id):
         if own is not None and abs(wrapped(own - hit["axes"])) > ROLL_SQUARE:
             q = frame_quarter(own, quarter_of(hit["turn"], hit["axes"]))
             hit = {k: v for k, v in hit.items() if k not in ("hold", "at")}
-            hit.update(turn=round(own - 90.0 * q, 2), square=True)
+            hit.update(turn=round(wrapped(own - 90.0 * q), 2), square=True)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:
             _centre_of.clear()
