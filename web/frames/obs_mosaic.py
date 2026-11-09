@@ -6904,26 +6904,26 @@ def _steady_ready(u, cache, rec):
     return (rec is not None and rec.get("steady") is not None) or os.path.exists(os.path.join(folder(u, cache), STEADY_FILE))
 
 
-_making_now, _making_lock = {}, threading.Lock()   # movie picture path -> [its lock, threads making or waiting]
+_movie_making_now, _movie_making_lock = {}, threading.Lock()   # movie picture path -> [its lock, threads making or waiting]
 
 
 @contextlib.contextmanager
-def _making(path):
+def _making_movie(path):
     """One thread at a time makes the movie picture at path: another asking for it meanwhile waits for it and then
     finds it in the cache (reel._cached), instead of drawing the same frame again beside it. The Movie Editor's levels
     (export.measure, 3 threads) and a Pre-process (Segments, 4 threads) walk the same stretch from its start at once,
     and a frame not made yet (a Jupiter WAC color frame with Exposure normalization: 3 to 4 s) was drawn by both."""
-    with _making_lock:
-        held = _making_now.setdefault(path, [threading.Lock(), 0])
+    with _movie_making_lock:
+        held = _movie_making_now.setdefault(path, [threading.Lock(), 0])
         held[1] += 1
     try:
         with held[0]:
             yield
     finally:
-        with _making_lock:
+        with _movie_making_lock:
             held[1] -= 1
             if not held[1]:
-                del _making_now[path]
+                del _movie_making_now[path]
 
 
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
@@ -6984,7 +6984,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         return buf.getvalue()
 
     try:
-        with _making(path):
+        with _making_movie(path):
             data = reel._cached(path, make)
         calibration.hdr_note_served(path, path[:-len(".webp")] + ".hdr.webp")
     except LookupError:

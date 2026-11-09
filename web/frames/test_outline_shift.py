@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Checks that the movie frames' outline search (obs_mosaic._outline_shift's _shift_cost) gives, to the bit, the
-differences the cv2.warpAffine it replaced gave, and that one thread at a time makes a movie picture (_making):
+differences the cv2.warpAffine it replaced gave, and that one thread at a time makes a movie picture (_making_movie):
 python web/frames/test_outline_shift.py"""
 import os
 import sys
@@ -80,7 +80,7 @@ def test_making_one_at_a_time():
     lock = threading.Lock()
 
     def ask(path, hold):
-        with obs_mosaic._making(path):
+        with obs_mosaic._making_movie(path):
             with lock:
                 inside[0] += 1
                 most[0] = max(most[0], inside[0])
@@ -92,13 +92,13 @@ def test_making_one_at_a_time():
         t.start()
     time.sleep(0.05)
     t0 = time.monotonic()
-    with obs_mosaic._making("b.webp"):
+    with obs_mosaic._making_movie("b.webp"):
         other.append(time.monotonic() - t0)
     for t in ts:
         t.join()
     assert most[0] == 1, most
     assert other[0] < 0.1, other
-    assert not obs_mosaic._making_now
+    assert not obs_mosaic._movie_making_now
 
 
 if __name__ == "__main__":
