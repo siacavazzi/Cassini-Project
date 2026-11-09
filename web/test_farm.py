@@ -87,7 +87,9 @@ def test_slots(tmp):
     logdir = os.path.join(tmp, "slotlogs")
     os.makedirs(logdir)
     mach = {"name": "mbp", "cache": os.path.join(tmp, "c"), "status": os.path.join(tmp, "s", "slot1"), "procs": 8}
+    write(os.path.join(tmp, "s", "slot1", "errors-processed-0of8.jsonl"), '{"item": "X", "error": "IndexError"}\n')
     farm.build_unit(shared, {}, plan, "mbp", mach, a, fake, dict(os.environ), logdir)
+    assert "IndexError" in open(os.path.join(logdir, "errors-2017-08-processed.jsonl")).read()
     done = json.loads(shared.read("done", "2017-08.json"))
     assert list(done["phases"]) == ["composites", "processed"] and all(r["exit"] == 0 for r in done["phases"].values())
     assert "--procs 8" in open(os.path.join(logdir, "processed-2017-08.log")).read()

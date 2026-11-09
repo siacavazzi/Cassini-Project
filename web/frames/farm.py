@@ -506,6 +506,22 @@ class Shipper:
             self.thread.start()
 
 
+def keep_errors(machine, logdir, unit, phase):
+    """prebuild's per-item error files (status/errors-<phase>-<k>of<n>.jsonl) are rewritten by the next run of the
+    phase; a copy per unit and phase keeps the failed items' names for the report."""
+    status = machine.get("status")
+    if not status or not os.path.isdir(status):
+        return
+    lines = []
+    for f in sorted(os.listdir(status)):
+        if f.startswith(f"errors-{phase}-") and f.endswith(".jsonl"):
+            with open(os.path.join(status, f)) as fh:
+                lines += [l for l in fh if l.strip()]
+    if lines:
+        with open(os.path.join(logdir, f"errors-{unit}-{phase}.jsonl"), "w") as fh:
+            fh.writelines(lines)
+
+
 def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_run=False):
     """Every phase of one unit, in order, each retried once; its result written to done/<unit>.json."""
     result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
@@ -534,6 +550,7 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
             if rc == 0:
                 break
         result["phases"][phase] = {"exit": rc, "seconds": took, "attempts": attempt}
+        keep_errors(machine, logdir, unit["unit"], phase)
     if dry_run:
         return
     result["finished"] = now()
