@@ -201,6 +201,7 @@ Access-Control-Allow-Origin: * so a page hosted elsewhere can show them.
 """
 import argparse
 import base64
+import contextlib
 import collections
 import datetime
 import email.utils
@@ -240,6 +241,7 @@ import contextvars  # noqa: E402
 import json  # noqa: E402
 import numpy as np  # noqa: E402
 import calibration  # noqa: E402
+import hdr_still  # noqa: E402
 import color_image  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
@@ -512,8 +514,8 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-# color-v47/v30/v25 (proc and thumb unchanged): the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); color-v46/v29/v24, proc-v20/v14, thumb-v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); color-v45/v28/v23: #294 (grey single-filter colour sets); color-v44/v27/v22, proc-v19/v13: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); color-v43/v26/v21, proc-v18/v12: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); color-v42/v25/v20, proc-v17/v11: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); color-v41/v24/v18 (proc unchanged): neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248); color-v40/v23/v17 (proc unchanged): natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); color-v39/v22/v16 (proc unchanged): the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); color-v38/v21/v15, proc-v16/v10: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); color-v37/v20/v14 (proc unchanged): the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); color-v36/v19/v13, proc-v15/v9: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); color-v35/v18/v12, proc-v14/v8: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); color-v34/v17/v11, proc-v13/v7: thin ringlets kept by the garbled-line check (#212), heavily compressed frames smoothed and saturated frames' glow black softened (#222), natural color (eye, #219); color-v33/v16/v10, proc-v12/v6: Titan color (#198), saturated white kept white (#205), movie strobe (#206), line holes after lost packets and star spikes (#201); color-v32/v15/v9, proc-v11/v5: star boxes, fill dashes, garbled lines (group I), color sets aligned near SPICE and two-filter/methane balance (group F); color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-COLOR_VERSIONS = {"balanced": "color-v47", "raw": "color-v30", "eye": "color-v47-eye", "false": "color-v47-false", "classic": "color-v25"}
+# color-v53/v36/v31 (proc and thumb unchanged): #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); color-v52/v35/v30 (proc and thumb unchanged): #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); color-v51/v34/v29 (proc and thumb unchanged): #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); color-v50/v33/v28 (proc and thumb unchanged): #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); color-v49/v32/v27 (proc and thumb unchanged): the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); color-v48/v31/v26 (proc and thumb unchanged): #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); color-v47/v30/v25 (proc and thumb unchanged): the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); color-v46/v29/v24, proc-v20/v14, thumb-v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); color-v45/v28/v23: #294 (grey single-filter colour sets); color-v44/v27/v22, proc-v19/v13: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); color-v43/v26/v21, proc-v18/v12: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); color-v42/v25/v20, proc-v17/v11: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); color-v41/v24/v18 (proc unchanged): neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248); color-v40/v23/v17 (proc unchanged): natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); color-v39/v22/v16 (proc unchanged): the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); color-v38/v21/v15, proc-v16/v10: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); color-v37/v20/v14 (proc unchanged): the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); color-v36/v19/v13, proc-v15/v9: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); color-v35/v18/v12, proc-v14/v8: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); color-v34/v17/v11, proc-v13/v7: thin ringlets kept by the garbled-line check (#212), heavily compressed frames smoothed and saturated frames' glow black softened (#222), natural color (eye, #219); color-v33/v16/v10, proc-v12/v6: Titan color (#198), saturated white kept white (#205), movie strobe (#206), line holes after lost packets and star spikes (#201); color-v32/v15/v9, proc-v11/v5: star boxes, fill dashes, garbled lines (group I), color sets aligned near SPICE and two-filter/methane balance (group F); color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+COLOR_VERSIONS = {"balanced": "color-v53", "raw": "color-v36", "eye": "color-v53-eye", "false": "color-v53-false", "classic": "color-v31"}
 PROC_VERSIONS = {"balanced": "proc-v20", "raw": "proc-v20", "eye": "proc-v20", "false": "proc-v20", "classic": "proc-v14"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
@@ -562,17 +564,107 @@ def composite(ids, channel=None, centre=None):
         bands = im.split()
         return Image.merge("LA", (bands[channel], bands[-1])), dict(report, channel=channel)
     if centre:
-        return centred(ids, centre)
-    imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+        with _hdr_capture() as sink:
+            im, report = centred(ids, centre)
+        return _with_hdr(im, sink), report
+    with _hdr_capture() as sink:
+        imgs, valid, _, report = color_image.load_aligned([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
     # the last step of every picture: a light unsharp mask (color_image.unsharp)
     if len(chans) == 1:
-        return Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), report
+        return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), sink), report
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    return Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), report
+    return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), sink), report
+
+
+# HDR stills (calibration.hdr_capture): each composite and processed frame also keeps its recovery map, a grey
+# lossless WebP at the picture's own size in HDR_DIR beside its sizes' folders, named as the picture; the drawn
+# picture is the same bytes either way. CASSINI_HDR=0 turns the maps off. A failed map is skipped, never the picture
+HDR_DIR = "hdr-r1"
+HDR_ON = os.environ.get("CASSINI_HDR", "1") != "0"
+
+
+def _hdr_capture():
+    return calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)
+
+
+def _with_hdr(im, sink):
+    """im with its recovery map in im.info["hdr"] (cut like im when centred cut it), when one was made"""
+    m = sink[-1] if sink else None
+    if m is not None and m.shape[:2] == (im.size[1], im.size[0]):
+        im.info["hdr"] = m
+    return im
+
+
+# HDR stills for the page (hdr=1 on /frames/color.webp and /frames/processed/<ID>.webp): an AVIF made from the cached
+# 1024 picture and its recovery map (hdr_still: 10-bit PQ, Rec.2020), kept in HDR_DIR/HDR_AVIF/<size>. One is made at a
+# time (a quarter second); a request that finds the slot busy, or no map, gets the SDR picture, not kept for good, so it
+# asks again later. HDR_AVIF is bumped when hdr_still's curve changes
+HDR_AVIF = "avif-v1"
+HDR_AVIF_SIZES = (512, 1024)
+_hdr_slot = threading.Semaphore(1)
+
+
+def hdr_avif(folder, name, size):
+    """The HDR AVIF of folder's picture name at size (512 or 1024, FULL as 1024), or None"""
+    size = 512 if size != FULL and size <= 512 else 1024
+    return hdr_avif_at(os.path.join(folder, size_dir(1024, "webp"), name + ".webp"), os.path.join(folder, HDR_DIR, name + ".webp"),
+                       os.path.join(folder, HDR_DIR, HDR_AVIF, str(size), name + ".avif"), size)
+
+
+def hdr_avif_served(path):
+    """The HDR AVIF of a movie frame or mosaic picture kept at path (calibration.hdr_served) and its recovery map
+    beside it (obs_mosaic.keep_picture_map), at the picture's own size, kept as <path>.hdr-<HDR_AVIF>.avif; or None"""
+    if not path or not path.endswith(".webp"):
+        return None
+    return hdr_avif_at(path, path[:-len(".webp")] + ".hdr.webp", f"{path[:-len('.webp')]}.hdr-{HDR_AVIF}.avif", 1 << 16)
+
+
+def hdr_avif_at(picture, stops, out, size):
+    """The HDR AVIF of picture with its recovery map stops, at most size px, kept at out; None when there is no map yet
+    or another is being made"""
+    if os.path.exists(out):
+        with open(out, "rb") as fh:
+            return fh.read()
+    if not (os.path.exists(stops) and os.path.exists(picture)) or not _hdr_slot.acquire(blocking=False):
+        return None
+    try:
+        hdr_still.make_avif(picture, stops, out, size)
+        with open(out, "rb") as fh:
+            return fh.read()
+    except Exception as e:
+        print(f"No HDR AVIF for {picture}: {e}")
+        return None
+    finally:
+        _hdr_slot.release()
+
+
+def hdr_download(query, name):
+    """download=1 on an HDR picture: saved as name_HDR.avif"""
+    return {"Content-Disposition": f'attachment; filename="{name}_HDR.avif"'} if query.get("download", ["0"])[0] == "1" else {}
+
+
+def wants_hdr(query, fmt):
+    return query.get("hdr", ["0"])[0] == "1" and fmt == "webp"
+
+
+def keep_hdr(im, folder, name):
+    """Write im's recovery map (if it has one) as folder/HDR_DIR/name.webp, once"""
+    m = im.info.get("hdr")
+    if m is None:
+        return
+    path = os.path.join(folder, HDR_DIR, name + ".webp")
+    if os.path.exists(path):
+        return
+    try:
+        out = io.BytesIO()
+        Image.fromarray(m, "L").save(out, "WEBP", lossless=True, quality=80, method=4)
+        _make_file(path, lambda: out.getvalue())
+    except Exception as e:
+        print(f"No HDR map kept for {name}: {e}")
 
 
 def body_radius(lbl):
@@ -628,6 +720,14 @@ def centred(ids, view):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + side, w), min(top + side, h)
     if x0 < x1 and y0 < y1:
         out[y0 - top:y1 - top, x0 - left:x1 - left] = image[y0:y1, x0:x1]
+    sink = calibration.hdr_sink()
+    if sink and sink[-1] is not None:
+        # the HDR recovery map (color_image.processed_frame placed it like image), cut the same; 0 stops off the frame
+        m = sink[-1]
+        cut = np.full((side, side), calibration.HDR_ZERO, np.uint8)
+        if m.shape[:2] == (h, w) and x0 < x1 and y0 < y1:
+            cut[y0 - top:y1 - top, x0 - left:x1 - left] = m[y0:y1, x0:x1]
+        sink[-1] = cut if m.shape[:2] == (h, w) else None
     report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
                                                           "centre": bool(view.get("centre"))})
     # the last step of every picture: a light unsharp mask (color_image.unsharp); one frame on its one channel
@@ -660,6 +760,14 @@ def centre_folder(folder, centre):
     return f"{folder}-{CENTRE_VERSION}{obs_mosaic.HOLD_RULE if centre and centre.get('hold') else ''}-s{int(centre['side'])}" if centre else folder
 
 
+def color_folder(cache, centre):
+    return centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
+
+
+def processed_folder(cache, centre):
+    return centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
+
+
 def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image). centre: centred on the body (composite)."""
@@ -677,6 +785,8 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
         # the camera windows' other sizes are encoded now too (a few tens of ms each), so a window that grows or
         # goes to full view gets the composite at once instead of making it again; a size encoded like another (a
         # 1024 px composite's 1024 and full) is the same bytes, made once
+        if channel is None:
+            keep_hdr(im, folder, "_".join(ids))
         enc = encoder(im)
         for other in WINDOW_SIZES if channel is None else ():   # a channel is asked for at the size it is shown
             if other != size:
@@ -689,6 +799,9 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     data = cached(f"{base}.{fmt}", make)
     if not report:
         report = reel.report_of(base + ".json", {})
+    if channel is None:
+        calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), "_".join(ids) + ".webp"),
+                                    os.path.join(folder, HDR_DIR, "_".join(ids) + ".webp"))
     return data, report
 
 
@@ -703,6 +816,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
             # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
             # made once, not once a size
             im, made = _recent_composite([frame_id], centre)
+        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), frame_id)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         reel.keep_report(base + ".json", made)
@@ -710,6 +824,9 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     data = cached(f"{base}.{fmt}", make)
     if not report:
         report = reel.report_of(base + ".json", {})
+    folder = processed_folder(cache, centre)
+    calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), frame_id + ".webp"),
+                                os.path.join(folder, HDR_DIR, frame_id + ".webp"))
     return data, report
 
 
@@ -1280,6 +1397,23 @@ def make_handler(site, cache, flags=None):
                 headers["Cache-Control"] = "no-store"
             return self.send_bytes(data, "image/png" if fmt == "png" else "image/webp", forever, headers)
 
+        def send_hdr(self, folder, name, size, sdr, query, download, report):
+            """hdr=1: the picture's HDR AVIF (hdr_avif), kept by the browser for good; or, when there is none yet, the SDR
+            picture it was asked with, not kept (X-HDR says which)"""
+            data = hdr_avif(folder, name, size)
+            if data is not None:
+                return self.send_bytes(data, "image/avif", True, {"X-Composite": json.dumps(report), "X-HDR": "1", **hdr_download(query, download)})
+            return self.send_picture(sdr, "webp", query, download, {"X-Composite": json.dumps(report), "X-HDR": "0"}, forever=False)
+
+        def send_served_hdr(self, sdr, query, download, headers, forever=True):
+            """hdr=1 on a movie frame or mosaic: its HDR AVIF (hdr_avif_served of what obs_mosaic just served,
+            calibration.hdr_served), or the
+            SDR picture, not kept (X-HDR says which)"""
+            data = hdr_avif_served(calibration.hdr_served()[0])
+            if data is not None:
+                return self.send_bytes(data, "image/avif", forever, {**headers, "X-HDR": "1", **hdr_download(query, download)})
+            return self.send_picture(sdr, "webp", query, download, {**headers, "X-HDR": "0"}, forever=False)
+
         def send_file(self, path, mime, query, name, headers=None, forever=True):
             """A picture kept in a file, sent a megabyte at a time (a native mosaic can be hundreds of MB)."""
             size = os.path.getsize(path)
@@ -1540,6 +1674,8 @@ def make_handler(site, cache, flags=None):
                     return
                 try:
                     data, report = color_webp(ids, size, cache, fmt, channel, centre)
+                    if query.get("hdr", ["0"])[0] == "1" and fmt == "webp" and channel is None:
+                        return self.send_hdr(color_folder(cache, centre), "_".join(ids), size, data, query, name, report)
                     return self.send_picture(data, fmt, query, name, {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
@@ -1582,6 +1718,9 @@ def make_handler(site, cache, flags=None):
                     return
                 try:
                     data, report = processed_webp(m.group(1), size, cache, fmt, centre)
+                    if query.get("hdr", ["0"])[0] == "1" and fmt == "webp":
+                        return self.send_hdr(processed_folder(cache, centre), m.group(1), size, data, query,
+                                             f"Cassini_{m.group(1)}_processed", report)
                     return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_processed", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
@@ -1774,6 +1913,9 @@ def make_handler(site, cache, flags=None):
                                                        out=out,
                                                        fade=fade, wait=query.get("whole", ["0"])[0] == "1")
                         if made and made[0] is not None:
+                            if wants_hdr(query, fmt):
+                                return self.send_served_hdr(made[0], query, f"Cassini_{m.group(1)}_mosaic_movie",
+                                                            {"X-Movie": json.dumps(made[1])}, forever=not made[1].get("partial"))
                             return self.send_picture(made[0], fmt, query, f"Cassini_{m.group(1)}_mosaic_movie", {"X-Movie": json.dumps(made[1])},
                                                      forever=not made[1].get("partial"))
                     else:
@@ -1787,8 +1929,14 @@ def make_handler(site, cache, flags=None):
                     return self.send_error(404, "Not in a pass")
                 if made[0] is None:
                     # the pass is being worked out, or SPICE could not place the frame: the window shows the frame
-                    return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, made[1].get("why", ""))
+                    # (and how far it is, which the window shows: "working out the pass, 12 of 36 frames")
+                    why = made[1].get("why", "")
+                    if why == "working out the pass" and made[1].get("of"):
+                        why = f"{why}, {made[1].get('made', 0)} of {made[1]['of']} frames"
+                    return self.send_error(503 if made[1].get("why") == "working out the pass" else 404, why)
                 data = made[0] if fmt == "webp" else encode(Image.open(io.BytesIO(made[0])), FULL, "png")
+                if wants_hdr(query, fmt):
+                    return self.send_served_hdr(data, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
                 return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_movie", {"X-Movie": json.dumps(made[1])})
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
@@ -1831,6 +1979,8 @@ def make_handler(site, cache, flags=None):
                         made = None
                     if made:
                         # behind: the mosaic of the tiles made so far, not yet this frame's (asked for again later)
+                        if wants_hdr(query, fmt):
+                            return self.send_served_hdr(made[0], query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                         return self.send_picture(made[0], fmt, query, name, {"X-Reel": json.dumps(made[1])}, forever=not made[1].get("behind"))
                     # a movie plays as frames: no rolling mosaic either (its drift would paste frames together)
                     found = obs_mosaic.unit_of(m.group(1))

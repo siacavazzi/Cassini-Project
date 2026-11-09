@@ -50,6 +50,8 @@ import gzip
 import json
 import math
 import os
+import re
+import threading
 
 import cv2
 import numpy as np
@@ -918,11 +920,36 @@ def emulated(bands, target=None):
     return not (len(bands) == 2 and SURFACE_WINDOW.get(str(target or "").upper()) in bands)
 
 
-def color_mix(camera, bands, target=None, gains=None, own=False):
+"""
+The body whose color natural color emulation (eye_mix) gives a set: its target, unless the target is one the tables
+know nothing of (no eye color, no tint, no typical brightness in any of the set's bands) and its observation is named
+after a body they do know (ISS_159SA_STORMW..., OBS_BODY). Saturn's storm watch frames are filed under whichever small
+moon rode along (JANUS, HELENE, METHONE, PALLENE: ..._RIDER) or under UNK, and drew the whole planet in that moon's gray,
+under a False color label: 490 methane sets (Spot check 9, 2026-11-06).
+"""
+OBS_BODY = {"SA": "SATURN", "TI": "TITAN", "JU": "JUPITER", "EN": "ENCELADUS", "RH": "RHEA", "DI": "DIONE",
+            "TE": "TETHYS", "MI": "MIMAS", "IA": "IAPETUS"}
+
+
+def _known_body(target, bands, camera):
+    t = str(target or "").upper()
+    eye_tint(t)   # (loads the eye colors)
+    return t in _eye_colors or tint_of(t) is not None or any(body_level(t, b, camera) is not None for b in bands)
+
+
+def mix_target(target, bands, camera=None, obs=None):
+    if not obs or _known_body(target, bands, camera):
+        return target
+    m = re.match(r"ISS_C?\d{2,3}([A-Z]{2})", str(obs).replace('"', "").strip())
+    body = OBS_BODY.get(m.group(1)) if m else None
+    return body if body and _known_body(body, bands, camera) else target
+
+
+def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
     if len(bands) in (2, 3) and (style() == "eye" or style() == "balanced" and emulated(bands, target)):
         if len(bands) == 3 and natural_mix(camera, bands) is not None:
             return natural_mix(camera, bands)
-        m = eye_mix(camera, bands, target)
+        m = eye_mix(camera, bands, mix_target(target, bands, camera, obs))
         if m is not None or style() == "eye":
             return m
         # no eye mix (a filter without a wavelength): natural color balances it as before
@@ -1367,13 +1394,17 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
             own = scale["black_of"](iof) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
-            out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe))
+            out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe, hdr=len(iofs) == 1))
         for picture, full in zip(out, saturated or []):
             # what the camera saturated is brighter than it could measure: white, as in a one frame picture
             # (draw_saturated), wherever the shared white puts its clipped value (a mosaic's white is its brightest
             # tile's, often a shorter exposure's, and a clipped crescent came out one flat gray)
             if full is not None:
                 picture[full] = 255
+        sink = _hdr_sink.get()
+        if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
+            # ... and HDR_SATURATED times white in its recovery map
+            sink[-1][saturated[0]] = hdr_code(np.log2(HDR_SATURATED))
         return out
     sky = None
     if off_disk is not None and len(iofs) > 1 and not _sky(iofs).mean() > sky_fraction:
@@ -1469,7 +1500,7 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
-                    own=True)
+                    own=True, obs=_value(infos[0], "OBSERVATION_ID", ""))
     false = isinstance(mix, FalseMix)
     lum = None
     if false:
@@ -1616,12 +1647,102 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
             gray = x.mean(axis=0)
             x += (gray - x) * (1 - k * k * (3 - 2 * k))
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
+    # HDR (hdr_capture): the picture's brightness before the shoulder and the clip below, white = 1 (a new array:
+    # x itself is not touched, so the picture drawn is the same with HDR on or off)
+    sink = _hdr_sink.get()
+    linear = x.max(axis=0) if sink is not None else None
     if shoulder:
         _shoulder(x, shoulder)
     if every is not None:
         x[:, every] = 1.0
     x = np.clip(x, 0, 1)
-    return [cv2.cvtColor((encode_eased(c, gamma, eased) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
+    drawn = [cv2.cvtColor((encode_eased(c, gamma, eased) * 255 + 0.5).astype(np.uint8), cv2.COLOR_GRAY2BGR) for c in x]
+    if sink is not None:
+        try:
+            if every is not None:
+                linear[every] = HDR_SATURATED
+            sink.append(recovery_map(linear, drawn))
+        except Exception as e:
+            print(f"No HDR map: {e}")
+    return drawn
+
+
+"""
+HDR. tone draws an 8-bit picture: white at the lit body's WHITE_PCT percentile, what is brighter rolled off by the
+shoulder and clipped, then gamma encoded. With hdr_capture open, tone also keeps a recovery map of that picture: per
+pixel of its highlights (HDR_FROM), log2 of how much brighter the linear picture was than the one drawn (decoded at
+HDR_GAMMA), from HDR_LOG2[0] to
+HDR_LOG2[1] stops in 8 bits (0 stops at code HDR_ZERO). The drawn picture times 2 ** map is the picture with its highlights
+linear again, white = 1, what the camera saturated (HDR_SATURATED) included, and its mid tones and shadows as drawn, so an HDR still (PQ AVIF, a gain map
+JPEG) can be made from the cached picture and its map with no pipeline run, on any display curve. Shadows keep the 8-bit
+picture's steps. The drawn picture is the same bytes with the capture open or not.
+"""
+HDR_LOG2 = (-1.0, 4.0)   # recovery map range, stops (a code is 5/255 of a stop)
+HDR_GAMMA = 2.2          # the drawn picture decoded at this gamma for the map (the gamma tone draws on)
+HDR_SATURATED = 8.0      # what the camera saturated, in the map: this many times white (past any display's peak)
+HDR_FROM = (0.4, 0.7)    # the map's highlights: from this share of white (0 stops under it) to all of it at the second
+HDR_EPS = 1.0 / 1024     # added to both sides of the ratio, so black over black is 0 stops
+HDR_ZERO = int(round(-HDR_LOG2[0] / (HDR_LOG2[1] - HDR_LOG2[0]) * 255))
+_hdr_sink = contextvars.ContextVar("hdr_sink", default=None)
+
+
+@contextlib.contextmanager
+def hdr_capture():
+    """While open (in this thread or task), each tone call appends its recovery map (uint8, H x W) to the list
+    yielded; the last one is the picture's"""
+    sink = []
+    token = _hdr_sink.set(sink)
+    try:
+        yield sink
+    finally:
+        _hdr_sink.reset(token)
+
+
+_hdr_served = threading.local()
+
+
+def hdr_note_served(picture, stops):
+    """A picture maker's note (this thread) of the cached picture it just served and its recovery map's path, for an
+    HDR version of it (the frame server's hdr=1, an HDR film); (None, None) to clear it"""
+    _hdr_served.pair = (picture, stops)
+
+
+def hdr_served():
+    """(picture, map) the last maker on this thread served (hdr_note_served), or (None, None)"""
+    return getattr(_hdr_served, "pair", (None, None))
+
+
+def hdr_sink():
+    """The list hdr_capture opened here, or None"""
+    return _hdr_sink.get()
+
+
+def recovery_map(linear, drawn, gamma=HDR_GAMMA):
+    """linear (H x W, white = 1, before the shoulder and clip) over drawn (tone's BGR uint8 channels, their max,
+    decoded at gamma), as log2 stops in uint8 (HDR_LOG2)"""
+    shown = np.max([d[..., 0] for d in drawn], axis=0).astype(np.float32) / 255
+    shown = np.power(shown, np.float32(gamma if isinstance(gamma, (int, float)) else HDR_GAMMA))
+    stops = np.log2((np.maximum(linear, 0) + HDR_EPS) / (shown + HDR_EPS))
+    # only the highlights: 0 stops under HDR_FROM of white, all of it from HDR_FROM[1] up (smoothstep between), so the
+    # shadows and mid tones of an HDR still are the drawn picture's own and the map is small (mostly one code)
+    t = np.clip((linear - np.float32(HDR_FROM[0])) / np.float32(HDR_FROM[1] - HDR_FROM[0]), 0, 1)
+    stops *= t * t * (3 - 2 * t)
+    lo, hi = HDR_LOG2
+    return (np.clip((stops - lo) / (hi - lo), 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
+def hdr_code(stops):
+    """The recovery map's code for so many stops"""
+    lo, hi = HDR_LOG2
+    return int(round(np.clip((stops - lo) / (hi - lo), 0, 1) * 255))
+
+
+def recover(rgb, stops):
+    """The linear picture (H x W x 3 float32, white = 1) from a drawn picture (uint8, gamma encoded) and its recovery
+    map (uint8): what an HDR still is made from"""
+    lo, hi = HDR_LOG2
+    gain = np.exp2(stops.astype(np.float32) / 255 * (hi - lo) + lo)
+    return np.power(rgb.astype(np.float32) / 255, np.float32(HDR_GAMMA)) * gain[..., None]
 
 
 """
@@ -1633,6 +1754,9 @@ so it gets the picture's typical color with the surface the others saw. Returns 
 reach: the ratio the picture has near each pixel instead (over a Gaussian of reach pixels, the typical one where too
 little near it says), for a picture whose colour changes across it: a mosaic of Saturn from its pole's blue-green to its
 gold lower latitudes, where the one typical ratio gave the clipped gold the pole's green.
+where: the pixels a ratio may be measured over (with the lit ones), None for every one; floor: False for pixels a
+channel did not see rather than saturated (color_image.per_body's far body behind a nearer one in some filter), which
+are filled with the ratio alone, never brought up to the channel's clipping.
 """
 FILL_NEAR = 0.05   # (fill_saturated's reach) the share of the pixels round one measured, from which their ratio is used whole
 FILL_FLOOR = 99.9  # (fill_saturated) percentile of a channel's unsaturated lit pixels a pixel it saturated is filled no darker than
@@ -1653,10 +1777,11 @@ def mostly_saturated(mask, lit):
     return n > 0 and float((np.asarray(mask, bool) & lit).sum()) > FILL_MOST * n
 
 
-def fill_saturated(channels, masks, reach=None):
+def fill_saturated(channels, masks, reach=None, where=None, floor=True):
     masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
     x = [np.asarray(c, np.float32) for c in channels]
     lit = lit_of(x)
+    seen = lit if where is None else lit & np.asarray(where, bool)
     out = []
     for i, (c, m) in enumerate(zip(x, masks)):
         if not m.any():
@@ -1665,7 +1790,7 @@ def fill_saturated(channels, masks, reach=None):
         total = np.zeros(c.shape, np.float32)
         count = np.zeros(c.shape, np.float32)
         for j, (o, n) in enumerate(zip(x, masks)):
-            both = lit & ~m & ~n & (o > 0)
+            both = seen & ~m & ~n & (o > 0)
             if j == i or both.sum() < 100:
                 continue
             ratio = np.float32(np.median(c[both] / o[both]))
@@ -1697,7 +1822,7 @@ def fill_saturated(channels, masks, reach=None):
         # with ragged edges along GRN's clipping. Not for a channel saturated over most of the picture
         # (mostly_saturated), whose fill keeps the others' colour.
         under = lit & ~m
-        if some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
+        if floor and some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
             floor = np.float32(np.percentile(c[under], FILL_FLOOR))
             filled[some] = np.maximum(filled[some], floor)
         out.append(filled)
@@ -2080,13 +2205,21 @@ def _shoulder(x, shoulder):
 An I/F image as a BGR uint8 image: black -> 0, black + white -> 255, gamma encoded (or the sRGB curve,
 gamma "srgb"); with a shoulder, brightness past it rolls off softly (roll_off) instead of clipping
 """
-def display(iof, black, white, gamma=2.2, shoulder=None, toe=None):
+def display(iof, black, white, gamma=2.2, shoulder=None, toe=None, hdr=False):
     x = iof - black
     if toe:
         # a soft toe instead of a hard clip at black: values just above it fade in quadratically over toe (I/F),
         # so noise sitting at the black point is a smooth dark fade, not black salt among gray grain
         x = np.where(x <= 0, 0, np.where(x <= toe, x * x / (2 * toe), x - toe / 2))
     x = x / white
+    # hdr: with hdr_capture open, the picture's recovery map (as tone keeps one) from x before the shoulder and clip
+    sink = _hdr_sink.get() if hdr else None
+    linear = x.astype(np.float32) if sink is not None else None
     x = np.clip(roll_off(x, shoulder) if shoulder else x, 0, 1)
     gray = (encode(x, gamma) * 255 + 0.5).astype(np.uint8)
+    if sink is not None:
+        try:
+            sink.append(recovery_map(linear, [gray[..., None]], gamma))
+        except Exception as e:
+            print(f"No HDR map: {e}")
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)

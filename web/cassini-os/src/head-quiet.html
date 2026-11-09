@@ -401,9 +401,11 @@ body.idle .win.full .orbitcorner { opacity: .55; }
 .capline a.pds:hover { color: var(--q-accent); text-decoration: underline solid; }
 .capline a.pds:hover::after { opacity: 1; }
 /* a quiet camera: a short strip in place of the square, with the camera's next picture and a button that goes
-   there (cameraFeed quiet; Sam 2026-11-04: a small countdown, out of the way, only while there is no picture) */
-.well:has(.idlecard), .camwin.zoomed .well:has(.idlecard) { aspect-ratio: auto; height: 58px; }
-.well .wellmsg:has(.idlecard) { position: absolute; inset: 0; }
+   there (cameraFeed quiet; Sam 2026-11-04: a small countdown, out of the way, only while there is no picture).
+   The card stays in the hidden message after a picture goes up, so the strip shape holds only without one: with
+   it, a frame that came in after a quiet spell sat squashed in a wide 58px strip that resizing could not undo */
+.well:not(.has-frame):has(.idlecard), .camwin.zoomed .well:not(.has-frame):has(.idlecard) { aspect-ratio: auto; height: 58px; }
+.well:not(.has-frame) .wellmsg:has(.idlecard) { position: absolute; inset: 0; }
 .idlecard { position: absolute; inset: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; text-transform: none; letter-spacing: normal; text-align: left; font: 11px/1.3 var(--ui); color: var(--q-dim); }
 .idletext { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 1px 7px; }
 .idlek { grid-column: 1 / -1; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--q-dim); }
@@ -2055,7 +2057,7 @@ function targetLabel(k) {
     const size = () => win.classList.contains("full") && S.get("cameras.fullRes") ? "full" : window.cassiniWM.sized(win, well);
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
     const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
-    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook({ center: centres(s.use[s.use.length - 1]) })}`;
+    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook({ center: centres(s.use[s.use.length - 1]) })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // Auto center (this window's settings menu, else Settings > Cameras > Auto center): a frame on its own comes
     // centred on its body by the frame server (the pipeline's processed frame, placed north up by SPICE) unless the
     // server said its pass is not centred (rings, sky, a body too big) or could not place the frame: then as it is
@@ -2108,8 +2110,8 @@ function targetLabel(k) {
     const processedFailed = new Set();
     const processes = k => S.get("cameras.processedFrames") !== false && !processedFailed.has(catalog.id[k]);
     const shownFrameUrl = (k, sz) => centres(k)
-      ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}`
-      : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}` : frameUrl(catalog.id[k], sz);
+      ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`
+      : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
     // a picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
@@ -2203,6 +2205,13 @@ function targetLabel(k) {
         const m = u.pathname.match(/\/frames\/(?:processed\/)?([NW]\d{10}_\d+)\.webp$/);
         rows.push({ label: "This frame as shown", note: "PNG", href: saveUrl(url), now: true });
         if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
+      }
+      // the picture in HDR (frame_server hdr=1: an AVIF made from the picture's recovery map; the usual WebP when it has
+      // none yet), for a color picture, a processed frame, a movie frame or a mosaic
+      if (/\/frames\/(color\.webp|processed\/|movie\/|mosaic\/[NW]\d{10}_\d+\.webp)/.test(u.pathname) && q.get("channel") === null) {
+        const h = new URL(u); for (const k of ["format", "download", "hdr"]) h.searchParams.delete(k);
+        h.searchParams.set("size", "1024"); h.searchParams.set("hdr", "1"); h.searchParams.set("download", "1");
+        rows.push("-", { label: "This picture in HDR", note: "AVIF · HDR10 · 1024 px", href: h.href });
       }
       return rows;
     }
@@ -2405,7 +2414,7 @@ function targetLabel(k) {
       // watched takes seconds), so the window shows today's frame and says the steady one is coming
       const steadying = !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
       well.classList.toggle("steadying", steadying);
-      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : "STEADYING MOVIE…") : "";
+      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : preparing.has(passOf(v.k)) ? `PREPARING MOVIE · ${preparing.get(passOf(v.k))}` : "STEADYING MOVIE…") : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
@@ -2483,9 +2492,16 @@ function targetLabel(k) {
           // other answer (SPICE could not place the frame) shows that frame as it is from then on
           const o = passOf(v.k), c0 = catalog, id = catalog.id[v.k];
           coldAt.set(o, performance.now());
-          fetch(v.key, { priority: "low" }).then(r => r.status, () => 503).then(status => {
+          fetch(v.key, { priority: "low" }).then(r => [r.status, r.statusText], () => [503, ""]).then(([status, why]) => {
             if (catalog !== c0) return;
             if (status !== 503 && status !== 200) { movieFailed.add(id); return; }
+            // how far the server is (its 503 says "... 12 of 36 frames"): on the window's tag while the frame stands in
+            const got = status === 503 && /(\d+) of (\d+) frames/.exec(why || "");
+            if (got) {
+              preparing.set(o, `${got[1]} OF ${got[2]} FRAMES`);
+              if (lastK >= 0 && passOf(lastK) === o && well.classList.contains("steadying") && !playsRolling(lastK))
+                card.querySelector(".kindtag").textContent = `PREPARING MOVIE · ${preparing.get(o)}`;
+            } else if (status === 200) preparing.delete(o);
             if (status === 200) coldAt.delete(o);
             setTimeout(() => { if (catalog === c0 && lastK >= 0 && passOf(lastK) === o) update(true); }, status === 200 ? 0 : COLD_RETRY + 50);
           });
@@ -2611,20 +2627,22 @@ function targetLabel(k) {
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}`;
+    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // what this computer works out for frame k's movie picture ({steady, exposure}: steady-local.html), null when the server draws it
     const hereWant = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.want(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : null;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
     // passes the server is still working out (a movie request failed): their frames show as they are, with the
     // steadying note, and the steady frame is asked for again every COLD_RETRY ms
     const coldAt = new Map(), COLD_RETRY = 2000;
+    // how far the server has got with each pass it is still working out ("12 OF 36 FRAMES", from its 503)
+    const preparing = new Map();
     const passCold = k => performance.now() - (coldAt.get(passOf(k)) ?? -1e9) < COLD_RETRY;
     // a mosaic movie (the switch's Mosaic movie, or Auto on a pass the server calls one): /frames/movie?mode=rolling,
     // which never empties when the camera starts its raster again (Settings > Movie > Mosaic movies keep)
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
     // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
-    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}`;
+    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -2764,7 +2782,7 @@ function targetLabel(k) {
         const patience = () => { if (over) return; if (L.next) { ctl.abort(); done(); } else setTimeout(patience, 1000); };
         setTimeout(patience, 8000);
       }
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}`, { signal: ctl.signal }).then(async r => {
+      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz) : ""}`, { signal: ctl.signal }).then(async r => {
         if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
@@ -2829,12 +2847,23 @@ function targetLabel(k) {
       fetch(w.key).then(r => JSON.parse(r.headers.get("X-Composite") || "null"), () => null).then(rep => {
         if (!rep || shown !== w) return;
         const n = rep.aligned.filter(a => a === "not aligned" || a === "failed").length, stacked = rep.stacked.reduce((a, b) => a + b, 0) - rep.stacked.length;
+        const left = (rep.dropped || []).length, kept = rep.stacked.length;
         const notes = [rep.calibrated ? "calibrated" : "not calibrated (each frame stretched on its own)",
           stacked ? `${stacked} repeat exposure${stacked > 1 ? "s" : ""} stacked` : "",
           rep.aligned.length && rep.aligned.every(a => a === "off") ? "not aligned (turned off)" :
-          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn grey from one filter" : ""}` : rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
-          rep.filled === false ? "lost lines not filled" : ""].filter(Boolean);
+          n ? `${n} channel${n > 1 ? "s" : ""} could not be aligned${rep.grey ? ", drawn gray from one filter" : ""}` :
+          rep.grey === "moved" ? "a body moved between the filters, drawn gray from one filter" :
+          rep.aligned.some(a => a.startsWith("centroid")) ? "aligned by centroid" : "aligned",
+          rep.filled === false ? "lost lines not filled" : "",
+          left ? `${left} filter${left > 1 ? "s" : ""} left out (could not be calibrated)${kept === 1 ? ", drawn gray from one filter" : ""}` : ""].filter(Boolean);
         made.set(w.set, notes.join(", "));
+        // a set drawn gray is not a color picture: the window says so rather than its set's kind (True color, ...);
+        // nor is a set left with one filter when the others could not be calibrated (color_image.load_aligned's dropped:
+        // 8LSB frames, Io 2001-01-01 ISS_C23IO_IOECLPSD), and a three-filter set left with two is a two-filter picture
+        const tag = rep.grey ? `BLACK AND WHITE · ${rep.grey === "moved" ? "BODY MOVED BETWEEN FILTERS" : "FILTERS COULD NOT BE ALIGNED"}` :
+          left && kept === 1 ? "BLACK AND WHITE · FILTERS COULD NOT BE CALIBRATED" :
+          left && kept === 2 && catalog.sets[w.set].use.length > 2 ? "TWO-FILTER COLOR · A FILTER COULD NOT BE CALIBRATED" : "";
+        if (tag && shownKey === w.key) card.querySelector(".kindtag").textContent = tag;
         if (catalog.setOf[lastK] === w.set) field("colour").textContent = field("colour").title = colourText(catalog.sets[w.set], w.set);
       });
     }
@@ -3603,7 +3632,7 @@ function targetLabel(k) {
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.colorSmooth", "movies.colorSmoothStrength", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "cameras.hdr", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.colorSmooth", "movies.colorSmoothStrength", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a pass's table for stabilizing on this computer arrived (steady-local.html): its frames are asked for again
   window.addEventListener("cassini-steady-local", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 

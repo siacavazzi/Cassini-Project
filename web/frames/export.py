@@ -66,7 +66,7 @@ import studio_look  # noqa: E402
 import colour_smooth  # noqa: E402
 
 # bumped whenever the way films are made changes, so older ones are not served again
-VERSION = "export-v56"   # v56: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost) reaches exported pictures; v55: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge) reaches exported pictures; v54: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks) reaches exported pictures; v53: #271 (movie stabilization held on the pass's target by SPICE) reaches exported pictures; v52: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset) reaches exported pictures; v51: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels) reaches exported pictures; v50: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength) reaches exported pictures; v49: #294 (grey single-filter colour sets) reaches exported pictures; v48: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes) reaches exported pictures; v47: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels) reaches exported pictures; v46: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py) reaches exported pictures; v45: the Day the Earth Smiled mosaic (#267) reaches exported pictures; v44: centred movies drawn as big as what the frames show (#269) reaches exported pictures; v43: the last picture holds the film's own step, no 1.5 s pause at the end, and Boomerang (boom=1); v42: movies use complete colour sets (#266) reaches exported pictures; v41: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251) reaches exported pictures; v40: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held) reaches exported pictures; v39: the classic look's black sky (a classic color set's sky off its body's disk, neutral near black) reaches exported pictures; v38: neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248) reaches exported pictures; v37: even brightness across a pass and dim tiles decided by each pointing's first tile (#253) reaches exported pictures; v36: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254) reaches exported pictures; v35: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236) reach exported pictures; v34: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242) reach exported pictures; v33: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237) reach exported pictures; v32: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232) reach exported pictures; v31: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230) reach exported pictures; v30: the batch-4 fixes reach exported pictures (thin ringlets kept, gentler heavily compressed frames, Titan wind stares in color, movie long exposures held); v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
+VERSION = "export-v69"   # v69: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks) reaches exported pictures; v68: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile) reaches exported pictures; v67: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione) reaches exported pictures; v66: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body) reaches exported pictures; v65: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies) reaches exported pictures; v64: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself) reaches exported pictures; v63: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI) reaches exported pictures; v62: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan) reaches exported pictures; v61: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body) reaches exported pictures; v60: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray) reaches exported pictures; v59: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets) reaches exported pictures; v58: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray) reaches exported pictures; v57: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo) reaches exported pictures; v56: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost) reaches exported pictures; v55: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge) reaches exported pictures; v54: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks) reaches exported pictures; v53: #271 (movie stabilization held on the pass's target by SPICE) reaches exported pictures; v52: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset) reaches exported pictures; v51: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels) reaches exported pictures; v50: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength) reaches exported pictures; v49: #294 (grey single-filter colour sets) reaches exported pictures; v48: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes) reaches exported pictures; v47: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels) reaches exported pictures; v46: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py) reaches exported pictures; v45: the Day the Earth Smiled mosaic (#267) reaches exported pictures; v44: centred movies drawn as big as what the frames show (#269) reaches exported pictures; v43: the last picture holds the film's own step, no 1.5 s pause at the end, and Boomerang (boom=1); v42: movies use complete colour sets (#266) reaches exported pictures; v41: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251) reaches exported pictures; v40: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held) reaches exported pictures; v39: the classic look's black sky (a classic color set's sky off its body's disk, neutral near black) reaches exported pictures; v38: neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248) reaches exported pictures; v37: even brightness across a pass and dim tiles decided by each pointing's first tile (#253) reaches exported pictures; v36: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254) reaches exported pictures; v35: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236) reach exported pictures; v34: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242) reach exported pictures; v33: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237) reach exported pictures; v32: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232) reach exported pictures; v31: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230) reach exported pictures; v30: the batch-4 fixes reach exported pictures (thin ringlets kept, gentler heavily compressed frames, Titan wind stares in color, movie long exposures held); v29: Mosaics Off (mos=off), every frame of a mosaic on its own; v28: Complete color pictures only (a color set once, at its last channel) and one color mix a camera and target through the film (movie audit); v27: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies, line holes, pass kinds) reach exported pictures; v26: the small artifact, edge registration and two-filter color fixes (groups I, H2, F) reach exported pictures; v25: the restart's calibration and tone fixes (groups G, C) reach exported pictures; v24: Whole mosaics keep a mosaic movie's whole laps only, its drifting tiles one copy each (obs_mosaic.slots); v23: a mosaic pass is its mosaic at every frame, and stays a mosaic (or mosaic movie) in Full color only; v22: the flat fielded, dark subtracted, hot pixel repaired pictures; v21: Auto center centres the pictures shown on their own too, as the windows do
 FPS = 30                     # frames a second in the file
 HOLD_MIN, HOLD_MAX = 1 / FPS, 0.5
 TYPICAL = 1 / 8              # adaptive: how long the stretch's median gap lasts on screen
@@ -110,7 +110,7 @@ LEVEL_EV = 2.0
 EVEN_MOST = 30               # pictures: the most Even out smooths over
 LEVELS_SIDE = 160            # px: the pictures' brightness is measured on them this big (as movie mode's, obs_mosaic)
 LEVELS_LIT = 0.04            # of the brightest: the pixels a brightness is measured on (the body, not the sky's noise)
-LEVELS_VERSION = "levels-v20"   # v20: measured on the pictures of #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); v19: measured on the pictures of the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); v18: measured on the pictures of the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v17: measured on the pictures of #271 (movie stabilization held on the pass's target by SPICE); v16: measured on the pictures of #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); v15: measured on the pictures of #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); v14: measured on the pictures of #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); v13: measured on the pictures of #294 (grey single-filter colour sets); v12: measured on the pictures of #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); v11: measured on the pictures of the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v10: measured on the pictures of the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); v9: measured on the pictures of the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); v8: measured on the pictures of the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); v7: measured on the pictures of the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v6: measured on the pictures of the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v5: measured on the pictures of the batch-4 fixes; v4: measured on the pictures of the batch-3 fixes; v3: measured on the pictures of the small artifact and color fixes; v2: measured on the pictures of the restart's calibration and tone fixes
+LEVELS_VERSION = "levels-v33"   # v33: measured on the pictures of #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); v32: measured on the pictures of #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); v31: measured on the pictures of #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); v30: measured on the pictures of #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); v29: measured on the pictures of #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); v28: measured on the pictures of #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); v27: measured on the pictures of #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); v26: measured on the pictures of #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); v25: measured on the pictures of #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); v24: measured on the pictures of #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); v23: measured on the pictures of the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); v22: measured on the pictures of #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); v21: measured on the pictures of #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); v20: measured on the pictures of #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); v19: measured on the pictures of the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); v18: measured on the pictures of the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v17: measured on the pictures of #271 (movie stabilization held on the pass's target by SPICE); v16: measured on the pictures of #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); v15: measured on the pictures of #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); v14: measured on the pictures of #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); v13: measured on the pictures of #294 (grey single-filter colour sets); v12: measured on the pictures of #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); v11: measured on the pictures of the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v10: measured on the pictures of the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); v9: measured on the pictures of the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); v8: measured on the pictures of the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); v7: measured on the pictures of the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); v6: measured on the pictures of the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); v5: measured on the pictures of the batch-4 fixes; v4: measured on the pictures of the batch-3 fixes; v3: measured on the pictures of the small artifact and color fixes; v2: measured on the pictures of the restart's calibration and tone fixes
 # and its framing: a crop of every picture (or a start and an end crop the film glides between), and a nudge of a
 # single frame (parts of the picture)
 CROP_LEAST = 0.05            # of the picture: the smallest crop's side
@@ -247,7 +247,7 @@ def options(q):
     pictures = get("pictures", "movie") if get("pictures", "movie") in PICTURES else "movie"
     return {"off": off, "cut": {k: v for k, v in kept.items() if v}, "edit": studio_look.encode(look_edit),
             "levels": levels, "even": even, "fedit": fedit, "frame": {"crop": crop, "crop2": crop2, "nudge": nudge},
-            "pictures": pictures, "list": get("list", "0") == "1",
+            "pictures": pictures, "list": get("list", "0") == "1", "hdr": get("hdr", "0") == "1",
             "from": t0, "until": t1, "cams": cams, "fps": fps, "size": size,
             "sound": get("sound", "1") != "0", "caption": get("caption", "1") != "0", "boom": get("boom", "0") == "1",
             "look": look if look in calibration.LOOKS else calibration.LOOKS[0],
@@ -281,6 +281,8 @@ def job_id(opt):
         key["pictures"] = opt["pictures"]
     if opt.get("boom"):
         key["boom"] = True
+    if opt.get("hdr"):
+        key["hdr"] = True
     return hashlib.sha1(json.dumps([VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -776,6 +778,41 @@ def height(opt):
 
 # ---------- pictures ----------
 
+def _served_map():
+    """The HDR recovery map of the picture the maker just served (calibration.hdr_served), an L image, or None"""
+    picture, stops = calibration.hdr_served()
+    if not stops or not os.path.exists(stops):
+        return None
+    try:
+        return Image.open(stops).convert("L")
+    except Exception:
+        return None
+
+
+def hdr_map_like(stops, size, alpha=None):
+    """A recovery map (L image) at size, 0 stops where alpha (the picture's, at size) has nothing"""
+    m = stops.resize(size, Image.BILINEAR) if stops.size != size else stops
+    if alpha is not None:
+        zero = Image.new("L", size, calibration.HDR_ZERO)
+        zero.paste(m, mask=alpha.point(lambda v: 255 if v else 0))
+        m = zero
+    return m
+
+
+def framed_map(m, size, crop, nudge):
+    """framed for a picture's recovery map (L image at the picture's size): the same move and cut, 0 stops where the
+    picture has nothing"""
+    dx, dy = nudge
+    if not crop and not dx and not dy:
+        return m
+    x0, y0, x1, y1 = crop or (0, 0, 1, 1)
+    W, H = size
+    cw, ch = (x1 - x0) * W, (y1 - y0) * H
+    k = max(W, H) / max(cw, ch)
+    return m.transform((max(1, round(cw * k)), max(1, round(ch * k))), Image.AFFINE,
+                       (1 / k, 0, (x0 - dx) * W, 0, 1 / k, (y0 - dy) * H), Image.BILINEAR, fillcolor=calibration.HDR_ZERO)
+
+
 class Pictures:
     """How the film gets each picture: the frame server's own makers (so its cache is shared), or the pipeline
     called here. Each make(...) returns WebP or PNG bytes, or None when it has no such picture."""
@@ -872,11 +909,14 @@ class Pictures:
         other picture made at 1024 and enlarged."""
         for kind, arg in e["try"]:
             try:
+                calibration.hdr_note_served(None, None)
                 if (full or cap) and kind in NATIVE_KINDS:
                     made = self.native(kind, arg, size) if full else self.canvas(kind, arg, cap)
                     if made:
-                        return self._on_black(made[0] if full else Image.open(io.BytesIO(made[0])), size), made[1]
+                        return self._on_black(made[0] if full else Image.open(io.BytesIO(made[0])), size,
+                                              None if full else _served_map()), made[1]
                     continue
+                calibration.hdr_note_served(None, None)
                 made = self.make(kind, arg, min(size, max(SIZES)))
             except FileNotFoundError:
                 continue
@@ -885,17 +925,20 @@ class Pictures:
                 continue
             if not made or not made[0]:
                 continue
-            return self._on_black(Image.open(io.BytesIO(made[0])), size), made[1]
+            return self._on_black(Image.open(io.BytesIO(made[0])), size, _served_map()), made[1]
         return None, ""
 
-    def _on_black(self, im, size):
-        """im (any mode) size px on its longest side, as RGB over black (or the film's Background, bg)."""
+    def _on_black(self, im, size, stops=None):
+        """im (any mode) size px on its longest side, as RGB over black (or the film's Background, bg). stops: its HDR
+        recovery map (an L image), sized with it into the picture's info["hdr"] (an HDR film's)."""
         im = im.convert("RGBA")
         if max(im.size) != size:
             s = size / max(im.size)
             im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
         black = Image.new("RGB", im.size, background(self.movie))
         black.paste(im, mask=im.getchannel("A"))
+        if stops is not None:
+            black.info["hdr"] = hdr_map_like(stops, black.size, im.getchannel("A"))
         return black
 
 
@@ -935,10 +978,24 @@ class Film:
         self.font = _font(max(10, round(self.ch * 0.36))) if self.ch else None
         self.small = _font(max(9, round(self.ch * 0.3))) if self.ch else None
         self.captions = {c: "" for c in opt["cams"]}
-        self.proc = subprocess.Popen(
-            [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{self.w}x{self.h}",
-             "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-             "-movflags", "+faststart", path], stdin=subprocess.PIPE)
+        # an HDR film (hdr=1): HEVC Main10, PQ, Rec.2020 (HDR10), from each picture and its recovery map
+        # (hdr_still.pq_rgb: the HDR stills' curve); the caption stays at SDR white
+        self.hdr = bool(opt.get("hdr"))
+        self.stops = Image.new("L", (self.w, self.h), calibration.HDR_ZERO) if self.hdr else None
+        self.frame = None
+        if self.hdr:
+            import hdr_still
+            self.proc = subprocess.Popen(
+                [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb48le", "-s", f"{self.w}x{self.h}",
+                 "-r", str(FPS), "-i", "-", "-vf", "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le",
+                 "-c:v", "libx265", "-preset", "fast", "-crf", "18", "-x265-params", hdr_still.x265_params(),
+                 "-tag:v", "hvc1", *hdr_still.HDR_TAGS, "-movflags", "+faststart", path],
+                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        else:
+            self.proc = subprocess.Popen(
+                [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{self.w}x{self.h}",
+                 "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+                 "-movflags", "+faststart", path], stdin=subprocess.PIPE)
 
     def put(self, e, im, what):
         """Picture im of entry e goes up in its camera's pane (which keeps it until the next)."""
@@ -947,6 +1004,14 @@ class Film:
         if im is not None:
             pane.paste(im, ((self.size - im.width) // 2, (self.size - im.height) // 2))
         self.canvas.paste(pane, (x0, 0))
+        if self.hdr:
+            stops = Image.new("L", (self.size, self.size), calibration.HDR_ZERO)
+            m = im.info.get("hdr") if im is not None else None
+            if m is not None:
+                stops.paste(m if m.size == im.size else m.resize(im.size, Image.BILINEAR),
+                            ((self.size - im.width) // 2, (self.size - im.height) // 2))
+            self.stops.paste(stops, (x0, 0))
+            self.frame = None
         self.captions[e["cam"]] = label(e, what)
         if self.ch:
             d = ImageDraw.Draw(self.canvas)
@@ -958,7 +1023,14 @@ class Film:
                        font=self.small, fill=(138, 182, 255), anchor="rm")
 
     def hold(self, frames):
-        data = self.canvas.tobytes()
+        if self.hdr:
+            if self.frame is None:
+                import hdr_still
+                linear = calibration.recover(np.asarray(self.canvas), np.asarray(self.stops))
+                self.frame = (np.clip(hdr_still.pq_rgb(linear), 0, 1) * 65535 + 0.5).astype("<u2").tobytes()
+            data = self.frame
+        else:
+            data = self.canvas.tobytes()
         for _ in range(frames):
             self.proc.stdin.write(data)
 
@@ -1015,6 +1087,7 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                                             opt["size"] if big(opt) and not full else None))
                     nxt += 1
                 im, what = todo.popleft().result()
+                stops = im.info.get("hdr") if im is not None and opt.get("hdr") else None
                 if cs and im is not None:
                     group, st = palette_of(n, (im, what))
                     later = [palette_of(n + 1 + q, todo[q].result()) for q in range(min(span, len(todo)))]
@@ -1030,12 +1103,17 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     measured.pop(n, None)
                 kinds[what or "none"] += 1
                 if im is not None:
-                    im = framed(im, crop_at(fr, mirror(n, fwd), fwd or len(pics)), fr["nudge"].get(e["id"], (0, 0)))
+                    at = crop_at(fr, mirror(n, fwd), fwd or len(pics)), fr["nudge"].get(e["id"], (0, 0))
+                    if stops is not None:
+                        stops = framed_map(stops, im.size, *at)
+                    im = framed(im, *at)
                 its = own[e["id"]] if e["id"] in own else look
                 if im is not None and (its or evs[n]):
                     # the movie editor's look (or the frame's own), as Cassini Studio draws it, at this picture's
                     # exposure level
                     im = studio_look.apply(im, its, evs[n])
+                if im is not None and stops is not None:
+                    im.info["hdr"] = stops
                 # a mosaic stays up while its observation goes on: the pass's other frames (another filter, a frame
                 # that is not a tile) would otherwise flash in and out between its tiles
                 if what in ("mosaic", "mosaic movie"):
@@ -1055,9 +1133,19 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
     return dict(kinds)
 
 
+def _hevc(video):
+    """Whether a film's video is HEVC (an HDR film's)"""
+    try:
+        got = subprocess.run([FFMPEG.replace("ffmpeg", "ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=codec_name", "-of", "csv=p=0", video], capture_output=True, text=True, timeout=30)
+        return got.stdout.strip() == "hevc"
+    except Exception:
+        return False
+
+
 def mux(video, wav, out):
     """The film with the soundtrack added as AAC (cut to the film's length)."""
-    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", video, "-i", wav, "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", video, "-i", wav, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-tag:v", "hvc1" if _hevc(video) else "avc1",
                     "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out], check=True)
 
 
@@ -1261,9 +1349,10 @@ def main():
     ap.add_argument("--cache", default=os.path.join(os.getcwd(), "frame_cache"))
     ap.add_argument("--plan", action="store_true", help="only print the plan")
     ap.add_argument("--out", default="export.mp4")
+    ap.add_argument("--hdr", action="store_true", help="an HDR film (HDR10), the pictures made by the frame server's makers")
     a = ap.parse_args()
     opt = options({"from": [a.start], "until": [a.end], "cams": [a.cams], "fps": [a.fps], "size": [str(a.size)],
-                   "caption": ["0" if a.no_caption else "1"], "sound": ["0"]})
+                   "caption": ["0" if a.no_caption else "1"], "sound": ["0"], "hdr": ["1" if a.hdr else "0"]})
     p = plan(opt)
     print(f"{p['count']} pictures, {p['seconds']} s of film, {p['width']}x{p['height']}", flush=True)
     if a.plan:
@@ -1272,7 +1361,14 @@ def main():
         return
     reel.data_source.KEEP_SPICE_CACHE = True
     started = time.time()
-    made = render(opt, p, Pictures(a.cache), a.out,
+    if a.hdr:
+        # the frame server's makers keep each picture's recovery map (as the server's own films are made)
+        import frame_server
+        pictures = Pictures(a.cache, color=frame_server.color_webp, processed=frame_server.processed_webp,
+                            frame=frame_server.webp, slots=frame_server._color_slots)
+    else:
+        pictures = Pictures(a.cache)
+    made = render(opt, p, pictures, a.out,
                   lambda d, t: print(f"{d}/{t} pictures, {time.time() - started:.0f} s", flush=True) if d % 50 == 0 or d == t else None)
     print(f"{a.out}: {made}, {time.time() - started:.0f} s", flush=True)
 

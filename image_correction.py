@@ -377,6 +377,9 @@ def _match(im1, im2, g, mask1, mask2, within=None):
     if shift is None:
         # a weak peak (under find_shift's bar) believed where it lines the edges up clearly better (checked_shift)
         shift, how = checked_shift(im1, im2, mask1, mask2, g)
+    if shift is None:
+        # a limb or terminator through filters that look nothing alike inside it: matched on the lit area's outline
+        shift, how = limb_shift(im1, im2, mask1, mask2)
     if shift is None and g is not None:
         # nothing matched anywhere (or only wild fits): SPICE's offset, where it lines the frames up better than none
         shift, how = spice_shift(im1, im2, mask1, mask2, g)
@@ -385,6 +388,15 @@ def _match(im1, im2, g, mask1, mask2, within=None):
         here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
         if here >= AS_TAKEN_SURE:
             shift, how = (0.0, 0.0), f"as taken (edges agree {here:.2f})"
+    if shift is None and _flat(im1, im2, mask1, mask2):
+        # nothing to match, and nothing a few pixels' error would show as a fringe: SPICE's place (or as taken)
+        # rather than a gray picture
+        # (SPICE's offset only within FIT_REACH: a larger move only cuts the picture down to where the channels
+        # overlap, colored strips along its edges, N1787002873_1 at 117 px, where it can show no better colour)
+        if g is not None and np.hypot(g[0], g[1]) <= FIT_REACH:
+            shift, how = (float(g[0]), float(g[1])), "SPICE (nothing to fringe)"
+        else:
+            shift, how = (0.0, 0.0), "as taken (nothing to fringe)"
     if rejected:
         how = f"{how} ({', '.join(rejected)} rejected)"
     return shift, how
@@ -431,6 +443,104 @@ def checked_shift(im1, im2, mask1, mask2, g=None):
     if best is None:
         return None, "not aligned"
     return (best[0], best[1]), f"{best[3]} checked on edges (peak {best[4]:.2f}, edges agree {max(base):.2f} to {best[2]:.2f})"
+
+
+"""
+A body's limb matched on its outline alone: the lit area of each frame (above its own Otsu threshold, 2 px blurred)
+correlated as a shape, so the filters' brightness inside it, which phase correlation and the edges trip on, plays no
+part. Titan through CB3 and MT1, or Saturn's limb through BL1 and MT2, look nothing alike inside the disk, but the
+disk's outline is the same curve (N1872922446_1: phase and edges found nothing; the outlines line up to 0.4 % of the
+frame differing, from 3.7 % as taken, 20 px off). A straight edge (a ring's, a frame-filling terminator) says only how
+far across it the frame moved, and correlates as a ridge with a low peak: only a peak of LIMB_RESPONSE is believed, a
+move within CHECK_REACH that leaves at most LIMB_DIFF of the frame differing and halves what differed as taken, and
+that the edges agree with (_agreement no worse than as taken). Each frame must have a clear lit and dark part
+(LIMB_CONTRAST between its 5th and 95th percentiles, lit over LIMB_SHARE of it to 1 - LIMB_SHARE). SPICE's offset is
+not asked: between a set's filters it is often the one off (N1496643022_1: SPICE -18,-7, the outline +17,+9).
+((dx, dy), how) or (None, "not aligned")
+"""
+LIMB_RESPONSE = 0.2   # the least peak of the outlines' correlation
+LIMB_DIFF = 0.01      # the most of the frame (inside both) whose lit and dark may differ after the move ...
+LIMB_GAIN = 0.6       # ... and at most this share of what differed as taken
+LIMB_CONTRAST = 30.0  # of 255: the least spread between a frame's 5th and 95th percentiles
+LIMB_SHARE = 0.05     # the least share of the frame lit, and of it dark
+LIMB_VALID = 0.9      # the least share of each frame that is picture (its mask): a frame with many lost lines, filled
+                      # across, has rows of fill whose outline the correlation matched 34 and 74 px off (153DI
+                      # N1694953782_3: 70 % of the frame left, drawn with a colored rim round Titan; matches it got
+                      # right had 97 % or more)
+
+
+def _lit(im, mask):
+    gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+    blurred = cv2.GaussianBlur(gray, (0, 0), 2)
+    v = blurred[mask]
+    if v.size < 1000:
+        return None
+    lo, hi = np.percentile(v, (5, 95))
+    if hi - lo < LIMB_CONTRAST:
+        return None
+    t, _ = cv2.threshold(np.clip(v, 0, 255).astype(np.uint8).reshape(-1, 1), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    lit = (blurred > t) & mask
+    return lit if LIMB_SHARE <= lit[mask].mean() <= 1 - LIMB_SHARE else None
+
+
+def limb_shift(im1, im2, mask1, mask2):
+    if min(float(np.mean(mask1)), float(np.mean(mask2))) < LIMB_VALID:
+        return None, "not aligned"
+    l1, l2 = _lit(im1, mask1), _lit(im2, mask2)
+    if l1 is None or l2 is None:
+        return None, "not aligned"
+    f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
+    (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
+    if response < LIMB_RESPONSE or np.hypot(dx, dy) > CHECK_REACH:
+        return None, "not aligned"
+
+    def differ(shift):
+        moved = shift_image(l2.astype(np.float32), *shift) > 0.5
+        both = mask1 & (shift_image(mask2.astype(np.float32), *shift) > 0.99)
+        both = cv2.erode(both.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
+        return float((l1[both] != moved[both]).mean()) if both.sum() >= 1000 else 1.0
+    before, after = differ((0.0, 0.0)), differ((dx, dy))
+    if after > LIMB_DIFF or after > LIMB_GAIN * before:
+        return None, "not aligned"
+    if _agreement(im1, im2, mask1, mask2, (dx, dy)) < _agreement(im1, im2, mask1, mask2, (0.0, 0.0)):
+        return None, "not aligned"
+    return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
+
+
+"""
+Whether two frames that matched nothing show nothing a misplacement would fringe: frame-filling cloud tops of Saturn
+or Titan, a black sky. Each frame, blurred as edges() sees it, is compared with itself moved FLAT_PROBE px on both
+axes (past the 3 to 30 px SPICE's offset between a set's filters is seen off) over the pixels valid in both; where
+the brightness changes by at most FLAT_DN at the 99th percentile and FLAT_PEAK_DN at the 99.9th (of 255), a channel
+placed that far off would change the color by no more than that, which does not show. Of 73 sets drawn gray in a
+400-set sample (main 11d0bca), 41 were such frames (Saturn's clouds N1548760421_1, N1787002873_1; Titan's haze
+N1504740260_1); the rest show a limb, a ring edge or a moon, which still need a match (FLAT_DN in the 8-bit display
+the channels are matched on).
+"""
+FLAT_PROBE = 12.0    # px
+FLAT_DN = 8.0        # of 255, at the 99th percentile
+FLAT_PEAK_DN = 16.0  # of 255, at the 99.9th percentile
+FLAT_LEAST_DN = 6.0  # of 255: a frame spanning less than this (1st to 99th percentile) is blank, not flat
+
+
+def _flat(im1, im2, mask1, mask2):
+    both = mask1 & mask2
+    k = 2 * int(FLAT_PROBE) + 9
+    both = cv2.erode(both.astype(np.uint8), np.ones((k, k), np.uint8), borderValue=0) > 0
+    if both.sum() < 1000:
+        return False
+    for im in (im1, im2):
+        gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+        lo, hi = np.percentile(gray[both], (1, 99))
+        if hi - lo < FLAT_LEAST_DN:
+            return False   # a blank frame (a black sky stretched to gray): its color says nothing (W1448930891_1 white)
+        blurred = cv2.GaussianBlur(gray, (0, 0), 1.5)
+        moved = cv2.warpAffine(blurred, np.float32([[1, 0, FLAT_PROBE], [0, 1, FLAT_PROBE]]), blurred.shape[::-1],
+                               borderMode=cv2.BORDER_REFLECT)
+        d = np.abs(blurred - moved)[both]
+        if np.percentile(d, 99) > FLAT_DN or np.percentile(d, 99.9) > FLAT_PEAK_DN:
+            return False
+    return True
 
 
 def _worse(im1, im2, mask1, mask2, shift):
