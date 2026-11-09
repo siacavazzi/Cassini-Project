@@ -145,12 +145,15 @@ def wavelength(camera, filters):
     """Effective wavelength (nm) of a filter pair ("ISSNA", "CL1RED"), from filter_calibration.csv."""
     global _nm
     if _nm is None:
-        _nm = {}
+        # filled in its own dict and only then published, as calibration.filter_table (#388): request threads and
+        # load_index's filter sets reading it at once found a half-filled table and got 0 nm for a filter
+        table = {}
         with open(os.path.join(REPO, "filter_calibration.csv")) as fh:
             next(fh)
             for line in fh:
                 cam, fs, w = line.strip().split(",")[:3]
-                _nm[(cam, fs)] = float(w)
+                table[(cam, fs)] = float(w)
+        _nm = table
     return _nm.get((camera, filters), 0)
 
 
