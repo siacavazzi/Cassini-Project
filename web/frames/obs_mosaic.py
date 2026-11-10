@@ -3224,9 +3224,9 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 # a limb sits higher or lower with the filter (Saturn's haze in UV3 stands ~8 px over its MT3 limb, Titan's in RED over
 # CB3, probe 10-29): edges are measured between tiles of one filter only
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
-EDGE_TAG = "-pe4"
+EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose tiles ring registration moved (ring_places)
-RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)
 
 # Global panel registration (on unless CASSINI_GLOBAL_PANELS=0): every pair of overlapping pointings is measured once
 # (panel_shift / edge_shift at SPICE's places, as panel_places measures them), and all pointings' moves are solved
@@ -3240,8 +3240,13 @@ GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), befo
 GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
 GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
 if GLOBAL_PANELS:
-    PANEL_FILE = "global2-" + PANEL_FILE   # (2: ring pairs and anchors, limb anchors)
-    PANEL_TAG, EDGE_TAG = "-g2", "-ge2"
+    # (2: ring pairs and anchors, limb anchors; the switches that change the solve in the name, so a solve kept with one
+    # setting is never served for another: t turns, nl no limb anchors, nf no ring filters)
+    _switches = ("t" if os.environ.get("CASSINI_GLOBAL_TURNS", "0") == "1" else "") + \
+        ("nl" if os.environ.get("CASSINI_GLOBAL_LIMBS", "1") == "0" else "") + \
+        ("nf" if os.environ.get("CASSINI_RING_FILTERS", "1") == "0" else "")
+    PANEL_FILE = "global2" + _switches + "-" + PANEL_FILE
+    PANEL_TAG, EDGE_TAG = "-g2" + _switches, "-ge2" + _switches
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -3674,7 +3679,10 @@ def ring_moves(u, cache, p, tiles):
                 for n, v in kept.items():
                     if len(v) > 3 and v[3]:
                         by.setdefault(roots.get(n, n), []).append(v[:2])
+                rings = _ring_geometry(u)
                 for t in todo:
+                    if t["n"] not in kept and rings is not None and not rings.knows(t["id"]):
+                        continue   # (no time for its frame in the geometry cache yet: asked again next time, not kept)
                     if t["n"] not in kept:
                         ms = by.get(roots.get(t["n"], t["n"]))
                         mid = [round(float(np.median([m[0] for m in ms])), 2), round(float(np.median([m[1] for m in ms])), 2)] \
@@ -3690,7 +3698,9 @@ def ring_moves(u, cache, p, tiles):
                     os.replace(part, path)
                 except OSError as e:
                     print(f"cannot keep {path} in the cache ({e})", flush=True)
-    return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
+    # (a tile fitted where it already was, a move of [0, 0], is kept too: the global solve takes it as an anchor holding
+    # its pointing there, where left out it took it as not fitted and let pair matches drag it)
+    return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0] or (len(v) > 3 and v[3])}
 
 
 _ring_geometries = {}   # pass key -> _ring_geometry's answer
@@ -3801,28 +3811,21 @@ def _ring_geometry(u):
         if key in _ring_geometries:
             return _ring_geometries[key]
     got = None
-    try:
-        import reproject as rp
-        placed = [fr for fr in u["frames"] if fr[7]]
-        ets = _ets([fr[1] for fr in placed])
-        if placed and ets and _with_kernels(placed[len(placed) // 2][3]):
-            km_px = IFOV[u["key"][2]] * u["z"]
-            a = math.radians(view_turn(u))
-            c, sn = math.cos(a), math.sin(a)
-            views = {}
+    import reproject as rp
+    view = _sky_views(u)
+    if view is not None:
+        km_px = IFOV[u["key"][2]] * u["z"]
+        a = math.radians(view_turn(u))
+        c, sn = math.cos(a), math.sin(a)
 
-            def got(x, y, fid):
-                if fid not in views:
-                    views[fid] = rp.sky_view(u["key"][0], ets[fid]) if fid in ets else None
-                v = views[fid]
-                if v is None:
-                    return np.zeros(np.shape(x)), np.zeros(np.shape(x), bool)
-                return rp.ring_plane(v, c * x + sn * y, c * y - sn * x, km_px)
-    except Exception as e:   # noqa: BLE001  (no kernels, no geometry: matched as before)
-        print(f"no ring geometry for {key}: {e}", flush=True)
-        got = None
-    with _lock:
-        _ring_geometries[key] = got
+        def got(x, y, fid):
+            v = view(fid)
+            if v is None:
+                return np.zeros(np.shape(x)), np.zeros(np.shape(x), bool)
+            return rp.ring_plane(v, c * x + sn * y, c * y - sn * x, km_px)
+        got.knows = view.knows
+        with _lock:
+            _ring_geometries[key] = got
     return got
 
 
@@ -3897,6 +3900,50 @@ def pair_turn_once(s, ref, t, mine, most=None):
     return round(theta, 4), len(pts)
 
 
+_sky_view_cache = {}   # (pass key, frame id) -> reproject.sky_view, worked out once (_sky_views)
+
+
+def _sky_views(u):
+    """For pass u: view(fid) -> reproject.sky_view of its target at that frame's time, or None when SPICE cannot say
+    (yet), and view.knows(fid): whether the geometry cache has the frame's time. Each view is worked out under
+    _spice_lock with the kernels of the frame's own year loaded (_with_kernels, as surface_pictures loads them), since
+    the frame server answers requests side by side and another may load another year's kernels between two calls; a
+    pass across New Year loads each year for its own frames. A frame the geometry cache has no time for yet is looked
+    up again next time it is asked for (a cold pass), and a frame whose view failed is not kept, so a kernel failure
+    passes with the request that met it. None for a pass without a distance."""
+    if not u.get("z"):
+        return None
+    import reproject as rp
+    key = tuple(u["key"])
+    t_of = {fr[1]: fr[3] for fr in u["frames"] if fr[7]}
+    ets = _ets(list(t_of))
+
+    def view(fid):
+        with _lock:
+            got = _sky_view_cache.get((key, fid))
+        if got is not None:
+            return got
+        if fid not in ets:
+            ets.update(_ets([fid]))
+            if fid not in ets:
+                return None
+        with _spice_lock:
+            if not _with_kernels(t_of[fid]):
+                return None
+            try:
+                got = rp.sky_view(u["key"][0], ets[fid])
+            except Exception as e:   # noqa: BLE001  (no geometry for this frame: matched as without it)
+                print(f"no sky view for {key} {fid}: {type(e).__name__}: {e}"[:200], flush=True)
+                return None
+        with _lock:
+            if len(_sky_view_cache) > 20000:
+                _sky_view_cache.clear()
+            _sky_view_cache[(key, fid)] = got
+        return got
+    view.knows = lambda fid: fid in ets or bool(ets.update(_ets([fid]))) or fid in ets
+    return view
+
+
 _disk_geometries = {}   # pass key -> _disk_geometry's answer
 
 
@@ -3911,31 +3958,24 @@ def _disk_geometry(u):
         if key in _disk_geometries:
             return _disk_geometries[key]
     got = None
-    try:
-        import reproject as rp
-        placed = [fr for fr in u["frames"] if fr[7]]
-        ets = _ets([fr[1] for fr in placed])
-        if placed and ets and _with_kernels(placed[len(placed) // 2][3]):
-            km_px = IFOV[u["key"][2]] * u["z"]
-            a = math.radians(view_turn(u))
-            c, sn = math.cos(a), math.sin(a)
-            views = {}
+    import reproject as rp
+    view = _sky_views(u)
+    if view is not None:
+        km_px = IFOV[u["key"][2]] * u["z"]
+        a = math.radians(view_turn(u))
+        c, sn = math.cos(a), math.sin(a)
 
-            def got(x, y, fid):
-                if fid not in views:
-                    views[fid] = rp.sky_view(u["key"][0], ets[fid]) if fid in ets else None
-                v = views[fid]
-                if v is None:
-                    return np.zeros(np.shape(x), bool), np.zeros(np.shape(x))
-                points, hit = rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)
-                normal = points / v["radii"] ** 2
-                normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
-                return hit, np.where(hit, normal @ v["sun"], 0.0)
-    except Exception as e:   # noqa: BLE001
-        print(f"no disk geometry for {key}: {e}", flush=True)
-        got = None
-    with _lock:
-        _disk_geometries[key] = got
+        def got(x, y, fid):
+            v = view(fid)
+            if v is None:
+                return np.zeros(np.shape(x), bool), np.zeros(np.shape(x))
+            points, hit = rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)
+            normal = points / v["radii"] ** 2
+            normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
+            return hit, np.where(hit, normal @ v["sun"], 0.0)
+        got.knows = view.knows
+        with _lock:
+            _disk_geometries[key] = got
     return got
 
 
