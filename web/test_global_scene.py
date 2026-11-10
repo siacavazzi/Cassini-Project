@@ -47,6 +47,19 @@ kept = json.load(open(os.path.join(om.folder(u, cache2), path[0])))
 assert kept["tiles"] == [0, 1, 2, 3, 4]
 print("global: the larger solve is kept")
 
+# a server that solved fewer tiles (kept in its memory) never writes over a larger solve another process (the
+# pre-build) kept on disk meanwhile: it reads that one and draws from it
+cache3 = tempfile.mkdtemp()
+tiles_in(cache3)
+small = om.panel_places(u, cache3, p, reports[:3])
+full = json.load(open(os.path.join(om.folder(u, cache2), path[0])))
+json.dump(full, open(os.path.join(om.folder(u, cache3), path[0]), "w"))
+four = om.panel_places(u, cache3, p, reports[:4])
+assert json.load(open(os.path.join(om.folder(u, cache3), path[0])))["tiles"] == [0, 1, 2, 3, 4]
+assert four == {n: v for n, v in full["moves"].items() if int(n) < 4 and v != [0, 0]} or \
+    four == {int(n): v for n, v in full["moves"].items() if int(n) < 4 and v != [0, 0]}, (four, full["moves"])
+print("global: a larger solve on disk wins over a smaller one in memory")
+
 with cal.stepping("panels"):
     assert om.panel_places(u, tempfile.mkdtemp(), p, reports) == {}
 print("global: panels step off gives SPICE's places")
