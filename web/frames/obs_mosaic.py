@@ -4393,6 +4393,11 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             picture(n)
 
         rings = _ring_geometry(u) if anchors is not None else None
+        if rings is not None:
+            # (SPICE's view at each tile's time worked out here, one at a time: SPICE is not safe to call from several
+            # threads, and the matches below run side by side; once worked out, a ring plane is plain arithmetic)
+            for t in by_n.values():
+                rings(np.zeros(1), np.zeros(1), t["id"])
 
         def measure(pr):
             j, n = pr
