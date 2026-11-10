@@ -1,0 +1,286 @@
+<!-- What Cassini is doing, for Cassini OS: worked out from where the spacecraft points, for the hours (most of them)
+     when the cameras take nothing. build.py splices the style into the head and the script after the viewer's.
+
+     Nothing new is loaded. The pointing files the page already has (data/attitude, every picture's pointing plus the
+     spacecraft's attitude every ten minutes or closer) and the tracks say where the high-gain dish (body -Z) and the
+     optical instruments (body -Y: both cameras and the spectrometers beside them) point at any moment:
+
+       dish on Earth                 sending data home; the status line says how long the signal takes
+       dish on Earth, Earth behind   the radio signal crossing the rings, or blocked by Saturn or Titan: a radio
+       the rings, Saturn or Titan    occultation (2005's eight ring occultations, 3 May to 5 Sep, come out to the hour)
+       dish on a body                radar or radio science (Titan's radar passes; 14 Jan 2005: receiving Huygens)
+       a long roll, no pictures      the fields-and-particles instruments sweeping the sky (the viewer's own spins)
+       instruments on a body         pointed at it, whether or not the cameras take a picture
+
+     It shows as a thin strip along the top edge of the timeline (the months whose pointing is loaded), as a line in
+     the menu bar, and as a faint beam from the dish while it is on Earth or on a body. Settings > View: "What Cassini
+     is doing" and "Radio beam". window.cassiniActivity (now(), at(et), spans(), KINDS) is the way in for other parts
+     of the page and for bench/activity.cjs, which checks it against the dates above. -->
+<style>
+#mact { font-size: 12px; color: var(--q-dim, #555); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+#mact i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+#mact b { font-weight: 400; color: var(--q-text, #111); }
+#mact:empty { display: none; }
+@media (max-width: 1180px) { #mact { display: none; } }
+body.cutscene #mact, body.ambient #mact { display: none; }
+</style>
+
+<script>
+// ---------- what Cassini is doing: read from where its dish and its instruments point ----------
+(function () {
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  let on = S.define({ key: "view.activity", section: "View", label: "What Cassini is doing", type: "toggle", value: true,
+    hint: "A thin strip along the top of the timeline and a line in the menu bar: sending data to Earth, radio signal through the rings, radar, rolling, or pointed at a body. Worked out from the recorded pointing." });
+  let beamOn = S.define({ key: "view.radioBeam", section: "View", label: "Radio beam", type: "toggle", value: true,
+    hint: "A faint beam from Cassini's dish while it points at Earth or at a body." });
+  const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
+  S.on("view.activity", v => { on = v; if (!v) status(null); redraw(); });
+  S.on("view.radioBeam", v => { beamOn = v; redraw(); });
+
+  const KINDS = { NONE: 0, DOWN: 1, OCC: 2, DISH: 3, ROLL: 4, LOOK: 5 };
+  //             strip and dot colors, and the legend's names
+  const LOOKS = [null, ["#49b3a6", "Dish on Earth"], ["#efe6c4", "Radio through rings or behind a body"], ["#e0994a", "Dish on a body"],
+                 ["#8f76d6", "Rolling"], ["rgba(138,182,255,.6)", "Pointed at a body"]];
+  const DEG = Math.PI / 180, C_KM_S = 299792.458;
+  const ON_EARTH = Math.cos(0.5 * DEG);          // the dish's beam is about a third of a degree wide
+  const DISH_PAD = 0.3 * DEG, LOOK_PAD = 0.15 * DEG;   // how far off a body's limb still counts (the NAC's half field is 0.18 deg)
+  const MIN_DISC = 0.05 * DEG;                    // a body smaller than this is not what the dish is on
+  const RING_KM = [74500, 140220];                // the C ring's inner edge to the F ring
+  const AIR_KM = { TITAN: 1200, SATURN: 0 };      // the radio signal is lost this far above the surface (Titan's air)
+  const HUYGENS = [utcToEt("2005-01-14T06:50:00"), utcToEt("2005-01-14T14:00:00")];   // Cassini's dish on Titan, receiving the probe
+  const NOT_TARGETS = { CASSINI: 1, SUN: 1 };
+  const name = n => n === "RINGS" ? "the rings" : titleCase(n);
+
+  // ---------- the rule: one moment, from the attitude q (J2000 -> spacecraft) and positions (name -> J2000 km, or null) ----------
+  // returns kind, or kind + 16 * (index of the body in `names` + 1); `rolling` is the viewer's spin test for that moment
+  const d3 = [0, 0, 0], e3 = [0, 0, 0], w3 = [0, 0, 0];
+  function rule(q, P, names, radii, rolling, pole) {
+    const w = q[0], x = q[1], y = q[2], z = q[3];
+    // rows 1 and 2 of the rotation matrix: the spacecraft's Y and Z axes in J2000 (q2rows)
+    const by = [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)];
+    const bz = [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)];
+    const cas = P.CASSINI, earth = P.EARTH, sat = P.SATURN;
+    if (!cas) return 0;
+    // the ring radius at which a ray from Cassini along u crosses the ring plane ahead of it (0: it does not)
+    const ringAt = u => {
+      if (!sat || !pole) return 0;
+      const hx = cas[0] - sat[0], hy = cas[1] - sat[1], hz = cas[2] - sat[2];
+      const h = hx * pole[0] + hy * pole[1] + hz * pole[2], du = u[0] * pole[0] + u[1] * pole[1] + u[2] * pole[2];
+      if (Math.abs(du) < 1e-9) return 0;
+      const s = -h / du; if (s <= 0) return 0;
+      return Math.hypot(hx + s * u[0], hy + s * u[1], hz + s * u[2]);
+    };
+    if (earth) {
+      e3[0] = earth[0] - cas[0]; e3[1] = earth[1] - cas[1]; e3[2] = earth[2] - cas[2];
+      const dE = Math.hypot(e3[0], e3[1], e3[2]); e3[0] /= dE; e3[1] /= dE; e3[2] /= dE;
+      if (-(bz[0] * e3[0] + bz[1] * e3[1] + bz[2] * e3[2]) > ON_EARTH) {
+        // is something between the dish and Earth?
+        for (const b of ["SATURN", "TITAN"]) {
+          const p = P[b]; if (!p) continue;
+          w3[0] = p[0] - cas[0]; w3[1] = p[1] - cas[1]; w3[2] = p[2] - cas[2];
+          const s = w3[0] * e3[0] + w3[1] * e3[1] + w3[2] * e3[2];
+          if (s <= 0) continue;
+          const miss = Math.hypot(w3[0] - s * e3[0], w3[1] - s * e3[1], w3[2] - s * e3[2]);
+          if (miss < radii[b] + AIR_KM[b]) return KINDS.OCC + 16 * (names.indexOf(b) + 1);
+        }
+        const r = ringAt(e3);
+        if (r > RING_KM[0] && r < RING_KM[1]) return KINDS.OCC + 16 * (names.indexOf("RINGS") + 1);
+        return KINDS.DOWN;
+      }
+    }
+    // the body the dish, or else the instruments, are on: the one nearest the middle of its own disc
+    let dish = -1, dishBest = 1, look = -1, lookBest = 1;
+    for (let i = 0; i < names.length; i++) {
+      const p = P[names[i]]; if (!p || NOT_TARGETS[names[i]] || names[i] === "RINGS") continue;
+      d3[0] = p[0] - cas[0]; d3[1] = p[1] - cas[1]; d3[2] = p[2] - cas[2];
+      const r = Math.hypot(d3[0], d3[1], d3[2]), disc = Math.asin(Math.min(1, radii[names[i]] / r));
+      const aDish = Math.acos(Math.max(-1, Math.min(1, -(bz[0] * d3[0] + bz[1] * d3[1] + bz[2] * d3[2]) / r)));
+      const aLook = Math.acos(Math.max(-1, Math.min(1, -(by[0] * d3[0] + by[1] * d3[1] + by[2] * d3[2]) / r)));
+      if (disc > MIN_DISC && aDish / (disc + DISH_PAD) < dishBest) { dishBest = aDish / (disc + DISH_PAD); dish = i; }
+      if (aLook / (disc + LOOK_PAD) < lookBest) { lookBest = aLook / (disc + LOOK_PAD); look = i; }
+    }
+    if (dish >= 0) return KINDS.DISH + 16 * (dish + 1);
+    if (rolling) return KINDS.ROLL;
+    if (look >= 0) return KINDS.LOOK + 16 * (look + 1);
+    d3[0] = -by[0]; d3[1] = -by[1]; d3[2] = -by[2];
+    const r = ringAt(d3);
+    if (r > RING_KM[0] && r < RING_KM[1]) return KINDS.LOOK + 16 * (names.indexOf("RINGS") + 1);
+    return 0;
+  }
+
+  // ---------- the loaded months, as spans: worked out a few milliseconds at a time so nothing stalls ----------
+  // a track's position at times that only go forward (the samples are walked, not searched)
+  function reader(tr) {
+    let i = 0; const t = tr.t, p = tr.pos, v = tr.vel, n = tr.count, out = [0, 0, 0];
+    return et => {
+      if (et < tr.start || et > tr.end || n < 2) return null;
+      if (t[i] > et) i = 0;
+      while (i + 2 < n && t[i + 1] <= et) i++;
+      const t0 = t[i], h = t[i + 1] - t0; if (!(h > 0)) { out[0] = p[3 * i]; out[1] = p[3 * i + 1]; out[2] = p[3 * i + 2]; return out; }
+      const u = (et - t0) / h, u2 = u * u, u3 = u2 * u, h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+      for (let k = 0; k < 3; k++) out[k] = h00 * p[3 * i + k] + h10 * h * v[3 * i + k] + h01 * p[3 * i + 3 + k] + h11 * h * v[3 * i + 3 + k];
+      return out;
+    };
+  }
+  let job = null;          // { att, names, radii, read, k, T0, T1, C, done }
+  let spans = { att: null, n: 0, T0: new Float64Array(0), T1: new Float64Array(0), C: new Uint16Array(0), names: [] };
+  function start() {
+    const names = Object.keys(tracks).filter(n => n === "CASSINI" || n === "EARTH" || (bodies[n] && bodies[n].radii && !NOT_TARGETS[n]));
+    const radii = {}; for (const n of names) if (bodies[n] && bodies[n].radii) radii[n] = Math.max(...bodies[n].radii);
+    const read = {}; for (const n of names) read[n] = reader(tracks[n]);
+    names.push("RINGS");
+    job = { att, names, radii, read, k: 0, T0: [], T1: [], C: [], P: {}, pole: E && E[1] };
+  }
+  function work(ms) {
+    const a = job.att, t1 = performance.now() + ms, P = job.P, q = [0, 0, 0, 0];
+    const spin = window.cassiniFollow && cassiniFollow.spinAt;
+    while (job.k < a.count - 1) {
+      const k = job.k++, t = a.t[k], dt = a.t[k + 1] - t;
+      if (dt <= 0) continue;
+      let c = 0;
+      if (dt <= GAP_S) {
+        for (const n of job.names) if (n !== "RINGS") P[n] = job.read[n](t);
+        q[0] = a.q[4 * k]; q[1] = a.q[4 * k + 1]; q[2] = a.q[4 * k + 2]; q[3] = a.q[4 * k + 3];
+        c = rule(q, P, job.names, job.radii, spin ? !!spin(t + dt / 2) : false, job.pole);
+      }
+      const n = job.C.length;
+      if (n && job.C[n - 1] === c && job.T1[n - 1] === t) job.T1[n - 1] = a.t[k + 1];
+      else if (c) { job.T0.push(t); job.T1.push(a.t[k + 1]); job.C.push(c); }
+      if ((k & 255) === 0 && performance.now() > t1) return;
+    }
+    spans = { att: a, n: job.C.length, T0: Float64Array.from(job.T0), T1: Float64Array.from(job.T1), C: Uint16Array.from(job.C), names: job.names };
+    job = null; redraw();
+  }
+  function tick() {
+    if (typeof att === "undefined" || !att || !att.count) { job = null; return; }
+    if (job && job.att !== att) job = null;
+    if (!job && spans.att !== att) { start(); setTimeout(pump, 0); }
+  }
+  // (on its own timer, not the frame's: a paused page draws once a second)
+  function pump() { if (!job) return; work(6); if (job) setTimeout(pump, 10); }
+  // the span at et in the months worked out, as { kind, body, start, end }, or null
+  function at(et) {
+    let lo = 0, hi = spans.n - 1;
+    if (hi < 0 || et < spans.T0[0]) return null;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (spans.T0[m] <= et) lo = m; else hi = m - 1; }
+    if (et > spans.T1[lo]) return null;
+    const c = spans.C[lo];
+    return { kind: c & 15, body: c >> 4 ? spans.names[(c >> 4) - 1] : null, start: spans.T0[lo], end: spans.T1[lo] };
+  }
+
+  // ---------- now: the same rule on this frame's own attitude and positions ----------
+  let live = { kind: 0, body: null };
+  function now() {
+    if (typeof att === "undefined" || !att || !state.pointed || !pos.CASSINI) return { kind: 0, body: null };
+    const names = Object.keys(pos).filter(n => n === "CASSINI" || n === "EARTH" || (present(n) && bodies[n] && bodies[n].radii && !NOT_TARGETS[n]));
+    const radii = {}, P = {};
+    for (const n of names) { P[n] = present(n) ? pos[n] : null; if (bodies[n] && bodies[n].radii) radii[n] = Math.max(...bodies[n].radii); }
+    names.push("RINGS");
+    const spin = window.cassiniFollow && cassiniFollow.spinAt;
+    const c = rule(qBody, P, names, radii, spin ? !!spin(state.et) : false, E && E[1]);
+    return { kind: c & 15, body: c >> 4 ? names[(c >> 4) - 1] : null };
+  }
+  // one line for the menu bar (and a longer one for its tooltip)
+  function words(a) {
+    if (!a || !a.kind) return null;
+    const lt = pos.EARTH && pos.CASSINI ? Math.hypot(pos.EARTH[0] - pos.CASSINI[0], pos.EARTH[1] - pos.CASSINI[1], pos.EARTH[2] - pos.CASSINI[2]) / C_KM_S : 0;
+    const B = a.body ? name(a.body) : "";
+    switch (a.kind) {
+      case KINDS.DOWN: return [`<b>Dish on Earth</b> · data takes ${fmtDur(lt)} to arrive`, "Cassini's high-gain dish points at Earth: it is sending what it recorded to the Deep Space Network."];
+      case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish is on Earth with the rings in between: the radio signal crosses them, and how it fades maps the rings (a radio occultation)."]
+        : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish is on Earth with ${B} in between: the radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
+      case KINDS.DISH: return a.body === "TITAN" && state.et > HUYGENS[0] && state.et < HUYGENS[1]
+        ? [`<b>Dish on Titan</b> · receiving Huygens`, "Cassini's dish points at Titan to record everything the Huygens probe sends on its way down."]
+        : [`<b>Dish on ${B}</b> · radar or radio science`, `Cassini's dish points at ${B}: the radar and the radio science experiments use it as their antenna, so the cameras look elsewhere.`];
+      case KINDS.ROLL: return [`<b>Rolling</b> · fields and particles`, "A long roll about one axis, with no pictures: the instruments that sense magnetic fields, dust and plasma sweep the whole sky."];
+      case KINDS.LOOK: return [`Pointed at <b>${B}</b>`, `The cameras and the spectrometers beside them point at ${B}.`];
+    }
+    return null;
+  }
+  let host = null, shown = "";
+  function status(a) {
+    if (!host) {
+      const mread = $("mread"); if (!mread) return;
+      host = document.createElement("span"); host.id = "mact"; host.setAttribute("role", "status");
+      mread.parentNode.insertBefore(host, mread);
+    }
+    const t = on && a ? words(a) : null, html = t ? `<i style="background:${LOOKS[a.kind][0]}"></i>${t[0]}` : "";
+    if (html !== shown) { host.innerHTML = shown = html; host.title = t ? t[1] : ""; }
+  }
+
+  // ---------- the beam from the dish ----------
+  const BEAM_N = 24;
+  let beam = null;
+  const vDish = new THREE.Vector3(), vTo = new THREE.Vector3();
+  function drawBeam() {
+    if (!beam) {
+      if (typeof hudScene === "undefined" || typeof cassini === "undefined" || !cassini) return;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(BEAM_N * 3), 3));
+      g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(BEAM_N * 3), 3));
+      beam = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+      beam.frustumCulled = false; beam.visible = false; hudScene.add(beam);
+    }
+    const a = live, show = on && beamOn && state.pointed && (a.kind === KINDS.DOWN || a.kind === KINDS.OCC || a.kind === KINDS.DISH) && !document.body.classList.contains("cutscene");
+    if (beam.visible !== show) { beam.visible = show; redraw(); }
+    if (!show) return;
+    // along the dish's own axis (the model's +Z), from its rim outward, fading with distance from Cassini
+    vDish.set(0, 0, 1).applyQuaternion(cassini.quaternion);
+    const s = cassini.scale.x, reach = Math.max(camera.position.distanceTo(cassini.position) * 8, s * 40);
+    const P = beam.geometry.attributes.position.array, C = beam.geometry.attributes.color.array;
+    const col = a.kind === KINDS.DISH ? [0.88, 0.6, 0.29] : a.kind === KINDS.OCC ? [0.94, 0.9, 0.77] : [0.29, 0.7, 0.65];
+    for (let i = 0; i < BEAM_N; i++) {
+      const f = i / (BEAM_N - 1), d = s * 2.2 + reach * f * f, k = 0.8 * (1 - f) * (1 - f * f);
+      P[3 * i] = cassini.position.x + vDish.x * d; P[3 * i + 1] = cassini.position.y + vDish.y * d; P[3 * i + 2] = cassini.position.z + vDish.z * d;
+      C[3 * i] = col[0] * k; C[3 * i + 1] = col[1] * k; C[3 * i + 2] = col[2] * k;
+    }
+    beam.geometry.attributes.position.needsUpdate = true; beam.geometry.attributes.color.needsUpdate = true;
+  }
+
+  // ---------- the strip along the top of the timeline ----------
+  const STRIP_H = 3, STRIP_SPAN = 120 * 86400;   // wider than this the daily rhythm is finer than a pixel: no strip
+  let cols = new Float32Array(0), keyed = false;
+  function strip(g, w) {
+    const v0 = state.view[0], v1 = state.view[1], span = v1 - v0;
+    if (!on || !spans.n || span > STRIP_SPAN) return;
+    // each pixel column shows the kind that fills most of it
+    const W = Math.ceil(w), NK = 6;
+    if (cols.length !== W * NK) cols = new Float32Array(W * NK); else cols.fill(0);
+    let lo = 0, hi = spans.n - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (spans.T1[m] < v0) lo = m + 1; else hi = m; }
+    for (let i = lo; i < spans.n && spans.T0[i] < v1; i++) {
+      const k = spans.C[i] & 15, x0 = Math.max(0, (spans.T0[i] - v0) / span * w), x1 = Math.min(w, (spans.T1[i] - v0) / span * w);
+      for (let x = Math.floor(x0); x < x1 && x < W; x++) cols[x * NK + k] += Math.min(x + 1, x1) - Math.max(x, x0);
+    }
+    let run = 0, runK = 0;
+    const flush = x => { if (runK) { g.fillStyle = LOOKS[runK][0]; g.fillRect(run, 0, x - run, STRIP_H); } };
+    for (let x = 0; x < W; x++) {
+      let best = 0, bv = 0.3;   // under 30% of a column: nothing
+      for (let k = 1; k < NK; k++) if (cols[x * NK + k] > bv) { bv = cols[x * NK + k]; best = k; }
+      if (best !== runK) { flush(x); run = x; runK = best; }
+    }
+    flush(W);
+    if (!keyed) {
+      const keys = $("lkeys");
+      if (keys && keys.children.length) { keyed = true; keys.insertAdjacentHTML("beforeend", LOOKS.slice(1).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join("")); }
+    }
+  }
+  // the strip's own tooltip: what Cassini was doing at the time under the pointer
+  const tl = $("tl");
+  if (tl) tl.addEventListener("pointermove", e => {
+    let tip = "";
+    if (on && e.offsetY <= STRIP_H + 3 && spans.n) {
+      const a = at(xToEt(e.offsetX, tl.clientWidth)), t = a && words(a);
+      if (t) tip = t[0].replace(/<[^>]+>/g, "").replace(/ · (data takes|\d).*$/, "");
+    }
+    if (tl.title !== tip) tl.title = tip;
+  });
+
+  // ---------- hooks: after the viewer has turned Cassini, with the read-outs, and on the timeline ----------
+  const prevAtt = window.studyAttitude, prevHud = window.studyHud, prevTl = window.studyTimeline;
+  window.studyAttitude = (...a) => { if (prevAtt) prevAtt(...a); live = on ? now() : { kind: 0, body: null }; drawBeam(); };
+  window.studyHud = ms => { if (prevHud) prevHud(ms); if (on) tick(); status(live); };
+  window.studyTimeline = (g, w, h, xn) => { strip(g, w); if (prevTl) prevTl(g, w, h, xn); };
+  window.cassiniActivity = { KINDS, now: () => live, at, spans: () => spans, words, busy: () => job ? job.k / job.att.count : 0 };
+})();
+</script>
