@@ -3696,11 +3696,10 @@ _ring_geometries = {}   # pass key -> _ring_geometry's answer
 RING_PAIR_LAG = 25      # bins (RING_BIN km) searched each way (ring_pair_shift)
 RING_PAIR_NCC = 0.6     # the least two tiles' ring profiles must agree once lined up ...
 RING_PAIR_RIVAL = 0.85  # ... and no other lag more than 3 bins away this nearly as well
-RING_PAIR_NEAR = 6.0    # px: how far from what the tiles' own ring fits say a pair's match is looked for
 RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
 
 
-def ring_pair_shift(u, rings, s, ref, t, mine, check=True, guess=None):
+def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     """Ring registration of two overlapping tiles of one filter, each where SPICE puts it: the radial profiles (SPICE's
     ring plane at each tile's own time, _ring_profile, detail only) of the part of the view both cover, and the radial
     lag that lines them up. Unlike a match of the pictures, a profile slides only across the rings, never along them
@@ -3735,6 +3734,26 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True, guess=None):
     both = (pa[1] >= 3) & (pb[1] >= 3)
     if both.sum() < RING_PAIR_BINS:
         return None, "narrow ring overlap"
+    idx = np.nonzero(both)[0]
+    da, db = _ring_detail(*pa)[idx.min():idx.max() + 1], _ring_detail(*pb)[idx.min():idx.max() + 1]
+    sc = []
+    for lag in range(-RING_PAIR_LAG, RING_PAIR_LAG + 1):
+        x, y = da[max(0, lag):len(da) + min(0, lag)], db[max(0, -lag):len(db) + min(0, -lag)]
+        if len(x) < RING_PAIR_BINS * 3 // 4:
+            sc.append(-1.0)
+            continue
+        x, y = x - x.mean(), y - y.mean()
+        d = math.sqrt(float((x * x).sum() * (y * y).sum()))
+        sc.append(float((x * y).sum() / d) if d > 0 else -1.0)
+    sc = np.array(sc)
+    j = int(np.argmax(sc))
+    far = np.abs(np.arange(len(sc)) - j) > 3
+    if sc[j] < RING_PAIR_NCC or (far.any() and sc[far].max() > RING_PAIR_RIVAL * sc[j]) or j in (0, len(sc) - 1):
+        return None, f"ring profiles not believed (ncc {sc[j]:.2f})"
+    lag = j - RING_PAIR_LAG
+    den = sc[j - 1] - 2 * sc[j] + sc[j + 1]
+    if den < 0:
+        lag += 0.5 * (sc[j - 1] - sc[j + 1]) / den
     # the rings' radial direction at the overlap, and km per px along it (SPICE's ring plane at tile s's time)
     cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
     r = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), s["id"])[0]
@@ -3751,34 +3770,6 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True, guess=None):
     step = step[np.isfinite(step) & (step > 0)]
     if len(step) >= 100:
         g = float(np.median(step))
-    idx = np.nonzero(both)[0]
-    da, db = _ring_detail(*pa)[idx.min():idx.max() + 1], _ring_detail(*pb)[idx.min():idx.max() + 1]
-    sc = []
-    for lag in range(-RING_PAIR_LAG, RING_PAIR_LAG + 1):
-        x, y = da[max(0, lag):len(da) + min(0, lag)], db[max(0, -lag):len(db) + min(0, -lag)]
-        if len(x) < RING_PAIR_BINS * 3 // 4:
-            sc.append(-1.0)
-            continue
-        x, y = x - x.mean(), y - y.mean()
-        d = math.sqrt(float((x * x).sum() * (y * y).sum()))
-        sc.append(float((x * y).sum() / d) if d > 0 else -1.0)
-    sc = np.array(sc)
-    lags = np.arange(len(sc)) - RING_PAIR_LAG
-    if guess is not None:
-        # (only near where the tiles' own ring fits put t against s (ring_moves: each against the pass's whole profile,
-        # which the ringlets' repeats do not fool as a pair's short overlap can): 195RI's pairs matched ringlets 1500 to
-        # 2400 km off, as well as their own)
-        want = float(np.dot(guess, n)) * g / RING_BIN
-        sc = np.where(np.abs(lags - want) <= RING_PAIR_NEAR * g / RING_BIN + 1, sc, -1.0)
-    j = int(np.argmax(sc))
-    far = (np.abs(np.arange(len(sc)) - j) > 3) & (sc > -1.0)
-    if sc[j] < RING_PAIR_NCC or (far.any() and sc[far].max() > RING_PAIR_RIVAL * sc[j]) or j in (0, len(sc) - 1) \
-            or sc[j - 1] <= -1.0 or sc[j + 1] <= -1.0:
-        return None, f"ring profiles not believed (ncc {sc[j]:.2f})"
-    lag = j - RING_PAIR_LAG
-    den = sc[j - 1] - 2 * sc[j] + sc[j + 1]
-    if den < 0:
-        lag += 0.5 * (sc[j - 1] - sc[j + 1]) / den
     # (t's ringlets sit lag bins in from s's: t moves out by that much, across the rings)
     move = lag * RING_BIN / g
     if check and abs(lag) > 1:
@@ -3786,8 +3777,7 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True, guess=None):
         # and a quarter of the lag). Tiles of one place seen at very different times or lighting can match the wrong
         # ringlets as well as their own (118RI's first and last laps, 1700 km apart that moved to 1000 km the other way)
         moved = dict(t, offset=[t["offset"][0] + float(n[0] * move), t["offset"][1] + float(n[1] * move)])
-        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False,
-                                     guess=None if guess is None else (guess[0] - n[0] * move, guess[1] - n[1] * move))
+        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False)
         if again is None or abs(how["lag_km"]) > RING_BIN + 0.25 * abs(lag) * RING_BIN:
             return None, f"ring match does not hold ({lag * RING_BIN:+.0f} km, then {how['lag_km'] if again is not None else how})"
     return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
@@ -4658,10 +4648,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if ref is None or mine is None:
                 return pr, None, "no picture"
             if rings is not None and s["filter"] == t["filter"]:
-                # (where the tiles' own ring fits put t against s, when both were fitted)
-                fs, ft = (anchors or {}).get(j), (anchors or {}).get(n)
-                guess = None if fs is None or ft is None else (ft[0] - fs[0], ft[1] - fs[1])
-                got = ring_pair_shift(u, rings, s, ref, t, mine, guess=guess)
+                got = ring_pair_shift(u, rings, s, ref, t, mine)
                 if got[0] is not None:
                     return (pr,) + got
             if edges:
