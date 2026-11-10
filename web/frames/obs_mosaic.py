@@ -2229,7 +2229,10 @@ def placed_tiles(u, p, mine, rect, cache):
         left = round((t["offset"][0] + bx - rect[0]) * k)
         top = round((t["offset"][1] + by - rect[1]) * k)
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        yield set_time(u, t["n"]), _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+        part = _part(_pic(u, cache, p["display_scale"], t), sw, sh)
+        if SUBPIXEL:   # (as _window draws it: the part of a pixel its rounding left out)
+            part = _subpixel_at(part, t, rect, k, left, top)
+        yield set_time(u, t["n"]), part[..., 3], left, top
 
 
 def set_time(u, n):
@@ -3932,10 +3935,14 @@ def _solve_moves(roots, meas, agree):
                 i, j = idx[a_], idx[b_]
                 res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - x[2 * i:2 * i + 2] - d)))
                 robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
-        worst = max(keep, key=lambda k: res[k]) if keep else None
-        if worst is None or res[worst] <= agree:
+        out_ = sorted((k for k in keep if res[k] > agree), key=lambda k: -res[k])
+        if not out_:
             break
-        keep.remove(worst)
+        # (the worst left out, and with it up to a twentieth of the matches that disagree by more than half as much: a big
+        # ring pass with many bad matches is solved in a few rounds instead of one round a match)
+        drop = [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]
+        for k in drop:
+            keep.remove(k)
     return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
 
 
@@ -3960,10 +3967,16 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
         if kept is None:
             kept = {}
             if os.path.exists(path):
-                with open(path) as fh:
-                    kept = json.load(fh)
+                kept = _read_solve(path)
             if rec is not None:
                 rec[name] = kept
+        if not (kept and set(by_n) <= set(kept.get("tiles", ()))) and os.path.exists(path):
+            # (another process, the pre-build, may have kept a solve of more tiles since this one read it)
+            on_disk = _read_solve(path)
+            if len(on_disk.get("tiles", ())) > len(kept.get("tiles", ())):
+                kept = on_disk
+                if rec is not None:
+                    rec[name] = kept
         if kept and set(by_n) <= set(kept.get("tiles", ())):
             return {int(n): v for n, v in kept["moves"].items() if int(n) in by_n and v != [0, 0]}
         there = _tiles(u, cache, p["display_scale"])
@@ -4029,6 +4042,8 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
         # (pairs measured before, by a solve of fewer tiles, are taken as measured: they were measured at SPICE's places,
         # which do not change, so a mosaic grown a tile at a time reads only its new pairs' pictures)
         before = kept.get("pairs", {}) if isinstance(kept, dict) else {}
+        # (a pair that had no picture yet, a tile still being made, is measured again)
+        before = {k: v for k, v in before.items() if not (isinstance(v, str) and v.startswith("no picture"))}
         again = [pr for pr in todo if f"{pr[0]}-{pr[1]}" in before]
         todo = [pr for pr in todo if f"{pr[0]}-{pr[1]}" not in before]
         for n in {n for pr in todo for n in pr}:
@@ -4051,23 +4066,31 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             how = before[f"{pr[0]}-{pr[1]}"]
             got.append((pr, tuple(how["shift"]), how) if isinstance(how, dict) else (pr, None, how))
         meas, seen = [], {}
+        # a match past PANEL_MAX of a frame between two pointings is believed, as panel_places believed one, only when
+        # it agrees well (PANEL_FAR_NCC) and another match of the same two pointings (another filter's) agrees with it
+        # (PANEL_AGREE): a lone 18 px match fits the solve exactly and is never seen as an outlier
+        by_pp = collections.defaultdict(list)
+        for (j, n), shift, how in got:
+            if shift is not None and not edges:
+                by_pp[(rootmap[j], rootmap[n])].append(np.array(shift, float))
         for (j, n), shift, how in got:
             seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
             if shift is None:
                 continue
             nrm = how.get("normal") if isinstance(how, dict) else None
             P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
-            far = math.hypot(*shift) > 2 * PANEL_MAX * FRAME
-            if not edges and far and how["ncc"][1] < PANEL_FAR_NCC:
-                continue
+            if not edges and math.hypot(*shift) > PANEL_MAX * FRAME:
+                agree = sum(np.hypot(*(o - np.array(shift))) <= PANEL_AGREE for o in by_pp[(rootmap[j], rootmap[n])])
+                if how["ncc"][1] < PANEL_FAR_NCC or agree < 2:
+                    seen[f"{j}-{n}"] = {**seen[f"{j}-{n}"], "far": "not believed"}
+                    continue
             w = float(max(how["ncc"][1], 0.1))
             # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
             meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w))
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
-        # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
-        # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
-        # 35 px, so the matches are capped here too (measure) and the moves only past what any chain reached)
-        most = EDGE_MAX * FRAME
+        # (the furthest a pointing is moved: EDGE_MAX on a clouded body, as _combine holds it; PANEL_FAR on any other, as
+        # panel_places believed a pointing far off, a chain wider than that held by its middle below)
+        most = (EDGE_MAX if edges else PANEL_FAR) * FRAME
         out = {}
         linked = {m[0] for i, m in enumerate(meas) if i in keep} | {m[1] for i, m in enumerate(meas) if i in keep}
         # a chain of pointings whose relative places spread wider than the furthest move believed (a long scan whose
@@ -4101,8 +4124,12 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             out[n] = [round(mv[0], 2), round(mv[1], 2)]
         if report is not None:
             report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
-        if set(kept.get("tiles", ())) - set(by_n):
-            # (a solve of tiles another solve does not hold: used, not kept over the one kept)
+        # (a solve of tiles another solve does not hold is used, not kept over the one kept: the one in memory, or the one
+        # on disk, read again here in case another process, the pre-build, wrote a larger one meanwhile)
+        latest = _read_solve(path) if os.path.exists(path) else {}
+        if set(kept.get("tiles", ())) - set(by_n) or set(latest.get("tiles", ())) - set(by_n):
+            if rec is not None and len(latest.get("tiles", ())) > len(kept.get("tiles", ())):
+                rec[name] = latest
             return {n: v for n, v in out.items() if v != [0, 0]}
         part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
         new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
@@ -4117,6 +4144,15 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v for n, v in out.items() if v != [0, 0]}
+
+
+def _read_solve(path):
+    """A kept global solve (global_places), or {} when it cannot be read (half written by another process)."""
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
 
 
 def solve_places(u, cache):
@@ -4740,6 +4776,10 @@ def layout(u, n, cache):
         name += f"_L{len(base)}"
     if colour and used == colour and clipped_still(u, tiles, colour):
         name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
+    if moved and GLOBAL_PANELS:
+        # (the global solve can move a pointing drawn before when it is solved again on more tiles, a cold pass grown on
+        # demand: the moves used are in the name, so a picture kept from fewer tiles' places is never served for these)
+        name += "_m" + hashlib.sha1(json.dumps(sorted((n, v[:3]) for n, v in moved.items())).encode()).hexdigest()[:8]
     return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
@@ -6825,12 +6865,19 @@ def hdr_map(placed, W, H):
     zero = calibration.HDR_ZERO
     by = {}
     found = False
-    for f, path, left, top, sw, sh in placed:
+    for f, path, left, top, sw, sh, *frac in placed:
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         if not (x0 < x1 and y0 < y1):
             continue
         part = _part(path, sw, sh)
         m = _map_part(path, sw, sh)
+        fx, fy = frac[0] if frac else (0.0, 0.0)
+        if abs(fx) > 0.01 or abs(fy) > 0.01:
+            # (where _place drew the tile: moved by the part of a pixel its rounding left out, the map with it)
+            part = _subpixel(part, fx, fy)
+            if m is not None:
+                m = cv2.warpAffine(m, np.float32([[1, 0, fx], [0, 1, fy]]), (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR,
+                                   borderMode=cv2.BORDER_REPLICATE)
         canvas = by.setdefault(f, np.full((H, W), zero, np.uint8))
         a = part[y0 - top:y1 - top, x0 - left:x1 - left, 3] > 0
         v = m[y0 - top:y1 - top, x0 - left:x1 - left] if m is not None else np.full(a.shape, zero, np.uint8)
@@ -6882,7 +6929,8 @@ def _place(u, t, rect, k, W, H, cache, scale):
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     drew = _hdr_drawn.get()
     if drew is not None:
-        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh))
+        frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
+        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac))
     return frame
 
 
@@ -8447,7 +8495,10 @@ def _fade_part(t, rect, w, h, there):
     a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
     if a1 <= a0 or b1 <= b0:
         return None
-    return (a0, b0, a1, b1), _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+    part = _part(os.path.join(there, f"{t['n']}.png"), sw, sh)
+    if SUBPIXEL:
+        part = _subpixel_at(part, t, rect, k, left, top)
+    return (a0, b0, a1, b1), part[b0 - top:b1 - top, a0 - left:a1 - left, 3]
 
 
 def fade_table(frame_id, cache, laps=1, W=0, H=0):
