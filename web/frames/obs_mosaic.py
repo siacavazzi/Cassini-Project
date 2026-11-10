@@ -3208,6 +3208,20 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
 EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 
+# Global panel registration (prototype, CASSINI_GLOBAL_PANELS=1): every pair of overlapping pointings is measured once
+# (panel_shift / edge_shift at SPICE's places, as panel_places measures them), and all pointings' moves are solved
+# together (_solve_moves: least squares with SPICE's place as a soft prior, outliers dropped), instead of one pointing
+# at a time against the earlier ones only. A pointing whose earlier neighbours have nothing to match on is then still
+# placed by its later ones, and a chain's small errors are shared out instead of piling up.
+GLOBAL_PANELS = os.environ.get("CASSINI_GLOBAL_PANELS") == "1"
+GLOBAL_PRIOR = 5.0     # px: how far SPICE's place of a pointing is off (its soft prior's spread)
+GLOBAL_NOISE = 0.7     # px: a believed match's own spread
+GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), before ...
+GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
+if GLOBAL_PANELS:
+    PANEL_FILE = "global1-" + PANEL_FILE
+    PANEL_TAG, EDGE_TAG = "-g1", "-ge1"
+
 
 def _detail(gray, mask, sigma=6.0):
     """A tile's overlap for registration: its detail (the picture less its mean over sigma, measured on the mask only,
@@ -3767,6 +3781,8 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     (or align) step off. report: a dict that gets each tile's measurements."""
     if not (calibration.step("align") and calibration.step("panels")):
         return {}
+    if GLOBAL_PANELS:
+        return global_places(u, cache, p, tiles, pic, report)
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
@@ -3867,6 +3883,161 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
+
+
+def _solve_moves(roots, meas, agree):
+    """The moves {root: (dx, dy)} of a mosaic's pointings that best agree with every match between them, meas =
+    [(a, b, d, proj, w)]: pointing b sits d from where pointing a is (proj, the 2 x 2 projection the match measures:
+    the identity, or onto an edge's normal), believed with weight w. Each pointing's move has SPICE's place as a soft
+    prior (GLOBAL_PRIOR), the matches GLOBAL_NOISE; residuals past GLOBAL_HUBER are weighted down (IRLS), then the
+    match furthest past agree from the fit is dropped and the rest solved again, until all agree. (moves, kept matches)."""
+    idx = {r: i for i, r in enumerate(roots)}
+    n = len(roots)
+    keep = list(range(len(meas)))
+    if not meas:
+        return {r: (0.0, 0.0) for r in roots}, []
+    while True:
+        robust = np.ones(len(meas))
+        for _ in range(8):
+            A = np.eye(2 * n) / GLOBAL_PRIOR ** 2
+            b = np.zeros(2 * n)
+            for k in keep:
+                a_, b_, d, P, w = meas[k]
+                i, j = idx[a_], idx[b_]
+                c = w * robust[k] / GLOBAL_NOISE ** 2
+                Q = c * P
+                si, sj = slice(2 * i, 2 * i + 2), slice(2 * j, 2 * j + 2)
+                A[si, si] += Q; A[sj, sj] += Q; A[si, sj] -= Q; A[sj, si] -= Q
+                b[sj] += Q @ d; b[si] -= Q @ d
+            x = np.linalg.solve(A, b)
+            res = {}
+            for k in keep:
+                a_, b_, d, P, w = meas[k]
+                i, j = idx[a_], idx[b_]
+                res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - x[2 * i:2 * i + 2] - d)))
+                robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
+        worst = max(keep, key=lambda k: res[k]) if keep else None
+        if worst is None or res[worst] <= agree:
+            break
+        keep.remove(worst)
+    return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
+
+
+def global_places(u, cache, p, tiles, pic=None, report=None):
+    """panel_places solved globally (GLOBAL_PANELS): {tile n: [dx, dy]}. Every pointing's first tile is measured
+    against the GLOBAL_PARTNERS pointings it overlaps most, earlier and later alike, each pair once, at SPICE's places
+    (panel_shift, or edge_shift on a clouded body); the pointings' moves are solved together (_solve_moves), and the
+    other filters of a pointing move with it, as panel_places moves them. Worked out for the tiles given; a mosaic
+    given more tiles later is solved again (its earlier pointings can move a little). Kept in the pass's folder."""
+    surfaced = any("pic" in t for t in tiles)
+    edges = clouded(u)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
+    by_n = {t["n"]: t for t in tiles if "offset" in t}
+    with _ulock(u):
+        if os.path.exists(path):
+            with open(path) as fh:
+                kept = json.load(fh)
+            if kept.get("tiles") == sorted(by_n):
+                return {int(n): v for n, v in kept["moves"].items() if v != [0, 0]}
+        there = _tiles(u, cache, p["display_scale"])
+        pics = {}
+
+        def picture(j):
+            if pic is not None:
+                return pic(j)
+            if j not in pics:
+                fp = by_n[j].get("pic") or os.path.join(there, f"{j}.png")
+                with _lock:
+                    pics[j] = _made_pictures.get(fp)
+                if pics[j] is None:
+                    pics[j] = np.asarray(Image.open(fp).convert("RGBA")) if os.path.exists(fp) else None
+            return pics[j]
+        rootmap = {}
+        for t in tiles:
+            if "offset" in t:
+                rootmap[t["n"]] = _pointing_root(u, t["n"], rootmap)
+        roots = sorted({r for r in rootmap.values() if r in by_n})
+
+        def overlap(s, t):
+            a, b = s["offset"], t["offset"]
+            w = min(a[0] + s["box"][0] + s["box"][2], b[0] + t["box"][0] + t["box"][2]) - max(a[0] + s["box"][0], b[0] + t["box"][0])
+            h = min(a[1] + s["box"][1] + s["box"][3], b[1] + t["box"][1] + t["box"][3]) - max(a[1] + s["box"][1], b[1] + t["box"][1])
+            return (w, h)
+        # pairs of tiles of different pointings: for each pointing's first tile, the tiles of the other pointings it
+        # overlaps most (its own filter first), one per pointing
+        pairs = set()
+        for r in roots:
+            t = by_n[r]
+            best = {}
+            for s in by_n.values():
+                rs = rootmap.get(s["n"])
+                if rs == r or rs not in by_n or edges and s["filter"] != t["filter"]:
+                    continue
+                w, h = overlap(s, t)
+                if w >= PANEL_NARROW and h >= PANEL_NARROW:
+                    key = (s["filter"] != t["filter"], -w * h)
+                    if rs not in best or key < best[rs][0]:
+                        best[rs] = (key, s["n"])
+            for rs, (_, sn) in sorted(best.items(), key=lambda kv: kv[1][0])[:GLOBAL_PARTNERS]:
+                pairs.add((min(r, sn), max(r, sn)))
+        pairs = sorted(pairs)
+        # keep only one pair per pair of pointings (the one measured first)
+        seen_pp, todo = set(), []
+        for a_, b_ in pairs:
+            pp = (min(rootmap[a_], rootmap[b_]), max(rootmap[a_], rootmap[b_]))
+            if pp not in seen_pp:
+                seen_pp.add(pp)
+                todo.append((a_, b_))
+        for n in {n for pr in todo for n in pr}:
+            picture(n)
+
+        def measure(pr):
+            j, n = pr
+            s, t = by_n[j], by_n[n]
+            ref, mine = picture(j), picture(n)
+            if ref is None or mine is None:
+                return pr, None, "no picture"
+            if edges:
+                return (pr,) + tuple(edge_shift(s, ref, s["offset"], t, mine, t["offset"]))
+            return (pr,) + tuple(panel_shift(s, ref, s["offset"], t, mine, t["offset"], PANEL_FAR if surfaced else None))
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+            got = list(ex.map(measure, todo))
+        meas, seen = [], {}
+        for (j, n), shift, how in got:
+            seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
+            if shift is None:
+                continue
+            nrm = how.get("normal") if isinstance(how, dict) else None
+            P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
+            far = math.hypot(*shift) > PANEL_MAX * FRAME
+            if not edges and far and how["ncc"][1] < PANEL_FAR_NCC:
+                continue
+            w = float(max(how["ncc"][1], 0.1))
+            # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
+            meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w))
+        moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
+        most = (EDGE_MAX if edges else (PANEL_FAR if surfaced else PANEL_MAX)) * FRAME
+        out = {}
+        linked = {m[0] for i, m in enumerate(meas) if i in keep} | {m[1] for i, m in enumerate(meas) if i in keep}
+        for n in by_n:
+            r = rootmap[n]
+            mv = moves.get(r, (0.0, 0.0)) if r in linked else (0.0, 0.0)
+            if math.hypot(*mv) > most or math.hypot(*mv) < PANEL_LEAST:
+                mv = (0.0, 0.0)
+            out[n] = [round(mv[0], 2), round(mv[1], 2)]
+        if report is not None:
+            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
+        part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(part, "w") as fh:
+                json.dump({"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())},
+                           "pairs": seen, "kept": len(keep), "measured": len(meas)}, fh)
+            os.replace(part, path)
+        except OSError as e:
+            print(f"cannot keep {path} in the cache ({e})", flush=True)
+        return {n: v for n, v in out.items() if v != [0, 0]}
 
 
 def view_rect(p, tiles=None):
