@@ -3268,7 +3268,7 @@ def _agree(a, b, mask):
     return float((x * y).sum()) / d if d > 0 else 0.0
 
 
-def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
+def panel_shift(q, ref, at_q, t, crop, at_t, most=None, least=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q), where
     two pointings of a mosaic overlap: (dx, dy) reference pixels that t's place moves back by to land on q (as
     _shift_onto), and what was measured {"ncc": [at SPICE's places, moved], "area", "response"}; (None, why) when
@@ -3293,7 +3293,7 @@ def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
     grays, masks = [g[:h, :w] for g in grays], [m[:h, :w] for m in masks]
     both = cv2.erode((masks[0] & masks[1]).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
     area = int(both.sum())
-    if area < PANEL_AREA or min(np.ptp(np.nonzero(both)[0]), np.ptp(np.nonzero(both)[1])) < PANEL_NARROW - 8:
+    if area < (least or PANEL_AREA) or min(np.ptp(np.nonzero(both)[0]), np.ptp(np.nonzero(both)[1])) < PANEL_NARROW - 8:
         return None, "little overlap"
     ds = [_detail(g, both) for g in grays]
     if ds[0] is None or ds[1] is None:
@@ -3306,7 +3306,7 @@ def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
     before = _agree(ds[0], ds[1], both)
     moved = image_correction.shift_image(ds[1], dx, dy)
     inner = cv2.erode(both.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=int(math.ceil(max(abs(dx), abs(dy)))) + 1) > 0
-    if inner.sum() < PANEL_AREA / 2:
+    if inner.sum() < (least or PANEL_AREA) / 2:
         return None, "little overlap once moved"
     after = _agree(ds[0], moved, inner)
     seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3)}
@@ -3819,6 +3819,77 @@ def _ring_geometry(u):
     with _lock:
         _ring_geometries[key] = got
     return got
+
+
+def pair_turn(s, ref, t, mine, most=None, rounds=3):
+    """pair_turn_once, taken again on t's picture turned back by what it found, rounds times, the turns added: a block's
+    match of a shift of a px or two comes out a third short (phase correlation's sub-pixel peak leans toward a whole
+    pixel), so a turn found once is short by as much; turned back and measured again, what is left is small."""
+    total, blocks = 0.0, 0
+    im = mine
+    for _ in range(rounds):
+        got, blocks = pair_turn_once(s, ref, t, im, most)
+        if got is None:
+            return (None, blocks) if total == 0.0 else (round(total, 4), blocks)
+        total += got
+        if abs(got) < 0.01:
+            break
+        h, w = mine.shape[:2]
+        k = t["box"][2] / w
+        m = cv2.getRotationMatrix2D((-t["box"][0] / k - 0.5, -t["box"][1] / k - 0.5), -total, 1.0)   # (about the frame's middle)
+        im = cv2.warpAffine(mine, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+    if abs(total) > TURN_MOST:
+        return None, f"turn too large ({total:+.2f} deg)"
+    return round(total, 4), blocks
+
+
+def pair_turn_once(s, ref, t, mine, most=None):
+    """How far tile t is turned against tile s where they overlap, each where SPICE (or the solve so far) puts it:
+    the overlap cut in TURN_BLOCK blocks along its long side, each block matched as panel_shift matches a whole
+    overlap, and the matches' change along the overlap fitted as a turn. (degrees, counter-clockwise on the canvas,
+    that t's content is turned against s's; blocks) or (None, why)."""
+    ax0 = max(s["offset"][0] + s["box"][0], t["offset"][0] + t["box"][0])
+    ax1 = min(s["offset"][0] + s["box"][0] + s["box"][2], t["offset"][0] + t["box"][0] + t["box"][2])
+    ay0 = max(s["offset"][1] + s["box"][1], t["offset"][1] + t["box"][1])
+    ay1 = min(s["offset"][1] + s["box"][1] + s["box"][3], t["offset"][1] + t["box"][1] + t["box"][3])
+    long_x = (ax1 - ax0) >= (ay1 - ay0)
+    L = (ax1 - ax0) if long_x else (ay1 - ay0)
+    if min(ax1 - ax0, ay1 - ay0) < TURN_BLOCK * 0.6 or L < 3 * TURN_BLOCK:
+        return None, "overlap too short for a turn"
+    half = TURN_BLOCK / 2
+    pts = []
+    for c in np.arange(half, L - half + 1, half):
+        cx = ax0 + c if long_x else (ax0 + ax1) / 2
+        cy = (ay0 + ay1) / 2 if long_x else ay0 + c
+        subs = []
+        for q, im in ((s, ref), (t, mine)):
+            k = q["box"][2] / im.shape[1]
+            x0 = int(round((cx - half - q["offset"][0] - q["box"][0]) / k))
+            y0 = int(round((cy - half - q["offset"][1] - q["box"][1]) / k))
+            w_ = int(round(TURN_BLOCK / k))
+            if x0 < 0 or y0 < 0 or x0 + w_ > im.shape[1] or y0 + w_ > im.shape[0]:
+                break
+            subs.append((dict(q, box=[x0 * k + q["box"][0], y0 * k + q["box"][1], TURN_BLOCK, TURN_BLOCK]),
+                         im[y0:y0 + w_, x0:x0 + w_]))
+        if len(subs) < 2:
+            continue
+        sh, _ = panel_shift(subs[0][0], subs[0][1], s["offset"], subs[1][0], subs[1][1], t["offset"], most, least=TURN_BLOCK ** 2 // 6)
+        if sh is not None:
+            pts.append((c, sh[0], sh[1]))
+    if len(pts) < 4:
+        return None, f"{len(pts)} blocks matched"
+    c, dx, dy = np.array(pts).T
+    across = dy if long_x else dx
+    fit, res, *_ = np.polyfit(c, across, 1, full=True)
+    spread = math.sqrt(float(res[0]) / len(c)) if len(res) else 0.0
+    if spread > 1.0:
+        return None, f"blocks disagree ({spread:.1f} px)"
+    # (t's content moved by -shift to land on s; a turn of t by +theta (counter-clockwise, y down: +x side moves
+    # down) shows as its shifts across the overlap falling along it)
+    theta = math.degrees(math.atan(fit[0])) * (-1 if long_x else 1)
+    if abs(theta) > TURN_MOST:
+        return None, f"turn too large ({theta:+.2f} deg)"
+    return round(theta, 4), len(pts)
 
 
 _disk_geometries = {}   # pass key -> _disk_geometry's answer
@@ -4379,6 +4450,11 @@ def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
 LIMB_BODIES = frozenset({"SATURN", "TITAN", "JUPITER", "RHEA", "DIONE", "TETHYS", "ENCELADUS", "MIMAS", "IAPETUS"})
 GLOBAL_LIMBS = os.environ.get("CASSINI_GLOBAL_LIMBS", "1") != "0"   # limb anchors in the global solve (global_places)
 LIMB_WEIGHT = 0.5         # a limb anchor's weight against a match's (its place is a few px rough tile to tile)
+GLOBAL_TURNS = os.environ.get("CASSINI_GLOBAL_TURNS", "0") == "1"   # prototype: each pointing's small turn solved too
+TURN_NOISE = 0.05         # degrees: a believed turn match's spread
+TURN_PRIOR = 0.3          # degrees: how far SPICE's twist of a pointing may be off (its prior)
+TURN_BLOCK = 160          # px: the blocks an overlap is cut in along its long side to measure a turn (pair_turn)
+TURN_MOST = 1.0           # degrees: the largest turn believed
 LIMB_HAZE_PRIOR = 100.0   # px: how high a filter's limb may stand over SPICE's (its haze), a loose prior (_solve_moves)
 
 
@@ -4396,11 +4472,16 @@ def _solve_moves(roots, meas, agree, haze=None):
     n = len(roots)
     filters = sorted({m[2] for m in meas if m[0] == "limb"})
     fdx = {f: 2 * n + i for i, f in enumerate(filters)}
-    size = 2 * n + len(filters)
+    turned = any(m[0] == "turn" for m in meas)
+    tdx = {r: 2 * n + len(filters) + i for i, r in enumerate(roots)} if turned else {}
+    size = 2 * n + len(filters) + len(tdx)
     keep = list(range(len(meas)))
     if not meas:
         return {r: (0.0, 0.0) for r in roots}, []
-    prior = np.concatenate([np.full(2 * n, 1 / GLOBAL_PRIOR ** 2), np.full(len(filters), 1 / LIMB_HAZE_PRIOR ** 2)])
+    prior = np.concatenate([np.full(2 * n, 1 / GLOBAL_PRIOR ** 2), np.full(len(filters), 1 / LIMB_HAZE_PRIOR ** 2),
+                            np.full(len(tdx), 1 / TURN_PRIOR ** 2)])
+    # a degree's turn (as cv2.getRotationMatrix2D turns, y down) about a tile's middle moves a point at lever from it by
+    spin = lambda lever: math.radians(1.0) * np.array([lever[1], -lever[0]], float)
 
     def rows(m):
         """(jacobian rows over the unknowns, targets): residual = J x - target"""
@@ -4410,11 +4491,26 @@ def _solve_moves(roots, meas, agree, haze=None):
             J[0, 2 * idx[b_]:2 * idx[b_] + 2] = nv
             J[0, fdx[f]] = -1.0
             return J, np.array([-o]), w
-        a_, b_, d, P, w = m
+        if m[0] == "turn":
+            # (pointing b turned theta degrees from pointing a; in px-equivalent units, TURN_NOISE to GLOBAL_NOISE)
+            _, a_, b_, theta, w = m
+            J = np.zeros((1, size))
+            J[0, tdx[b_]] = 1.0
+            J[0, tdx[a_]] = -1.0
+            k = GLOBAL_NOISE / TURN_NOISE
+            return J * k, np.array([theta]) * k, w
+        a_, b_, d, P, w = m[:5]
         J = np.zeros((2, size))
         J[:, 2 * idx[b_]:2 * idx[b_] + 2] = P
         if a_ is not None:
             J[:, 2 * idx[a_]:2 * idx[a_] + 2] = -P
+        if tdx and len(m) > 5:
+            # (the match was made at a place lever_a from a's middle and lever_b from b's: each pointing's turn about its
+            # own middle moves that place too)
+            la, lb = m[5], m[6]
+            J[:, tdx[b_]] = P @ spin(lb)
+            if a_ is not None:
+                J[:, tdx[a_]] = -(P @ spin(la))
         return J, P @ np.asarray(d, float), w
     built = [rows(m) for m in meas]
     while True:
@@ -4439,6 +4535,7 @@ def _solve_moves(roots, meas, agree, haze=None):
         keep.remove(worst)
     if haze is not None:
         haze.update({f: round(float(x[fdx[f]]), 2) for f in filters})
+        haze.update({("turn", r): round(float(x[tdx[r]]), 4) for r in tdx})
     return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
 
 
@@ -4557,7 +4654,12 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if edges:
                 return (pr,) + tuple(edge_shift(s, ref, s["offset"], t, mine, t["offset"]))
             # (two pointings each up to PANEL_MAX off SPICE can sit twice that apart)
-            return (pr,) + tuple(panel_shift(s, ref, s["offset"], t, mine, t["offset"], PANEL_FAR if surfaced else 2 * PANEL_MAX))
+            got = panel_shift(s, ref, s["offset"], t, mine, t["offset"], PANEL_FAR if surfaced else 2 * PANEL_MAX)
+            if GLOBAL_TURNS and got[0] is not None:
+                theta, blocks = pair_turn(s, ref, t, mine, PANEL_FAR if surfaced else 2 * PANEL_MAX)
+                if theta is not None:
+                    got[1]["turn"] = theta
+            return (pr,) + tuple(got)
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
             got = list(ex.map(measure, todo))
@@ -4587,7 +4689,16 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 continue
             w = float(max(how["ncc"][1], 0.1))
             # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
-            meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w))
+            s_, t_ = by_n[j], by_n[n]
+            ox = (max(s_["offset"][0] + s_["box"][0], t_["offset"][0] + t_["box"][0])
+                  + min(s_["offset"][0] + s_["box"][0] + s_["box"][2], t_["offset"][0] + t_["box"][0] + t_["box"][2])) / 2
+            oy = (max(s_["offset"][1] + s_["box"][1], t_["offset"][1] + t_["box"][1])
+                  + min(s_["offset"][1] + s_["box"][1] + s_["box"][3], t_["offset"][1] + t_["box"][1] + t_["box"][3])) / 2
+            meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w,
+                         (ox - s_["offset"][0], oy - s_["offset"][1]), (ox - t_["offset"][0], oy - t_["offset"][1])))
+            if "turn" in how:
+                # (tile n's content turned theta against j's: n's pointing turns back by that much against j's)
+                meas.append(("turn", rootmap[j], rootmap[n], -how["turn"], w))
         if anchors:
             # absolute places (ring_moves: each tile's rings fitted to the pass's radial profile), one per pointing: the
             # median of its tiles' fits, as ring_moves moves a pointing's filters together
@@ -4629,13 +4740,14 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         haze = {}
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE, haze)
         if haze:
-            seen["haze"] = haze
+            seen["haze"] = {f: v for f, v in haze.items() if not isinstance(f, tuple)}
         # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
         # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
         # 35 px, so the matches are capped here too (measure) and the moves only past what any chain reached)
         most = EDGE_MAX * FRAME
         out = {}
-        linked = {m[0] for i, m in enumerate(meas) if i in keep and m[0] not in (None, "limb")} | {m[1] for i, m in enumerate(meas) if i in keep}
+        linked = ({m[0] for i, m in enumerate(meas) if i in keep and m[0] not in (None, "limb", "turn")}
+                  | {m[1] for i, m in enumerate(meas) if i in keep and m[0] != "turn"})
         # a chain of pointings whose relative places spread wider than the furthest move believed (a long scan whose
         # pointings SPICE puts a little further off each step: Hyperion 015HY, 70 px end to end) is held by its
         # middle instead of by SPICE's average, each linked group on its own, as the time-order rule held it by its
@@ -4649,7 +4761,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             return r
         for i in keep:
             a_, b_ = meas[i][0], meas[i][1]
-            if a_ not in (None, "limb"):
+            if a_ not in (None, "limb", "turn"):
                 group[top(a_)] = top(b_)
         members = collections.defaultdict(list)
         for r in linked:
@@ -4667,6 +4779,9 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if math.hypot(*mv) > most or math.hypot(*mv) < PANEL_LEAST:
                 mv = (0.0, 0.0)
             out[n] = [round(mv[0], 2), round(mv[1], 2)]
+            turn = haze.get(("turn", r), 0.0) if r in linked else 0.0
+            if abs(turn) >= 0.01:
+                out[n].append(round(turn, 4))
         if report is not None:
             report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
         if set(kept.get("tiles", ())) - set(by_n):
@@ -5293,7 +5408,8 @@ def layout(u, n, cache):
         if rung:
             moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
     if moved:
-        tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
+        tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"],
+                      **({"turn": moved[t["n"]][2]} if len(moved[t["n"]]) > 2 else {}))
                  if t["n"] in moved and "offset" in t else t for t in tiles]
     count = {}
     for t in tiles:
@@ -7422,12 +7538,15 @@ def hdr_map(placed, W, H):
 SUBPIXEL = os.environ.get("CASSINI_SUBPIXEL", "1") != "0"   # tiles drawn at their sub-pixel places (_subpixel_at; off: =0)
 
 
-def _subpixel(part, fx, fy):
+def _subpixel(part, fx, fy, turn=0.0, centre=None):
     """RGBA uint8 part moved by (fx, fy) px (each within half a pixel), premultiplied by its alpha so no black comes in
     from outside it; its edge softens by the part of a pixel moved."""
     a = part[..., 3:4].astype(np.float32) / 255
     pm = np.concatenate([part[..., :3].astype(np.float32) * a, a * 255], axis=2)
     m = np.float32([[1, 0, fx], [0, 1, fy]])
+    if turn:
+        m = cv2.getRotationMatrix2D(centre, turn, 1.0).astype(np.float32)
+        m[:, 2] += (fx, fy)
     moved = cv2.warpAffine(pm, m, (part.shape[1], part.shape[0]), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
     al = np.clip(moved[..., 3:4], 0, 255)
     rgb = np.where(al > 0.5, moved[..., :3] / np.maximum(al / 255, 1e-6), 0)
@@ -7440,6 +7559,10 @@ def _subpixel_at(part, t, rect, k, left, top):
     each rounded on its own, no longer land up to a pixel apart."""
     fx = (t["offset"][0] + t["box"][0] - rect[0]) * k - left
     fy = (t["offset"][1] + t["box"][1] - rect[1]) * k - top
+    if t.get("turn"):
+        # (a pointing the solve turned: turned about the frame's middle, then moved by the part of a pixel)
+        return _subpixel(part, fx, fy, t["turn"], (-t["box"][0] / t["box"][2] * part.shape[1] - 0.5,
+                                                   -t["box"][1] / t["box"][3] * part.shape[0] - 0.5))
     return _subpixel(part, fx, fy) if abs(fx) > 0.01 or abs(fy) > 0.01 else part
 
 
