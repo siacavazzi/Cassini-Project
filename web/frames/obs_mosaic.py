@@ -3234,7 +3234,7 @@ GLOBAL_PANELS = os.environ.get("CASSINI_GLOBAL_PANELS", "1") != "0"
 GLOBAL_PRIOR = 5.0     # px: how far SPICE's place of a pointing is off (its soft prior's spread)
 GLOBAL_NOISE = 0.7     # px: a believed match's own spread
 GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), before ...
-GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
+GLOBAL_PARTNERS = int(os.environ.get("CASSINI_GLOBAL_PARTNERS", "8"))    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
 GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
 if GLOBAL_PANELS:
     PANEL_FILE = "global2-" + PANEL_FILE   # (2: ring pairs and anchors, limb anchors)
@@ -3696,6 +3696,7 @@ _ring_geometries = {}   # pass key -> _ring_geometry's answer
 RING_PAIR_LAG = 25      # bins (RING_BIN km) searched each way (ring_pair_shift)
 RING_PAIR_NCC = 0.6     # the least two tiles' ring profiles must agree once lined up ...
 RING_PAIR_RIVAL = 0.85  # ... and no other lag more than 3 bins away this nearly as well
+RING_PAIR_AGREE = 1.5   # px: a filter's ring match further than this from its pointing pair's other filters' is left out
 RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
 
 
@@ -4674,6 +4675,31 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                   if shift is not None and isinstance(how, dict) and how.get("ring")}
         got = [g for g in got if g[1] is None or (isinstance(g[2], dict) and g[2].get("ring"))
                or (min(rootmap[g[0][0]], rootmap[g[0][1]]), max(rootmap[g[0][0]], rootmap[g[0][1]])) not in ringed]
+        # (a pair of pointings matched on its rings in several filters: the filters must agree. The rings' pattern
+        # repeats closely enough that a filter can match ringlets 1500 km off and hold there, the next filter its own:
+        # 195RI's pointings 97 and 104 matched -9.8 px in one filter and +12.3 in the other. Matches further than
+        # RING_PAIR_AGREE from the filters' median across the rings are left out, and all of them when no more than
+        # half agree)
+        byp = collections.defaultdict(list)
+        for i, g in enumerate(got):
+            if g[1] is not None and isinstance(g[2], dict) and g[2].get("ring"):
+                byp[(min(rootmap[g[0][0]], rootmap[g[0][1]]), max(rootmap[g[0][0]], rootmap[g[0][1]]))].append(i)
+        drop = set()
+        for pp, ii in byp.items():
+            if len(ii) < 2:
+                continue
+            # (across the rings, signed as from the lower root to the higher)
+            along = []
+            for i in ii:
+                (j, n), shift, how = got[i]
+                v = float(np.dot(shift, how["normal"])) * (1 if rootmap[j] == pp[0] else -1)
+                along.append(v)
+            mid = float(np.median(along))
+            ok = [i for i, v in zip(ii, along) if abs(v - mid) <= RING_PAIR_AGREE]
+            drop |= set(ii) - set(ok) if len(ok) * 2 > len(ii) else set(ii)
+        for i in drop:
+            (j, n), shift, how = got[i]
+            got[i] = ((j, n), None, f"ring match disagrees with the pointing's other filters ({how['lag_km']:+.0f} km)")
         for (j, n), shift, how in got:
             seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
             if shift is None:
