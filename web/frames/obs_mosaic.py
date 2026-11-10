@@ -6361,6 +6361,98 @@ def _chain(made, pic, there, believed, step, guide=None):
     return places, hows
 
 
+STEADY_LINKS = int(os.environ.get("CASSINI_STEADY_LINKS", "1"))   # prototype: frames each frame is matched to (1: the chain)
+STEADY_AGREE = 2.0        # px: a link further than this from the solve is left out (_chain_links)
+STEADY_LINK_NOISE = 0.3   # px: a frame-to-frame match's spread (_chain_links)
+STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SPICE's place), so the solve is held; the
+#                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
+
+
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
+    """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
+    each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
+    "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, the worst link left
+    out until all agree within STEADY_AGREE), as the global mosaic solve does. The chain adds each frame's match to
+    the one before, so a fraction of a pixel off in each adds up like a random walk over a movie (steady_places pulls
+    it back to SPICE only over STEADY_SMOOTH frames); linked several frames back, the places are held by several paths.
+    ({n: [x, y]}, how)."""
+    import scipy.sparse as sps
+    import scipy.sparse.linalg as spla
+    tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
+    if not tiles:
+        return {}, {}
+    order = [t["n"] for t in tiles]
+    at = {n: i for i, n in enumerate(order)}
+    by = {t["n"]: t for t in tiles}
+    spice = {n: list(by[n]["offset"]) for n in order}
+    pairs = []
+    newest = {}
+    for i, n in enumerate(order):
+        cands = order[max(0, i - links):i]
+        if newest.get(by[n]["filter"]) is not None:
+            cands = cands + [newest[by[n]["filter"]]]
+        for j in dict.fromkeys(cands):
+            pairs.append((j, n))
+        newest[by[n]["filter"]] = n
+
+    def measure(pr):
+        j, n = pr
+        t = by[n]
+        rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
+        g = guide(spice, j, n, None) if guide else {}
+        shift, how = _shift_onto(by[j], pic(j), (0.0, 0.0), t, pic(n), rel,
+                                 around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
+        if shift is None or math.hypot(*shift) > believed:
+            return pr, None, how
+        d = (rel[0] - shift[0], rel[1] - shift[1])
+        if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
+            return pr, None, "past reach"
+        return pr, d, how
+    for n in order:
+        pic(n)   # (read before the threads)
+    with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+        got = [g for g in ex.map(measure, pairs) if g[1] is not None]
+    N = len(order)
+    keep = list(range(len(got)))
+    robust = np.ones(len(got))
+    x0 = np.array([spice[n] for n in order], float)
+    for rnd in range(40):
+        rows, cols, vals, rhs_x, rhs_y, wts = [], [], [], [], [], []
+        for r, k in enumerate(keep):
+            (j, n), d, _ = got[k]
+            w = math.sqrt(robust[k]) / STEADY_LINK_NOISE
+            rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
+            rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
+        m = len(keep)
+        pw = 1.0 / STEADY_LINK_PRIOR
+        rows += list(range(m, m + N)); cols += list(range(N)); vals += [pw] * N
+        rhs_x += list(pw * x0[:, 0]); rhs_y += list(pw * x0[:, 1])
+        A = sps.csr_matrix((vals, (rows, cols)), shape=(m + N, N))
+        px = spla.lsqr(A, np.array(rhs_x), atol=1e-10, btol=1e-10)[0]
+        py = spla.lsqr(A, np.array(rhs_y), atol=1e-10, btol=1e-10)[0]
+        res = {}
+        for k in keep:
+            (j, n), d, _ = got[k]
+            res[k] = math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1])
+        new = {k: 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k] for k in keep}
+        changed = any(abs(new[k] - robust[k]) > 1e-3 for k in keep)
+        for k in keep:
+            robust[k] = new[k]
+        worst = max(keep, key=lambda k: res[k]) if keep else None
+        if worst is not None and res[worst] > STEADY_AGREE:
+            keep.remove(worst)
+            continue
+        if not changed:
+            break
+    places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
+    linked = {}
+    for k in keep:
+        (j, n), _, how = got[k]
+        linked.setdefault(n, []).append(j)
+    hows = {n: (f"linked to {sorted(linked[n])}" if n in linked else "SPICE (no link)") for n in order}
+    return places, hows
+
+
 def _chained(u, cache, p, name, key, work):
     """A pass's chain kept with it (in the file name and its record's key): {n: [x, y]}, made by work() once."""
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -6420,6 +6512,8 @@ STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
 STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places;
+if int(os.environ.get("CASSINI_STEADY_LINKS", "1")) > 1:
+    STEADY_FILE = f"links{os.environ['CASSINI_STEADY_LINKS']}-" + STEADY_FILE   # (prototype: kept apart from the chain's)
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -6462,7 +6556,10 @@ def steady_chain(u, cache, p=None):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-        places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        if STEADY_LINKS > 1:
+            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS)
+        else:
+            places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 
