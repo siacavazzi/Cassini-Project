@@ -3218,6 +3218,7 @@ GLOBAL_PRIOR = 5.0     # px: how far SPICE's place of a pointing is off (its sof
 GLOBAL_NOISE = 0.7     # px: a believed match's own spread
 GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), before ...
 GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
+GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
 if GLOBAL_PANELS:
     PANEL_FILE = "global1-" + PANEL_FILE
     PANEL_TAG, EDGE_TAG = "-g1", "-ge1"
@@ -3974,31 +3975,42 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             w = min(a[0] + s["box"][0] + s["box"][2], b[0] + t["box"][0] + t["box"][2]) - max(a[0] + s["box"][0], b[0] + t["box"][0])
             h = min(a[1] + s["box"][1] + s["box"][3], b[1] + t["box"][1] + t["box"][3]) - max(a[1] + s["box"][1], b[1] + t["box"][1])
             return (w, h)
-        # pairs of tiles of different pointings: for each pointing's first tile, the tiles of the other pointings it
-        # overlaps most (its own filter first), one per pointing
-        pairs = set()
+        # pairs of tiles of different pointings: each pointing paired with the GLOBAL_PARTNERS pointings its first tile
+        # overlaps most (its own filter first), and each such pair of pointings measured on up to GLOBAL_FILTERS of
+        # their filters, tile against tile of the same filter (as panel_places measured a pointing on several of the
+        # tiles it overlaps: one filter's match fails where another's holds, Tethys 015TE); a pair of pointings with no
+        # filter in common is measured on the two tiles that overlap most (not on a clouded body: edge_shift)
+        tiles_of = collections.defaultdict(list)
+        for n in sorted(by_n):
+            if rootmap.get(n) in by_n:
+                tiles_of[rootmap[n]].append(n)
+        partners = set()
         for r in roots:
             t = by_n[r]
             best = {}
-            for s in by_n.values():
-                rs = rootmap.get(s["n"])
-                if rs == r or rs not in by_n or edges and s["filter"] != t["filter"]:
+            for sv in by_n.values():
+                rs = rootmap.get(sv["n"])
+                if rs == r or rs not in by_n or edges and sv["filter"] != t["filter"]:
                     continue
-                w, h = overlap(s, t)
+                w, h = overlap(sv, t)
                 if w >= PANEL_NARROW and h >= PANEL_NARROW:
-                    key = (s["filter"] != t["filter"], -w * h)
+                    key = (sv["filter"] != t["filter"], -w * h)
                     if rs not in best or key < best[rs][0]:
-                        best[rs] = (key, s["n"])
+                        best[rs] = (key, sv["n"])
             for rs, (_, sn) in sorted(best.items(), key=lambda kv: kv[1][0])[:GLOBAL_PARTNERS]:
-                pairs.add((min(r, sn), max(r, sn)))
-        pairs = sorted(pairs)
-        # keep only one pair per pair of pointings (the one measured first)
-        seen_pp, todo = set(), []
-        for a_, b_ in pairs:
-            pp = (min(rootmap[a_], rootmap[b_]), max(rootmap[a_], rootmap[b_]))
-            if pp not in seen_pp:
-                seen_pp.add(pp)
-                todo.append((a_, b_))
+                partners.add((min(r, rs), max(r, rs), min(r, sn) if rs > r else min(sn, r), max(r, sn)))
+        todo, seen_pp = [], set()
+        for ra, rb, a0, b0 in sorted(partners):
+            if (ra, rb) in seen_pp:
+                continue
+            seen_pp.add((ra, rb))
+            byf = {by_n[n]["filter"]: n for n in tiles_of[rb]}
+            same = [(min(n, byf[by_n[n]["filter"]]), max(n, byf[by_n[n]["filter"]])) for n in tiles_of[ra]
+                    if by_n[n]["filter"] in byf]
+            if same:
+                todo += same[:GLOBAL_FILTERS]
+            elif not edges:
+                todo.append((a0, b0))
         # (pairs measured before, by a solve of fewer tiles, are taken as measured: they were measured at SPICE's places,
         # which do not change, so a mosaic grown a tile at a time reads only its new pairs' pictures)
         before = kept.get("pairs", {}) if isinstance(kept, dict) else {}
@@ -4037,9 +4049,35 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
             meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w))
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
-        most = (EDGE_MAX if edges else (PANEL_FAR if surfaced else PANEL_MAX)) * FRAME
+        # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
+        # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
+        # 35 px, so the matches are capped here too (measure) and the moves only past what any chain reached)
+        most = EDGE_MAX * FRAME
         out = {}
         linked = {m[0] for i, m in enumerate(meas) if i in keep} | {m[1] for i, m in enumerate(meas) if i in keep}
+        # a chain of pointings whose relative places spread wider than the furthest move believed (a long scan whose
+        # pointings SPICE puts a little further off each step: Hyperion 015HY, 70 px end to end) is held by its
+        # middle instead of by SPICE's average, each linked group on its own, as the time-order rule held it by its
+        # first pointing; cut at that limit pointing by pointing, a group came apart at the cut
+        group = {r: r for r in linked}
+
+        def top(r):
+            while group[r] != r:
+                group[r] = group[group[r]]
+                r = group[r]
+            return r
+        for i in keep:
+            a_, b_ = meas[i][0], meas[i][1]
+            group[top(a_)] = top(b_)
+        members = collections.defaultdict(list)
+        for r in linked:
+            members[top(r)].append(r)
+        for rs in members.values():
+            xy = np.array([moves[r] for r in rs], float)
+            if np.hypot(*xy.T).max() > most:
+                c = (xy.min(axis=0) + xy.max(axis=0)) / 2
+                for r in rs:
+                    moves[r] = (moves[r][0] - c[0], moves[r][1] - c[1])
         for n in by_n:
             r = rootmap[n]
             mv = moves.get(r, (0.0, 0.0)) if r in linked else (0.0, 0.0)
