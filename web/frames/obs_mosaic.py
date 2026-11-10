@@ -6447,8 +6447,6 @@ def _chain(made, pic, there, believed, step, guide=None):
 
 STEADY_LINKS = int(os.environ.get("CASSINI_STEADY_LINKS", "4"))   # frames back each frame is matched to (1: the chain alone)
 STEADY_AGREE = 2.0        # px: a link further than this from the solve is left out (_chain_links)
-STEADY_OFF_TIMES = 4.0   # a solved place further off SPICE's than this many times the pass's median is held at SPICE's
-STEADY_OFF_LEAST = 8.0   # px: ... when that is over this much (_chain_links)
 STEADY_WINDOW = 32        # tiles whose links are measured with their pictures read at once (_chain_links)
 STEADY_LINK_NOISE = 0.3   # px: a frame-to-frame match's spread (_chain_links)
 STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SPICE's place), so the solve is held; the
@@ -6547,11 +6545,9 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
                 keep.remove(k)
             continue
         if reach is not None:
-            # (past the reach, or far past how far the pass's frames are off SPICE as a rule: a run of frames another
-            # moon pulled along together sits 20 px off where the rest sit 3)
+            # (past the guide's reach, as _chain holds each frame: a run of frames another moon pulled along together)
             dev = np.hypot(px - x0[:, 0], py - x0[:, 1])
-            limit = min(reach, max(STEADY_OFF_LEAST, STEADY_OFF_TIMES * float(np.median(dev))))
-            far = [order[i] for i in range(N) if order[i] not in held and dev[i] > limit]
+            far = [order[i] for i in range(N) if order[i] not in held and dev[i] > reach]
             if far:
                 # (past the reach: SPICE's place, its links out, and the rest solved again)
                 held |= set(far)
