@@ -4436,6 +4436,13 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             how = before[f"{pr[0]}-{pr[1]}"]
             got.append((pr, tuple(how["shift"]), how) if isinstance(how, dict) else (pr, None, how))
         meas, seen = [], {}
+        # (a pair of pointings whose rings were matched is held by that alone: the edges two tiles share there are the
+        # disk's limb, the ring's shadow on it and the terminator, which Cassini sees from another place by the next
+        # lap, so they move against the sky; 118RI's first and last laps matched 7 px apart on them, the rings agree)
+        ringed = {(min(rootmap[j], rootmap[n]), max(rootmap[j], rootmap[n])) for (j, n), shift, how in got
+                  if shift is not None and isinstance(how, dict) and how.get("ring")}
+        got = [g for g in got if g[1] is None or (isinstance(g[2], dict) and g[2].get("ring"))
+               or (min(rootmap[g[0][0]], rootmap[g[0][1]]), max(rootmap[g[0][0]], rootmap[g[0][1]])) not in ringed]
         for (j, n), shift, how in got:
             seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
             if shift is None:
