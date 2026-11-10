@@ -3864,7 +3864,7 @@ def _disk_geometry(u):
 
 
 LIMB_BAND = 24      # px each side of SPICE's limb measured (limb_place)
-LIMB_LIT = 0.15     # the least cosine of the sun just inside the limb: a lit limb, not the terminator or the night side
+LIMB_LIT = 0.02     # the least cosine of the sun just inside the limb: a lit limb (a crescent's is lit at a slant), not the night side
 LIMB_LEAST = 200    # samples on the lit limb a tile needs
 
 
