@@ -3237,8 +3237,8 @@ GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), befo
 GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
 GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
 if GLOBAL_PANELS:
-    PANEL_FILE = "global2-" + PANEL_FILE   # (2: ring pairs and anchors, limb anchors)
-    PANEL_TAG, EDGE_TAG = "-g2", "-ge2"
+    PANEL_FILE = ("pf-" if os.environ.get("CASSINI_GLOBAL_PER_FRAME") == "1" else "") + "global2-" + PANEL_FILE   # (2: ring pairs and anchors, limb anchors)
+    PANEL_TAG, EDGE_TAG = ("-g2f", "-ge2f") if os.environ.get("CASSINI_GLOBAL_PER_FRAME") == "1" else ("-g2", "-ge2")
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -4452,6 +4452,9 @@ def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
 LIMB_BODIES = frozenset({"SATURN", "TITAN", "JUPITER", "RHEA", "DIONE", "TETHYS", "ENCELADUS", "MIMAS", "IAPETUS"})
 GLOBAL_LIMBS = os.environ.get("CASSINI_GLOBAL_LIMBS", "1") != "0"   # limb anchors in the global solve (global_places)
 LIMB_WEIGHT = 0.5         # a limb anchor's weight against a match's (its place is a few px rough tile to tile)
+GLOBAL_PER_FRAME = os.environ.get("CASSINI_GLOBAL_PER_FRAME", "0") == "1"   # prototype: every tile its own move
+PER_FRAME_TIE = 4.0       # weight tying a filter to its pointing's first tile where C8's match was believed ...
+PER_FRAME_LOOSE = 0.03    # ... and where it kept SPICE's place (a spread of 4 px: the WAC's filters drift 3 to 5 px)
 GLOBAL_TURNS = os.environ.get("CASSINI_GLOBAL_TURNS", "0") == "1"   # prototype: each pointing's small turn solved too
 TURN_NOISE = 0.05         # degrees: a believed turn match's spread
 TURN_PRIOR = 0.3          # degrees: how far SPICE's twist of a pointing may be off (its prior)
@@ -4460,7 +4463,7 @@ TURN_MOST = 1.0           # degrees: the largest turn believed
 LIMB_HAZE_PRIOR = 100.0   # px: how high a filter's limb may stand over SPICE's (its haze), a loose prior (_solve_moves)
 
 
-def _solve_moves(roots, meas, agree, haze=None):
+def _solve_moves(roots, meas, agree, haze=None, tied=()):
     """The moves {root: (dx, dy)} of a mosaic's pointings that best agree with every match between them, meas =
     [(a, b, d, proj, w)]: pointing b sits d from where pointing a is (proj, the 2 x 2 projection the match measures:
     the identity, or onto an edge's normal), believed with weight w; a None for a: pointing b's own place is d (an
@@ -4480,7 +4483,9 @@ def _solve_moves(roots, meas, agree, haze=None):
     keep = list(range(len(meas)))
     if not meas:
         return {r: (0.0, 0.0) for r in roots}, []
-    prior = np.concatenate([np.full(2 * n, 1 / GLOBAL_PRIOR ** 2), np.full(len(filters), 1 / LIMB_HAZE_PRIOR ** 2),
+    # (a tile tied to its pointing's first tile, GLOBAL_PER_FRAME, takes SPICE's prior through that tie alone)
+    own = np.array([[1e-6 if r in tied else 1 / GLOBAL_PRIOR ** 2] * 2 for r in roots]).ravel()
+    prior = np.concatenate([own, np.full(len(filters), 1 / LIMB_HAZE_PRIOR ** 2),
                             np.full(len(tdx), 1 / TURN_PRIOR ** 2)])
     # a degree's turn (as cv2.getRotationMatrix2D turns, y down) about a tile's middle moves a point at lever from it by
     spin = lambda lever: math.radians(1.0) * np.array([lever[1], -lever[0]], float)
@@ -4586,6 +4591,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if "offset" in t:
                 rootmap[t["n"]] = _pointing_root(u, t["n"], rootmap)
         roots = sorted({r for r in rootmap.values() if r in by_n})
+        # (per frame, GLOBAL_PER_FRAME: every tile its own unknown, as ISIS's jigsaw solves each image's pointing; the
+        # pairs are still chosen pointing by pointing below, and a pointing's filters are tied to one another)
+        node = (lambda n: n) if GLOBAL_PER_FRAME else (lambda n: rootmap[n])
+        solve_roots = sorted(by_n) if GLOBAL_PER_FRAME else roots
 
         def overlap(s, t):
             a, b = s["offset"], t["offset"]
@@ -4683,7 +4692,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             nrm = how.get("normal") if isinstance(how, dict) else None
             if isinstance(how, dict) and how.get("ring"):
                 # (a ring match: how far tile n's ringlets sit out from tile j's, across the rings only)
-                meas.append((rootmap[j], rootmap[n], np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
+                meas.append((node(j), node(n), np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
                 continue
             P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
             far = math.hypot(*shift) > 2 * PANEL_MAX * FRAME
@@ -4696,18 +4705,18 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                   + min(s_["offset"][0] + s_["box"][0] + s_["box"][2], t_["offset"][0] + t_["box"][0] + t_["box"][2])) / 2
             oy = (max(s_["offset"][1] + s_["box"][1], t_["offset"][1] + t_["box"][1])
                   + min(s_["offset"][1] + s_["box"][1] + s_["box"][3], t_["offset"][1] + t_["box"][1] + t_["box"][3])) / 2
-            meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w,
+            meas.append((node(j), node(n), -np.array(shift, float), P, w,
                          (ox - s_["offset"][0], oy - s_["offset"][1]), (ox - t_["offset"][0], oy - t_["offset"][1])))
             if "turn" in how:
                 # (tile n's content turned theta against j's: n's pointing turns back by that much against j's)
-                meas.append(("turn", rootmap[j], rootmap[n], -how["turn"], w))
+                meas.append(("turn", node(j), node(n), -how["turn"], w))
         if anchors:
             # absolute places (ring_moves: each tile's rings fitted to the pass's radial profile), one per pointing: the
             # median of its tiles' fits, as ring_moves moves a pointing's filters together
             by = {}
             for n, m in anchors.items():
                 if rootmap.get(n) in by_n:
-                    by.setdefault(rootmap[n], []).append(m[:2])
+                    by.setdefault(node(n), []).append(m[:2])
             for r, ms in by.items():
                 # (a radial profile fit says how far across the rings the tile sits, not where along them: its move along
                 # the rings is noise, up to 18 px on 039RI, and held whole it dragged pointings along the rings. Only
@@ -4737,10 +4746,22 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                     for n, got_l in ex.map(limb, sorted(by_n)):
                         if got_l is not None:
                             o, nv, count = got_l
-                            meas.append(("limb", rootmap[n], by_n[n]["filter"], nv, o, LIMB_WEIGHT))
+                            meas.append(("limb", node(n), by_n[n]["filter"], nv, o, LIMB_WEIGHT))
                             seen[f"limb-{n}"] = {"limb": round(o, 2), "normal": [round(float(v), 4) for v in nv]}
+        if GLOBAL_PER_FRAME:
+            # each filter tied to its pointing's first tile where C8 put it: firmly where C8's match of the two was
+            # believed, loosely where it kept SPICE's place (a quarter of C8's matches on the moons and rings), so there
+            # the filter's own matches to its neighbours in that filter place it
+            for n in by_n:
+                r = rootmap.get(n)
+                if r is None or r == n or r not in by_n:
+                    continue
+                reg = by_n[n].get("registered") or {}
+                w = PER_FRAME_TIE if "shift" in reg else PER_FRAME_LOOSE
+                meas.append((r, n, np.zeros(2), np.eye(2), w))
         haze = {}
-        moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE, haze)
+        moves, keep = _solve_moves(solve_roots, meas, EDGE_AGREE if edges else PANEL_AGREE, haze,
+                                   tied={n for n in by_n if GLOBAL_PER_FRAME and rootmap.get(n) not in (None, n)})
         if haze:
             seen["haze"] = {f: v for f, v in haze.items() if not isinstance(f, tuple)}
         # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
@@ -4776,7 +4797,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 for r in rs:
                     moves[r] = (moves[r][0] - c[0], moves[r][1] - c[1])
         for n in by_n:
-            r = rootmap[n]
+            r = node(n)
             mv = moves.get(r, (0.0, 0.0)) if r in linked else (0.0, 0.0)
             if math.hypot(*mv) > most or math.hypot(*mv) < PANEL_LEAST:
                 mv = (0.0, 0.0)
