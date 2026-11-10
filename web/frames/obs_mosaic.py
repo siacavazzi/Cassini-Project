@@ -3821,6 +3821,93 @@ def _ring_geometry(u):
     return got
 
 
+_disk_geometries = {}   # pass key -> _disk_geometry's answer
+
+
+def _disk_geometry(u):
+    """For a pass of a body SPICE has a shape for: a function (canvas x, y arrays in reference px, frame id) -> (on the
+    disk, cosine of the sun there), SPICE's triaxial body at that frame's time (reproject.sky_to_surface), on the pass's
+    axes (view_turn), as _ring_geometry; None when SPICE cannot say."""
+    if not u.get("z"):
+        return None
+    key = tuple(u["key"])
+    with _lock:
+        if key in _disk_geometries:
+            return _disk_geometries[key]
+    got = None
+    try:
+        import reproject as rp
+        placed = [fr for fr in u["frames"] if fr[7]]
+        ets = _ets([fr[1] for fr in placed])
+        if placed and ets and _with_kernels(placed[len(placed) // 2][3]):
+            km_px = IFOV[u["key"][2]] * u["z"]
+            a = math.radians(view_turn(u))
+            c, sn = math.cos(a), math.sin(a)
+            views = {}
+
+            def got(x, y, fid):
+                if fid not in views:
+                    views[fid] = rp.sky_view(u["key"][0], ets[fid]) if fid in ets else None
+                v = views[fid]
+                if v is None:
+                    return np.zeros(np.shape(x), bool), np.zeros(np.shape(x))
+                points, hit = rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)
+                normal = points / v["radii"] ** 2
+                normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
+                return hit, np.where(hit, normal @ v["sun"], 0.0)
+    except Exception as e:   # noqa: BLE001
+        print(f"no disk geometry for {key}: {e}", flush=True)
+        got = None
+    with _lock:
+        _disk_geometries[key] = got
+    return got
+
+
+LIMB_BAND = 24      # px each side of SPICE's limb measured (limb_place)
+LIMB_LIT = 0.15     # the least cosine of the sun just inside the limb: a lit limb, not the terminator or the night side
+LIMB_LEAST = 200    # samples on the lit limb a tile needs
+
+
+def limb_place(disk, t, im, step=2):
+    """How far tile t's lit limb (its picture im, where its offset puts it) sits outside SPICE's limb of the body at
+    its time (disk, _disk_geometry): (e px along n, n the limb's mean outward normal, samples), or None. Measured as
+    the area between the picture's lit-ness (halfway between the sky and the disk just inside, per tile) and SPICE's
+    disk, over a band LIMB_BAND each side of the lit limb, per length of limb: a sub-pixel edge place that needs no
+    peak, and that a haze standing over the limb moves by its own height (each filter's own, solved for)."""
+    h, w = im.shape[:2]
+    k = t["box"][2] / w
+    x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    sy, sx = np.mgrid[0:h:step, 0:w:step]
+    gx, gy = sx * k + x0, sy * k + y0
+    hit, mu0 = disk(gx.ravel(), gy.ravel(), t["id"])
+    hit, mu0 = hit.reshape(gx.shape), mu0.reshape(gx.shape)
+    if not hit.any() or hit.all():
+        return None
+    d_in = cv2.distanceTransform(hit.astype(np.uint8), cv2.DIST_L2, 5)
+    d_out = cv2.distanceTransform((~hit).astype(np.uint8), cv2.DIST_L2, 5)
+    d = (np.where(hit, d_in - 0.5, -(d_out - 0.5))) * step * k    # px, + inside SPICE's disk
+    lit_in = cv2.dilate(np.where(hit & (d < LIMB_BAND), mu0, 0).astype(np.float32), np.ones((9, 9), np.uint8))
+    a = im[sy, sx]
+    valid = cv2.erode((a[..., 3] == 255).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    band = valid & (np.abs(d) < LIMB_BAND) & (lit_in > LIMB_LIT)
+    if band.sum() < LIMB_LEAST:
+        return None
+    g = a[..., :3].astype(np.float32).mean(axis=2)
+    sky = np.percentile(g[band & (d < -LIMB_BAND / 2)], 50) if (band & (d < -LIMB_BAND / 2)).sum() > 20 else None
+    inside = np.percentile(g[band & (d > LIMB_BAND / 2)], 50) if (band & (d > LIMB_BAND / 2)).sum() > 20 else None
+    if sky is None or inside is None or inside - sky < 20:
+        return None
+    lit = np.clip((g - sky) / (inside - sky), 0, 1)
+    # the band's width counted in samples across the limb: its samples per px of d, so the area becomes a distance
+    per_px = band.sum() / (2 * LIMB_BAND)
+    e = float((lit[band] - hit[band]).sum() / per_px)
+    gyd, gxd = np.gradient(d)
+    n = -np.array([float(gxd[band].mean()), float(gyd[band].mean())])
+    if np.hypot(*n) < 1e-6:
+        return None
+    return e, n / np.hypot(*n), int(band.sum())
+
+
 def _combine(found):
     """The move of a pointing from its matches on edges [(where it lands by that match (x, y), the edge's normal or
     None)]: the least-squares place that agrees with each across its own edge (all ways for a match that is not one
