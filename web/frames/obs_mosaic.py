@@ -6400,7 +6400,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         t = by[n]
         rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
         g = guide(spice, j, n, None) if guide else {}
-        shift, how = _shift_onto(by[j], pic(j), (0.0, 0.0), t, pic(n), rel,
+        shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                  around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is None or math.hypot(*shift) > believed:
             return pr, None, how
@@ -6408,8 +6408,9 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
             return pr, None, "past reach"
         return pr, d, how
-    for n in order:
-        pic(n)   # (read before the threads)
+    # (every picture read here, before the threads: _every_tile's pic keeps only the last few, and side by side one
+    # thread's picture was let go while another still wanted it)
+    own = {n: pic(n) for n in order}
     with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
         got = [g for g in ex.map(measure, pairs) if g[1] is not None]
     N = len(order)
