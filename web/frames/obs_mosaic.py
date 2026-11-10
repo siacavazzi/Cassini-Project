@@ -3699,7 +3699,7 @@ RING_PAIR_RIVAL = 0.85  # ... and no other lag more than 3 bins away this nearly
 RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
 
 
-def ring_pair_shift(u, rings, s, ref, t, mine):
+def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     """Ring registration of two overlapping tiles of one filter, each where SPICE puts it: the radial profiles (SPICE's
     ring plane at each tile's own time, _ring_profile, detail only) of the part of the view both cover, and the radial
     lag that lines them up. Unlike a match of the pictures, a profile slides only across the rings, never along them
@@ -3762,8 +3762,24 @@ def ring_pair_shift(u, rings, s, ref, t, mine):
     if g <= 0:
         return None, "no ring gradient"
     n = grad / g
+    # (km a pixel across the rings, as the profiles measured it: over all of s's ring samples in the overlap, not at its
+    # middle alone; where the ring plane is seen nearly edge on it changes across the overlap, and the middle's said
+    # 118RI's rings were half as far apart as they are, so the solve moved its pointings twice too far)
+    gx, gy = A[0][ins[0]], A[1][ins[0]]
+    step = rings(gx + n[0], gy + n[1], s["id"])[0] - A[2][ins[0]]
+    step = step[np.isfinite(step) & (step > 0)]
+    if len(step) >= 100:
+        g = float(np.median(step))
     # (t's ringlets sit lag bins in from s's: t moves out by that much, across the rings)
     move = lag * RING_BIN / g
+    if check and abs(lag) > 1:
+        # believed only when it holds: t moved by it, its profile must then line up with s's at no lag (within a bin
+        # and a quarter of the lag). Tiles of one place seen at very different times or lighting can match the wrong
+        # ringlets as well as their own (118RI's first and last laps, 1700 km apart that moved to 1000 km the other way)
+        moved = dict(t, offset=[t["offset"][0] + float(n[0] * move), t["offset"][1] + float(n[1] * move)])
+        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False)
+        if again is None or abs(how["lag_km"]) > RING_BIN + 0.25 * abs(lag) * RING_BIN:
+            return None, f"ring match does not hold ({lag * RING_BIN:+.0f} km, then {how['lag_km'] if again is not None else how})"
     return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
                                                       "normal": [round(float(n[0]), 4), round(float(n[1]), 4)],
                                                       "lag_km": round(lag * RING_BIN, 1)}
