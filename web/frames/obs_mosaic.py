@@ -4056,7 +4056,7 @@ def surface_box(path, t):
 _surface_boxes = {}
 
 
-def panel_places(u, cache, p, tiles, pic=None, report=None):
+def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     """Panel registration: {tile n: [dx, dy]}, how far each tile is moved from SPICE's place (reference pixels), so
     a mosaic's pointings line up where they overlap. SPICE places each frame on its own and its pointing is a few
     pixels off, differently for each pointing (more where the c-smithed pointing is missing, PR #5), so panels of a
@@ -4072,7 +4072,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     if not (calibration.step("align") and calibration.step("panels")):
         return {}
     if GLOBAL_PANELS:
-        return global_places(u, cache, p, tiles, pic, report)
+        return global_places(u, cache, p, tiles, pic, report, anchors)
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
@@ -4193,18 +4193,25 @@ def _solve_moves(roots, meas, agree):
             b = np.zeros(2 * n)
             for k in keep:
                 a_, b_, d, P, w = meas[k]
-                i, j = idx[a_], idx[b_]
+                j = idx[b_]
                 c = w * robust[k] / GLOBAL_NOISE ** 2
                 Q = c * P
-                si, sj = slice(2 * i, 2 * i + 2), slice(2 * j, 2 * j + 2)
-                A[si, si] += Q; A[sj, sj] += Q; A[si, sj] -= Q; A[sj, si] -= Q
-                b[sj] += Q @ d; b[si] -= Q @ d
+                sj = slice(2 * j, 2 * j + 2)
+                A[sj, sj] += Q
+                b[sj] += Q @ d
+                if a_ is None:   # (an anchor: pointing b's own place, as a ring fit says)
+                    continue
+                i = idx[a_]
+                si = slice(2 * i, 2 * i + 2)
+                A[si, si] += Q; A[si, sj] -= Q; A[sj, si] -= Q
+                b[si] -= Q @ d
             x = np.linalg.solve(A, b)
             res = {}
             for k in keep:
                 a_, b_, d, P, w = meas[k]
-                i, j = idx[a_], idx[b_]
-                res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - x[2 * i:2 * i + 2] - d)))
+                j = idx[b_]
+                xa = np.zeros(2) if a_ is None else x[2 * idx[a_]:2 * idx[a_] + 2]
+                res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - xa - d)))
                 robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
         worst = max(keep, key=lambda k: res[k]) if keep else None
         if worst is None or res[worst] <= agree:
@@ -4213,7 +4220,7 @@ def _solve_moves(roots, meas, agree):
     return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
 
 
-def global_places(u, cache, p, tiles, pic=None, report=None):
+def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     """panel_places solved globally (GLOBAL_PANELS): {tile n: [dx, dy]}. Every pointing's first tile is measured
     against the GLOBAL_PARTNERS pointings it overlaps most, earlier and later alike, each pair once, at SPICE's places
     (panel_shift, or edge_shift on a clouded body); the pointings' moves are solved together (_solve_moves), and the
@@ -4221,7 +4228,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
     given more tiles later is solved again (its earlier pointings can move a little). Kept in the pass's folder."""
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + ("ringed-" if anchors else "") + PANEL_FILE)
     by_n = {t["n"]: t for t in tiles if "offset" in t}
     with _ulock(u):
         if os.path.exists(path):
@@ -4307,10 +4314,19 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             w = float(max(how["ncc"][1], 0.1))
             # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
             meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w))
+        if anchors:
+            # absolute places (ring_moves: each tile's rings fitted to the pass's radial profile), one per pointing: the
+            # median of its tiles' fits, as ring_moves moves a pointing's filters together
+            by = {}
+            for n, m in anchors.items():
+                if rootmap.get(n) in by_n:
+                    by.setdefault(rootmap[n], []).append(m[:2])
+            for r, ms in by.items():
+                meas.append((None, r, np.median(np.array(ms, float), axis=0), np.eye(2), 1.0))
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
         most = (EDGE_MAX if edges else (PANEL_FAR if surfaced else PANEL_MAX)) * FRAME
         out = {}
-        linked = {m[0] for i, m in enumerate(meas) if i in keep} | {m[1] for i, m in enumerate(meas) if i in keep}
+        linked = {m[0] for i, m in enumerate(meas) if i in keep and m[0] is not None} | {m[1] for i, m in enumerate(meas) if i in keep}
         for n in by_n:
             r = rootmap[n]
             mv = moves.get(r, (0.0, 0.0)) if r in linked else (0.0, 0.0)
@@ -4918,9 +4934,13 @@ def layout(u, n, cache):
     # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
     # keep that place, and their pointings' panel moves are not added
     rung = ring_moves(u, cache, p, tiles)
-    moved = panel_places(u, cache, p, tiles)
-    if rung:
-        moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
+    if GLOBAL_PANELS:
+        # (global: the ring fits are anchors in the one solve with the pairwise matches, which places every pointing)
+        moved = panel_places(u, cache, p, tiles, anchors=rung)
+    else:
+        moved = panel_places(u, cache, p, tiles)
+        if rung:
+            moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
                  if t["n"] in moved and "offset" in t else t for t in tiles]

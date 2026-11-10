@@ -48,6 +48,13 @@ def test_edge_match_constrains_only_across():
     assert abs(moves[0][1]) < 1e-9 and abs(moves[1][1]) < 1e-9
 
 
+def test_anchor_places_a_chain():
+    # pointing 0 is anchored at (4, 0) (a ring fit); pointing 1 sits (1, 1) from it by a match: both follow the anchor
+    meas = [(None, 0, np.array([4.0, 0.0]), np.eye(2), 1.0), (0, 1, np.array([1.0, 1.0]), np.eye(2), 1.0)]
+    moves, _ = om._solve_moves([0, 1], meas, 2.0)
+    assert abs(moves[0][0] - 4) < 0.5 and abs(moves[1][0] - 5) < 0.5 and abs(moves[1][1] - 1) < 0.2
+
+
 def test_no_matches_keeps_spice():
     moves, keep = om._solve_moves([0, 1, 2], [], 2.0)
     assert all(m == (0.0, 0.0) for m in moves.values()) and keep == []
