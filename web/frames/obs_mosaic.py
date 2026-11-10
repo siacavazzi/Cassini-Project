@@ -6513,7 +6513,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
     keep = list(range(len(got)))
     robust = np.ones(len(got))
     x0 = np.array([spice[n] for n in order], float)
-    held = set()   # tiles held at SPICE's place (past reach)
+    held = set()   # tiles past the reach: placed by SPICE's step from the tile before them, as _chain holds one
     px, py = x0[:, 0].copy(), x0[:, 1].copy()
     for rnd in range(len(got) + 10):
         rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []
@@ -6524,7 +6524,18 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
             rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
             rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
             r += 1
-        pw = [1.0 / STEADY_LINK_PRIOR if order[i] not in held else 1e3 for i in range(N)]
+        # (a held tile: linked to the tile before it by SPICE's step alone, so the movie goes on from there as SPICE moved,
+        # where held at SPICE's own place it jumped there and back on a badly placed body: Hyperion 153HY)
+        for n in held:
+            i = at[n]
+            if i == 0:
+                continue
+            j = order[i - 1]
+            w = 1.0 / STEADY_LINK_NOISE
+            rows += [r, r]; cols += [i, i - 1]; vals += [w, -w]
+            rhs_x.append(w * (x0[i, 0] - x0[i - 1, 0])); rhs_y.append(w * (x0[i, 1] - x0[i - 1, 1]))
+            r += 1
+        pw = [1.0 / STEADY_LINK_PRIOR] * N
         rows += list(range(r, r + N)); cols += list(range(N)); vals += pw
         rhs_x += list(np.array(pw) * x0[:, 0]); rhs_y += list(np.array(pw) * x0[:, 1])
         A = sps.csr_matrix((vals, (rows, cols)), shape=(r + N, N))
@@ -6549,20 +6560,18 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
             dev = np.hypot(px - x0[:, 0], py - x0[:, 1])
             far = [order[i] for i in range(N) if order[i] not in held and dev[i] > reach]
             if far:
-                # (past the reach: SPICE's place, its links out, and the rest solved again)
+                # (past the reach: its links out, SPICE's step from the tile before it in, and the rest solved again)
                 held |= set(far)
                 keep = [k for k in keep if got[k][0][0] not in held and got[k][0][1] not in held]
                 continue
         if not changed:
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
-    for n in held:
-        places[n] = list(spice[n])
     linked = {}
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
-    hows = {n: ("SPICE (past reach)" if n in held else f"linked to {sorted(linked[n])}" if n in linked
+    hows = {n: ("held from the tile before (past reach)" if n in held else f"linked to {sorted(linked[n])}" if n in linked
                 else "first" if n == order[0] else "SPICE (no link)") for n in order}
     return places, hows
 
