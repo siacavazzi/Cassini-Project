@@ -9395,10 +9395,9 @@ def _fade_part(t, rect, w, h, there):
     a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
     if a1 <= a0 or b1 <= b0:
         return None
-    part = _part(os.path.join(there, f"{t['n']}.png"), sw, sh)
-    if SUBPIXEL:
-        part = _subpixel_at(part, t, rect, k, left, top)
-    return (a0, b0, a1, b1), part[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+    # (at the rounded pixel, not moved by the part of a pixel _window moves the tile: the page draws the fade from this
+    # table line for line (web/test_fade_local.py), and a half-pixel edge on a broad fade map shows nowhere)
+    return (a0, b0, a1, b1), _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
 
 
 def fade_table(frame_id, cache, laps=1, W=0, H=0):
