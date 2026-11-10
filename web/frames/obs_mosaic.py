@@ -2229,7 +2229,10 @@ def placed_tiles(u, p, mine, rect, cache):
         left = round((t["offset"][0] + bx - rect[0]) * k)
         top = round((t["offset"][1] + by - rect[1]) * k)
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        yield set_time(u, t["n"]), _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+        part = _part(_pic(u, cache, p["display_scale"], t), sw, sh)
+        if SUBPIXEL:   # (as _window draws it: the part of a pixel its rounding left out)
+            part = _subpixel_at(part, t, rect, k, left, top)
+        yield set_time(u, t["n"]), part[..., 3], left, top
 
 
 def set_time(u, n):
@@ -3221,9 +3224,9 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 # a limb sits higher or lower with the filter (Saturn's haze in UV3 stands ~8 px over its MT3 limb, Titan's in RED over
 # CB3, probe 10-29): edges are measured between tiles of one filter only
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
-EDGE_TAG = "-pe4"
+EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose tiles ring registration moved (ring_places)
-RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)
 
 # Global panel registration (on unless CASSINI_GLOBAL_PANELS=0): every pair of overlapping pointings is measured once
 # (panel_shift / edge_shift at SPICE's places, as panel_places measures them), and all pointings' moves are solved
@@ -3237,8 +3240,13 @@ GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), befo
 GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
 GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
 if GLOBAL_PANELS:
-    PANEL_FILE = "global2-" + PANEL_FILE   # (2: ring pairs and anchors, limb anchors)
-    PANEL_TAG, EDGE_TAG = "-g2", "-ge2"
+    # (2: ring pairs and anchors, limb anchors; the switches that change the solve in the name, so a solve kept with one
+    # setting is never served for another: t turns, nl no limb anchors, nf no ring filters)
+    _switches = ("t" if os.environ.get("CASSINI_GLOBAL_TURNS", "0") == "1" else "") + \
+        ("nl" if os.environ.get("CASSINI_GLOBAL_LIMBS", "1") == "0" else "") + \
+        ("nf" if os.environ.get("CASSINI_RING_FILTERS", "1") == "0" else "")
+    PANEL_FILE = "global2" + _switches + "-" + PANEL_FILE
+    PANEL_TAG, EDGE_TAG = "-g2" + _switches, "-ge2" + _switches
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -3671,7 +3679,10 @@ def ring_moves(u, cache, p, tiles):
                 for n, v in kept.items():
                     if len(v) > 3 and v[3]:
                         by.setdefault(roots.get(n, n), []).append(v[:2])
+                rings = _ring_geometry(u)
                 for t in todo:
+                    if t["n"] not in kept and rings is not None and not rings.knows(t["id"]):
+                        continue   # (no time for its frame in the geometry cache yet: asked again next time, not kept)
                     if t["n"] not in kept:
                         ms = by.get(roots.get(t["n"], t["n"]))
                         mid = [round(float(np.median([m[0] for m in ms])), 2), round(float(np.median([m[1] for m in ms])), 2)] \
@@ -3687,7 +3698,9 @@ def ring_moves(u, cache, p, tiles):
                     os.replace(part, path)
                 except OSError as e:
                     print(f"cannot keep {path} in the cache ({e})", flush=True)
-    return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
+    # (a tile fitted where it already was, a move of [0, 0], is kept too: the global solve takes it as an anchor holding
+    # its pointing there, where left out it took it as not fitted and let pair matches drag it)
+    return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0] or (len(v) > 3 and v[3])}
 
 
 _ring_geometries = {}   # pass key -> _ring_geometry's answer
@@ -3798,28 +3811,21 @@ def _ring_geometry(u):
         if key in _ring_geometries:
             return _ring_geometries[key]
     got = None
-    try:
-        import reproject as rp
-        placed = [fr for fr in u["frames"] if fr[7]]
-        ets = _ets([fr[1] for fr in placed])
-        if placed and ets and _with_kernels(placed[len(placed) // 2][3]):
-            km_px = IFOV[u["key"][2]] * u["z"]
-            a = math.radians(view_turn(u))
-            c, sn = math.cos(a), math.sin(a)
-            views = {}
+    import reproject as rp
+    view = _sky_views(u)
+    if view is not None:
+        km_px = IFOV[u["key"][2]] * u["z"]
+        a = math.radians(view_turn(u))
+        c, sn = math.cos(a), math.sin(a)
 
-            def got(x, y, fid):
-                if fid not in views:
-                    views[fid] = rp.sky_view(u["key"][0], ets[fid]) if fid in ets else None
-                v = views[fid]
-                if v is None:
-                    return np.zeros(np.shape(x)), np.zeros(np.shape(x), bool)
-                return rp.ring_plane(v, c * x + sn * y, c * y - sn * x, km_px)
-    except Exception as e:   # noqa: BLE001  (no kernels, no geometry: matched as before)
-        print(f"no ring geometry for {key}: {e}", flush=True)
-        got = None
-    with _lock:
-        _ring_geometries[key] = got
+        def got(x, y, fid):
+            v = view(fid)
+            if v is None:
+                return np.zeros(np.shape(x)), np.zeros(np.shape(x), bool)
+            return rp.ring_plane(v, c * x + sn * y, c * y - sn * x, km_px)
+        got.knows = view.knows
+        with _lock:
+            _ring_geometries[key] = got
     return got
 
 
@@ -3894,6 +3900,50 @@ def pair_turn_once(s, ref, t, mine, most=None):
     return round(theta, 4), len(pts)
 
 
+_sky_view_cache = {}   # (pass key, frame id) -> reproject.sky_view, worked out once (_sky_views)
+
+
+def _sky_views(u):
+    """For pass u: view(fid) -> reproject.sky_view of its target at that frame's time, or None when SPICE cannot say
+    (yet), and view.knows(fid): whether the geometry cache has the frame's time. Each view is worked out under
+    _spice_lock with the kernels of the frame's own year loaded (_with_kernels, as surface_pictures loads them), since
+    the frame server answers requests side by side and another may load another year's kernels between two calls; a
+    pass across New Year loads each year for its own frames. A frame the geometry cache has no time for yet is looked
+    up again next time it is asked for (a cold pass), and a frame whose view failed is not kept, so a kernel failure
+    passes with the request that met it. None for a pass without a distance."""
+    if not u.get("z"):
+        return None
+    import reproject as rp
+    key = tuple(u["key"])
+    t_of = {fr[1]: fr[3] for fr in u["frames"] if fr[7]}
+    ets = _ets(list(t_of))
+
+    def view(fid):
+        with _lock:
+            got = _sky_view_cache.get((key, fid))
+        if got is not None:
+            return got
+        if fid not in ets:
+            ets.update(_ets([fid]))
+            if fid not in ets:
+                return None
+        with _spice_lock:
+            if not _with_kernels(t_of[fid]):
+                return None
+            try:
+                got = rp.sky_view(u["key"][0], ets[fid])
+            except Exception as e:   # noqa: BLE001  (no geometry for this frame: matched as without it)
+                print(f"no sky view for {key} {fid}: {type(e).__name__}: {e}"[:200], flush=True)
+                return None
+        with _lock:
+            if len(_sky_view_cache) > 20000:
+                _sky_view_cache.clear()
+            _sky_view_cache[(key, fid)] = got
+        return got
+    view.knows = lambda fid: fid in ets or bool(ets.update(_ets([fid]))) or fid in ets
+    return view
+
+
 _disk_geometries = {}   # pass key -> _disk_geometry's answer
 
 
@@ -3908,31 +3958,24 @@ def _disk_geometry(u):
         if key in _disk_geometries:
             return _disk_geometries[key]
     got = None
-    try:
-        import reproject as rp
-        placed = [fr for fr in u["frames"] if fr[7]]
-        ets = _ets([fr[1] for fr in placed])
-        if placed and ets and _with_kernels(placed[len(placed) // 2][3]):
-            km_px = IFOV[u["key"][2]] * u["z"]
-            a = math.radians(view_turn(u))
-            c, sn = math.cos(a), math.sin(a)
-            views = {}
+    import reproject as rp
+    view = _sky_views(u)
+    if view is not None:
+        km_px = IFOV[u["key"][2]] * u["z"]
+        a = math.radians(view_turn(u))
+        c, sn = math.cos(a), math.sin(a)
 
-            def got(x, y, fid):
-                if fid not in views:
-                    views[fid] = rp.sky_view(u["key"][0], ets[fid]) if fid in ets else None
-                v = views[fid]
-                if v is None:
-                    return np.zeros(np.shape(x), bool), np.zeros(np.shape(x))
-                points, hit = rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)
-                normal = points / v["radii"] ** 2
-                normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
-                return hit, np.where(hit, normal @ v["sun"], 0.0)
-    except Exception as e:   # noqa: BLE001
-        print(f"no disk geometry for {key}: {e}", flush=True)
-        got = None
-    with _lock:
-        _disk_geometries[key] = got
+        def got(x, y, fid):
+            v = view(fid)
+            if v is None:
+                return np.zeros(np.shape(x), bool), np.zeros(np.shape(x))
+            points, hit = rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)
+            normal = points / v["radii"] ** 2
+            normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
+            return hit, np.where(hit, normal @ v["sun"], 0.0)
+        got.knows = view.knows
+        with _lock:
+            _disk_geometries[key] = got
     return got
 
 
@@ -4531,10 +4574,14 @@ def _solve_moves(roots, meas, agree, haze=None):
                 J, y, w = built[k]
                 res[k] = float(np.linalg.norm(J @ x - y))
                 robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
-        worst = max(keep, key=lambda k: res[k]) if keep else None
-        if worst is None or res[worst] <= agree:
+        out_ = sorted((k for k in keep if res[k] > agree), key=lambda k: -res[k])
+        if not out_:
             break
-        keep.remove(worst)
+        # (the worst left out, and with it up to a twentieth of the matches that disagree by more than half as much: a big
+        # ring pass with many bad matches is solved in a few rounds instead of one round a match)
+        drop = [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]
+        for k in drop:
+            keep.remove(k)
     if haze is not None:
         haze.update({f: round(float(x[fdx[f]]), 2) for f in filters})
         haze.update({("turn", r): round(float(x[tdx[r]]), 4) for r in tdx})
@@ -4562,10 +4609,16 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         if kept is None:
             kept = {}
             if os.path.exists(path):
-                with open(path) as fh:
-                    kept = json.load(fh)
+                kept = _read_solve(path)
             if rec is not None:
                 rec[name] = kept
+        if not (kept and set(by_n) <= set(kept.get("tiles", ()))) and os.path.exists(path):
+            # (another process, the pre-build, may have kept a solve of more tiles since this one read it)
+            on_disk = _read_solve(path)
+            if len(on_disk.get("tiles", ())) > len(kept.get("tiles", ())):
+                kept = on_disk
+                if rec is not None:
+                    rec[name] = kept
         if kept and set(by_n) <= set(kept.get("tiles", ())):
             return {int(n): v for n, v in kept["moves"].items() if int(n) in by_n and v != [0, 0]}
         there = _tiles(u, cache, p["display_scale"])
@@ -4631,6 +4684,8 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         # (pairs measured before, by a solve of fewer tiles, are taken as measured: they were measured at SPICE's places,
         # which do not change, so a mosaic grown a tile at a time reads only its new pairs' pictures)
         before = kept.get("pairs", {}) if isinstance(kept, dict) else {}
+        # (a pair that had no picture yet, a tile still being made, is measured again)
+        before = {k: v for k, v in before.items() if not (isinstance(v, str) and v.startswith("no picture"))}
         again = [pr for pr in todo if f"{pr[0]}-{pr[1]}" in before]
         todo = [pr for pr in todo if f"{pr[0]}-{pr[1]}" not in before]
         for n in {n for pr in todo for n in pr}:
@@ -4676,6 +4731,13 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                   if shift is not None and isinstance(how, dict) and how.get("ring")}
         got = [g for g in got if g[1] is None or (isinstance(g[2], dict) and g[2].get("ring"))
                or (min(rootmap[g[0][0]], rootmap[g[0][1]]), max(rootmap[g[0][0]], rootmap[g[0][1]])) not in ringed]
+        # a match past PANEL_MAX of a frame between two pointings is believed, as panel_places believed one, only when
+        # it agrees well (PANEL_FAR_NCC) and another match of the same two pointings (another filter's) agrees with it
+        # (PANEL_AGREE): a lone 18 px match fits the solve exactly and is never seen as an outlier
+        by_pp = collections.defaultdict(list)
+        for (j, n), shift, how in got:
+            if shift is not None and not edges:
+                by_pp[(rootmap[j], rootmap[n])].append(np.array(shift, float))
         for (j, n), shift, how in got:
             seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
             if shift is None:
@@ -4686,9 +4748,11 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 meas.append((rootmap[j], rootmap[n], np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
                 continue
             P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
-            far = math.hypot(*shift) > 2 * PANEL_MAX * FRAME
-            if not edges and far and how["ncc"][1] < PANEL_FAR_NCC:
-                continue
+            if not edges and math.hypot(*shift) > PANEL_MAX * FRAME:
+                agree = sum(np.hypot(*(o - np.array(shift))) <= PANEL_AGREE for o in by_pp[(rootmap[j], rootmap[n])])
+                if how["ncc"][1] < PANEL_FAR_NCC or agree < 2:
+                    seen[f"{j}-{n}"] = {**seen[f"{j}-{n}"], "far": "not believed"}
+                    continue
             w = float(max(how["ncc"][1], 0.1))
             # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
             s_, t_ = by_n[j], by_n[n]
@@ -4743,10 +4807,9 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE, haze)
         if haze:
             seen["haze"] = {f: v for f, v in haze.items() if not isinstance(f, tuple)}
-        # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
-        # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
-        # 35 px, so the matches are capped here too (measure) and the moves only past what any chain reached)
-        most = EDGE_MAX * FRAME
+        # (the furthest a pointing is moved: EDGE_MAX on a clouded body, as _combine holds it; PANEL_FAR on any other, as
+        # panel_places believed a pointing far off, a chain wider than that held by its middle below)
+        most = (EDGE_MAX if edges else PANEL_FAR) * FRAME
         out = {}
         linked = ({m[0] for i, m in enumerate(meas) if i in keep and m[0] not in (None, "limb", "turn")}
                   | {m[1] for i, m in enumerate(meas) if i in keep and m[0] != "turn"})
@@ -4811,8 +4874,12 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                         seen[f"filter-{n}"] = {"shift": [round(v, 2) for v in got_r[0]], "ncc": got_r[1]["ncc"]}
         if report is not None:
             report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
-        if set(kept.get("tiles", ())) - set(by_n):
-            # (a solve of tiles another solve does not hold: used, not kept over the one kept)
+        # (a solve of tiles another solve does not hold is used, not kept over the one kept: the one in memory, or the one
+        # on disk, read again here in case another process, the pre-build, wrote a larger one meanwhile)
+        latest = _read_solve(path) if os.path.exists(path) else {}
+        if set(kept.get("tiles", ())) - set(by_n) or set(latest.get("tiles", ())) - set(by_n):
+            if rec is not None and len(latest.get("tiles", ())) > len(kept.get("tiles", ())):
+                rec[name] = latest
             return {n: v for n, v in out.items() if v != [0, 0]}
         part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
         new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
@@ -4827,6 +4894,15 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v for n, v in out.items() if v != [0, 0]}
+
+
+def _read_solve(path):
+    """A kept global solve (global_places), or {} when it cannot be read (half written by another process)."""
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
 
 
 def solve_places(u, cache):
@@ -5460,6 +5536,10 @@ def layout(u, n, cache):
         name += f"_L{len(base)}"
     if colour and used == colour and clipped_still(u, tiles, colour):
         name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
+    if moved and GLOBAL_PANELS:
+        # (the global solve can move a pointing drawn before when it is solved again on more tiles, a cold pass grown on
+        # demand: the moves used are in the name, so a picture kept from fewer tiles' places is never served for these)
+        name += "_m" + hashlib.sha1(json.dumps(sorted((n, v[:3]) for n, v in moved.items())).encode()).hexdigest()[:8]
     return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((RING_EDGE_TAG if rung else EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
@@ -7645,12 +7725,19 @@ def hdr_map(placed, W, H):
     zero = calibration.HDR_ZERO
     by = {}
     found = False
-    for f, path, left, top, sw, sh in placed:
+    for f, path, left, top, sw, sh, *frac in placed:
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         if not (x0 < x1 and y0 < y1):
             continue
         part = _part(path, sw, sh)
         m = _map_part(path, sw, sh)
+        fx, fy = frac[0] if frac else (0.0, 0.0)
+        if abs(fx) > 0.01 or abs(fy) > 0.01:
+            # (where _place drew the tile: moved by the part of a pixel its rounding left out, the map with it)
+            part = _subpixel(part, fx, fy)
+            if m is not None:
+                m = cv2.warpAffine(m, np.float32([[1, 0, fx], [0, 1, fy]]), (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR,
+                                   borderMode=cv2.BORDER_REPLICATE)
         canvas = by.setdefault(f, np.full((H, W), zero, np.uint8))
         a = part[y0 - top:y1 - top, x0 - left:x1 - left, 3] > 0
         v = m[y0 - top:y1 - top, x0 - left:x1 - left] if m is not None else np.full(a.shape, zero, np.uint8)
@@ -7709,7 +7796,8 @@ def _place(u, t, rect, k, W, H, cache, scale):
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     drew = _hdr_drawn.get()
     if drew is not None:
-        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh))
+        frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
+        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac))
     return frame
 
 
@@ -9274,7 +9362,10 @@ def _fade_part(t, rect, w, h, there):
     a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
     if a1 <= a0 or b1 <= b0:
         return None
-    return (a0, b0, a1, b1), _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
+    part = _part(os.path.join(there, f"{t['n']}.png"), sw, sh)
+    if SUBPIXEL:
+        part = _subpixel_at(part, t, rect, k, left, top)
+    return (a0, b0, a1, b1), part[b0 - top:b1 - top, a0 - left:a1 - left, 3]
 
 
 def fade_table(frame_id, cache, laps=1, W=0, H=0):
