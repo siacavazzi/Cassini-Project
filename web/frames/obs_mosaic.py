@@ -4289,7 +4289,8 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
                 return pr, None, "no picture"
             if edges:
                 return (pr,) + tuple(edge_shift(s, ref, s["offset"], t, mine, t["offset"]))
-            return (pr,) + tuple(panel_shift(s, ref, s["offset"], t, mine, t["offset"], PANEL_FAR if surfaced else None))
+            # (two pointings each up to PANEL_MAX off SPICE can sit twice that apart)
+            return (pr,) + tuple(panel_shift(s, ref, s["offset"], t, mine, t["offset"], PANEL_FAR if surfaced else 2 * PANEL_MAX))
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
             got = list(ex.map(measure, todo))
@@ -4300,7 +4301,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
                 continue
             nrm = how.get("normal") if isinstance(how, dict) else None
             P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
-            far = math.hypot(*shift) > PANEL_MAX * FRAME
+            far = math.hypot(*shift) > 2 * PANEL_MAX * FRAME
             if not edges and far and how["ncc"][1] < PANEL_FAR_NCC:
                 continue
             w = float(max(how["ncc"][1], 0.1))
@@ -7032,6 +7033,21 @@ def hdr_map(placed, W, H):
     return np.max(np.stack(list(by.values())), axis=0)
 
 
+SUBPIXEL = os.environ.get("CASSINI_SUBPIXEL") == "1"   # prototype: tiles drawn at their sub-pixel places (_place)
+
+
+def _subpixel(part, fx, fy):
+    """RGBA uint8 part moved by (fx, fy) px (each within half a pixel), premultiplied by its alpha so no black comes in
+    from outside it; its edge softens by the part of a pixel moved."""
+    a = part[..., 3:4].astype(np.float32) / 255
+    pm = np.concatenate([part[..., :3].astype(np.float32) * a, a * 255], axis=2)
+    m = np.float32([[1, 0, fx], [0, 1, fy]])
+    moved = cv2.warpAffine(pm, m, (part.shape[1], part.shape[0]), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+    al = np.clip(moved[..., 3:4], 0, 255)
+    rgb = np.where(al > 0.5, moved[..., :3] / np.maximum(al / 255, 1e-6), 0)
+    return np.concatenate([np.clip(rgb, 0, 255), al], axis=2).round().astype(np.uint8)
+
+
 def _place(u, t, rect, k, W, H, cache, scale):
     """Tile t (made on the display scale) drawn where SPICE puts it in the view rect, on a W x H canvas (k canvas
     pixels per reference pixel)."""
@@ -7043,6 +7059,14 @@ def _place(u, t, rect, k, W, H, cache, scale):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
+        if SUBPIXEL:
+            # (the part of a pixel the rounding above left out: the tile moved by it, premultiplied, so the place
+            # registration measured to a hundredth of a pixel is where it is drawn, and a pointing's filters, each
+            # rounded on its own, no longer land up to a pixel apart)
+            fx = (t["offset"][0] + bx - rect[0]) * k - left
+            fy = (t["offset"][1] + by - rect[1]) * k - top
+            if abs(fx) > 0.01 or abs(fy) > 0.01:
+                part = _subpixel(part, fx, fy)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     drew = _hdr_drawn.get()
     if drew is not None:
