@@ -3863,17 +3863,19 @@ def _disk_geometry(u):
     return got
 
 
-LIMB_BAND = 24      # px each side of SPICE's limb measured (limb_place)
+LIMB_BAND = 60      # px each side of SPICE's limb measured (limb_place)
 LIMB_LIT = 0.02     # the least cosine of the sun just inside the limb: a lit limb (a crescent's is lit at a slant), not the night side
 LIMB_LEAST = 200    # samples on the lit limb a tile needs
+LIMB_CONTRAST = 20  # levels the lit limb stands over the sky outside it, at least
 
 
 def limb_place(disk, t, im, step=2):
     """How far tile t's lit limb (its picture im, where its offset puts it) sits outside SPICE's limb of the body at
-    its time (disk, _disk_geometry): (e px along n, n the limb's mean outward normal, samples), or None. Measured as
-    the area between the picture's lit-ness (halfway between the sky and the disk just inside, per tile) and SPICE's
-    disk, over a band LIMB_BAND each side of the lit limb, per length of limb: a sub-pixel edge place that needs no
-    peak, and that a haze standing over the limb moves by its own height (each filter's own, solved for)."""
+    its time (disk, _disk_geometry): (e px, outward along n, n the limb's mean outward normal, samples), or None. The
+    picture's brightness against the distance to SPICE's limb, over a band LIMB_BAND each side of the lit limb (a
+    profile across the limb, binned half a px), and where it falls, on the outside of its brightest, half way to the sky:
+    a sub-pixel edge that a full disk and a thin crescent (lit only in a band just inside its limb, 202SA) both have. A
+    haze standing over the limb moves it out by its own height, each filter's own (solved for with the moves)."""
     h, w = im.shape[:2]
     k = t["box"][2] / w
     x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
@@ -3886,26 +3888,45 @@ def limb_place(disk, t, im, step=2):
     d_in = cv2.distanceTransform(hit.astype(np.uint8), cv2.DIST_L2, 5)
     d_out = cv2.distanceTransform((~hit).astype(np.uint8), cv2.DIST_L2, 5)
     d = (np.where(hit, d_in - 0.5, -(d_out - 0.5))) * step * k    # px, + inside SPICE's disk
-    lit_in = cv2.dilate(np.where(hit & (d < LIMB_BAND), mu0, 0).astype(np.float32), np.ones((9, 9), np.uint8))
+    reach = int(math.ceil(LIMB_BAND / (step * k))) | 1
+    lit_in = cv2.dilate(np.where(hit & (d < LIMB_BAND), mu0, 0).astype(np.float32), np.ones((reach, reach), np.uint8))
     a = im[sy, sx]
     valid = cv2.erode((a[..., 3] == 255).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
     band = valid & (np.abs(d) < LIMB_BAND) & (lit_in > LIMB_LIT)
     if band.sum() < LIMB_LEAST:
         return None
     g = a[..., :3].astype(np.float32).mean(axis=2)
-    sky = np.percentile(g[band & (d < -LIMB_BAND / 2)], 50) if (band & (d < -LIMB_BAND / 2)).sum() > 20 else None
-    inside = np.percentile(g[band & (d > LIMB_BAND / 2)], 50) if (band & (d > LIMB_BAND / 2)).sum() > 20 else None
-    if sky is None or inside is None or inside - sky < 20:
+    bins = np.round(d[band] * 2).astype(int)   # half px
+    lo = bins.min()
+    cnt = np.bincount(bins - lo)
+    tot = np.bincount(bins - lo, weights=g[band])
+    have = cnt >= 3
+    if have.sum() < 2 * LIMB_BAND:
         return None
-    lit = np.clip((g - sky) / (inside - sky), 0, 1)
-    # the band's width counted in samples across the limb: its samples per px of d, so the area becomes a distance
-    per_px = band.sum() / (2 * LIMB_BAND)
-    e = float((lit[band] - hit[band]).sum() / per_px)
+    dd = (np.arange(len(cnt)) + lo) / 2.0
+    prof = np.interp(dd, dd[have], tot[have] / np.maximum(cnt[have], 1))
+    prof = cv2.GaussianBlur(prof.reshape(1, -1).astype(np.float32), (0, 0), 1.5).ravel()
+    top = int(np.argmax(prof))
+    outside = dd < dd[top] - 8
+    if outside.sum() < 20:
+        return None
+    sky = float(np.median(prof[outside][:max(10, outside.sum() // 2)]))
+    if prof[top] - sky < LIMB_CONTRAST:
+        return None
+    half = (prof[top] + sky) / 2
+    # from the brightest outward (toward smaller d), the first fall below half way
+    i = top
+    while i > 0 and prof[i] >= half:
+        i -= 1
+    if i == 0:
+        return None
+    e = float(dd[i] + (dd[i + 1] - dd[i]) * (half - prof[i]) / max(prof[i + 1] - prof[i], 1e-6))
     gyd, gxd = np.gradient(d)
     n = -np.array([float(gxd[band].mean()), float(gyd[band].mean())])
     if np.hypot(*n) < 1e-6:
         return None
-    return e, n / np.hypot(*n), int(band.sum())
+    # (e: where the picture's limb is, in px of d, + inside SPICE's: the limb stands out by -e)
+    return -e, n / np.hypot(*n), int(band.sum())
 
 
 def _combine(found):
