@@ -3696,6 +3696,8 @@ _ring_geometries = {}   # pass key -> _ring_geometry's answer
 RING_PAIR_LAG = 25      # bins (RING_BIN km) searched each way (ring_pair_shift)
 RING_PAIR_NCC = 0.6     # the least two tiles' ring profiles must agree once lined up ...
 RING_PAIR_RIVAL = 0.85  # ... and no other lag more than 3 bins away this nearly as well
+RING_FILTERS = os.environ.get("CASSINI_RING_FILTERS", "1") != "0"   # a pointing's filters lined up on their ring profiles
+RING_FILTER_MOST = 8.0  # px: the most a filter is moved onto its pointing's first tile that way
 RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
 
 
@@ -4782,6 +4784,31 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             turn = haze.get(("turn", r), 0.0) if r in linked else 0.0
             if abs(turn) >= 0.01:
                 out[n].append(round(turn, 4))
+        if rings is not None and RING_FILTERS:
+            # a pointing's filters on the rings, each lined up across the rings on its pointing's first tile by their
+            # radial profiles (the filters' detail: the ringlets and gaps are where they are in every filter), where C8's
+            # match of the pictures (_register) left them apart: on a ring the pictures' match slides along the ringlets
+            # as readily as across, and Earth Smiled's pointings kept a colour fringe on every ring edge
+            def refine(n):
+                r = rootmap[n]
+                if r == n or r not in by_n:
+                    return n, None
+                a, b = by_n[r], by_n[n]
+                ma, mb = out.get(r, [0, 0]), out[n]
+                sa = dict(a, offset=[a["offset"][0] + ma[0], a["offset"][1] + ma[1]])
+                sb = dict(b, offset=[b["offset"][0] + mb[0], b["offset"][1] + mb[1]])
+                ra, rb = picture(r), picture(n)
+                if ra is None or rb is None:
+                    return n, None
+                got_r, how_r = ring_pair_shift(u, rings, sa, ra, sb, rb)
+                if got_r is None or math.hypot(*got_r) > RING_FILTER_MOST:
+                    return n, None
+                return n, (got_r, how_r)
+            with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+                for n, got_r in ex.map(refine, sorted(by_n)):
+                    if got_r is not None:
+                        out[n] = [round(out[n][0] + got_r[0][0], 2), round(out[n][1] + got_r[0][1], 2)] + out[n][2:]
+                        seen[f"filter-{n}"] = {"shift": [round(v, 2) for v in got_r[0]], "ncc": got_r[1]["ncc"]}
         if report is not None:
             report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
         if set(kept.get("tiles", ())) - set(by_n):
