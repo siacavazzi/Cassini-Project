@@ -3693,6 +3693,82 @@ def ring_moves(u, cache, p, tiles):
 _ring_geometries = {}   # pass key -> _ring_geometry's answer
 
 
+RING_PAIR_LAG = 25      # bins (RING_BIN km) searched each way (ring_pair_shift)
+RING_PAIR_NCC = 0.6     # the least two tiles' ring profiles must agree once lined up ...
+RING_PAIR_RIVAL = 0.85  # ... and no other lag more than 3 bins away this nearly as well
+RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
+
+
+def ring_pair_shift(u, rings, s, ref, t, mine):
+    """Ring registration of two overlapping tiles of one filter, each where SPICE puts it: the radial profiles (SPICE's
+    ring plane at each tile's own time, _ring_profile, detail only) of the part of the view both cover, and the radial
+    lag that lines them up. Unlike a match of the pictures, a profile slides only across the rings, never along them
+    (the ringlets repeat along the ring, which is what defeated a pairwise picture match, #395), so it says how far
+    across the rings tile t sits from tile s, wherever their edges hold nothing for edge_shift. ((dx, dy) along the
+    rings' radial direction there, {"ring": True, "ncc", "normal", "lag_km"}) or (None, why)."""
+    import reproject as rp
+    km_px = IFOV[u["key"][2]] * u["z"]
+    samp = []
+    for q, im in ((s, ref), (t, mine)):
+        h, w = im.shape[:2]
+        k = q["box"][2] / w
+        x0, y0 = q["offset"][0] + q["box"][0], q["offset"][1] + q["box"][1]
+        sy, sx = np.mgrid[2:h - 2:3, 2:w - 2:3]
+        sy, sx = sy.ravel(), sx.ravel()
+        gx, gy = sx * k + x0, sy * k + y0
+        radius, on = rings(gx, gy, q["id"])
+        px = im[sy, sx]
+        use = on & (px[:, 3] == 255)
+        samp.append((gx[use], gy[use], radius[use], px[use, :3].astype(np.float32).mean(axis=1)))
+    A, B = samp
+    if len(A[0]) < 500 or len(B[0]) < 500:
+        return None, "little ring"
+    bx0, by0 = max(A[0].min(), B[0].min()), max(A[1].min(), B[1].min())
+    bx1, by1 = min(A[0].max(), B[0].max()), min(A[1].max(), B[1].max())
+    if bx1 - bx0 < PANEL_NARROW or by1 - by0 < PANEL_NARROW:
+        return None, "apart"
+    ins = [(S[0] >= bx0) & (S[0] <= bx1) & (S[1] >= by0) & (S[1] <= by1) for S in (A, B)]
+    if min(int(m.sum()) for m in ins) < 300:
+        return None, "little ring overlap"
+    pa, pb = (_ring_profile(S[3][m], S[2][m]) for S, m in zip((A, B), ins))
+    both = (pa[1] >= 3) & (pb[1] >= 3)
+    if both.sum() < RING_PAIR_BINS:
+        return None, "narrow ring overlap"
+    idx = np.nonzero(both)[0]
+    da, db = _ring_detail(*pa)[idx.min():idx.max() + 1], _ring_detail(*pb)[idx.min():idx.max() + 1]
+    sc = []
+    for lag in range(-RING_PAIR_LAG, RING_PAIR_LAG + 1):
+        x, y = da[max(0, lag):len(da) + min(0, lag)], db[max(0, -lag):len(db) + min(0, -lag)]
+        if len(x) < RING_PAIR_BINS * 3 // 4:
+            sc.append(-1.0)
+            continue
+        x, y = x - x.mean(), y - y.mean()
+        d = math.sqrt(float((x * x).sum() * (y * y).sum()))
+        sc.append(float((x * y).sum() / d) if d > 0 else -1.0)
+    sc = np.array(sc)
+    j = int(np.argmax(sc))
+    far = np.abs(np.arange(len(sc)) - j) > 3
+    if sc[j] < RING_PAIR_NCC or (far.any() and sc[far].max() > RING_PAIR_RIVAL * sc[j]) or j in (0, len(sc) - 1):
+        return None, f"ring profiles not believed (ncc {sc[j]:.2f})"
+    lag = j - RING_PAIR_LAG
+    den = sc[j - 1] - 2 * sc[j] + sc[j + 1]
+    if den < 0:
+        lag += 0.5 * (sc[j - 1] - sc[j + 1]) / den
+    # the rings' radial direction at the overlap, and km per px along it (SPICE's ring plane at tile s's time)
+    cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+    r = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), s["id"])[0]
+    grad = np.array([r[1] - r[0], r[2] - r[0]], float)
+    g = float(np.hypot(*grad))
+    if g <= 0:
+        return None, "no ring gradient"
+    n = grad / g
+    # (t's ringlets sit lag bins in from s's: t moves out by that much, across the rings)
+    move = lag * RING_BIN / g
+    return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
+                                                      "normal": [round(float(n[0]), 4), round(float(n[1]), 4)],
+                                                      "lag_km": round(lag * RING_BIN, 1)}
+
+
 def _ring_geometry(u):
     """For a pass of a body with rings (RING_BODIES): a function (canvas x, y arrays in reference px, frame id) ->
     (ring radius km, on the ring plane), from SPICE at that frame's time (reproject.ring_plane), on the pass's axes
@@ -4057,7 +4133,7 @@ def surface_box(path, t):
 _surface_boxes = {}
 
 
-def panel_places(u, cache, p, tiles, pic=None, report=None):
+def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     """Panel registration: {tile n: [dx, dy]}, how far each tile is moved from SPICE's place (reference pixels), so
     a mosaic's pointings line up where they overlap. SPICE places each frame on its own and its pointing is a few
     pixels off, differently for each pointing (more where the c-smithed pointing is missing, PR #5), so panels of a
@@ -4073,7 +4149,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     if not (calibration.step("align") and calibration.step("panels")):
         return {}
     if GLOBAL_PANELS:
-        return global_places(u, cache, p, tiles, pic, report)
+        return global_places(u, cache, p, tiles, pic, report, anchors)
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
@@ -4194,18 +4270,25 @@ def _solve_moves(roots, meas, agree):
             b = np.zeros(2 * n)
             for k in keep:
                 a_, b_, d, P, w = meas[k]
-                i, j = idx[a_], idx[b_]
+                j = idx[b_]
                 c = w * robust[k] / GLOBAL_NOISE ** 2
                 Q = c * P
-                si, sj = slice(2 * i, 2 * i + 2), slice(2 * j, 2 * j + 2)
-                A[si, si] += Q; A[sj, sj] += Q; A[si, sj] -= Q; A[sj, si] -= Q
-                b[sj] += Q @ d; b[si] -= Q @ d
+                sj = slice(2 * j, 2 * j + 2)
+                A[sj, sj] += Q
+                b[sj] += Q @ d
+                if a_ is None:   # (an anchor: pointing b's own place, as a ring fit says)
+                    continue
+                i = idx[a_]
+                si = slice(2 * i, 2 * i + 2)
+                A[si, si] += Q; A[si, sj] -= Q; A[sj, si] -= Q
+                b[si] -= Q @ d
             x = np.linalg.solve(A, b)
             res = {}
             for k in keep:
                 a_, b_, d, P, w = meas[k]
-                i, j = idx[a_], idx[b_]
-                res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - x[2 * i:2 * i + 2] - d)))
+                j = idx[b_]
+                xa = np.zeros(2) if a_ is None else x[2 * idx[a_]:2 * idx[a_] + 2]
+                res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - xa - d)))
                 robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
         worst = max(keep, key=lambda k: res[k]) if keep else None
         if worst is None or res[worst] <= agree:
@@ -4214,7 +4297,7 @@ def _solve_moves(roots, meas, agree):
     return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
 
 
-def global_places(u, cache, p, tiles, pic=None, report=None):
+def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     """panel_places solved globally (GLOBAL_PANELS): {tile n: [dx, dy]}. Every pointing's first tile is measured
     against the GLOBAL_PARTNERS pointings it overlaps most, earlier and later alike, each pair once, at SPICE's places
     (panel_shift, or edge_shift on a clouded body); the pointings' moves are solved together (_solve_moves), and the
@@ -4225,10 +4308,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
     of fewer tiles is not kept over one of more. Kept in the pass's folder."""
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + ("ringed-" if anchors else "") + PANEL_FILE)
     by_n = {t["n"]: t for t in tiles if "offset" in t}
     rec = _kept_tiles(u, cache, p["display_scale"])
-    name = "global" + SURFACE_TAG * surfaced + EDGE_TAG * edges
+    name = "global" + SURFACE_TAG * surfaced + EDGE_TAG * edges + "-ringed" * bool(anchors)
     with _ulock(u):
         # (read once, and kept with the pass's record in memory, as panel_places keeps its moves)
         kept = rec.get(name) if rec is not None else None
@@ -4309,12 +4392,18 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
         for n in {n for pr in todo for n in pr}:
             picture(n)
 
+        rings = _ring_geometry(u) if anchors is not None else None
+
         def measure(pr):
             j, n = pr
             s, t = by_n[j], by_n[n]
             ref, mine = picture(j), picture(n)
             if ref is None or mine is None:
                 return pr, None, "no picture"
+            if rings is not None and s["filter"] == t["filter"]:
+                got = ring_pair_shift(u, rings, s, ref, t, mine)
+                if got[0] is not None:
+                    return (pr,) + got
             if edges:
                 return (pr,) + tuple(edge_shift(s, ref, s["offset"], t, mine, t["offset"]))
             # (two pointings each up to PANEL_MAX off SPICE can sit twice that apart)
@@ -4331,6 +4420,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             if shift is None:
                 continue
             nrm = how.get("normal") if isinstance(how, dict) else None
+            if isinstance(how, dict) and how.get("ring"):
+                # (a ring match: how far tile n's ringlets sit out from tile j's, across the rings only)
+                meas.append((rootmap[j], rootmap[n], np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
+                continue
             P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
             far = math.hypot(*shift) > 2 * PANEL_MAX * FRAME
             if not edges and far and how["ncc"][1] < PANEL_FAR_NCC:
@@ -4338,13 +4431,22 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             w = float(max(how["ncc"][1], 0.1))
             # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
             meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w))
+        if anchors:
+            # absolute places (ring_moves: each tile's rings fitted to the pass's radial profile), one per pointing: the
+            # median of its tiles' fits, as ring_moves moves a pointing's filters together
+            by = {}
+            for n, m in anchors.items():
+                if rootmap.get(n) in by_n:
+                    by.setdefault(rootmap[n], []).append(m[:2])
+            for r, ms in by.items():
+                meas.append((None, r, np.median(np.array(ms, float), axis=0), np.eye(2), 1.0))
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
         # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
         # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
         # 35 px, so the matches are capped here too (measure) and the moves only past what any chain reached)
         most = EDGE_MAX * FRAME
         out = {}
-        linked = {m[0] for i, m in enumerate(meas) if i in keep} | {m[1] for i, m in enumerate(meas) if i in keep}
+        linked = {m[0] for i, m in enumerate(meas) if i in keep and m[0] is not None} | {m[1] for i, m in enumerate(meas) if i in keep}
         # a chain of pointings whose relative places spread wider than the furthest move believed (a long scan whose
         # pointings SPICE puts a little further off each step: Hyperion 015HY, 70 px end to end) is held by its
         # middle instead of by SPICE's average, each linked group on its own, as the time-order rule held it by its
@@ -4358,13 +4460,15 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             return r
         for i in keep:
             a_, b_ = meas[i][0], meas[i][1]
-            group[top(a_)] = top(b_)
+            if a_ is not None:
+                group[top(a_)] = top(b_)
         members = collections.defaultdict(list)
         for r in linked:
             members[top(r)].append(r)
+        held = {m[1] for i, m in enumerate(meas) if i in keep and m[0] is None}
         for rs in members.values():
             xy = np.array([moves[r] for r in rs], float)
-            if np.hypot(*xy.T).max() > most:
+            if np.hypot(*xy.T).max() > most and not held & set(rs):   # (a group anchored on its rings stays put)
                 c = (xy.min(axis=0) + xy.max(axis=0)) / 2
                 for r in rs:
                     moves[r] = (moves[r][0] - c[0], moves[r][1] - c[1])
@@ -4992,9 +5096,13 @@ def layout(u, n, cache):
     # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
     # keep that place, and their pointings' panel moves are not added
     rung = ring_moves(u, cache, p, tiles)
-    moved = panel_places(u, cache, p, tiles)
-    if rung:
-        moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
+    if GLOBAL_PANELS:
+        # (global: the ring fits are anchors in the one solve with the pairwise matches, which places every pointing)
+        moved = panel_places(u, cache, p, tiles, anchors=rung)
+    else:
+        moved = panel_places(u, cache, p, tiles)
+        if rung:
+            moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
     if moved:
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
                  if t["n"] in moved and "offset" in t else t for t in tiles]
