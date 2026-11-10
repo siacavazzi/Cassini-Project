@@ -1,0 +1,70 @@
+"""obs_mosaic._solve_moves (global panel registration) and _subpixel, on made-up matches and pictures."""
+import os
+import sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
+import obs_mosaic as om  # noqa: E402
+
+
+def _meas(true, pairs, noise=0.0, rng=None):
+    out = []
+    for a, b in pairs:
+        d = np.array(true[b]) - np.array(true[a])
+        if noise:
+            d = d + rng.normal(0, noise, 2)
+        out.append((a, b, d, np.eye(2), 1.0))
+    return out
+
+
+def test_chain_recovers_relative_places():
+    rng = np.random.default_rng(1)
+    true = {r: tuple(rng.normal(0, 4, 2)) for r in range(6)}
+    pairs = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 2), (3, 5)]
+    moves, keep = om._solve_moves(list(true), _meas(true, pairs, 0.1, rng), 2.0)
+    rel = lambda m, a, b: np.array(m[b]) - np.array(m[a])
+    for a, b in pairs:
+        assert np.linalg.norm(rel(moves, a, b) - rel(true, a, b)) < 0.5
+    assert len(keep) == len(pairs)
+
+
+def test_outlier_is_dropped():
+    true = {0: (0, 0), 1: (3, 0), 2: (3, 3), 3: (0, 3)}
+    pairs = [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2), (1, 3)]
+    meas = _meas(true, pairs)
+    a, b, d, P, w = meas[0]
+    meas[0] = (a, b, d + np.array([15.0, -9.0]), P, w)   # a false match
+    moves, keep = om._solve_moves(list(true), meas, 2.0)
+    assert 0 not in keep and len(keep) == 5
+    assert abs((moves[1][0] - moves[0][0]) - 3) < 0.2
+
+
+def test_edge_match_constrains_only_across():
+    # one straight edge: only how far across it (x) is known; along it the prior keeps SPICE's place
+    meas = [(0, 1, np.array([2.0, 0.0]), np.outer([1, 0], [1, 0]), 1.0)]
+    moves, _ = om._solve_moves([0, 1], meas, 3.0)
+    assert abs((moves[1][0] - moves[0][0]) - 2.0) < 0.1
+    assert abs(moves[0][1]) < 1e-9 and abs(moves[1][1]) < 1e-9
+
+
+def test_no_matches_keeps_spice():
+    moves, keep = om._solve_moves([0, 1, 2], [], 2.0)
+    assert all(m == (0.0, 0.0) for m in moves.values()) and keep == []
+
+
+def test_subpixel_moves_a_step_by_its_fraction():
+    part = np.zeros((20, 40, 4), np.uint8)
+    part[..., 3] = 255
+    part[:, 20:, :3] = 200
+    moved = om._subpixel(part, 0.5, 0.0)
+    row = moved[10, :, 0].astype(float)
+    # the step from 0 to 200 now sits half a pixel right: its middle pixel is about half way
+    assert 60 < row[20] < 140 and row[18] < 10 and row[22] > 190
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_"):
+            fn()
+            print(f"{name}: ok")
