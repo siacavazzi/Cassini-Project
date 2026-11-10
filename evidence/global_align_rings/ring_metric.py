@@ -45,8 +45,14 @@ with calibration.looking("balanced"):
             samp[t["n"]] = (gx[use], gy[use], radius[use], px[use, :3].astype(np.float32).mean(axis=1))
         pics = {t["n"]: np.asarray(Image.open(os.path.join(there, f"{t['n']}.png")).convert("RGBA")) for t in tiles}
         rows = []
+        within = []
         for i, s in enumerate(tiles):
             for t in tiles[i + 1:]:
+                if roots[s["n"]] == roots[t["n"]] and s["filter"] != t["filter"]:
+                    mv, how = om.ring_pair_shift(u, rings, s, pics[s["n"]], t, pics[t["n"]])
+                    if mv is not None:
+                        within.append(round(math.hypot(*mv), 2))
+                    continue
                 if roots[s["n"]] == roots[t["n"]] or s["filter"] != t["filter"]:
                     continue
                 mv, how = om.ring_pair_shift(u, rings, s, pics[s["n"]], t, pics[t["n"]])
@@ -58,5 +64,7 @@ with calibration.looking("balanced"):
         out.append({"pass": "_".join(map(str, u["key"])), "pairs": len(rows),
                     "median": float(np.median(lags)) if lags else None, "p90": float(np.percentile(lags, 90)) if lags else None,
                     "over2px": int(sum(l > 2 for l in lags)), "ncc0_mean": float(np.mean([r["ncc0"] for r in rows])) if rows else None,
+                    "within_pairs": len(within), "within_median": float(np.median(within)) if within else None,
+                    "within_p90": float(np.percentile(within, 90)) if within else None, "within_over1": int(sum(w > 1 for w in within)),
                     "rows": rows})
 print(json.dumps(out))
