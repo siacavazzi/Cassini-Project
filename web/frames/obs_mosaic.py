@@ -3936,14 +3936,20 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
     edges = clouded(u)
     path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
     by_n = {t["n"]: t for t in tiles if "offset" in t}
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    name = "global" + SURFACE_TAG * surfaced + EDGE_TAG * edges
     with _ulock(u):
-        if os.path.exists(path):
-            with open(path) as fh:
-                kept = json.load(fh)
-            if set(by_n) <= set(kept.get("tiles", ())):
-                return {int(n): v for n, v in kept["moves"].items() if int(n) in by_n and v != [0, 0]}
-        else:
+        # (read once, and kept with the pass's record in memory, as panel_places keeps its moves)
+        kept = rec.get(name) if rec is not None else None
+        if kept is None:
             kept = {}
+            if os.path.exists(path):
+                with open(path) as fh:
+                    kept = json.load(fh)
+            if rec is not None:
+                rec[name] = kept
+        if kept and set(by_n) <= set(kept.get("tiles", ())):
+            return {int(n): v for n, v in kept["moves"].items() if int(n) in by_n and v != [0, 0]}
         there = _tiles(u, cache, p["display_scale"])
         pics = {}
 
@@ -3993,6 +3999,11 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             if pp not in seen_pp:
                 seen_pp.add(pp)
                 todo.append((a_, b_))
+        # (pairs measured before, by a solve of fewer tiles, are taken as measured: they were measured at SPICE's places,
+        # which do not change, so a mosaic grown a tile at a time reads only its new pairs' pictures)
+        before = kept.get("pairs", {}) if isinstance(kept, dict) else {}
+        again = [pr for pr in todo if f"{pr[0]}-{pr[1]}" in before]
+        todo = [pr for pr in todo if f"{pr[0]}-{pr[1]}" not in before]
         for n in {n for pr in todo for n in pr}:
             picture(n)
 
@@ -4009,6 +4020,9 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
             got = list(ex.map(measure, todo))
+        for pr in again:
+            how = before[f"{pr[0]}-{pr[1]}"]
+            got.append((pr, tuple(how["shift"]), how) if isinstance(how, dict) else (pr, None, how))
         meas, seen = [], {}
         for (j, n), shift, how in got:
             seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
@@ -4038,11 +4052,14 @@ def global_places(u, cache, p, tiles, pic=None, report=None):
             # (a solve of tiles another solve does not hold: used, not kept over the one kept)
             return {n: v for n, v in out.items() if v != [0, 0]}
         part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+        new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
+               "kept": len(keep), "measured": len(meas)}
+        if rec is not None:
+            rec[name] = new
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(part, "w") as fh:
-                json.dump({"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())},
-                           "pairs": seen, "kept": len(keep), "measured": len(meas)}, fh)
+                json.dump(new, fh)
             os.replace(part, path)
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
