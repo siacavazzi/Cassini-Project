@@ -4485,6 +4485,8 @@ def _window(u, p, mine, rect, cache):
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
         part = _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t)
+        if SUBPIXEL:
+            part = _subpixel_at(part, t, rect, k, left, top)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -4588,7 +4590,8 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-    draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
+    draw_over(rgba, lambda: _subpixel_at(_shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t), t, rect, k, left, top)
+              if SUBPIXEL else _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
               left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill")))
 
 
@@ -7068,6 +7071,15 @@ def _subpixel(part, fx, fy):
     return np.concatenate([np.clip(rgb, 0, 255), al], axis=2).round().astype(np.uint8)
 
 
+def _subpixel_at(part, t, rect, k, left, top):
+    """Tile t's part (drawn at canvas pixel left, top: its place rounded) moved by the part of a pixel the rounding left
+    out, so the place registration measured to a hundredth of a pixel is where it is drawn, and a pointing's filters,
+    each rounded on its own, no longer land up to a pixel apart."""
+    fx = (t["offset"][0] + t["box"][0] - rect[0]) * k - left
+    fy = (t["offset"][1] + t["box"][1] - rect[1]) * k - top
+    return _subpixel(part, fx, fy) if abs(fx) > 0.01 or abs(fy) > 0.01 else part
+
+
 def _place(u, t, rect, k, W, H, cache, scale):
     """Tile t (made on the display scale) drawn where SPICE puts it in the view rect, on a W x H canvas (k canvas
     pixels per reference pixel)."""
@@ -7080,13 +7092,7 @@ def _place(u, t, rect, k, W, H, cache, scale):
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         if SUBPIXEL:
-            # (the part of a pixel the rounding above left out: the tile moved by it, premultiplied, so the place
-            # registration measured to a hundredth of a pixel is where it is drawn, and a pointing's filters, each
-            # rounded on its own, no longer land up to a pixel apart)
-            fx = (t["offset"][0] + bx - rect[0]) * k - left
-            fy = (t["offset"][1] + by - rect[1]) * k - top
-            if abs(fx) > 0.01 or abs(fy) > 0.01:
-                part = _subpixel(part, fx, fy)
+            part = _subpixel_at(part, t, rect, k, left, top)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     drew = _hdr_drawn.get()
     if drew is not None:
