@@ -4748,10 +4748,11 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 meas.append((rootmap[j], rootmap[n], np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
                 continue
             P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
-            if not edges and math.hypot(*shift) > PANEL_MAX * FRAME:
-                # (agreeing within PANEL_AGREE or a tenth of the move, the larger: Dione 139DI's filters of one pointing
-                # pair matched 29 to 31 px, 2 to 3 px apart)
-                near_ = max(PANEL_AGREE, 0.1 * math.hypot(*shift))
+            # (two pointings each up to PANEL_MAX off SPICE can sit twice that apart: a match past that is the far one)
+            if not edges and math.hypot(*shift) > 2 * PANEL_MAX * FRAME:
+                # (agreeing within PANEL_AGREE or a fifth of the move, the larger: Dione 139DI's filters of one pointing
+                # pair matched 29 to 31 px, 2 to 5 px apart)
+                near_ = max(PANEL_AGREE, 0.2 * math.hypot(*shift))
                 agree = sum(np.hypot(*(o - np.array(shift))) <= near_ for o in by_pp[(rootmap[j], rootmap[n])])
                 if how["ncc"][1] < PANEL_FAR_NCC or agree < 2:
                     seen[f"{j}-{n}"] = {**seen[f"{j}-{n}"], "far": "not believed"}
