@@ -3237,8 +3237,8 @@ GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), befo
 GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
 GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
 if GLOBAL_PANELS:
-    PANEL_FILE = "global1-" + PANEL_FILE
-    PANEL_TAG, EDGE_TAG = "-g1", "-ge1"
+    PANEL_FILE = "global2-" + PANEL_FILE   # (2: ring pairs and anchors, limb anchors)
+    PANEL_TAG, EDGE_TAG = "-g2", "-ge2"
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -4376,48 +4376,69 @@ def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
 
 
-def _solve_moves(roots, meas, agree):
+LIMB_BODIES = frozenset({"SATURN", "TITAN", "JUPITER", "RHEA", "DIONE", "TETHYS", "ENCELADUS", "MIMAS", "IAPETUS"})
+GLOBAL_LIMBS = os.environ.get("CASSINI_GLOBAL_LIMBS", "1") != "0"   # limb anchors in the global solve (global_places)
+LIMB_WEIGHT = 0.5         # a limb anchor's weight against a match's (its place is a few px rough tile to tile)
+LIMB_HAZE_PRIOR = 100.0   # px: how high a filter's limb may stand over SPICE's (its haze), a loose prior (_solve_moves)
+
+
+def _solve_moves(roots, meas, agree, haze=None):
     """The moves {root: (dx, dy)} of a mosaic's pointings that best agree with every match between them, meas =
     [(a, b, d, proj, w)]: pointing b sits d from where pointing a is (proj, the 2 x 2 projection the match measures:
-    the identity, or onto an edge's normal), believed with weight w. Each pointing's move has SPICE's place as a soft
-    prior (GLOBAL_PRIOR), the matches GLOBAL_NOISE; residuals past GLOBAL_HUBER are weighted down (IRLS), then the
-    match furthest past agree from the fit is dropped and the rest solved again, until all agree. (moves, kept matches)."""
+    the identity, or onto an edge's normal), believed with weight w; a None for a: pointing b's own place is d (an
+    anchor, a ring fit). And limb anchors ("limb", b, filter, n, o, w): pointing b's limb in that filter stands o px out
+    from SPICE's along n, which is that filter's haze height (an unknown solved with the moves, LIMB_HAZE_PRIOR) less
+    how far b sits out (as ISIS's jigsaw solves each image's pointing with ground points). Each pointing's move has
+    SPICE's place as a soft prior (GLOBAL_PRIOR), the matches GLOBAL_NOISE; residuals past GLOBAL_HUBER are weighted
+    down (IRLS), then the match furthest past agree from the fit is dropped and the rest solved again, until all agree.
+    (moves, kept matches); haze, a dict, gets each filter's limb height."""
     idx = {r: i for i, r in enumerate(roots)}
     n = len(roots)
+    filters = sorted({m[2] for m in meas if m[0] == "limb"})
+    fdx = {f: 2 * n + i for i, f in enumerate(filters)}
+    size = 2 * n + len(filters)
     keep = list(range(len(meas)))
     if not meas:
         return {r: (0.0, 0.0) for r in roots}, []
+    prior = np.concatenate([np.full(2 * n, 1 / GLOBAL_PRIOR ** 2), np.full(len(filters), 1 / LIMB_HAZE_PRIOR ** 2)])
+
+    def rows(m):
+        """(jacobian rows over the unknowns, targets): residual = J x - target"""
+        if m[0] == "limb":
+            _, b_, f, nv, o, w = m
+            J = np.zeros((1, size))
+            J[0, 2 * idx[b_]:2 * idx[b_] + 2] = nv
+            J[0, fdx[f]] = -1.0
+            return J, np.array([-o]), w
+        a_, b_, d, P, w = m
+        J = np.zeros((2, size))
+        J[:, 2 * idx[b_]:2 * idx[b_] + 2] = P
+        if a_ is not None:
+            J[:, 2 * idx[a_]:2 * idx[a_] + 2] = -P
+        return J, P @ np.asarray(d, float), w
+    built = [rows(m) for m in meas]
     while True:
         robust = np.ones(len(meas))
         for _ in range(8):
-            A = np.eye(2 * n) / GLOBAL_PRIOR ** 2
-            b = np.zeros(2 * n)
+            A = np.diag(prior)
+            b = np.zeros(size)
             for k in keep:
-                a_, b_, d, P, w = meas[k]
-                j = idx[b_]
+                J, y, w = built[k]
                 c = w * robust[k] / GLOBAL_NOISE ** 2
-                Q = c * P
-                sj = slice(2 * j, 2 * j + 2)
-                A[sj, sj] += Q
-                b[sj] += Q @ d
-                if a_ is None:   # (an anchor: pointing b's own place, as a ring fit says)
-                    continue
-                i = idx[a_]
-                si = slice(2 * i, 2 * i + 2)
-                A[si, si] += Q; A[si, sj] -= Q; A[sj, si] -= Q
-                b[si] -= Q @ d
+                A += c * J.T @ J
+                b += c * J.T @ y
             x = np.linalg.solve(A, b)
             res = {}
             for k in keep:
-                a_, b_, d, P, w = meas[k]
-                j = idx[b_]
-                xa = np.zeros(2) if a_ is None else x[2 * idx[a_]:2 * idx[a_] + 2]
-                res[k] = float(np.linalg.norm(P @ (x[2 * j:2 * j + 2] - xa - d)))
+                J, y, w = built[k]
+                res[k] = float(np.linalg.norm(J @ x - y))
                 robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
         worst = max(keep, key=lambda k: res[k]) if keep else None
         if worst is None or res[worst] <= agree:
             break
         keep.remove(worst)
+    if haze is not None:
+        haze.update({f: round(float(x[fdx[f]]), 2) for f in filters})
     return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
 
 
@@ -4588,13 +4609,33 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                         nn = grad / np.hypot(*grad)
                         P = np.outer(nn, nn)
                 meas.append((None, r, np.median(np.array(ms, float), axis=0), P, 1.0))
-        moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
+        if u["key"][0] in LIMB_BODIES and GLOBAL_LIMBS:
+            # each tile's lit limb against SPICE's disk at its time (limb_place): an anchor for its pointing across the
+            # limb, with its filter's haze height an unknown of the solve
+            disk = _disk_geometry(u)
+            if disk is not None:
+                for t in by_n.values():
+                    disk(np.zeros(1), np.zeros(1), t["id"])   # (SPICE's views first, one at a time: not thread safe)
+
+                def limb(n):
+                    im = picture(n)
+                    return n, (limb_place(disk, by_n[n], im) if im is not None else None)
+                with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+                    for n, got_l in ex.map(limb, sorted(by_n)):
+                        if got_l is not None:
+                            o, nv, count = got_l
+                            meas.append(("limb", rootmap[n], by_n[n]["filter"], nv, o, LIMB_WEIGHT))
+                            seen[f"limb-{n}"] = {"limb": round(o, 2), "normal": [round(float(v), 4) for v in nv]}
+        haze = {}
+        moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE, haze)
+        if haze:
+            seen["haze"] = haze
         # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
         # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
         # 35 px, so the matches are capped here too (measure) and the moves only past what any chain reached)
         most = EDGE_MAX * FRAME
         out = {}
-        linked = {m[0] for i, m in enumerate(meas) if i in keep and m[0] is not None} | {m[1] for i, m in enumerate(meas) if i in keep}
+        linked = {m[0] for i, m in enumerate(meas) if i in keep and m[0] not in (None, "limb")} | {m[1] for i, m in enumerate(meas) if i in keep}
         # a chain of pointings whose relative places spread wider than the furthest move believed (a long scan whose
         # pointings SPICE puts a little further off each step: Hyperion 015HY, 70 px end to end) is held by its
         # middle instead of by SPICE's average, each linked group on its own, as the time-order rule held it by its
@@ -4608,12 +4649,12 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             return r
         for i in keep:
             a_, b_ = meas[i][0], meas[i][1]
-            if a_ is not None:
+            if a_ not in (None, "limb"):
                 group[top(a_)] = top(b_)
         members = collections.defaultdict(list)
         for r in linked:
             members[top(r)].append(r)
-        held = {m[1] for i, m in enumerate(meas) if i in keep and m[0] is None}
+        held = {m[1] for i, m in enumerate(meas) if i in keep and m[0] in (None, "limb")}
         for rs in members.values():
             xy = np.array([moves[r] for r in rs], float)
             if np.hypot(*xy.T).max() > most and not held & set(rs):   # (a group anchored on its rings stays put)
