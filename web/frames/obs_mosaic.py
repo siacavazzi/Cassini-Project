@@ -4444,7 +4444,19 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 if rootmap.get(n) in by_n:
                     by.setdefault(rootmap[n], []).append(m[:2])
             for r, ms in by.items():
-                meas.append((None, r, np.median(np.array(ms, float), axis=0), np.eye(2), 1.0))
+                # (a radial profile fit says how far across the rings the tile sits, not where along them: its move along
+                # the rings is noise, up to 18 px on 039RI, and held whole it dragged pointings along the rings. Only
+                # the part across the rings, at the tile's middle, anchors the pointing)
+                P = np.eye(2)
+                if rings is not None:
+                    t = by_n[r]
+                    cx, cy = t["offset"][0] + t["box"][0] + t["box"][2] / 2, t["offset"][1] + t["box"][1] + t["box"][3] / 2
+                    rr = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), t["id"])[0]
+                    grad = np.array([rr[1] - rr[0], rr[2] - rr[0]], float)
+                    if np.hypot(*grad) > 0:
+                        nn = grad / np.hypot(*grad)
+                        P = np.outer(nn, nn)
+                meas.append((None, r, np.median(np.array(ms, float), axis=0), P, 1.0))
         moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE)
         # (the furthest a pointing is moved: EDGE_MAX, as _combine holds a clouded body's; the time-order rule capped
         # only each match, PANEL_MAX or PANEL_FAR, and its moves added up along a chain past that, Hyperion 015HY's to
