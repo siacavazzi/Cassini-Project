@@ -6443,6 +6443,9 @@ def _chain(made, pic, there, believed, step, guide=None):
 
 STEADY_LINKS = int(os.environ.get("CASSINI_STEADY_LINKS", "4"))   # frames back each frame is matched to (1: the chain alone)
 STEADY_AGREE = 2.0        # px: a link further than this from the solve is left out (_chain_links)
+STEADY_OFF_TIMES = 4.0   # a solved place further off SPICE's than this many times the pass's median is held at SPICE's
+STEADY_OFF_LEAST = 8.0   # px: ... when that is over this much (_chain_links)
+STEADY_WINDOW = 32        # tiles whose links are measured with their pictures read at once (_chain_links)
 STEADY_LINK_NOISE = 0.3   # px: a frame-to-frame match's spread (_chain_links)
 STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SPICE's place), so the solve is held; the
 #                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
@@ -6451,11 +6454,14 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
-    "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, the worst link left
-    out until all agree within STEADY_AGREE), as the global mosaic solve does. The chain adds each frame's match to
-    the one before, so a fraction of a pixel off in each adds up like a random walk over a movie (steady_places pulls
-    it back to SPICE only over STEADY_SMOOTH frames); linked several frames back, the places are held by several paths.
-    ({n: [x, y]}, how)."""
+    "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
+    by more than STEADY_AGREE left out, the worst first, several a round), as the global mosaic solve does. The chain
+    adds each frame's match to the one before, so a fraction of a pixel off in each adds up like a random walk over a
+    movie (steady_places pulls it back to SPICE only over STEADY_SMOOTH frames); linked several frames back, the places
+    are held by several paths. As _chain, no place ends further than the guide's reach from the tile's own SPICE place:
+    a tile the solve put past it (a run of frames another moon pulled along together) keeps SPICE's place and its links
+    are left out. The pictures are read a window at a time (STEADY_WINDOW tiles and the links before them), so a movie
+    of hundreds of tiles never holds them all. ({n: [x, y]}, how)."""
     import scipy.sparse as sps
     import scipy.sparse.linalg as spla
     tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
@@ -6474,12 +6480,15 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         for j in dict.fromkeys(cands):
             pairs.append((j, n))
         newest[by[n]["filter"]] = n
+    reach = None
 
-    def measure(pr):
+    def measure(pr, own):
+        nonlocal reach
         j, n = pr
         t = by[n]
         rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
         g = guide(spice, j, n, None) if guide else {}
+        reach = g.get("reach", reach)
         shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                  around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is None or math.hypot(*shift) > believed:
@@ -6488,27 +6497,35 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
             return pr, None, "past reach"
         return pr, d, how
-    # (every picture read here, before the threads: _every_tile's pic keeps only the last few, and side by side one
-    # thread's picture was let go while another still wanted it)
-    own = {n: pic(n) for n in order}
+    got = []
     with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
-        got = [g for g in ex.map(measure, pairs) if g[1] is not None]
+        for k in range(0, len(order), STEADY_WINDOW):
+            chunk = set(order[k:k + STEADY_WINDOW])
+            todo = [pr for pr in pairs if pr[1] in chunk]
+            # (this window's pictures and those its links reach back to, read here before the threads: _every_tile's
+            # pic keeps only the last few, and side by side one thread's picture was let go while another wanted it)
+            own = {m: pic(m) for m in sorted({m for pr in todo for m in pr})}
+            got += [g for g in ex.map(lambda pr: measure(pr, own), todo) if g[1] is not None]
+            del own
     N = len(order)
     keep = list(range(len(got)))
     robust = np.ones(len(got))
     x0 = np.array([spice[n] for n in order], float)
-    for rnd in range(40):
-        rows, cols, vals, rhs_x, rhs_y, wts = [], [], [], [], [], []
-        for r, k in enumerate(keep):
+    held = set()   # tiles held at SPICE's place (past reach)
+    px, py = x0[:, 0].copy(), x0[:, 1].copy()
+    for rnd in range(len(got) + 10):
+        rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []
+        r = 0
+        for k in keep:
             (j, n), d, _ = got[k]
             w = math.sqrt(robust[k]) / STEADY_LINK_NOISE
             rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
             rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
-        m = len(keep)
-        pw = 1.0 / STEADY_LINK_PRIOR
-        rows += list(range(m, m + N)); cols += list(range(N)); vals += [pw] * N
-        rhs_x += list(pw * x0[:, 0]); rhs_y += list(pw * x0[:, 1])
-        A = sps.csr_matrix((vals, (rows, cols)), shape=(m + N, N))
+            r += 1
+        pw = [1.0 / STEADY_LINK_PRIOR if order[i] not in held else 1e3 for i in range(N)]
+        rows += list(range(r, r + N)); cols += list(range(N)); vals += pw
+        rhs_x += list(np.array(pw) * x0[:, 0]); rhs_y += list(np.array(pw) * x0[:, 1])
+        A = sps.csr_matrix((vals, (rows, cols)), shape=(r + N, N))
         px = spla.lsqr(A, np.array(rhs_x), atol=1e-10, btol=1e-10)[0]
         py = spla.lsqr(A, np.array(rhs_y), atol=1e-10, btol=1e-10)[0]
         res = {}
@@ -6519,19 +6536,34 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         changed = any(abs(new[k] - robust[k]) > 1e-3 for k in keep)
         for k in keep:
             robust[k] = new[k]
-        worst = max(keep, key=lambda k: res[k]) if keep else None
-        if worst is not None and res[worst] > STEADY_AGREE:
-            keep.remove(worst)
+        out_ = sorted((k for k in keep if res[k] > STEADY_AGREE), key=lambda k: -res[k])
+        if out_:
+            # (the worst left out, and with it up to a twentieth of the links that disagree by more than half as much)
+            for k in [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]:
+                keep.remove(k)
             continue
+        if reach is not None:
+            # (past the reach, or far past how far the pass's frames are off SPICE as a rule: a run of frames another
+            # moon pulled along together sits 20 px off where the rest sit 3)
+            dev = np.hypot(px - x0[:, 0], py - x0[:, 1])
+            limit = min(reach, max(STEADY_OFF_LEAST, STEADY_OFF_TIMES * float(np.median(dev))))
+            far = [order[i] for i in range(N) if order[i] not in held and dev[i] > limit]
+            if far:
+                # (past the reach: SPICE's place, its links out, and the rest solved again)
+                held |= set(far)
+                keep = [k for k in keep if got[k][0][0] not in held and got[k][0][1] not in held]
+                continue
         if not changed:
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
+    for n in held:
+        places[n] = list(spice[n])
     linked = {}
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
-    hows = {n: (f"linked to {sorted(linked[n])}" if n in linked else "first" if n == order[0] else "SPICE (no link)")
-            for n in order}
+    hows = {n: ("SPICE (past reach)" if n in held else f"linked to {sorted(linked[n])}" if n in linked
+                else "first" if n == order[0] else "SPICE (no link)") for n in order}
     return places, hows
 
 
@@ -6595,8 +6627,9 @@ STEADY_MOST = 60      # frames: the most smoothing asked for
 # movie_webp) whenever the rule changes
 STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places;
 if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
-    # steady5: solved over links several frames back (_chain_links); the chain alone keeps steady4's name
-    STEADY_FILE = "steady5-" + PLAN_FILE
+    # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
+    # the chain alone keeps steady4's name
+    STEADY_FILE = f"steady5k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
