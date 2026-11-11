@@ -42,15 +42,18 @@ Routes:
   ...&channel=0|1|2            one channel of that composite (0 red, 1 green, 2 blue), black and white, cut
                                from the same composite so it keeps the composite's shared brightness scale and
                                alignment: what a composite's channel looks like opened on its own (drill-down)
-  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, north up,
-                               by SPICE (color_image.processed_frame), at the frame's own scale (one frame square
+  ...&center=1                 Auto center (a camera window's setting): the picture centred on the body, square and
+                               turned the whole quarter that brings north toward the top (obs_mosaic.pass_turn), by
+                               SPICE (color_image.processed_frame), at the frame's own scale (one frame square
                                round the body); whether to centre is decided once for the pass (obs_mosaic.centre_view,
                                the rule of a movie centred on its body). Centred is centred: the body's centre is
                                the picture's middle however much of it the frame leaves empty (transparent).
-                               A close-up pass (frames on a body too big for the view) is turned north up where it
-                               is, so the surface holds still. 404 with X-Center {"centre": false, "why"} for a ring,
-                               spoke or sky pass (Cassini kept those upright in the camera, the steady view) or a
-                               frame SPICE has no place for, and the window shows the picture as it is. Also on
+                               A close-up pass (frames on a body too big for the view) is placed where it is on the
+                               pass's axes, so the surface holds still. A ring or spoke pass (Cassini kept those
+                               upright in the camera, the steady view) is turned by a whole quarter only, where that
+                               brings north toward the top. 404 with X-Center {"centre": false, "why"} for a sky pass
+                               that shows no body or a frame SPICE has no place for ("frame": true when only this
+                               frame, not its pass), and the window shows the picture as it is. Also on
                                /frames/processed below
   /frames/processed/<ID>.webp?size=512
                                the frame alone made like a composite's channel (color_image.load_aligned with
@@ -514,15 +517,18 @@ def webp(frame_id, size, cache, fmt="webp"):
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
-# color-v53/v36/v31 (proc and thumb unchanged): #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); color-v52/v35/v30 (proc and thumb unchanged): #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); color-v51/v34/v29 (proc and thumb unchanged): #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); color-v50/v33/v28 (proc and thumb unchanged): #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); color-v49/v32/v27 (proc and thumb unchanged): the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); color-v48/v31/v26 (proc and thumb unchanged): #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); color-v47/v30/v25 (proc and thumb unchanged): the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); color-v46/v29/v24, proc-v20/v14, thumb-v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); color-v45/v28/v23: #294 (grey single-filter colour sets); color-v44/v27/v22, proc-v19/v13: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); color-v43/v26/v21, proc-v18/v12: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); color-v42/v25/v20, proc-v17/v11: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); color-v41/v24/v18 (proc unchanged): neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248); color-v40/v23/v17 (proc unchanged): natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); color-v39/v22/v16 (proc unchanged): the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); color-v38/v21/v15, proc-v16/v10: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); color-v37/v20/v14 (proc unchanged): the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); color-v36/v19/v13, proc-v15/v9: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); color-v35/v18/v12, proc-v14/v8: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); color-v34/v17/v11, proc-v13/v7: thin ringlets kept by the garbled-line check (#212), heavily compressed frames smoothed and saturated frames' glow black softened (#222), natural color (eye, #219); color-v33/v16/v10, proc-v12/v6: Titan color (#198), saturated white kept white (#205), movie strobe (#206), line holes after lost packets and star spikes (#201); color-v32/v15/v9, proc-v11/v5: star boxes, fill dashes, garbled lines (group I), color sets aligned near SPICE and two-filter/methane balance (group F); color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-COLOR_VERSIONS = {"balanced": "color-v53", "raw": "color-v36", "eye": "color-v53-eye", "false": "color-v53-false", "classic": "color-v31"}
-PROC_VERSIONS = {"balanced": "proc-v20", "raw": "proc-v20", "eye": "proc-v20", "false": "proc-v20", "classic": "proc-v14"}   # one frame: no colors to mix
+# color-v56/v39/v34, proc-v23/v17, thumb-v9: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); color-v55/v38/v33, proc-v22/v16, thumb-v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); color-v54/v37/v32, proc-v21/v15, thumb-v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); color-v53/v36/v31 (proc and thumb unchanged): #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); color-v52/v35/v30 (proc and thumb unchanged): #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); color-v51/v34/v29 (proc and thumb unchanged): #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); color-v50/v33/v28 (proc and thumb unchanged): #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); color-v49/v32/v27 (proc and thumb unchanged): the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); color-v48/v31/v26 (proc and thumb unchanged): #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); color-v47/v30/v25 (proc and thumb unchanged): the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); color-v46/v29/v24, proc-v20/v14, thumb-v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); color-v45/v28/v23: #294 (grey single-filter colour sets); color-v44/v27/v22, proc-v19/v13: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); color-v43/v26/v21, proc-v18/v12: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); color-v42/v25/v20, proc-v17/v11: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); color-v41/v24/v18 (proc unchanged): neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248); color-v40/v23/v17 (proc unchanged): natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); color-v39/v22/v16 (proc unchanged): the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); color-v38/v21/v15, proc-v16/v10: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); color-v37/v20/v14 (proc unchanged): the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); color-v36/v19/v13, proc-v15/v9: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); color-v35/v18/v12, proc-v14/v8: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); color-v34/v17/v11, proc-v13/v7: thin ringlets kept by the garbled-line check (#212), heavily compressed frames smoothed and saturated frames' glow black softened (#222), natural color (eye, #219); color-v33/v16/v10, proc-v12/v6: Titan color (#198), saturated white kept white (#205), movie strobe (#206), line holes after lost packets and star spikes (#201); color-v32/v15/v9, proc-v11/v5: star boxes, fill dashes, garbled lines (group I), color sets aligned near SPICE and two-filter/methane balance (group F); color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+COLOR_VERSIONS = {"balanced": "color-v56", "raw": "color-v39", "eye": "color-v56-eye", "false": "color-v56-false", "classic": "color-v34"}
+PROC_VERSIONS = {"balanced": "proc-v23", "raw": "proc-v23", "eye": "proc-v23", "false": "proc-v23", "classic": "proc-v17"}   # one frame: no colors to mix
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
-CENTRE_VERSION = "ctr7"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
+CENTRE_VERSION = "ctr9"   # ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
                           # ctr4: a close-up pass is turned north up where it is; ctr5: no stop, centred is centred;
                           # ctr6: a small moon centred on the moon the picture shows (find_small_body); ctr7: only
                           # the small moons (SMALL_RADIUS), the blob nearest SPICE within FIND_REACH, nearly full disks near it
+                          # ctr8: turned to the pass's own orientation (obs_mosaic.pass_turn), not north up: no tilt
+                          # ctr9: the pass's axes turned the quarter nearest north up; ring and sky passes that show
+                          # their body turned by that quarter alone (obs_mosaic.centre_view "quarter")
 
 
 # a plan being worked out (/export/plan.json?progress=KEY): how far it is, for GET /export/plan-progress/KEY.json
@@ -572,12 +578,12 @@ def composite(ids, channel=None, centre=None):
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
-    # the last step of every picture: a light unsharp mask (color_image.unsharp)
+    # (no sharpening: #249's unsharp mask came out on 11-08, Sam: it added to the over-processed look)
     if len(chans) == 1:
-        return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack([chans[0], alpha])), "LA"), sink), report
+        return _with_hdr(Image.fromarray(np.dstack([chans[0], alpha]), "LA"), sink), report
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    return _with_hdr(Image.fromarray(color_image.unsharp(np.dstack(chans + [alpha])), "RGBA"), sink), report
+    return _with_hdr(Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), sink), report
 
 
 # HDR stills (calibration.hdr_capture): each composite and processed frame also keeps its recovery map, a grey
@@ -681,11 +687,13 @@ def body_radius(lbl):
 
 
 def centred(ids, view):
-    """The composite of ids (or one frame) centred on the body, north up: the pipeline's color path and SPICE
+    """The composite of ids (or one frame) centred on the body (view["centre"]; else kept on the frame's middle, or
+    held), turned to the pass's axes (view["turn"], obs_mosaic.pass_turn: the camera's own, turned the whole quarter
+    that brings north toward the top, so the frame keeps its square): the pipeline's color path and SPICE
     placement (color_image.processed_frame: load_aligned as composite, then auto_center), cut to the square of
     view["side"] full resolution pixels round the body's centre (obs_mosaic.centre_view: one frame, the frame's own
     scale). RGBA (LA for one frame) and the report; LookupError when SPICE cannot place it."""
-    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids])
+    image, lbl, report = color_image.processed_frame([f"{FOLDERS[i[0]]}/{i}.png" for i in ids], turn=view.get("turn", 0.0))
     if "frame_offset" not in report:
         raise LookupError(report.get("why", "not placed by SPICE"))
     # processed_frame puts the frame's middle at the canvas middle; the body's centre is frame_offset from it
@@ -730,10 +738,10 @@ def centred(ids, view):
         sink[-1] = cut if m.shape[:2] == (h, w) else None
     report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
                                                           "centre": bool(view.get("centre"))})
-    # the last step of every picture: a light unsharp mask (color_image.unsharp); one frame on its one channel
+    # one frame on its one channel (no sharpening since 11-08)
     if len(ids) == 1:
-        return Image.fromarray(color_image.unsharp(np.ascontiguousarray(out[..., [0, 3]])), "LA"), report
-    return Image.fromarray(color_image.unsharp(out), "RGBA"), report
+        return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
+    return Image.fromarray(out, "RGBA"), report
 
 
 # the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once
@@ -741,7 +749,8 @@ _recent, _recent_lock, RECENT = {}, threading.Lock(), 4
 
 
 def _recent_composite(ids, centre=None):
-    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()))
+    key = (calibration.mode(), tuple(ids), centre and centre["side"], centre and tuple(centre.get("hold") or ()),
+           centre and centre.get("turn"))
     with _recent_lock:
         hit = _recent.pop(key, None)
         if hit:
@@ -831,7 +840,7 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
 
 
 # ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
-THUMB_VERSION = "thumb-v4"   # v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
+THUMB_VERSION = "thumb-v14"   # v14: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; v13: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; v12: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; v11: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; v10: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; v9: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); v8: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
 THUMB_SIZE = 256
 
 
@@ -1084,6 +1093,24 @@ _native_lock = threading.Lock()
 _native_wanted = {}
 
 SERVER_VERSION = git_version(REPO)   # the code this server runs: read once, as it starts
+
+
+def replay_data_missing(site):
+    """Why the page at --site would stop at "trajectory data could not be loaded", or None when it would not. The replay
+    data (mission.json and the year folders, or one year's bodies.json) is made by web/replay/build_data.py and is not
+    in git, so a fresh worktree has none: the page then asks for data/mission.json, falls back to data/bodies.json and
+    gets 404 for both. Checked as the server starts, so a preview without its data never goes up."""
+    if not site:
+        return None
+    data = os.path.join(site, "data")
+    if any(os.path.isfile(os.path.join(data, name)) for name in ("mission.json", "bodies.json")):
+        return None
+    return (f"No replay data at {data} (neither mission.json nor bodies.json): the page would stop at its loading "
+            "screen. Make it at this commit with\n"
+            "  python web/replay/build_data.py --data <export dir> --years 1997-2017 --attitude <attitude dir> "
+            "--out web/replay/data --groups\n"
+            "  python web/replay/build_coverage.py --data web/replay/data\n"
+            "or pass --allow-no-replay-data to serve the site without it.")
 
 
 def site_version(site):
@@ -1435,16 +1462,17 @@ def make_handler(site, cache, flags=None):
 
         def centre_of(self, query, frame_id):
             """center=1 (Auto center in a camera window): the pass's view (obs_mosaic.centre_view: centred on the body,
-            or north up where it is for a close-up), or None for the picture as it is. False for a ring, spoke or
-            sky pass or a frame SPICE has no place for: the answer (404, X-Center says why) is sent, so the window
-            shows the picture as it is for the whole pass."""
+            placed where it is for a close-up, or turned a whole quarter for a ring or spoke pass; view_shown), or
+            None for the picture as it is. False for a sky pass that shows no body or a frame SPICE has no place
+            for: the answer (404, X-Center says why) is sent, so the window shows the picture as it is (for the
+            whole pass unless X-Center has "frame": true)."""
             if query.get("center", ["0"])[0] != "1" or reel._index is None:
                 return None
             try:
                 view = obs_mosaic.centre_view(frame_id)
             except Exception as e:
                 view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
-            if view.get("centre") or view.get("north"):
+            if obs_mosaic.view_shown(view):
                 return view
             self.not_centred(view)
             return False
@@ -2146,8 +2174,13 @@ def main():
                     help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing. "
                          "Left out, only the live site (port 8765) counts, into ~/Documents/cassini-usage, so previews "
                          "never add their own visits to it")
+    ap.add_argument("--allow-no-replay-data", action="store_true",
+                    help="start even though the site has no replay data (the page then stops at its loading screen)")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
+    missing = replay_data_missing(site)
+    if missing and not args.allow_no_replay_data:
+        sys.exit(missing)
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True

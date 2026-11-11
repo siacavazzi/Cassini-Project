@@ -125,7 +125,7 @@ def centred(frame_id):
         view = obs_mosaic.centre_view(frame_id)
     except Exception:   # noqa: BLE001  (not centred: the window shows the picture as it is)
         return None
-    return view if view.get("centre") or view.get("north") else None
+    return view if obs_mosaic.view_shown(view) else None
 
 
 def items(phase):
@@ -147,7 +147,7 @@ def items(phase):
     if phase == "mosaics":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
     if phase == "chains":
-        # a movie pass's stabilization and exposure chains (steady2-, exposure5-c11s0-plan4.json), which the page
+        # a movie pass's stabilization and exposure chains (steady2-, exposure6-c11s0-plan4.json), which the page
         # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
@@ -308,6 +308,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         # (every tile made: their reports in one file too, which a server's first look at the pass reads instead of
         # a file a tile, obs_mosaic.REPORTS_FILE)
         obs_mosaic.keep_reports(u, cache, p)
+        # (the pointings solved on all the pass's tiles before any mosaic so far is drawn, so each is drawn where the
+        # whole pass puts it from its first tile on: obs_mosaic.global_places)
+        if u.get("kind") == "mosaic":
+            obs_mosaic.solve_places(u, cache)
     kind, n = u.get("kind"), 0
 
     def movie(f, size):
@@ -1099,6 +1103,13 @@ def main():
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
+    # the SPICE kernels of every year the build covers, or no build: pictures made without them are placed, calibrated
+    # and grouped wrongly with no error (Sam 2026-11-08, the 2017 test build's M5 months)
+    since = int(args.since[:4]) if args.since else 1997
+    until = int(args.until[:4]) if args.until else 2017
+    if args.until and args.until[5:10] in ("01-01", "") and until > since:
+        until -= 1
+    data_source.check_kernels(range(since, until + 1))
     (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 

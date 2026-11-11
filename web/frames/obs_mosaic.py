@@ -66,8 +66,8 @@ import label_handler  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v87", "raw": "obs-v70", "eye": "obs-v87-eye", "false": "obs-v87-false", "classic": "obs-v57-classic"}
+# obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v110", "raw": "obs-v93", "eye": "obs-v110-eye", "false": "obs-v110-false", "classic": "obs-v80-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -77,9 +77,9 @@ ZOOM = 1.4           # change in distance that ends a pass (tiles closer than th
 MIN_PLACES = 3       # pointings a pass needs to be a mosaic
 MAX_FRAMES = 16      # footprints wider than this many frames stay rolling mosaics
 MOVIE_JUMPS = 0.3    # a pass whose same-filter steps jump (mosaic.min_step) less often than this is a movie
-MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to this many frames across, else a
-                     # window this wide following the frame, at one scale for the whole pass
-MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint
+MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to this many frames across, else it
+                     # follows the frame: each picture the frame as Cassini took it (follow_view)
+MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint when the geometry cache has none of its frames (pass_boxes)
 CENTRE_MARGIN = 0.2  # of the body's diameter, round its disk in a movie centred on it
 CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep, or the pass is not centred (centre_half)
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
@@ -253,7 +253,8 @@ def units(target, obs, cam):
         g = where.get(r.id)
         t = float(r.seconds_1970)
         if cur is None or t - cur["last"] > GAP or (g and cur["z"] and not 1 / ZOOM < g[2] / cur["z"] < ZOOM):
-            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t, "turns": turned}
+            zoomed = cur is not None and t - cur["last"] <= GAP
+            cur = {"frames": [], "all": [], "taken": [], "z": g and g[2], "last": t, "turns": turned, "zoomed": zoomed}
             out.append(cur)
         cur["last"] = t
         cur["taken"].append((f, *(g or (None, None, None))))   # every frame, repeats too, for _judge
@@ -302,6 +303,9 @@ def units(target, obs, cam):
             panned = panned or prev["panned"]
         else:
             laps.append(u)
+    # a raster's lap that ZOOM cut short takes the tiles that finish it back from the pass after it
+    if _lap_tails(laps):
+        relaid = True   # (the passes after it change, or are renumbered)
     # a movie that re-points to sky it never comes back to plays each view as a pass of its own, and a mosaic that
     # holds separate scans (islands) draws each as a mosaic of its own
     # (a map joined or kept apart on its frames' ground, or a time series judged on places turned frame by frame,
@@ -364,6 +368,84 @@ def units(target, obs, cam):
     with _lock:
         _units[(target, obs, cam)] = out
     return out
+
+
+LAP_TAIL_BODIES = ("SATURN", "JUPITER")   # (_lap_tails) the planets, whose rasters go round lap after lap as Cassini
+                                          # closes in; a moon's flyby mosaics at two distances stay two (000PH, 194TI)
+
+
+def _lap_tails(laps):
+    """(units) A raster split at ZOOM in the middle of a lap (Cassini closing in, the camera going round the same
+    places): the frames at the start of the pass after the split that finish the lap, at places of the pass before it
+    its last lap has not taken yet, go back to that pass, and a pass that is all such frames joins it. The 2017-04-26
+    north pole movie (271SA_NPOLMOV001 W) was cut at 02:43 and 05:12: its third lap lost its last pointing to the next
+    pass, and its fifth lap's last four pointings were a pass of their own (a 4-tile mosaic). A frame's place there
+    is on the pass's own canvas (scaled to its distance, as tiles are) and must lie within half the pass's step of
+    one of its slots. The passes are judged again; a move that would change the first pass's kind (other than a
+    mosaic becoming a mosaic movie) is not made. True when frames moved (the passes are renumbered, LAID's folder)."""
+    moved, n = False, 0
+    while n + 1 < len(laps):
+        took = _lap_tail(laps[n], laps[n + 1])
+        moved = moved or took
+        if took and not laps[n + 1]["frames"]:
+            del laps[n + 1]   # (and the pass after it may finish the lap further)
+            continue
+        n += 1
+    return moved
+
+
+def _lap_tail(a, b):
+    """(_lap_tails) Moves the frames at the start of pass b that finish pass a's last lap into a; True when it did."""
+    if not (b.get("zoomed") and a["key"][0] in LAP_TAIL_BODIES and a.get("kind") in ("mosaic", "mosaic_movie") and a.get("z") and b["frames"]
+            and b["frames"][0][3] - a["last"] <= GAP):
+        return False
+    where = slots(a)
+    lap = lap_of(a)
+    at = {}
+    for fr, i in zip(a["frames"], where):
+        if i is not None and fr[7]:
+            at.setdefault(i, []).append((-fr[5] * fr[7] / a["z"], -fr[6] * fr[7] / a["z"]))
+    if len(at) < MIN_PLACES:
+        return False
+    centre = {i: np.mean(v, 0) for i, v in at.items()}
+    pts = list(centre.values())
+    step = float(np.median([min(max(abs(p[0] - q[0]), abs(p[1] - q[1])) for q in pts if q is not p) for p in pts]))
+    last = max(lap)
+    open_ = set(centre) - {i for i, n in zip(where, lap) if n == last and i is not None}
+    if not open_:
+        return False
+    take, here = 0, None
+    for fr in b["frames"]:
+        if not fr[7]:
+            break
+        p = (-fr[5] * fr[7] / a["z"], -fr[6] * fr[7] / a["z"])
+        i = min(centre, key=lambda k: max(abs(p[0] - centre[k][0]), abs(p[1] - centre[k][1])))
+        if max(abs(p[0] - centre[i][0]), abs(p[1] - centre[i][1])) > step / 2 or not (i in open_ or i == here):
+            break
+        open_.discard(i)
+        here = i
+        take += 1
+    if not take:
+        return False
+    t_end = b["frames"][take - 1][3]
+    cut = sum(1 for x in b["all"] if x[3] <= t_end)   # ("all" and "taken" hold every frame, in the same order)
+    trial = dict(a, frames=a["frames"] + b["frames"][:take], all=a["all"] + b["all"][:cut],
+                 taken=a["taken"] + b["taken"][:cut], last=t_end)
+    for k in ("slots", "lap_of", "_lum", "_lap_prev", "_lap_lead"):
+        trial.pop(k, None)
+    _judge(trial)
+    if trial["kind"] != a["kind"] and not (a["kind"] == "mosaic" and trial["kind"] == "mosaic_movie"):
+        return False
+    rest = {"frames": b["frames"][take:], "all": b["all"][cut:], "taken": b["taken"][cut:]}
+    a.clear()
+    a.update(trial, tails=True)
+    b.update(rest)
+    for k in ("slots", "lap_of", "_lum", "_lap_prev", "_lap_lead"):
+        b.pop(k, None)
+    if b["frames"]:
+        b["z"] = next((fr[7] for fr in b["frames"] if fr[7]), b["z"])
+        _judge(b)
+    return True
 
 
 def _pictures(frames, gap):
@@ -818,8 +900,62 @@ def _revisits(u):
         mine.append((i, x, y))
     if not (len(returns) >= 2 and back >= REVISIT_SHARE * again):
         return False
+    if _reraster(u) or _named_map(u):
+        return False
     u["rescanned"] = _scan(np.array([q[2:] for q in fr]), np.split(np.arange(len(fr)), np.flatnonzero(gaps >= pause) + 1))
     return not u["rescanned"]
+
+
+RERASTER_ORDER = 0.75   # (_reraster) of the steps between the places a raster takes again, this share at least follow
+                        # the order it first took them in ...
+RERASTER_STEP = 0.3     # ... and its first lap steps (median) at least this much of a frame from place to place, as a
+                        # mosaic's tiles do; a camera creeping along with the clouds steps less (234SA_WIND5HR005: 0.2)
+
+
+def _reraster(u):
+    """(_revisits) Pass u's returns are a raster taken again, not a time series: after its first return to a place,
+    the camera goes round at least MIN_PLACES of the places it took before, in the order it first took them (most
+    steps, RERASTER_ORDER, from one place to the place it first took next), as a mosaic movie's laps do. A time
+    series comes back to one view or a few (267SA_LIMBINT002, Titan's cloud monitors, a FTRACK's filters), or creeps
+    along with what it follows in steps smaller than a mosaic's (RERASTER_STEP: the 5-hour wind movies). The 2017
+    north pole movie, 271SA_NPOLMOV001, split at ZOOM as Cassini closed in: its fourth lap and the start of its fifth
+    were judged a time series, so its whole frames were single tiles."""
+    seq = []
+    for p in u.get("place") or []:
+        if p is not None and (not seq or seq[-1] != p):
+            seq.append(p)
+    first, seen = None, set()
+    for k, p in enumerate(seq):
+        if p in seen:
+            first = k
+            break
+        seen.add(p)
+    if first is None:
+        return False
+    order = {p: k for k, p in enumerate(dict.fromkeys(seq[:first]))}
+    at = u.get("places_at") or []
+    lap = [at[p] for p in order if p < len(at)]
+    if len(lap) < 2 or float(np.median([max(abs(a[0] - b[0]), abs(a[1] - b[1])) for a, b in zip(lap, lap[1:])])) < RERASTER_STEP * FRAME:
+        return False
+    again = [p for p in seq[first:] if p in order]
+    if len(set(again)) < MIN_PLACES:
+        return False
+    steps = list(zip(again, again[1:]))
+    return sum(order[b] == order[a] + 1 for a, b in steps) >= RERASTER_ORDER * len(steps)
+
+
+MAP_NAMES = ("MAP", "MOSAIC")   # (_named_map) a Saturn observation's purpose naming a map or a mosaic
+
+
+def _named_map(u):
+    """(_revisits) Pass u's observation is named a map or a mosaic (MAP_NAMES in its purpose, _name): its frames
+    retaking neighbouring views after pauses are a tight map, one pointing every few minutes, not a time series. The
+    2017 north pole maps (261SA_NPOLMAP001, 267SA_NPOLMAP002, 292SA_NPOLEMAP001: WAC frames overlapping by 0.6-0.8
+    of a frame, each pointing after a pause) played as movies of single tiles. A time series is named for what it
+    watches (LIMBINT, FEATRAK, FTRACK, MONITOR, CLOUD). Saturn only: a Titan map's WAC frames each holding most of
+    the disk, a fifth of a frame apart, stay movies (059TI_GLOBMAP001, 153TI_FIRNADMAP001)."""
+    name = _name(u["key"][1])
+    return bool(u["key"][0] == "SATURN" and name and any(m in name[3:] for m in MAP_NAMES))
 
 
 def _drifting(u):
@@ -1302,7 +1438,9 @@ def _ulock(u):
 
 PLAN_FILE = "plan4.json"   # renamed when the plan's rules change, so cached plans are worked out again
 # a movie's footprint (movie_footprint), worked out with the plan and named after it, so a new plan redoes it
-FOOTPRINT_FILE = "movie_footprint-" + PLAN_FILE
+# (movie_footprint2: every frame's own drawn box on the pass's axes, pass_boxes, in place of a margin round the samples
+# and the geometry footprint's north-up diagonals, so a stare is drawn a frame across)
+FOOTPRINT_FILE = "movie_footprint2-" + PLAN_FILE
 # a feature track's steady places (track_places), and its footprint drawn from them; renamed (with the track's movie
 # frames, movie_webp) whenever the rule changes
 TRACK_FILE = "track2-" + PLAN_FILE
@@ -1473,7 +1611,32 @@ def _filters(u):
         if mine is not None or colour is None:
             colour = mine
             u["set_colour"] = colour is not None
+    if colour is None:
+        # a pass its counts make grey whose sets are a pair with an approximate color (calibration.approximate_pair):
+        # Titan's cloud watches and maps take CB3 three times a set and MT1 once (133TI_CLOUD002: 120 CB3, 40 MT1),
+        # so MT1 never reached half of CB3's count and the pass played and mosaicked grey (Sam 11-08)
+        pair = _pair_colour(u, count, nms)
+        if pair is not None:
+            colour = pair
+            u["set_colour"] = u.get("kind") == "movie"
     return count, nms, aside, colour
+
+
+PAIR_SETS = 2   # sets of a pair (_pair_colour) a pass takes at least, as a movie's colour takes (COLOUR_STEPS)
+
+
+def _pair_colour(u, count, nms):
+    """The two colour filters, [longer, shorter], of a pass whose sets (colour_sets) take a pair drawn in approximate
+    color (calibration.approximate_pair: a body's surface window pair, Titan's CB3 with MT1, IR1, RED...), at least
+    PAIR_SETS times: the pair taken most; None without one."""
+    seen = {}
+    for run in colour_sets(u["frames"]):
+        fs = tuple(sorted({f for f, _ in run}, key=lambda f: -nms[f]))
+        if len(fs) == 2 and all(f in count for f in fs) and \
+                calibration.approximate_pair(u["key"][2], list(fs), u["key"][0]):
+            seen[fs] = seen.get(fs, 0) + 1
+    best = max(seen, key=seen.get) if seen else None
+    return list(best) if best and seen[best] >= PAIR_SETS else None
 
 
 def _set_coloured(u):
@@ -1569,7 +1732,7 @@ def footprint(u, angle, ref, aside=()):
     def turn(fid):
         if fid not in turned:
             return angle
-        return angle + math.radians(turned[ref] - turned[fid]) if ref in turned else math.pi - math.radians(turned[fid])
+        return angle + math.radians(turned[ref] - turned[fid]) if ref in turned else math.pi - math.radians(turned[fid] - view_turn(u))
     pts, ks = [], []
     # the footprint of the filters drawn: frames of a filter left out (aside) would only hold empty canvas
     for _, fid, f, _, _, x, y, z in u["frames"]:
@@ -1770,7 +1933,19 @@ def _mine(u, p, tiles, f):
             g = lum["gains"].get(t["filter"], 1.0)
             t = dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t
             out.append(dict(t, fill=True) if t["n"] in fills else t)
+    if not rolling:
+        # (and a saturated place's left-out tile, where nothing else is: blown_fills, worked out in layout)
+        for t in blown_tiles(tiles):
+            g = lum["gains"].get(t["filter"], 1.0)
+            out.append(dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t)
     return out
+
+
+def blown_tiles(tiles):
+    """The tiles layout marked as the luminance base's saturated fills ("fill_at": blown_fills), as drawn: at that
+    place, under everything (fill)."""
+    return [dict({k: v for k, v in t.items() if k not in ("blown", "why", "fill_at")}, **t["fill_at"], fill=True, blown_fill=True)
+            for t in tiles if "fill_at" in t]
 
 
 _luts = {}
@@ -1826,10 +2001,13 @@ def lum_base(u, p, tiles, used, base=None):
         return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
     if base is None:
         frames = lum_frames(u, p) | lum_fills(u, p, tiles)
-        base = [t for t in tiles if "offset" in t and t["n"] in frames]
+        # (and a saturated place's fill, blown_tiles: the colour is never where it is, so the base draws it)
+        base = [t for t in tiles if "offset" in t and t["n"] in frames] + blown_tiles(tiles)
     if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
-    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
+    # (a colour tile left out of the colour, astray, covers nothing: its place takes the base, whatever the body)
+    stray = astray(tiles, used)
+    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t and t["n"] not in stray] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
     # (or a colour tile with lines lost in downlink: the colour is only where all its filters are, so its lost lines were
     # a black strip, Dione ISS_016DI_TARGFLYBY001's GRN N1507742100_3; or a frame filling in under a lossy grey one)
@@ -1932,7 +2110,7 @@ def mixes(u, p, tiles, colour):
     pointings at their seams (the newer pointing's filters all on top) do not mix; a pairwise test of the boxes counted
     both, and the 3x3 took the luminance of its MT2 base (drawn mid-grey)."""
     # (a mosaic movie's picture shows each place's newest lap by design: rolling_layout, its tiles marked "base")
-    if not colour or len(colour) < 2 or not clouded(u) or _rolling.get() or any("base" in t for t in tiles):
+    if not colour or len(colour) < 2 or not still_ground(u, tiles) or _rolling.get() or any("base" in t for t in tiles):
         return False
     if len(visit_tiles(u, tiles, colour)) < len(tiles):
         return True   # (a partial visit left out of the colour: the gray shows there)
@@ -1950,12 +2128,38 @@ def mixes(u, p, tiles, colour):
         for t in sorted((t for t in mine if t["filter"] == f), key=lambda t: t["n"]):
             x0, y0, x1, y1 = box(t)
             grid[int(round((y0 - gy) / MIX_CELL)):int(round((y1 - gy) / MIX_CELL)),
-                 int(round((x0 - gx) / MIX_CELL)):int(round((x1 - gx) / MIX_CELL))] = set_time(u, t["n"])
+                 int(round((x0 - gx) / MIX_CELL)):int(round((x1 - gx) / MIX_CELL))] = drawn_time(u, t)
         times.append(grid)
     return set_mask(times, 1 / MIX_CELL) is not None
 
 
 MIX_CELL = 16   # reference px: the grid mixes() lays the tiles' boxes on
+
+
+def still_ground(u, tiles):
+    """(mixes) True when the ground under a place can move between the pass's visits as drawn (the name: the ground
+    is not held still): a clouded body (its clouds move on their own), or, with the surface step on (Settings >
+    Processing), a body some of whose tiles surface reprojection decided to keep as taken ("as_taken": SURFACE_TAKEN,
+    the redrawing would distort them, layout), each showing the ground as it was when taken. Phoebe's closest
+    approach (000PH HIRESC001, 2004-06-11): a set of filters, then GRN again ten minutes on, the view turned under it;
+    drawn newest on top, the later GRN over the earlier RED and BL1 fringed every crater green and purple. Decided
+    place by place (drawn_time). A tile the step could not redraw for want of kernels or geometry is no decision and
+    mosaics as it always did, as does every moon with the step off."""
+    if clouded(u):
+        return True
+    return calibration.step("surface") and any(t.get("as_taken") for t in tiles if "offset" in t)
+
+
+def drawn_time(u, t):
+    """(mixes, placed_tiles) When the ground tile t shows was seen, for set_mask: its visit's (set_time) on a clouded
+    body or for a tile kept as taken ("as_taken"); any other tile of a body that is not clouded (redrawn as at the
+    pass's epoch, or not redrawn for want of kernels) the pass's one moment (its middle frame's time, surface_pictures'
+    epoch), the same for all of them, so they never mix. A tile kept as taken over redrawn tiles of its own camera set
+    is compared with that epoch: past MIX_SPAN from it that place is gray, the ground there drawn at two moments."""
+    if not clouded(u) and not t.get("as_taken"):
+        fr = u["frames"]
+        return fr[len(fr) // 2][3]
+    return set_time(u, t["n"])
 
 
 def visit_frames(u, colour):
@@ -2021,9 +2225,50 @@ def visit_tiles(u, tiles, colour):
     if _rolling.get() or any("base" in t for t in tiles):
         return tiles   # (a mosaic movie's picture shows each place's newest lap: rolling_layout)
     keep = visit_frames(u, colour)
-    longs = long_repeats(tiles, colour)
-    out = [dict(t, long=True) if t["n"] in longs else t for t in tiles if t["filter"] not in colour or t["n"] in keep]
+    # (and a pointing the camera saturated far more than its filters' other tiles: clipped_still, as a mosaic movie's
+    # picture draws it)
+    longs = long_repeats(tiles, colour) | clipped_still(u, tiles, colour)
+    stray = astray(tiles, colour)
+    out = [dict(t, long=True) if t["n"] in longs else t for t in tiles
+           if t["filter"] not in colour or t["n"] in keep and t["n"] not in stray]
     return tiles if len(out) == len(tiles) and not longs else out
+
+
+def astray(tiles, colour):
+    """(visit_tiles) The colour tiles that cannot be lined up with the other colour filters they overlap: registration
+    found no match ("not aligned", kept at SPICE's place) and no other colour filter's tile was taken at its pointing
+    (within SAME_PLACE of a frame), though one overlaps it (within a frame). A colour set taken at one pointing
+    mixes fine at SPICE's place; a set taken as the camera swept, each filter on another patch of ground, puts its
+    bands SPICE's error apart. They are left out of the colour, so their place draws as the rest of the pass's
+    uncovered colour does instead of mixing mismatched bands: Iapetus' closest flyby, 049IA ORSHIRES001 pass 3, a
+    12-filter sweep with GRN 0.4 of a frame from BL1 and RED, drew a rainbow patch where the three overlapped."""
+    placed = [t for t in tiles if t["filter"] in colour and "offset" in t]
+    out = set()
+    for t in placed:
+        if (t.get("registered") or {}).get("how") != "not aligned":
+            continue
+        w = max(t["box"][2], t["box"][3])
+        apart = [math.hypot(o["offset"][0] - t["offset"][0], o["offset"][1] - t["offset"][1]) / w
+                 for o in placed if o["filter"] != t["filter"]]
+        near = [d for d in apart if d < 1.0]
+        if near and min(near) > SAME_PLACE:
+            out.add(t["n"])
+    return out
+
+
+def clipped_still(u, tiles, colour):
+    """(visit_tiles, layout) The tiles of a still mosaic's colour filters that go under as a saturated pointing
+    (clipped_pointings: the 2017-04-26 north pole movie's still, 271SA NPOLMOV001; 118RI PHOTLIT001's blown disk),
+    leaving out the long exposures taken again in a colour set (long_repeats): those go under on their own, the set's
+    own frames of the other filters staying on top. Taken as saturated pointings, a HIPHASE ring mosaic's filter taken
+    again for the faint rings pulled its whole pointing under, and the neighbouring pointings' edges drew the bright
+    rings in two places in mismatched colours (Day the Earth Smiled, 195RI HIPHASEC001: two GRN repeats took eleven
+    RED, BL1, VIO and polarizer tiles down with them, a lime and purple copy of the rings beside Saturn's limb; 260RI
+    HIPHASEFA001 and 269RI HIPHASEFB001 alike)."""
+    if not colour:
+        return set()
+    longs = long_repeats(tiles, colour)
+    return clipped_pointings(u, [t for t in tiles if t["filter"] in colour and t["n"] not in longs])
 
 
 def set_times(shape, placed):
@@ -2049,7 +2294,10 @@ def placed_tiles(u, p, mine, rect, cache):
         left = round((t["offset"][0] + bx - rect[0]) * k)
         top = round((t["offset"][1] + by - rect[1]) * k)
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        yield set_time(u, t["n"]), _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+        part = _part(_pic(u, cache, p["display_scale"], t), sw, sh)
+        if SUBPIXEL:   # (as _window draws it: the part of a pixel its rounding left out)
+            part = _subpixel_at(part, t, rect, k, left, top)
+        yield drawn_time(u, t), part[..., 3], left, top
 
 
 def set_time(u, n):
@@ -2131,7 +2379,8 @@ def _sky_fine(iofs, masks):
                            for i, l, m in zip(iofs, local, masks)])
 
 
-def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True):
+def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True,
+               speck=False):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2145,7 +2394,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     disk (on_disk), so a frame with no dark sky is the body, never a glow. exposure, t: the frame's exposure (s) and
     time, which put a movie frame off the disk in one of the pass's runs of long exposures (pass_scale's "long") on
     their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
-    the shadow (032RI's silhouette) are in the sky the rule would take under black."""
+    the shadow (032RI's silhouette) are in the sky the rule would take under black. speck: the body is one of SPECKS
+    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     long = scale.get("long")
     if (long and own_sky and not on_body and exposure is not None and exposure >= long["exposure"] and t is not None
@@ -2165,12 +2415,21 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
         top_of_sky = 0.05 * np.percentile(q, 99.9)
+        if glow_only and not codes and float(np.median(q)) > calibration.GLOW_IOF[1]:
+            # (a ring pass's frame as bright as a sunlit surface, GLOW_IOF, is the rings filling it, real light, never a
+            # glow: the pass's black. Its flat floor read as a glow's, and black over its median took half the ring
+            # under it: 124RI RDHRCOMP001's frames, median 0.016-0.05 I/F, went to their brightest ringlets on black,
+            # 53% of each frame black, from #279. A dim ring frame's veil, 051RG G20PHASE002's 3e-5, keeps the rule)
+            return None
         m = _dark_sky(q)
         veiled = glow = False
-        if disk is not None and disk[2] < SPECK_PX:
-            # a body under a pixel across (Earth from Saturn, a few km moon far off): the frame is all sky, and a dark
-            # sky found under 5% of its brightest is still the veil's lower part, whose line bands and other filters'
-            # levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over its set)
+        if speck and disk is not None and disk[2] < SPECK_PX:
+            # a body from beyond Saturn's system under a pixel across (Earth from Saturn, SPECKS): the frame is all sky,
+            # and a dark sky found under 5% of its brightest is still the veil's lower part, whose line bands and other
+            # filters' levels then showed over black (195RI: N1752968916_1's gray lines, N1752969019_1 a red wash over
+            # its set). Not a moon of Saturn under a pixel: its frame can be the rings or Saturn, lit all over by real
+            # light, not a veil (115RI MNRNGSHAD004, Daphnis 0.6 px across the A ring: the whole ring went under black),
+            # so it keeps the rule above (the veil's black only when no dark sky is found)
             m = np.zeros(q.shape, bool)
         # (a glow's flat floor is what _dark_sky takes for a sky with an offset in it; whether a frame of a pass with no
         # sky height of its own has dark sky is measured from 0, as before _dark_sky)
@@ -2280,10 +2539,16 @@ def _disk_pixels(q, shape, x, y, radius):
     return q[_disk_mask(q.shape, shape, x, y, radius)]
 
 
-def _disk_mask(qshape, shape, x, y, radius):
+def _disk_mask(qshape, shape, x, y, radius, inner=False):
     """_disk_pixels' disk as a mask of the quarter size frame (qshape) of a frame of the given shape; DISK_MARGIN
-    round the disk even when its radius is 0 (a body under a pixel across: SPICE's error round its place)."""
-    reach = max(radius, 0) * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1]
+    round the disk even when its radius is 0 (a body under a pixel across: SPICE's error round its place). inner: the
+    disk that much narrower instead, the part that is the body wherever SPICE's error puts it."""
+    if inner:
+        reach = radius * (1 - DISK_MARGIN[0]) - DISK_MARGIN[1]
+        if reach <= 0:
+            return np.zeros(qshape, bool)
+    else:
+        reach = max(radius, 0) * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1]
     k = 1024 / shape[0]   # (the frame's pixels are full resolution ones scaled to 1024)
     cy, cx = (511.5 - y) / k, (511.5 - x) / k
     r = reach / k
@@ -2292,7 +2557,9 @@ def _disk_mask(qshape, shape, x, y, radius):
     return (rows - cy) ** 2 + (cols - cx) ** 2 < r * r
 
 
-SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
+RING_HEADROOM = 1.4  # pass_scale: a ring pass's white this many times
+                    # its measured white (the 99.9th percentile), so the brightest ringlet sits under white, as before #153
+SPECK_PX = 1.0      # tile_scale: a SPECKS body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
 GLOW_FLOOR_PCT = 25  # tile_scale: a movie frame with no dark sky, lit all over by a glow: its sky is under this percentile
 GLOW_BLACK_PCT = 50  # ... and its black over this percentile of the frame, smoothed
@@ -2357,7 +2624,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     (the measured values come back as "sky_tops", with the soft "toe" above black). lit_levels: a dict given here gets
     each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
     scale itself is the same with or without it."""
-    by, disks, each = {}, {}, []
+    by, disks, each, bodies = {}, {}, [], {}
     # the frames read and calibrated MOVIE_WORKERS at once (in order: the same scale), so a cold pass's plan is not
     # one frame after another (021TI REGMAPNA001: 67 frames, 28 s of a 100 s first movie frame)
     mode = calibration.mode()
@@ -2375,9 +2642,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             q, shape, exposure = got
             by.setdefault(f, []).append(q)
             each.append((f, q, exposure, on_disk(u, fr), fr[3]))
+            body = None
             if z:
                 km = RADIUS.get(u["key"][0]) or SPECKS.get(u["key"][0], 0)
                 disks.setdefault(f, []).append(_disk_pixels(q, shape, x, y, km / (z * IFOV[u["key"][2]])))
+                if km > 0 and not clouded(u):
+                    body = _disk_mask(q.shape, shape, x, y, km / (z * IFOV[u["key"][2]]), inner=True)
+            bodies.setdefault(f, []).append(body)
     if not by:
         return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
     scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
@@ -2431,7 +2702,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
         # noise, so the sky came out a gray, scan-lined veil around the body once the tiles were put together
-        masks = {f: [_dark_sky(i) for i in iofs] for f, iofs in by.items()}
+        # (and never inside an airless body's disk, where SPICE puts it, DISK_MARGIN in from its limb so the sky by the
+        # limb still counts: its darkest ground is ground, not sky. Iapetus'
+        # close flyby, 049IA ORSHIRES001, fills its frames with bright ice and dark material a tenth as bright; the dark
+        # material passed for sky, black went to its level and it drew as black holes. A body with clouds or haze
+        # (clouded: Saturn, Titan) keeps its night side as sky, as before)
+        masks = {f: [_dark_sky(i) & ~b if b is not None else _dark_sky(i) for i, b in zip(iofs, bodies[f])]
+                 for f, iofs in by.items()}
         if all(sum(int(m.sum()) for m in ms) > SKY_MIN * sum(m.size for m in ms) for ms in masks.values()):
             levels, margin = calibration.sky_levels(list(by.values()), list(masks.values()))
             # How far each band's black sits over its sky is measured on the sky's fine structure only: the sky
@@ -2453,6 +2730,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+    # a ring pass's white has headroom (RING_HEADROOM): since CISSCAL's hot pixel and cosmic ray repair (#153) its 99.9th
+    # percentile is the brightest real ringlet, not a defect over it, and the rings drew ~15% brighter than before (124RI,
+    # 239RI, 111RI movies: lit median 175 of 255 before, 202 after; 180 at 1.4). Moons' passes are not brighter than
+    # before (their lit median fell from 121 to 64, the sky's stray light gone) and keep their white. Movies only: a ring
+    # mosaic (195RI, 260RI and 269RI HIPHASE) was not brighter, and 1.4x only dimmed its faint rings (lit median 34 to 31)
+    if _ring(u) and u.get("movie") and not u.get("mosaic"):
+        white *= RING_HEADROOM
     if calibration.look() == "balanced" and white > 0:
         # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
         # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
@@ -2506,6 +2790,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             levels.append(float(np.median(lit)) if lit.size else 0.0)
         mix = calibration.color_mix(u["key"][2], mine, u["key"][0], [sum(levels) / 2 / v for v in levels], obs=u["key"][1]) \
             if min(levels) > 0 else None
+        if mix is not None and not isinstance(mix, calibration.FalseMix):
+            # (an approximate color pair: its levels, for a band the body's table lacks, calibration.pair_mix)
+            out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
         if isinstance(mix, calibration.FalseMix):
             out["balance"] = {f: sum(levels) / 2 / v for f, v in zip(mine, levels)}
             shown = [g * v for g, v in zip(np.diagonal(mix).tolist(), calibration.two_bands(levels))]
@@ -2519,11 +2806,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
 
 
 def _exposure(lbl):
-    """A frame's exposure in s from its label (EXPOSURE_DURATION, ms), or None."""
-    try:
-        return float(lbl.info.get("EXPOSURE_DURATION")) / 1000
-    except (AttributeError, TypeError, ValueError):
-        return None
+    """A frame's exposure in s from its label (EXPOSURE_DURATION, ms), or None (bootleg_autonav.exposure_s)."""
+    import bootleg_autonav as ba
+    return ba.exposure_s(lbl)
 
 
 def _long_white(each, blacks, white):
@@ -2630,7 +2915,14 @@ def _tile_made(u, n, cache, scale, base):
     """(_tile, holding the tile's lock) the report in base.json, or the tile made and its report."""
     if os.path.exists(base + ".json"):
         with open(base + ".json") as fh:
-            return json.load(fh)
+            out = json.load(fh)
+        if out.get("lost", 0.0) > MOVIE_LOST and "lost_inside" not in out and os.path.exists(base + ".png"):
+            # (a tile made before its report kept lost_inside: worked out from its picture, as lost_held reads it)
+            try:
+                out["lost_inside"] = lost_inside(np.asarray(Image.open(base + ".png"))[..., 3])
+            except (OSError, IndexError, ValueError):
+                pass
+        return out
     path, fid, f, t, nm, x, y, z = u["frames"][n]
     k = z / u["z"] if z else 1.0
     seen = {}
@@ -2641,9 +2933,10 @@ def _tile_made(u, n, cache, scale, base):
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
                                                                                            on_disk(u, u["frames"][n]), exposure, t,
-                                                                                           not _ring(u)),
+                                                                                           not _ring(u), u["key"][0] in SPECKS),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
-                                                        around=_around(u, n) if u.get("movie") else _same_pointing(u, n))
+                                                        around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
+                                                        turn=view_turn(u))
     except Exception as e:
         image, rep, sink = None, {"why": f"{type(e).__name__}: {e}"[:200]}, None
     if (image is not None and u.get("mosaic") and rep.get("calibrated") is False and calibration.step("calibrate")
@@ -2657,7 +2950,9 @@ def _tile_made(u, n, cache, scale, base):
         # a frame the camera saturated all over carries no picture: calibrated, it is one flat field at the top of the
         # camera's range over its exposure, so a long exposure's is dark and a short one's bright (101SA SPOLEDYN001 W
         # took 10 to 82 s frames between its 2.6 s ones: its places flickered black and white lap to lap). Left out
-        image, rep = None, {**rep, "why": f"saturated all over ({share:.0%}): left out of the mosaic"}
+        # (its picture and place kept aside, "blown": blown_fills draws it under everything where nothing else was
+        # taken, and nothing else uses it)
+        rep = {**rep, "why": f"saturated all over ({share:.0%}): left out of the mosaic", "blown": True}
     out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
     if rep.get("spikes_px"):
         out["spikes_px"] = rep["spikes_px"]
@@ -2692,10 +2987,17 @@ def _tile_made(u, n, cache, scale, base):
             _keep_tile_map(sink, image, side, crop, base)
             out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
-            _register(u, n, out, crop, cache, scale)
+            if not rep.get("blown"):
+                _register(u, n, out, crop, cache, scale)
             out["outline"] = _corners(out, crop[..., 3])
+            if out.get("lost", 0.0) > MOVIE_LOST:
+                out["lost_inside"] = lost_inside(crop[..., 3])
     else:
         out["why"] = rep.get("why", "not placed by SPICE")
+    if rep.get("blown"):
+        place = {k: out[k] for k in BLOWN_KEYS if k in out}
+        out = {k: v for k, v in out.items() if k not in BLOWN_KEYS}
+        out.update(why=rep["why"], **({"blown": place} if "offset" in place else {}))
     data = json.dumps(out, default=str)
     reel._cached(base + ".json", data.encode)
     return json.loads(data)
@@ -3031,6 +3333,28 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 # CB3, probe 10-29): edges are measured between tiles of one filter only
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
 EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
+RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose tiles ring registration moved (ring_places)
+RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)
+
+# Global panel registration (on unless CASSINI_GLOBAL_PANELS=0): every pair of overlapping pointings is measured once
+# (panel_shift / edge_shift at SPICE's places, as panel_places measures them), and all pointings' moves are solved
+# together (_solve_moves: least squares with SPICE's place as a soft prior, outliers dropped), instead of one pointing
+# at a time against the earlier ones only. A pointing whose earlier neighbours have nothing to match on is then still
+# placed by its later ones, and a chain's small errors are shared out instead of piling up.
+GLOBAL_PANELS = os.environ.get("CASSINI_GLOBAL_PANELS", "1") != "0"
+GLOBAL_PRIOR = 5.0     # px: how far SPICE's place of a pointing is off (its soft prior's spread)
+GLOBAL_NOISE = 0.7     # px: a believed match's own spread
+GLOBAL_HUBER = 1.0     # px: residuals past this are weighted down (Huber), before ...
+GLOBAL_PARTNERS = 8    # pointings each pointing is measured against at most (those it overlaps most, its filter first)
+GLOBAL_FILTERS = 4     # ... on this many of their filters at most, tile against tile of one filter
+if GLOBAL_PANELS:
+    # (2: ring pairs and anchors, limb anchors; the switches that change the solve in the name, so a solve kept with one
+    # setting is never served for another: t turns, nl no limb anchors, nf no ring filters)
+    _switches = ("t" if os.environ.get("CASSINI_GLOBAL_TURNS", "0") == "1" else "") + \
+        ("nl" if os.environ.get("CASSINI_GLOBAL_LIMBS", "1") == "0" else "") + \
+        ("nf" if os.environ.get("CASSINI_RING_FILTERS", "1") == "0" else "")
+    PANEL_FILE = "global2" + _switches + "-" + PANEL_FILE
+    PANEL_TAG, EDGE_TAG = "-g2" + _switches, "-ge2" + _switches
 
 
 def _detail(gray, mask, sigma=6.0):
@@ -3060,7 +3384,7 @@ def _agree(a, b, mask):
     return float((x * y).sum()) / d if d > 0 else 0.0
 
 
-def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
+def panel_shift(q, ref, at_q, t, crop, at_t, most=None, least=None):
     """How far tile t (its picture crop, its middle put at at_t) is from tile q (picture ref, middle at at_q), where
     two pointings of a mosaic overlap: (dx, dy) reference pixels that t's place moves back by to land on q (as
     _shift_onto), and what was measured {"ncc": [at SPICE's places, moved], "area", "response"}; (None, why) when
@@ -3085,7 +3409,7 @@ def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
     grays, masks = [g[:h, :w] for g in grays], [m[:h, :w] for m in masks]
     both = cv2.erode((masks[0] & masks[1]).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
     area = int(both.sum())
-    if area < PANEL_AREA or min(np.ptp(np.nonzero(both)[0]), np.ptp(np.nonzero(both)[1])) < PANEL_NARROW - 8:
+    if area < (least or PANEL_AREA) or min(np.ptp(np.nonzero(both)[0]), np.ptp(np.nonzero(both)[1])) < PANEL_NARROW - 8:
         return None, "little overlap"
     ds = [_detail(g, both) for g in grays]
     if ds[0] is None or ds[1] is None:
@@ -3098,7 +3422,7 @@ def panel_shift(q, ref, at_q, t, crop, at_t, most=None):
     before = _agree(ds[0], ds[1], both)
     moved = image_correction.shift_image(ds[1], dx, dy)
     inner = cv2.erode(both.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=int(math.ceil(max(abs(dx), abs(dy)))) + 1) > 0
-    if inner.sum() < PANEL_AREA / 2:
+    if inner.sum() < (least or PANEL_AREA) / 2:
         return None, "little overlap once moved"
     after = _agree(ds[0], moved, inner)
     seen = {"ncc": [round(before, 3), round(after, 3)], "area": area, "response": round(float(response), 3)}
@@ -3246,6 +3570,587 @@ def edge_shift(q, ref, at_q, t, crop, at_t):
     if after < EDGE_NCC or (math.hypot(*shift) > 0.5 and after < before + EDGE_GAIN):
         return None, f"not believed {shift[0]:+.1f},{shift[1]:+.1f} ncc {before:.2f}->{after:.2f}"
     return shift, seen
+
+
+RING_BODIES = ("SATURN",)   # (ring_places) bodies whose rings SPICE places (reproject.ring_plane)
+RING_STEP = 3        # px: (ring_places) a tile is sampled this far apart
+RING_FIT_MIN = 6     # tiles with rings a pass needs before ring registration starts
+RING_AGREE = 3.0     # px: a tile's fitted move further than this from its pointing's median takes the median
+RING_SEARCH = 32 / 1024   # of a frame: how far ring registration searches (PANEL_FAR's reach)
+
+
+RING_DETAIL = 6.0   # radius bins: (_ring_detail) the profile's slow change taken out, over this many bins (a Gaussian)
+
+
+def _ring_detail(tot, n):
+    """(ring_places) A radial profile's detail: the mean per radius bin (tot / n, bins with no samples filled from their
+    neighbours) less its Gaussian blur over RING_DETAIL bins, so two tiles at different exposures, or a profile that
+    brightens toward one side, match on the ringlets and gaps and not on the slope."""
+    have = n > 0
+    if not have.any():
+        return np.zeros(len(n))
+    idx = np.arange(len(n))
+    mean = np.interp(idx, idx[have], tot[have] / n[have])
+    smooth = cv2.GaussianBlur(mean.reshape(1, -1).astype(np.float64), (0, 0), RING_DETAIL).ravel()
+    return mean - smooth
+
+
+RING_BIN = 100.0        # km: (ring_places) the radial profile's bins
+RING_FIT_STEP = 2       # px: the coarse search's step (then a pixel, then a parabola)
+RING_FIT_NCC = 0.6      # the least a tile's profile, moved, must agree with the pass's reference profile
+RING_FIT_GAIN = 0.02    # ... and how much better than where it was placed, for a move of over half a pixel
+RING_FIT_LEAST = 3000   # samples on the rings a tile needs
+RING_FIT_ROUNDS = 2     # the reference profile is made again from the tiles as moved this many times
+
+
+def _tile_ring_samples(u, t, im, rings, reach):
+    """(ring_places) Tile t's samples on the rings: (its values, the radius grid round it at 1 px over its box and
+    reach px each way, on-ring grid, the samples' grid rows and columns), or None with too few."""
+    k = t["box"][2] / im.shape[1]
+    x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    h, w = im.shape[:2]
+    gx, gy = np.meshgrid(np.arange(-reach, w + reach + 1) * k + x0, np.arange(-reach, h + reach + 1) * k + y0)
+    radius, on = rings(gx, gy, t["id"])
+    sy, sx = np.mgrid[reach:reach + h:RING_STEP, reach:reach + w:RING_STEP]
+    sy, sx = sy.ravel(), sx.ravel()
+    px = im[sy - reach, sx - reach]
+    use = on[sy, sx] & (px[:, 3] > 0)
+    if use.sum() < RING_FIT_LEAST:
+        return None
+    return px[use, :3].astype(np.float32).mean(axis=1), radius, on, sy[use], sx[use]
+
+
+def _ring_profile(values, radius):
+    """(ring_places) values binned by radius (RING_BIN km, from RING_INNER): (sums, counts) over the rings' bins."""
+    import reproject as rp
+    nb = int((rp.RING_OUTER - rp.RING_INNER) / RING_BIN) + 1
+    b = ((radius - rp.RING_INNER) / RING_BIN).astype(int)
+    ok = (b >= 0) & (b < nb)
+    return (np.bincount(b[ok], weights=values[ok], minlength=nb), np.bincount(b[ok], minlength=nb))
+
+
+def _profile_ncc(tot, n, ref):
+    """(ring_places) normalized correlation of a profile's detail (_ring_detail) with ref's over the bins both hold"""
+    both = (n >= 3) & ~np.isnan(ref)
+    if both.sum() < 30:
+        return -1.0
+    a = _ring_detail(tot, n)[both]
+    b = ref[both]
+    a, b = a - a.mean(), b - b.mean()
+    d = math.sqrt(float((a * a).sum() * (b * b).sum()))
+    return float((a * b).sum() / d) if d > 0 else -1.0
+
+
+def ring_places(u, tiles, picture, fixed=None, ref=None):
+    """Ring registration: {tile n: [dx, dy]} for a ringed body's pass (RING_BODIES), each tile moved to where SPICE's ring
+    plane (reproject.ring_plane, at the tile's own time) has its rings: the radial profile of its ring pixels (their
+    detail, _ring_detail) matched to the pass's reference profile, the median of every tile's (made again from the tiles
+    as moved, RING_FIT_ROUNDS times). Each tile on its own, every filter, so a pointing's filters land together and on
+    their neighbours (Day the Earth Smiled, 195RI HIPHASEC001: the A ring's outer edge sat +-1100 km, up to 15 px,
+    from where SPICE's pointing put it, tile to tile; edges only moved 3 of 41 pointings and the filters' own matches
+    pushed some further off). A tile with too little ring, or whose match is not clearly better than where it was put
+    (RING_FIT_NCC, RING_FIT_GAIN), keeps its place. picture: n -> the tile's RGBA picture. fixed: {n: [dx, dy, ...]}
+    of tiles already registered, which keep their moves (and make the reference with them): only the others are
+    searched. ref: the reference profile already made (as answered before): only the tiles not fixed are read and
+    fitted to it, once. Answers ({n: {"move", "ncc", "found", "ok"}} for the tiles searched, the reference profile).
+    ({}, None) for a pass with too few ring tiles."""
+    fixed = fixed or {}
+    rings = _ring_geometry(u)
+    if rings is None:
+        return {}, None
+    reach = int(round(RING_SEARCH * FRAME))
+    data = {}
+    for t in tiles:
+        if "offset" not in t or ref is not None and t["n"] in fixed:
+            continue
+        im = picture(t["n"])
+        got = _tile_ring_samples(u, t, im, rings, reach) if im is not None else None
+        if got is not None:
+            data[t["n"]] = got
+    if ref is None and len(data) < RING_FIT_MIN:
+        return {}, None
+    moves = {n: tuple(fixed[n][:2]) if n in fixed else (0, 0) for n in data}
+
+    def prof(n, d):
+        v, radius, on, sy, sx = data[n]
+        dx, dy = int(round(d[0])), int(round(d[1]))
+        return _ring_profile(v, radius[sy + dy, sx + dx])
+
+    out = {}
+    given = ref is not None
+    for _ in range(1 if given else RING_FIT_ROUNDS):
+        if not given:
+            details = []
+            for n in data:
+                tot, cnt = prof(n, moves[n])
+                dd = _ring_detail(tot, cnt)
+                dd[cnt < 3] = np.nan
+                details.append(dd)
+            ref = np.nanmedian(np.vstack(details), axis=0)
+        new = dict(moves)
+        for n in data:
+            if n in fixed:
+                continue
+            v, radius, on, sy, sx = data[n]
+            score = lambda d: _profile_ncc(*prof(n, d), ref)
+            before = score((0, 0))
+            best, at = -2.0, (0, 0)
+            for dy in range(-reach, reach + 1, RING_FIT_STEP):
+                for dx in range(-reach, reach + 1, RING_FIT_STEP):
+                    sc = score((dx, dy))
+                    if sc > best:
+                        best, at = sc, (dx, dy)
+            for dy in range(at[1] - RING_FIT_STEP + 1, at[1] + RING_FIT_STEP):
+                for dx in range(at[0] - RING_FIT_STEP + 1, at[0] + RING_FIT_STEP):
+                    if abs(dx) <= reach and abs(dy) <= reach:
+                        sc = score((dx, dy))
+                        if sc > best:
+                            best, at = sc, (dx, dy)
+            ok = best >= RING_FIT_NCC and (math.hypot(*at) <= 0.5 or best >= before + RING_FIT_GAIN) \
+                and max(abs(at[0]), abs(at[1])) < reach
+            new[n] = at if ok else (0, 0)
+            # (to a tenth of a pixel: a parabola through the best and its neighbours, each way)
+            fine = list(at)
+            if ok:
+                for axis in (0, 1):
+                    lo_, hi_ = list(at), list(at)
+                    lo_[axis] -= 1
+                    hi_[axis] += 1
+                    a_, c_ = score(tuple(lo_)), score(tuple(hi_))
+                    if a_ - 2 * best + c_ < 0:
+                        fine[axis] = round(at[axis] + 0.5 * (a_ - c_) / (a_ - 2 * best + c_), 1)
+            out[n] = {"move": fine if ok else [0, 0], "ncc": [round(before, 3), round(best, 3)], "found": list(at), "ok": bool(ok)}
+        moves = new
+    return out, ref
+
+
+def ring_moves(u, cache, p, tiles):
+    """ring_places for pass u's tiles, kept with the pass (RING_FILE): {tile n: [dx, dy]} from each tile's own place
+    (its offset as made: SPICE's, or where filter registration put it), only for tiles it moved. A tile is registered
+    once, when it is first drawn with RING_FIT_MIN ring tiles or more, and keeps its move. {} for a pass with no rings,
+    or with Settings > Processing's align or panels step off."""
+    if not (calibration.step("align") and calibration.step("panels")) or _ring_geometry(u) is None:
+        return {}
+    path = os.path.join(folder(u, cache), RING_FILE + PLAN_FILE)
+    with _ulock(u):
+        kept, ref = {}, None
+        if os.path.exists(path):
+            with open(path) as fh:
+                rec = json.load(fh)
+            kept = {int(n): v for n, v in rec.get("tiles", {}).items()}
+            ref = np.array([np.nan if v is None else v for v in rec["ref"]]) if rec.get("ref") else None
+        todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
+        if todo:
+            there = _tiles(u, cache, p["display_scale"])
+
+            def picture(j):
+                fp = os.path.join(there, f"{j}.png")
+                with _lock:
+                    got = _made_pictures.get(fp)
+                if got is None and os.path.exists(fp):
+                    got = np.asarray(Image.open(fp).convert("RGBA"))
+                return got
+            # (the reference profile is made once, from the first RING_FIT_MIN ring tiles or more; later tiles are fitted
+            # to it alone, so a mosaic grown a tile at a time reads each tile once)
+            found, made = ring_places(u, [t for t in tiles if "offset" in t], picture, fixed=kept, ref=ref)
+            if made is not None:
+                ref = made
+            if found:
+                # a pointing's filters move together: each pointing's fitted tiles (with those kept before) give its
+                # move, their median, and a tile of it not fitted, or fitted further than RING_AGREE from it, takes it
+                # (Day the Earth Smiled's B ring: BL1 fitted and RED not, blue and yellow ringlets)
+                roots = {}
+                for t in tiles:
+                    if "offset" in t:
+                        roots[t["n"]] = _pointing_root(u, t["n"], roots)
+                fits = {n: v["move"] for n, v in found.items() if v["ok"]}
+                fits.update({n: v[:2] for n, v in kept.items() if len(v) > 3 and v[3]})
+                by = {}
+                for n, m in fits.items():
+                    by.setdefault(roots.get(n, n), []).append(m)
+                for n, v in found.items():
+                    ms = by.get(roots.get(n, n))
+                    if not ms:
+                        continue
+                    mid = [float(np.median([m[0] for m in ms])), float(np.median([m[1] for m in ms]))]
+                    if not v["ok"] or math.hypot(v["move"][0] - mid[0], v["move"][1] - mid[1]) > RING_AGREE:
+                        v["move"] = [round(mid[0], 2), round(mid[1], 2)]
+                for n, v in found.items():
+                    kept[n] = v["move"] + [v["ncc"][1], bool(v["ok"])]
+            if ref is not None:
+                # (too little ring: read once, and moved with its pointing's fitted filters, or kept where it is)
+                roots = {}
+                for t in tiles:
+                    if "offset" in t:
+                        roots[t["n"]] = _pointing_root(u, t["n"], roots)
+                by = {}
+                for n, v in kept.items():
+                    if len(v) > 3 and v[3]:
+                        by.setdefault(roots.get(n, n), []).append(v[:2])
+                rings = _ring_geometry(u)
+                for t in todo:
+                    if t["n"] not in kept and rings is not None and not rings.knows(t["id"]):
+                        continue   # (no time for its frame in the geometry cache yet: asked again next time, not kept)
+                    if t["n"] not in kept:
+                        ms = by.get(roots.get(t["n"], t["n"]))
+                        mid = [round(float(np.median([m[0] for m in ms])), 2), round(float(np.median([m[1] for m in ms])), 2)] \
+                            if ms else [0, 0]
+                        kept[t["n"]] = mid + [None, False]
+            if found or ref is not None:
+                part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+                try:
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(part, "w") as fh:
+                        json.dump({"ref": [None if not np.isfinite(v) else round(float(v), 4) for v in ref],
+                                   "tiles": {str(n): v for n, v in sorted(kept.items())}}, fh)
+                    os.replace(part, path)
+                except OSError as e:
+                    print(f"cannot keep {path} in the cache ({e})", flush=True)
+    # (a tile fitted where it already was, a move of [0, 0], is kept too: the global solve takes it as an anchor holding
+    # its pointing there, where left out it took it as not fitted and let pair matches drag it)
+    return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0] or (len(v) > 3 and v[3])}
+
+
+_ring_geometries = {}   # pass key -> _ring_geometry's answer
+
+
+RING_PAIR_LAG = 25      # bins (RING_BIN km) searched each way (ring_pair_shift)
+RING_PAIR_NCC = 0.6     # the least two tiles' ring profiles must agree once lined up ...
+RING_PAIR_RIVAL = 0.85  # ... and no other lag more than 3 bins away this nearly as well
+RING_FILTERS = os.environ.get("CASSINI_RING_FILTERS", "1") != "0"   # a pointing's filters lined up on their ring profiles
+RING_FILTER_MOST = 8.0  # px: the most a filter is moved onto its pointing's first tile that way
+RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
+
+
+def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
+    """Ring registration of two overlapping tiles of one filter, each where SPICE puts it: the radial profiles (SPICE's
+    ring plane at each tile's own time, _ring_profile, detail only) of the part of the view both cover, and the radial
+    lag that lines them up. Unlike a match of the pictures, a profile slides only across the rings, never along them
+    (the ringlets repeat along the ring, which is what defeated a pairwise picture match, #395), so it says how far
+    across the rings tile t sits from tile s, wherever their edges hold nothing for edge_shift. ((dx, dy) along the
+    rings' radial direction there, {"ring": True, "ncc", "normal", "lag_km"}) or (None, why)."""
+    import reproject as rp
+    km_px = IFOV[u["key"][2]] * u["z"]
+    samp = []
+    for q, im in ((s, ref), (t, mine)):
+        h, w = im.shape[:2]
+        k = q["box"][2] / w
+        x0, y0 = q["offset"][0] + q["box"][0], q["offset"][1] + q["box"][1]
+        sy, sx = np.mgrid[2:h - 2:3, 2:w - 2:3]
+        sy, sx = sy.ravel(), sx.ravel()
+        gx, gy = sx * k + x0, sy * k + y0
+        radius, on = rings(gx, gy, q["id"])
+        px = im[sy, sx]
+        use = on & (px[:, 3] == 255)
+        samp.append((gx[use], gy[use], radius[use], px[use, :3].astype(np.float32).mean(axis=1)))
+    A, B = samp
+    if len(A[0]) < 500 or len(B[0]) < 500:
+        return None, "little ring"
+    bx0, by0 = max(A[0].min(), B[0].min()), max(A[1].min(), B[1].min())
+    bx1, by1 = min(A[0].max(), B[0].max()), min(A[1].max(), B[1].max())
+    if bx1 - bx0 < PANEL_NARROW or by1 - by0 < PANEL_NARROW:
+        return None, "apart"
+    ins = [(S[0] >= bx0) & (S[0] <= bx1) & (S[1] >= by0) & (S[1] <= by1) for S in (A, B)]
+    if min(int(m.sum()) for m in ins) < 300:
+        return None, "little ring overlap"
+    pa, pb = (_ring_profile(S[3][m], S[2][m]) for S, m in zip((A, B), ins))
+    both = (pa[1] >= 3) & (pb[1] >= 3)
+    if both.sum() < RING_PAIR_BINS:
+        return None, "narrow ring overlap"
+    idx = np.nonzero(both)[0]
+    da, db = _ring_detail(*pa)[idx.min():idx.max() + 1], _ring_detail(*pb)[idx.min():idx.max() + 1]
+    sc = []
+    for lag in range(-RING_PAIR_LAG, RING_PAIR_LAG + 1):
+        x, y = da[max(0, lag):len(da) + min(0, lag)], db[max(0, -lag):len(db) + min(0, -lag)]
+        if len(x) < RING_PAIR_BINS * 3 // 4:
+            sc.append(-1.0)
+            continue
+        x, y = x - x.mean(), y - y.mean()
+        d = math.sqrt(float((x * x).sum() * (y * y).sum()))
+        sc.append(float((x * y).sum() / d) if d > 0 else -1.0)
+    sc = np.array(sc)
+    j = int(np.argmax(sc))
+    far = np.abs(np.arange(len(sc)) - j) > 3
+    if sc[j] < RING_PAIR_NCC or (far.any() and sc[far].max() > RING_PAIR_RIVAL * sc[j]) or j in (0, len(sc) - 1):
+        return None, f"ring profiles not believed (ncc {sc[j]:.2f})"
+    lag = j - RING_PAIR_LAG
+    den = sc[j - 1] - 2 * sc[j] + sc[j + 1]
+    if den < 0:
+        lag += 0.5 * (sc[j - 1] - sc[j + 1]) / den
+    # the rings' radial direction at the overlap, and km per px along it (SPICE's ring plane at tile s's time)
+    cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+    r = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), s["id"])[0]
+    grad = np.array([r[1] - r[0], r[2] - r[0]], float)
+    g = float(np.hypot(*grad))
+    if g <= 0:
+        return None, "no ring gradient"
+    n = grad / g
+    # (km a pixel across the rings, as the profiles measured it: over all of s's ring samples in the overlap, not at its
+    # middle alone; where the ring plane is seen nearly edge on it changes across the overlap, and the middle's said
+    # 118RI's rings were half as far apart as they are, so the solve moved its pointings twice too far)
+    gx, gy = A[0][ins[0]], A[1][ins[0]]
+    step = rings(gx + n[0], gy + n[1], s["id"])[0] - A[2][ins[0]]
+    step = step[np.isfinite(step) & (step > 0)]
+    if len(step) >= 100:
+        g = float(np.median(step))
+    # (t's ringlets sit lag bins in from s's: t moves out by that much, across the rings)
+    move = lag * RING_BIN / g
+    if check and abs(lag) > 1:
+        # believed only when it holds: t moved by it, its profile must then line up with s's at no lag (within a bin
+        # and a quarter of the lag). Tiles of one place seen at very different times or lighting can match the wrong
+        # ringlets as well as their own (118RI's first and last laps, 1700 km apart that moved to 1000 km the other way)
+        moved = dict(t, offset=[t["offset"][0] + float(n[0] * move), t["offset"][1] + float(n[1] * move)])
+        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False)
+        if again is None or abs(how["lag_km"]) > RING_BIN + 0.25 * abs(lag) * RING_BIN:
+            return None, f"ring match does not hold ({lag * RING_BIN:+.0f} km, then {how['lag_km'] if again is not None else how})"
+    return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
+                                                      "normal": [round(float(n[0]), 4), round(float(n[1]), 4)],
+                                                      "lag_km": round(lag * RING_BIN, 1)}
+
+
+def _ring_geometry(u):
+    """For a pass of a body with rings (RING_BODIES): a function (canvas x, y arrays in reference px, frame id) ->
+    (ring radius km, on the ring plane), from SPICE at that frame's time (reproject.ring_plane), on the pass's axes
+    (view_turn); None for any other pass or when SPICE cannot say."""
+    if u["key"][0] not in RING_BODIES or not u.get("z"):
+        return None
+    key = tuple(u["key"])
+    with _lock:
+        if key in _ring_geometries:
+            return _ring_geometries[key]
+    got = None
+    import reproject as rp
+    view = _sky_views(u)
+    if view is not None:
+        km_px = IFOV[u["key"][2]] * u["z"]
+        a = math.radians(view_turn(u))
+        c, sn = math.cos(a), math.sin(a)
+
+        def got(x, y, fid):
+            v = view(fid)
+            if v is None:
+                return np.zeros(np.shape(x)), np.zeros(np.shape(x), bool)
+            return rp.ring_plane(v, c * x + sn * y, c * y - sn * x, km_px)
+        got.knows = view.knows
+        with _lock:
+            _ring_geometries[key] = got
+    return got
+
+
+def pair_turn(s, ref, t, mine, most=None, rounds=3):
+    """pair_turn_once, taken again on t's picture turned back by what it found, rounds times, the turns added: a block's
+    match of a shift of a px or two comes out a third short (phase correlation's sub-pixel peak leans toward a whole
+    pixel), so a turn found once is short by as much; turned back and measured again, what is left is small."""
+    total, blocks = 0.0, 0
+    im = mine
+    for _ in range(rounds):
+        got, blocks = pair_turn_once(s, ref, t, im, most)
+        if got is None:
+            return (None, blocks) if total == 0.0 else (round(total, 4), blocks)
+        total += got
+        if abs(got) < 0.01:
+            break
+        h, w = mine.shape[:2]
+        k = t["box"][2] / w
+        m = cv2.getRotationMatrix2D((-t["box"][0] / k - 0.5, -t["box"][1] / k - 0.5), -total, 1.0)   # (about the frame's middle)
+        im = cv2.warpAffine(mine, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+    if abs(total) > TURN_MOST:
+        return None, f"turn too large ({total:+.2f} deg)"
+    return round(total, 4), blocks
+
+
+def pair_turn_once(s, ref, t, mine, most=None):
+    """How far tile t is turned against tile s where they overlap, each where SPICE (or the solve so far) puts it:
+    the overlap cut in TURN_BLOCK blocks along its long side, each block matched as panel_shift matches a whole
+    overlap, and the matches' change along the overlap fitted as a turn. (degrees, counter-clockwise on the canvas,
+    that t's content is turned against s's; blocks) or (None, why)."""
+    ax0 = max(s["offset"][0] + s["box"][0], t["offset"][0] + t["box"][0])
+    ax1 = min(s["offset"][0] + s["box"][0] + s["box"][2], t["offset"][0] + t["box"][0] + t["box"][2])
+    ay0 = max(s["offset"][1] + s["box"][1], t["offset"][1] + t["box"][1])
+    ay1 = min(s["offset"][1] + s["box"][1] + s["box"][3], t["offset"][1] + t["box"][1] + t["box"][3])
+    long_x = (ax1 - ax0) >= (ay1 - ay0)
+    L = (ax1 - ax0) if long_x else (ay1 - ay0)
+    if min(ax1 - ax0, ay1 - ay0) < TURN_BLOCK * 0.6 or L < 3 * TURN_BLOCK:
+        return None, "overlap too short for a turn"
+    half = TURN_BLOCK / 2
+    pts = []
+    for c in np.arange(half, L - half + 1, half):
+        cx = ax0 + c if long_x else (ax0 + ax1) / 2
+        cy = (ay0 + ay1) / 2 if long_x else ay0 + c
+        subs = []
+        for q, im in ((s, ref), (t, mine)):
+            k = q["box"][2] / im.shape[1]
+            x0 = int(round((cx - half - q["offset"][0] - q["box"][0]) / k))
+            y0 = int(round((cy - half - q["offset"][1] - q["box"][1]) / k))
+            w_ = int(round(TURN_BLOCK / k))
+            if x0 < 0 or y0 < 0 or x0 + w_ > im.shape[1] or y0 + w_ > im.shape[0]:
+                break
+            subs.append((dict(q, box=[x0 * k + q["box"][0], y0 * k + q["box"][1], TURN_BLOCK, TURN_BLOCK]),
+                         im[y0:y0 + w_, x0:x0 + w_]))
+        if len(subs) < 2:
+            continue
+        sh, _ = panel_shift(subs[0][0], subs[0][1], s["offset"], subs[1][0], subs[1][1], t["offset"], most, least=TURN_BLOCK ** 2 // 6)
+        if sh is not None:
+            pts.append((c, sh[0], sh[1]))
+    if len(pts) < 4:
+        return None, f"{len(pts)} blocks matched"
+    c, dx, dy = np.array(pts).T
+    across = dy if long_x else dx
+    fit, res, *_ = np.polyfit(c, across, 1, full=True)
+    spread = math.sqrt(float(res[0]) / len(c)) if len(res) else 0.0
+    if spread > 1.0:
+        return None, f"blocks disagree ({spread:.1f} px)"
+    # (t's content moved by -shift to land on s; a turn of t by +theta (counter-clockwise, y down: +x side moves
+    # down) shows as its shifts across the overlap falling along it)
+    theta = math.degrees(math.atan(fit[0])) * (-1 if long_x else 1)
+    if abs(theta) > TURN_MOST:
+        return None, f"turn too large ({theta:+.2f} deg)"
+    return round(theta, 4), len(pts)
+
+
+_sky_view_cache = {}   # (pass key, frame id) -> reproject.sky_view, worked out once (_sky_views)
+
+
+def _sky_views(u):
+    """For pass u: view(fid) -> reproject.sky_view of its target at that frame's time, or None when SPICE cannot say
+    (yet), and view.knows(fid): whether the geometry cache has the frame's time. Each view is worked out under
+    _spice_lock with the kernels of the frame's own year loaded (_with_kernels, as surface_pictures loads them), since
+    the frame server answers requests side by side and another may load another year's kernels between two calls; a
+    pass across New Year loads each year for its own frames. A frame the geometry cache has no time for yet is looked
+    up again next time it is asked for (a cold pass), and a frame whose view failed is not kept, so a kernel failure
+    passes with the request that met it. None for a pass without a distance."""
+    if not u.get("z"):
+        return None
+    import reproject as rp
+    key = tuple(u["key"])
+    t_of = {fr[1]: fr[3] for fr in u["frames"] if fr[7]}
+    ets = _ets(list(t_of))
+
+    def view(fid):
+        with _lock:
+            got = _sky_view_cache.get((key, fid))
+        if got is not None:
+            return got
+        if fid not in ets:
+            ets.update(_ets([fid]))
+            if fid not in ets:
+                return None
+        with _spice_lock:
+            if not _with_kernels(t_of[fid]):
+                return None
+            try:
+                got = rp.sky_view(u["key"][0], ets[fid])
+            except Exception as e:   # noqa: BLE001  (no geometry for this frame: matched as without it)
+                print(f"no sky view for {key} {fid}: {type(e).__name__}: {e}"[:200], flush=True)
+                return None
+        with _lock:
+            if len(_sky_view_cache) > 20000:
+                _sky_view_cache.clear()
+            _sky_view_cache[(key, fid)] = got
+        return got
+    view.knows = lambda fid: fid in ets or bool(ets.update(_ets([fid]))) or fid in ets
+    return view
+
+
+_disk_geometries = {}   # pass key -> _disk_geometry's answer
+
+
+def _disk_geometry(u):
+    """For a pass of a body SPICE has a shape for: a function (canvas x, y arrays in reference px, frame id) -> (on the
+    disk, cosine of the sun there), SPICE's triaxial body at that frame's time (reproject.sky_to_surface), on the pass's
+    axes (view_turn), as _ring_geometry; None when SPICE cannot say."""
+    if not u.get("z"):
+        return None
+    key = tuple(u["key"])
+    with _lock:
+        if key in _disk_geometries:
+            return _disk_geometries[key]
+    got = None
+    import reproject as rp
+    view = _sky_views(u)
+    if view is not None:
+        km_px = IFOV[u["key"][2]] * u["z"]
+        a = math.radians(view_turn(u))
+        c, sn = math.cos(a), math.sin(a)
+
+        def got(x, y, fid):
+            v = view(fid)
+            if v is None:
+                return np.zeros(np.shape(x), bool), np.zeros(np.shape(x))
+            points, hit = rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)
+            normal = points / v["radii"] ** 2
+            normal /= np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1e-12)
+            return hit, np.where(hit, normal @ v["sun"], 0.0)
+        got.knows = view.knows
+        with _lock:
+            _disk_geometries[key] = got
+    return got
+
+
+LIMB_BAND = 60      # px each side of SPICE's limb measured (limb_place)
+LIMB_LIT = 0.02     # the least cosine of the sun just inside the limb: a lit limb (a crescent's is lit at a slant), not the night side
+LIMB_LEAST = 200    # samples on the lit limb a tile needs
+LIMB_CONTRAST = 20  # levels the lit limb stands over the sky outside it, at least
+
+
+def limb_place(disk, t, im, step=2):
+    """How far tile t's lit limb (its picture im, where its offset puts it) sits outside SPICE's limb of the body at
+    its time (disk, _disk_geometry): (e px, outward along n, n the limb's mean outward normal, samples), or None. The
+    picture's brightness against the distance to SPICE's limb, over a band LIMB_BAND each side of the lit limb (a
+    profile across the limb, binned half a px), and where it falls, on the outside of its brightest, half way to the sky:
+    a sub-pixel edge that a full disk and a thin crescent (lit only in a band just inside its limb, 202SA) both have. A
+    haze standing over the limb moves it out by its own height, each filter's own (solved for with the moves)."""
+    h, w = im.shape[:2]
+    k = t["box"][2] / w
+    x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
+    sy, sx = np.mgrid[0:h:step, 0:w:step]
+    gx, gy = sx * k + x0, sy * k + y0
+    hit, mu0 = disk(gx.ravel(), gy.ravel(), t["id"])
+    hit, mu0 = hit.reshape(gx.shape), mu0.reshape(gx.shape)
+    if not hit.any() or hit.all():
+        return None
+    d_in = cv2.distanceTransform(hit.astype(np.uint8), cv2.DIST_L2, 5)
+    d_out = cv2.distanceTransform((~hit).astype(np.uint8), cv2.DIST_L2, 5)
+    d = (np.where(hit, d_in - 0.5, -(d_out - 0.5))) * step * k    # px, + inside SPICE's disk
+    reach = int(math.ceil(LIMB_BAND / (step * k))) | 1
+    lit_in = cv2.dilate(np.where(hit & (d < LIMB_BAND), mu0, 0).astype(np.float32), np.ones((reach, reach), np.uint8))
+    a = im[sy, sx]
+    valid = cv2.erode((a[..., 3] == 255).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    band = valid & (np.abs(d) < LIMB_BAND) & (lit_in > LIMB_LIT)
+    if band.sum() < LIMB_LEAST:
+        return None
+    g = a[..., :3].astype(np.float32).mean(axis=2)
+    bins = np.round(d[band] * 2).astype(int)   # half px
+    lo = bins.min()
+    cnt = np.bincount(bins - lo)
+    tot = np.bincount(bins - lo, weights=g[band])
+    have = cnt >= 3
+    if have.sum() < 2 * LIMB_BAND:
+        return None
+    dd = (np.arange(len(cnt)) + lo) / 2.0
+    prof = np.interp(dd, dd[have], tot[have] / np.maximum(cnt[have], 1))
+    prof = cv2.GaussianBlur(prof.reshape(1, -1).astype(np.float32), (0, 0), 1.5).ravel()
+    top = int(np.argmax(prof))
+    outside = dd < dd[top] - 8
+    if outside.sum() < 20:
+        return None
+    sky = float(np.median(prof[outside][:max(10, outside.sum() // 2)]))
+    if prof[top] - sky < LIMB_CONTRAST:
+        return None
+    half = (prof[top] + sky) / 2
+    # from the brightest outward (toward smaller d), the first fall below half way
+    i = top
+    while i > 0 and prof[i] >= half:
+        i -= 1
+    if i == 0:
+        return None
+    e = float(dd[i] + (dd[i + 1] - dd[i]) * (half - prof[i]) / max(prof[i + 1] - prof[i], 1e-6))
+    gyd, gxd = np.gradient(d)
+    n = -np.array([float(gxd[band].mean()), float(gyd[band].mean())])
+    if np.hypot(*n) < 1e-6:
+        return None
+    # (e: where the picture's limb is, in px of d, + inside SPICE's: the limb stands out by -e)
+    return -e, n / np.hypot(*n), int(band.sum())
 
 
 def _combine(found):
@@ -3453,7 +4358,7 @@ def surface_pictures(u, cache, p, tiles):
             if image is None:
                 image = np.asarray(Image.open(src).convert("RGBA"))
             # (the field worked out SURFACE_REACH round the tile too, where its ground may move to: surface_redrawn)
-            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px)
+            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px, view_turn(u))
             path = os.path.join(out_dir, f"{t['n']}.png")
             r = SURFACE_REACH // SURFACE_STEP
             stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
@@ -3514,15 +4419,25 @@ def _redraw_from(t, by_id=None):
             return when
 
 
-def surface_field(rp, epoch, view, shape, t, km_px):
+def surface_field(rp, epoch, view, shape, t, km_px, turn=0.0):
     """reproject.sky_field for tile t (its picture shape, h x w) on SURFACE_STEP's grid over its box grown by
     SURFACE_REACH each way: the grid's point (SURFACE_REACH // SURFACE_STEP, the same) is the tile's pixel (0, 0), at
-    the tile's corner on the sky, so the grid's inner part is the field over the tile's own box."""
+    the tile's corner on the sky, so the grid's inner part is the field over the tile's own box. turn: the pass's axes
+    (view_turn), turn degrees short of the sky's north up that sky_field works on: places are turned onto the sky
+    and the shifts back."""
     h, w = shape
     m = SURFACE_REACH
     gy, gx = np.mgrid[-m:h + m + SURFACE_STEP:SURFACE_STEP, -m:w + m + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
     x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
-    return rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+    if not turn:
+        return rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+    # a place p on the pass's canvas is R(turn) p on the north-up sky (R as cv2.getRotationMatrix2D turns), and a
+    # shift on the sky R(-turn) d on the canvas
+    a = math.radians(turn)
+    c, sn = math.cos(a), math.sin(a)
+    x, y = gx + x0, gy + y0
+    dx, dy, w = rp.sky_field(epoch, view, c * x + sn * y, c * y - sn * x, km_px)
+    return (c * dx - sn * dy).astype(np.float32), (sn * dx + c * dy).astype(np.float32), w
 
 
 def surface_redrawn(rp, image, t, dx, dy, weight):
@@ -3566,7 +4481,7 @@ def surface_box(path, t):
 _surface_boxes = {}
 
 
-def panel_places(u, cache, p, tiles, pic=None, report=None):
+def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     """Panel registration: {tile n: [dx, dy]}, how far each tile is moved from SPICE's place (reference pixels), so
     a mosaic's pointings line up where they overlap. SPICE places each frame on its own and its pointing is a few
     pixels off, differently for each pointing (more where the c-smithed pointing is missing, PR #5), so panels of a
@@ -3581,6 +4496,8 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
     (or align) step off. report: a dict that gets each tile's measurements."""
     if not (calibration.step("align") and calibration.step("panels")):
         return {}
+    if GLOBAL_PANELS:
+        return global_places(u, cache, p, tiles, pic, report, anchors)
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
@@ -3681,6 +4598,431 @@ def panel_places(u, cache, p, tiles, pic=None, report=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
+
+
+LIMB_BODIES = frozenset({"SATURN", "TITAN", "JUPITER", "RHEA", "DIONE", "TETHYS", "ENCELADUS", "MIMAS", "IAPETUS"})
+GLOBAL_LIMBS = os.environ.get("CASSINI_GLOBAL_LIMBS", "1") != "0"   # limb anchors in the global solve (global_places)
+LIMB_WEIGHT = 0.5         # a limb anchor's weight against a match's (its place is a few px rough tile to tile)
+GLOBAL_TURNS = os.environ.get("CASSINI_GLOBAL_TURNS", "0") == "1"   # prototype: each pointing's small turn solved too
+TURN_NOISE = 0.05         # degrees: a believed turn match's spread
+TURN_PRIOR = 0.3          # degrees: how far SPICE's twist of a pointing may be off (its prior)
+TURN_BLOCK = 160          # px: the blocks an overlap is cut in along its long side to measure a turn (pair_turn)
+TURN_MOST = 1.0           # degrees: the largest turn believed
+LIMB_HAZE_PRIOR = 100.0   # px: how high a filter's limb may stand over SPICE's (its haze), a loose prior (_solve_moves)
+
+
+def _solve_moves(roots, meas, agree, haze=None):
+    """The moves {root: (dx, dy)} of a mosaic's pointings that best agree with every match between them, meas =
+    [(a, b, d, proj, w)]: pointing b sits d from where pointing a is (proj, the 2 x 2 projection the match measures:
+    the identity, or onto an edge's normal), believed with weight w; a None for a: pointing b's own place is d (an
+    anchor, a ring fit). And limb anchors ("limb", b, filter, n, o, w): pointing b's limb in that filter stands o px out
+    from SPICE's along n, which is that filter's haze height (an unknown solved with the moves, LIMB_HAZE_PRIOR) less
+    how far b sits out (as ISIS's jigsaw solves each image's pointing with ground points). Each pointing's move has
+    SPICE's place as a soft prior (GLOBAL_PRIOR), the matches GLOBAL_NOISE; residuals past GLOBAL_HUBER are weighted
+    down (IRLS), then the match furthest past agree from the fit is dropped and the rest solved again, until all agree.
+    (moves, kept matches); haze, a dict, gets each filter's limb height."""
+    idx = {r: i for i, r in enumerate(roots)}
+    n = len(roots)
+    filters = sorted({m[2] for m in meas if m[0] == "limb"})
+    fdx = {f: 2 * n + i for i, f in enumerate(filters)}
+    turned = any(m[0] == "turn" for m in meas)
+    tdx = {r: 2 * n + len(filters) + i for i, r in enumerate(roots)} if turned else {}
+    size = 2 * n + len(filters) + len(tdx)
+    keep = list(range(len(meas)))
+    if not meas:
+        return {r: (0.0, 0.0) for r in roots}, []
+    prior = np.concatenate([np.full(2 * n, 1 / GLOBAL_PRIOR ** 2), np.full(len(filters), 1 / LIMB_HAZE_PRIOR ** 2),
+                            np.full(len(tdx), 1 / TURN_PRIOR ** 2)])
+    # a degree's turn (as cv2.getRotationMatrix2D turns, y down) about a tile's middle moves a point at lever from it by
+    spin = lambda lever: math.radians(1.0) * np.array([lever[1], -lever[0]], float)
+
+    def rows(m):
+        """(jacobian rows over the unknowns, targets): residual = J x - target"""
+        if m[0] == "limb":
+            _, b_, f, nv, o, w = m
+            J = np.zeros((1, size))
+            J[0, 2 * idx[b_]:2 * idx[b_] + 2] = nv
+            J[0, fdx[f]] = -1.0
+            return J, np.array([-o]), w
+        if m[0] == "turn":
+            # (pointing b turned theta degrees from pointing a; in px-equivalent units, TURN_NOISE to GLOBAL_NOISE)
+            _, a_, b_, theta, w = m
+            J = np.zeros((1, size))
+            J[0, tdx[b_]] = 1.0
+            J[0, tdx[a_]] = -1.0
+            k = GLOBAL_NOISE / TURN_NOISE
+            return J * k, np.array([theta]) * k, w
+        a_, b_, d, P, w = m[:5]
+        J = np.zeros((2, size))
+        J[:, 2 * idx[b_]:2 * idx[b_] + 2] = P
+        if a_ is not None:
+            J[:, 2 * idx[a_]:2 * idx[a_] + 2] = -P
+        if tdx and len(m) > 5:
+            # (the match was made at a place lever_a from a's middle and lever_b from b's: each pointing's turn about its
+            # own middle moves that place too)
+            la, lb = m[5], m[6]
+            J[:, tdx[b_]] = P @ spin(lb)
+            if a_ is not None:
+                J[:, tdx[a_]] = -(P @ spin(la))
+        return J, P @ np.asarray(d, float), w
+    built = [rows(m) for m in meas]
+    while True:
+        robust = np.ones(len(meas))
+        for _ in range(8):
+            A = np.diag(prior)
+            b = np.zeros(size)
+            for k in keep:
+                J, y, w = built[k]
+                c = w * robust[k] / GLOBAL_NOISE ** 2
+                A += c * J.T @ J
+                b += c * J.T @ y
+            x = np.linalg.solve(A, b)
+            res = {}
+            for k in keep:
+                J, y, w = built[k]
+                res[k] = float(np.linalg.norm(J @ x - y))
+                robust[k] = 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k]
+        out_ = sorted((k for k in keep if res[k] > agree), key=lambda k: -res[k])
+        if not out_:
+            break
+        # (the worst left out, and with it up to a twentieth of the matches that disagree by more than half as much: a big
+        # ring pass with many bad matches is solved in a few rounds instead of one round a match)
+        drop = [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]
+        for k in drop:
+            keep.remove(k)
+    if haze is not None:
+        haze.update({f: round(float(x[fdx[f]]), 2) for f in filters})
+        haze.update({("turn", r): round(float(x[tdx[r]]), 4) for r in tdx})
+    return {r: (float(x[2 * idx[r]]), float(x[2 * idx[r] + 1])) for r in roots}, keep
+
+
+def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
+    """panel_places solved globally (GLOBAL_PANELS): {tile n: [dx, dy]}. Every pointing's first tile is measured
+    against the GLOBAL_PARTNERS pointings it overlaps most, earlier and later alike, each pair once, at SPICE's places
+    (panel_shift, or edge_shift on a clouded body); the pointings' moves are solved together (_solve_moves), and the
+    other filters of a pointing move with it, as panel_places moves them. Worked out for the tiles given; a mosaic
+    given more tiles later is solved again (its earlier pointings can move a little), unless the kept solve already
+    holds every tile given: the pre-build solves each pass on all its tiles first (solve_places), so a mosaic grown a
+    tile at a time draws each pointing where the whole pass puts it from the first tile on, and never moves it. A solve
+    of fewer tiles is not kept over one of more. Kept in the pass's folder."""
+    surfaced = any("pic" in t for t in tiles)
+    edges = clouded(u)
+    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + ("ringed-" if anchors else "") + PANEL_FILE)
+    by_n = {t["n"]: t for t in tiles if "offset" in t}
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    name = "global" + SURFACE_TAG * surfaced + EDGE_TAG * edges + "-ringed" * bool(anchors)
+    with _ulock(u):
+        # (read once, and kept with the pass's record in memory, as panel_places keeps its moves)
+        kept = rec.get(name) if rec is not None else None
+        if kept is None:
+            kept = {}
+            if os.path.exists(path):
+                kept = _read_solve(path)
+            if rec is not None:
+                rec[name] = kept
+        if not (kept and set(by_n) <= set(kept.get("tiles", ()))) and os.path.exists(path):
+            # (another process, the pre-build, may have kept a solve of more tiles since this one read it)
+            on_disk = _read_solve(path)
+            if len(on_disk.get("tiles", ())) > len(kept.get("tiles", ())):
+                kept = on_disk
+                if rec is not None:
+                    rec[name] = kept
+        if kept and set(by_n) <= set(kept.get("tiles", ())):
+            return {int(n): v for n, v in kept["moves"].items() if int(n) in by_n and v != [0, 0]}
+        there = _tiles(u, cache, p["display_scale"])
+        pics = {}
+
+        def picture(j):
+            if pic is not None:
+                return pic(j)
+            if j not in pics:
+                fp = by_n[j].get("pic") or os.path.join(there, f"{j}.png")
+                with _lock:
+                    pics[j] = _made_pictures.get(fp)
+                if pics[j] is None:
+                    pics[j] = np.asarray(Image.open(fp).convert("RGBA")) if os.path.exists(fp) else None
+            return pics[j]
+        rootmap = {}
+        for t in tiles:
+            if "offset" in t:
+                rootmap[t["n"]] = _pointing_root(u, t["n"], rootmap)
+        roots = sorted({r for r in rootmap.values() if r in by_n})
+
+        def overlap(s, t):
+            a, b = s["offset"], t["offset"]
+            w = min(a[0] + s["box"][0] + s["box"][2], b[0] + t["box"][0] + t["box"][2]) - max(a[0] + s["box"][0], b[0] + t["box"][0])
+            h = min(a[1] + s["box"][1] + s["box"][3], b[1] + t["box"][1] + t["box"][3]) - max(a[1] + s["box"][1], b[1] + t["box"][1])
+            return (w, h)
+        # pairs of tiles of different pointings: each pointing paired with the GLOBAL_PARTNERS pointings its first tile
+        # overlaps most (its own filter first), and each such pair of pointings measured on up to GLOBAL_FILTERS of
+        # their filters, tile against tile of the same filter (as panel_places measured a pointing on several of the
+        # tiles it overlaps: one filter's match fails where another's holds, Tethys 015TE); a pair of pointings with no
+        # filter in common is measured on the two tiles that overlap most (not on a clouded body: edge_shift)
+        tiles_of = collections.defaultdict(list)
+        for n in sorted(by_n):
+            if rootmap.get(n) in by_n:
+                tiles_of[rootmap[n]].append(n)
+        partners = set()
+        for r in roots:
+            t = by_n[r]
+            best = {}
+            for sv in by_n.values():
+                rs = rootmap.get(sv["n"])
+                if rs == r or rs not in by_n or edges and sv["filter"] != t["filter"]:
+                    continue
+                w, h = overlap(sv, t)
+                if w >= PANEL_NARROW and h >= PANEL_NARROW:
+                    key = (sv["filter"] != t["filter"], -w * h)
+                    if rs not in best or key < best[rs][0]:
+                        best[rs] = (key, sv["n"])
+            for rs, (_, sn) in sorted(best.items(), key=lambda kv: kv[1][0])[:GLOBAL_PARTNERS]:
+                partners.add((min(r, rs), max(r, rs), min(r, sn) if rs > r else min(sn, r), max(r, sn)))
+        todo, seen_pp = [], set()
+        for ra, rb, a0, b0 in sorted(partners):
+            if (ra, rb) in seen_pp:
+                continue
+            seen_pp.add((ra, rb))
+            byf = {by_n[n]["filter"]: n for n in tiles_of[rb]}
+            same = [(min(n, byf[by_n[n]["filter"]]), max(n, byf[by_n[n]["filter"]])) for n in tiles_of[ra]
+                    if by_n[n]["filter"] in byf]
+            if same:
+                todo += same[:GLOBAL_FILTERS]
+            elif not edges:
+                todo.append((a0, b0))
+        # (pairs measured before, by a solve of fewer tiles, are taken as measured: they were measured at SPICE's places,
+        # which do not change, so a mosaic grown a tile at a time reads only its new pairs' pictures)
+        before = kept.get("pairs", {}) if isinstance(kept, dict) else {}
+        # (a pair that had no picture yet, a tile still being made, is measured again)
+        before = {k: v for k, v in before.items() if not (isinstance(v, str) and v.startswith("no picture"))}
+        again = [pr for pr in todo if f"{pr[0]}-{pr[1]}" in before]
+        todo = [pr for pr in todo if f"{pr[0]}-{pr[1]}" not in before]
+        for n in {n for pr in todo for n in pr}:
+            picture(n)
+
+        rings = _ring_geometry(u) if anchors is not None else None
+        if rings is not None:
+            # (SPICE's view at each tile's time worked out here, one at a time: SPICE is not safe to call from several
+            # threads, and the matches below run side by side; once worked out, a ring plane is plain arithmetic)
+            for t in by_n.values():
+                rings(np.zeros(1), np.zeros(1), t["id"])
+
+        def measure(pr):
+            j, n = pr
+            s, t = by_n[j], by_n[n]
+            ref, mine = picture(j), picture(n)
+            if ref is None or mine is None:
+                return pr, None, "no picture"
+            if rings is not None and s["filter"] == t["filter"]:
+                got = ring_pair_shift(u, rings, s, ref, t, mine)
+                if got[0] is not None:
+                    return (pr,) + got
+            if edges:
+                return (pr,) + tuple(edge_shift(s, ref, s["offset"], t, mine, t["offset"]))
+            # (two pointings each up to PANEL_MAX off SPICE can sit twice that apart)
+            got = panel_shift(s, ref, s["offset"], t, mine, t["offset"], PANEL_FAR if surfaced else 2 * PANEL_MAX)
+            if GLOBAL_TURNS and got[0] is not None:
+                theta, blocks = pair_turn(s, ref, t, mine, PANEL_FAR if surfaced else 2 * PANEL_MAX)
+                if theta is not None:
+                    got[1]["turn"] = theta
+            return (pr,) + tuple(got)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+            got = list(ex.map(measure, todo))
+        for pr in again:
+            how = before[f"{pr[0]}-{pr[1]}"]
+            got.append((pr, tuple(how["shift"]), how) if isinstance(how, dict) else (pr, None, how))
+        meas, seen = [], {}
+        # (a pair of pointings whose rings were matched is held by that alone: the edges two tiles share there are the
+        # disk's limb, the ring's shadow on it and the terminator, which Cassini sees from another place by the next
+        # lap, so they move against the sky; 118RI's first and last laps matched 7 px apart on them, the rings agree)
+        ringed = {(min(rootmap[j], rootmap[n]), max(rootmap[j], rootmap[n])) for (j, n), shift, how in got
+                  if shift is not None and isinstance(how, dict) and how.get("ring")}
+        got = [g for g in got if g[1] is None or (isinstance(g[2], dict) and g[2].get("ring"))
+               or (min(rootmap[g[0][0]], rootmap[g[0][1]]), max(rootmap[g[0][0]], rootmap[g[0][1]])) not in ringed]
+        # a match past PANEL_MAX of a frame between two pointings is believed, as panel_places believed one, only when
+        # it agrees well (PANEL_FAR_NCC) and another match of the same two pointings (another filter's) agrees with it
+        # (PANEL_AGREE): a lone 18 px match fits the solve exactly and is never seen as an outlier
+        by_pp = collections.defaultdict(list)
+        for (j, n), shift, how in got:
+            if shift is not None and not edges:
+                by_pp[(rootmap[j], rootmap[n])].append(np.array(shift, float))
+        for (j, n), shift, how in got:
+            seen[f"{j}-{n}"] = how if shift is None else {**how, "shift": [round(shift[0], 2), round(shift[1], 2)]}
+            if shift is None:
+                continue
+            nrm = how.get("normal") if isinstance(how, dict) else None
+            if isinstance(how, dict) and how.get("ring"):
+                # (a ring match: how far tile n's ringlets sit out from tile j's, across the rings only)
+                meas.append((rootmap[j], rootmap[n], np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
+                continue
+            P = np.eye(2) if nrm is None else np.outer(nrm, nrm)
+            # (two pointings each up to PANEL_MAX off SPICE can sit twice that apart: a match past that is the far one)
+            if not edges and math.hypot(*shift) > 2 * PANEL_MAX * FRAME:
+                # (agreeing within PANEL_AGREE or a fifth of the move, the larger: Dione 139DI's filters of one pointing
+                # pair matched 29 to 31 px, 2 to 5 px apart)
+                near_ = max(PANEL_AGREE, 0.2 * math.hypot(*shift))
+                agree = sum(np.hypot(*(o - np.array(shift))) <= near_ for o in by_pp[(rootmap[j], rootmap[n])])
+                if how["ncc"][1] < PANEL_FAR_NCC or agree < 2:
+                    seen[f"{j}-{n}"] = {**seen[f"{j}-{n}"], "far": "not believed"}
+                    continue
+            w = float(max(how["ncc"][1], 0.1))
+            # tile n sits shift from where it lands on j: n's pointing moves by -shift relative to j's
+            s_, t_ = by_n[j], by_n[n]
+            ox = (max(s_["offset"][0] + s_["box"][0], t_["offset"][0] + t_["box"][0])
+                  + min(s_["offset"][0] + s_["box"][0] + s_["box"][2], t_["offset"][0] + t_["box"][0] + t_["box"][2])) / 2
+            oy = (max(s_["offset"][1] + s_["box"][1], t_["offset"][1] + t_["box"][1])
+                  + min(s_["offset"][1] + s_["box"][1] + s_["box"][3], t_["offset"][1] + t_["box"][1] + t_["box"][3])) / 2
+            meas.append((rootmap[j], rootmap[n], -np.array(shift, float), P, w,
+                         (ox - s_["offset"][0], oy - s_["offset"][1]), (ox - t_["offset"][0], oy - t_["offset"][1])))
+            if "turn" in how:
+                # (tile n's content turned theta against j's: n's pointing turns back by that much against j's)
+                meas.append(("turn", rootmap[j], rootmap[n], -how["turn"], w))
+        if anchors:
+            # absolute places (ring_moves: each tile's rings fitted to the pass's radial profile), one per pointing: the
+            # median of its tiles' fits, as ring_moves moves a pointing's filters together
+            by = {}
+            for n, m in anchors.items():
+                if rootmap.get(n) in by_n:
+                    by.setdefault(rootmap[n], []).append(m[:2])
+            for r, ms in by.items():
+                # (a radial profile fit says how far across the rings the tile sits, not where along them: its move along
+                # the rings is noise, up to 18 px on 039RI, and held whole it dragged pointings along the rings. Only
+                # the part across the rings, at the tile's middle, anchors the pointing)
+                P = np.eye(2)
+                if rings is not None:
+                    t = by_n[r]
+                    cx, cy = t["offset"][0] + t["box"][0] + t["box"][2] / 2, t["offset"][1] + t["box"][1] + t["box"][3] / 2
+                    rr = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), t["id"])[0]
+                    grad = np.array([rr[1] - rr[0], rr[2] - rr[0]], float)
+                    if np.hypot(*grad) > 0:
+                        nn = grad / np.hypot(*grad)
+                        P = np.outer(nn, nn)
+                meas.append((None, r, np.median(np.array(ms, float), axis=0), P, 1.0))
+        if u["key"][0] in LIMB_BODIES and GLOBAL_LIMBS:
+            # each tile's lit limb against SPICE's disk at its time (limb_place): an anchor for its pointing across the
+            # limb, with its filter's haze height an unknown of the solve
+            disk = _disk_geometry(u)
+            if disk is not None:
+                for t in by_n.values():
+                    disk(np.zeros(1), np.zeros(1), t["id"])   # (SPICE's views first, one at a time: not thread safe)
+
+                def limb(n):
+                    im = picture(n)
+                    return n, (limb_place(disk, by_n[n], im) if im is not None else None)
+                with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+                    for n, got_l in ex.map(limb, sorted(by_n)):
+                        if got_l is not None:
+                            o, nv, count = got_l
+                            meas.append(("limb", rootmap[n], by_n[n]["filter"], nv, o, LIMB_WEIGHT))
+                            seen[f"limb-{n}"] = {"limb": round(o, 2), "normal": [round(float(v), 4) for v in nv]}
+        haze = {}
+        moves, keep = _solve_moves(roots, meas, EDGE_AGREE if edges else PANEL_AGREE, haze)
+        if haze:
+            seen["haze"] = {f: v for f, v in haze.items() if not isinstance(f, tuple)}
+        # (the furthest a pointing is moved: EDGE_MAX on a clouded body, as _combine holds it; PANEL_FAR on any other, as
+        # panel_places believed a pointing far off, a chain wider than that held by its middle below)
+        most = (EDGE_MAX if edges else PANEL_FAR) * FRAME
+        out = {}
+        linked = ({m[0] for i, m in enumerate(meas) if i in keep and m[0] not in (None, "limb", "turn")}
+                  | {m[1] for i, m in enumerate(meas) if i in keep and m[0] != "turn"})
+        # a chain of pointings whose relative places spread wider than the furthest move believed (a long scan whose
+        # pointings SPICE puts a little further off each step: Hyperion 015HY, 70 px end to end) is held by its
+        # middle instead of by SPICE's average, each linked group on its own, as the time-order rule held it by its
+        # first pointing; cut at that limit pointing by pointing, a group came apart at the cut
+        group = {r: r for r in linked}
+
+        def top(r):
+            while group[r] != r:
+                group[r] = group[group[r]]
+                r = group[r]
+            return r
+        for i in keep:
+            a_, b_ = meas[i][0], meas[i][1]
+            if a_ not in (None, "limb", "turn"):
+                group[top(a_)] = top(b_)
+        members = collections.defaultdict(list)
+        for r in linked:
+            members[top(r)].append(r)
+        held = {m[1] for i, m in enumerate(meas) if i in keep and m[0] in (None, "limb")}
+        for rs in members.values():
+            xy = np.array([moves[r] for r in rs], float)
+            if np.hypot(*xy.T).max() > most and not held & set(rs):   # (a group anchored on its rings stays put)
+                c = (xy.min(axis=0) + xy.max(axis=0)) / 2
+                for r in rs:
+                    moves[r] = (moves[r][0] - c[0], moves[r][1] - c[1])
+        for n in by_n:
+            r = rootmap[n]
+            mv = moves.get(r, (0.0, 0.0)) if r in linked else (0.0, 0.0)
+            if math.hypot(*mv) > most or math.hypot(*mv) < PANEL_LEAST:
+                mv = (0.0, 0.0)
+            out[n] = [round(mv[0], 2), round(mv[1], 2)]
+            turn = haze.get(("turn", r), 0.0) if r in linked else 0.0
+            if abs(turn) >= 0.01:
+                out[n].append(round(turn, 4))
+        if rings is not None and RING_FILTERS:
+            # a pointing's filters on the rings, each lined up across the rings on its pointing's first tile by their
+            # radial profiles (the filters' detail: the ringlets and gaps are where they are in every filter), where C8's
+            # match of the pictures (_register) left them apart: on a ring the pictures' match slides along the ringlets
+            # as readily as across, and Earth Smiled's pointings kept a colour fringe on every ring edge
+            def refine(n):
+                r = rootmap[n]
+                if r == n or r not in by_n:
+                    return n, None
+                a, b = by_n[r], by_n[n]
+                ma, mb = out.get(r, [0, 0]), out[n]
+                sa = dict(a, offset=[a["offset"][0] + ma[0], a["offset"][1] + ma[1]])
+                sb = dict(b, offset=[b["offset"][0] + mb[0], b["offset"][1] + mb[1]])
+                ra, rb = picture(r), picture(n)
+                if ra is None or rb is None:
+                    return n, None
+                got_r, how_r = ring_pair_shift(u, rings, sa, ra, sb, rb)
+                if got_r is None or math.hypot(*got_r) > RING_FILTER_MOST:
+                    return n, None
+                return n, (got_r, how_r)
+            with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+                for n, got_r in ex.map(refine, sorted(by_n)):
+                    if got_r is not None:
+                        out[n] = [round(out[n][0] + got_r[0][0], 2), round(out[n][1] + got_r[0][1], 2)] + out[n][2:]
+                        seen[f"filter-{n}"] = {"shift": [round(v, 2) for v in got_r[0]], "ncc": got_r[1]["ncc"]}
+        if report is not None:
+            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
+        # (a solve of tiles another solve does not hold is used, not kept over the one kept: the one in memory, or the one
+        # on disk, read again here in case another process, the pre-build, wrote a larger one meanwhile)
+        latest = _read_solve(path) if os.path.exists(path) else {}
+        if set(kept.get("tiles", ())) - set(by_n) or set(latest.get("tiles", ())) - set(by_n):
+            if rec is not None and len(latest.get("tiles", ())) > len(kept.get("tiles", ())):
+                rec[name] = latest
+            return {n: v for n, v in out.items() if v != [0, 0]}
+        part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+        new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
+               "kept": len(keep), "measured": len(meas)}
+        if rec is not None:
+            rec[name] = new
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(part, "w") as fh:
+                json.dump(new, fh)
+            os.replace(part, path)
+        except OSError as e:
+            print(f"cannot keep {path} in the cache ({e})", flush=True)
+        return {n: v for n, v in out.items() if v != [0, 0]}
+
+
+def _read_solve(path):
+    """A kept global solve (global_places), or {} when it cannot be read (half written by another process)."""
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def solve_places(u, cache):
+    """The pass's pointings registered on all its tiles at once (global_places, through layout as a request draws it),
+    for the pre-build to call once every tile is made and before any mosaic so far is drawn: those then take their
+    places from the whole pass's solve. Nothing with GLOBAL_PANELS off."""
+    if GLOBAL_PANELS and u["frames"]:
+        layout(u, len(u["frames"]) - 1, cache)
 
 
 def view_rect(p, tiles=None):
@@ -3821,6 +5163,8 @@ def _window(u, p, mine, rect, cache):
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
         part = _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t)
+        if SUBPIXEL:
+            part = _subpixel_at(part, t, rect, k, left, top)
         frame = np.zeros((H, W, 4), np.uint8)
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
@@ -3924,7 +5268,8 @@ def _over(u, p, rgba, t, rect, cache, match=True, kept=None):
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-    draw_over(rgba, lambda: _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
+    draw_over(rgba, lambda: _subpixel_at(_shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t), t, rect, k, left, top)
+              if SUBPIXEL else _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t),
               left, top, sw, sh, k, match, kept, under=partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill")))
 
 
@@ -3967,6 +5312,18 @@ def draw_over(rgba, part, left, top, sw, sh, k, match=True, kept=None, under=Fal
 
 _grown_last = collections.OrderedDict()   # path of a grown filter mosaic -> its RGBA, the few made last
 GROWN_KEEP = 6
+
+
+def grows(mine):
+    """True when filter_mosaic may grow the mosaic of mine (_grown: the one before it with the newest tile drawn over
+    it), which only holds while every tile goes on top of the ones before it. Not with more than GROW_FROM tiles
+    only, nor with a fill (lum_fills: it joins under the tiles before it), nor with a long exposure taken again
+    (long_repeats, "long": it goes under the others, and is known for one only once its filter's next frame at that
+    place is in, so the mosaic grown before then drew it on top and growing never took it under. Day the Earth
+    Smiled, 195RI HIPHASEC001, kept its GRN repeat's clipped rings on top, a lime patch by Saturn's limb). The
+    high-phase ring passes that take such repeats compose their filter mosaics whole instead (2 passes of 1,313 in
+    2004 and early 2005)."""
+    return len(mine) > GROW_FROM and not any(t.get("fill") or t.get("long") for t in mine)
 
 
 def _grown(u, p, f, mine, rect, cache, tag=""):
@@ -4054,7 +5411,10 @@ def _roll(u, p, key, mine, rect, cache):
     return rgba
 
 
-VISIT_TAG = "-v"   # in the name of a colour filter's mosaic drawn without the partial visits (visit_tiles)
+CLIPPED_TAG = "_cu"   # in a mosaic picture's name: a saturated pointing is drawn under the others (clipped_pointings)
+# in the name of a colour filter's mosaic drawn without the partial visits or with tiles under (visit_tiles); "-v2"
+# since clipped_still: the "-v" planes #384 drew pulled a long repeat's whole pointing under (195RI HIPHASEC001)
+VISIT_TAG = "-v2"
 
 
 def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag=""):
@@ -4075,7 +5435,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     mine = _mine(u, p, tiles, f)
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
-    whole = plain in ("", PANEL_TAG, EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)
+    whole = plain in ("", PANEL_TAG, EDGE_TAG, RING_EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)
     if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
         # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
         # (decided here on all the pass's tiles; the mosaic of fewer tiles _grown starts from keeps the decisions)
@@ -4086,7 +5446,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     ref = ref or f
     solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
     path = _filter_path(u, f, len(mine), rect, cache, solved_on)
-    path = path[:-len(".png")] + tag + ".png"
+    # (the base's saturated fills in its name: one can come and go as tiles arrive, at the same count, blown_fills)
+    filled = "".join(f"-B{t['n']}" for t in mine if t.get("blown_fill"))
+    path = path[:-len(".png")] + tag + filled + ".png"
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
@@ -4095,8 +5457,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
 
     def make():
         # (panel registration's tiles are every tile up to the newest too, each kept where it was first put)
-        # (and not a base with fills, lum_fills: one joins it under the tiles before it, not as the newest on top)
-        if not balanced and whole and len(mine) > GROW_FROM and not any(t.get("fill") for t in mine):
+        if not balanced and whole and grows(mine):
             return _grown(u, p, f, mine, rect, cache, tag)
         window, shown = _window(u, p, mine, rect, cache)
         corrections = None
@@ -4171,9 +5532,8 @@ def _keep_made(path, picture):
 
 
 def _part(path, w, h):
-    """A tile at w x h canvas pixels (RGBA): read, resized and lightly sharpened at that size (color_image.unsharp,
-    the last step of every picture: in a movie frame and a mosaic alike, and in the planes a browser moves, gains and
-    mixes, so its pictures are sharpened as the server's are) once, and kept in memory (up to PARTS_KEEP bytes), since
+    """A tile at w x h canvas pixels (RGBA): read and resized to that size (no sharpening since 11-08: #249's unsharp
+    mask came out) once, and kept in memory (up to PARTS_KEEP bytes), since
     every mosaic of a pass is drawn again from all of its tiles and a tile never changes once made."""
     key = (path, w, h)
     with _lock:
@@ -4184,7 +5544,7 @@ def _part(path, w, h):
         made = _made_pictures.get(path)
     # a tile just made is resized from its picture in memory, the pixels its PNG holds
     im = Image.fromarray(made) if made is not None else Image.open(path).convert("RGBA")
-    part = color_image.unsharp(np.asarray(im.resize((w, h), Image.LANCZOS)))
+    part = np.asarray(im.resize((w, h), Image.LANCZOS))
     with _lock:
         if key not in _parts:
             _parts[key] = part
@@ -4262,12 +5622,27 @@ def layout(u, n, cache):
     # each tile's surface redrawn as at the pass's epoch (surface reprojection), then each pointing moved onto the
     # ones before it where they overlap (panel registration: what is left is SPICE's pointing, a few pixels)
     surfaced = surface_pictures(u, cache, p, tiles)
+    if calibration.step("surface") and not clouded(u):
+        # (the tiles it decided to keep as taken, as they are: still_ground, drawn_time)
+        kept = _surface_taken(u, cache, p, os.path.join(_tiles(u, cache, p["display_scale"]), SURFACE_DIR))
+        if kept:
+            tiles = [dict(t, as_taken=True) if t["n"] in kept and "offset" in t else t for t in tiles]
     if surfaced:
         tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
                  for t in tiles]
-    moved = panel_places(u, cache, p, tiles)
+    # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
+    # keep that place, and their pointings' panel moves are not added
+    rung = ring_moves(u, cache, p, tiles)
+    if GLOBAL_PANELS:
+        # (global: the ring fits are anchors in the one solve with the pairwise matches, which places every pointing)
+        moved = panel_places(u, cache, p, tiles, anchors=rung)
+    else:
+        moved = panel_places(u, cache, p, tiles)
+        if rung:
+            moved = {**{n: v for n, v in moved.items() if n not in rung}, **rung}
     if moved:
-        tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"])
+        tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"],
+                      **({"turn": moved[t["n"]][2]} if len(moved[t["n"]]) > 2 else {}))
                  if t["n"] in moved and "offset" in t else t for t in tiles]
     count = {}
     for t in tiles:
@@ -4276,6 +5651,11 @@ def layout(u, n, cache):
     if not count:
         return None
     colour = p["colour"]
+    # a saturated place nothing else covers, filled from its left-out tile where the tiles round it now are
+    # (blown_fills, after every move above)
+    blown = blown_fills(tiles, set(colour or []) | set(_luminance(p)["filters"]))
+    if blown:
+        tiles = [dict(t, fill_at=blown[t["n"]]) if t["n"] in blown else t for t in tiles]
     frames = lum_frames(u, p) | lum_fills(u, p, tiles)
     base = [t["filter"] for t in tiles if "offset" in t and t["n"] in frames]
     if colour and all(count.get(f) for f in colour):
@@ -4289,7 +5669,15 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
+    if blown:
+        name += "_B" + "-".join(str(n) for n in sorted(blown))   # (saturated places the base fills in: blown_fills)
+    if colour and used == colour and clipped_still(u, tiles, colour):
+        name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
+    if moved and GLOBAL_PANELS:
+        # (the global solve can move a pointing drawn before when it is solved again on more tiles, a cold pass grown on
+        # demand: the moves used are in the name, so a picture kept from fewer tiles' places is never served for these)
+        name += "_m" + hashlib.sha1(json.dumps(sorted((n, v[:3]) for n, v in moved.items())).encode()).hexdigest()[:8]
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((RING_EDGE_TAG if rung else EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
@@ -4386,6 +5774,85 @@ TINT_MATCH = (0.67, 1.5)   # the furthest a tinted frame's brightness is moved t
 #                            frame on Saturn's night side) would otherwise set it (221EN PLMHPMR003 came out near black)
 
 
+TINT_SHIFT = 0.04      # of the picture's side: the furthest a set's picture is moved onto the frame it tints (_onto_frame)
+
+
+TINT_OUTLINE_GAIN = 0.8   # _outline_shift: a move kept only when the outlines then differ at most this share of as taken
+
+
+def _outline_shift(im1, im2, both, reach, step=4):
+    """(dx, dy) moving im2's lit outline onto im1's (as image_correction.limb_shift's shift), by the least difference of
+    their blurred lit masks (Otsu, over both) within reach px: a coarse search every step px, then every px round the
+    best; None unless it differs at most TINT_OUTLINE_GAIN of what it did as taken. For a set's filter whose limb the
+    pipeline's limb_shift refuses (its terminator or haze rim unlike the frame's: Titan's MT1 against CB3)."""
+    if both.mean() < 0.05:
+        return None
+
+    def lit(im):
+        v = cv2.GaussianBlur(im.astype(np.float32), (0, 0), 2)
+        t, _ = cv2.threshold(np.clip(v[both], 0, 255).astype(np.uint8).reshape(-1, 1), 0, 255,
+                             cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return cv2.GaussianBlur((v > t).astype(np.float32), (0, 0), 3)
+    a, b = lit(im1), lit(im2)
+    inner = cv2.erode(both.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
+    if inner.sum() < 1000:
+        return None
+    small = lambda x: cv2.resize(x, (x.shape[1] // step, x.shape[0] // step), interpolation=cv2.INTER_AREA)
+    sa, sb, sm = small(a), small(b), small(inner.astype(np.float32)) > 0.99
+    cost, cost_small = _shift_cost(a, b, inner), _shift_cost(sa, sb, sm)
+    r = int(reach // step)
+    best = min((cost_small(dx, dy), dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1))
+    best = min((cost(best[1] * step + dx, best[2] * step + dy), best[1] * step + dx, best[2] * step + dy)
+               for dx in range(-step, step + 1) for dy in range(-step, step + 1))
+    if best[0] > TINT_OUTLINE_GAIN * cost(0, 0):
+        return None
+    return float(best[1]), float(best[2])
+
+
+def _shift_cost(x, y, m):
+    """cost(dx, dy): how far y moved by whole pixels (dx, dy) differs from x under mask m, the mean absolute difference
+    of the two over m with y's pixels moved in from outside it 0, as a cv2.warpAffine of y by (-dx, -dy) (INTER_LINEAR,
+    its border 0) gave it, to the bit: y's pixels are copied into place over m's bounding box only, so each of
+    _outline_shift's ~520 tries a set's plane costs under half of what warping and comparing the whole picture did (a
+    Jupiter WAC color movie frame 2.7 s at nice 19 on the Mini, 80% of it this search, 2026-11-08). The same
+    differences in the same order, so the same mean and the same move chosen."""
+    if not m.any():
+        return lambda dx, dy: float("nan")   # (the mean of nothing, as before)
+    rows, cols = np.flatnonzero(m.any(axis=1)), np.flatnonzero(m.any(axis=0))
+    r0, r1, c0, c1 = int(rows[0]), int(rows[-1]) + 1, int(cols[0]), int(cols[-1]) + 1
+    H, W = y.shape
+    xb, mb = x[r0:r1, c0:c1], m[r0:r1, c0:c1]
+
+    def cost(dx, dy):
+        moved = np.zeros(xb.shape, y.dtype)
+        # moved[i, j] = y[r0 + i + dy, c0 + j + dx], where that is inside y
+        sr0, sr1, sc0, sc1 = max(r0 + dy, 0), min(r1 + dy, H), max(c0 + dx, 0), min(c1 + dx, W)
+        if sr1 > sr0 and sc1 > sc0:
+            moved[sr0 - dy - r0:sr1 - dy - r0, sc0 - dx - c0:sc1 - dx - c0] = y[sr0:sr1, sc0:sc1]
+        return float(np.abs(xb - moved)[mb].mean())
+    return cost
+
+
+def _onto_frame(colour, grey):
+    """A set's picture or one filter's plane (RGBA) moved onto the frame it tints (grey: RGBA) by the pipeline's limb
+    registration (image_correction.limb_shift: their lit outlines matched, the move kept only when the outlines then
+    differ less), when that is under TINT_SHIFT of the picture's side; else as it is. A set's filters are taken a minute
+    or more from each other and from the frame, each placed by its own pointing, so the body can sit 20 to 40 px apart
+    in them: their limbs, whose hue is the set's own (a hazy rim blue, a filter's lone edge orange), then crossed the
+    frame's disk as ghost arcs (133TI CLOUD002, CB3 + MT1; Sam 11-08)."""
+    look = lambda a: np.ascontiguousarray(a[..., :3].mean(axis=2) if a.shape[2] == 4 and not np.array_equal(
+        a[..., 0], a[..., 1]) else a[..., 0]).astype(np.uint8)
+    shift, _ = image_correction.limb_shift(look(grey), look(colour), grey[..., 3] > 0, colour[..., 3] > 0)
+    if shift is None:
+        shift = _outline_shift(look(grey), look(colour), (grey[..., 3] > 0) & (colour[..., 3] > 0),
+                               TINT_SHIFT * max(grey.shape[:2]))
+    if shift is None or math.hypot(*shift) > TINT_SHIFT * max(grey.shape[:2]) or math.hypot(*shift) < 0.5:
+        return colour
+    m = np.float32([[1, 0, -shift[0]], [0, 1, -shift[1]]])
+    return cv2.warpAffine(colour, m, (colour.shape[1], colour.shape[0]), flags=cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+
 def tinted_frame(colour, grey, gamma=2.2, same=False):
     """A movie frame's own picture (grey: RGBA, its first channel the frame on the pass's display scale) drawn in the
     colour of a colour set (colour: colour_picture's RGBA on the same canvas): in linear light, the set's hue (each
@@ -4393,6 +5860,7 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     the set has no picture, or is dark, the hue is the set's mean over its lit part, so the frame keeps its whole
     place in one colour. The frame's alpha. (set_shown: the frames between sets play their own moment in colour.)"""
     lin = lambda v: calibration.decode(v.astype(np.float32) / 255, gamma)
+    colour = _onto_frame(colour, grey)
     ca = colour[..., 3].astype(np.float32) / 255
     ga = grey[..., 3].astype(np.float32) / 255
     rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None] / 1.0)
@@ -4909,7 +6377,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + \
-        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
+        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG, RING_EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's
@@ -5003,6 +6471,10 @@ def movie_footprint(u, cache, p=None):
     picks = sorted({round(i * (n - 1) / max(1, MOVIE_SAMPLES - 1)) for i in range(MOVIE_SAMPLES)}) if n else []
     if track:
         picks = sorted(track)
+    else:
+        # (and every tile of the pass already made: its own place, where the geometry cache's can be tens of px off)
+        there = _tiles(u, cache, p["display_scale"])
+        picks = sorted(set(picks) | {j for j in range(n) if os.path.exists(os.path.join(there, f"{j}.json"))})
     boxes = []
     # the samples made side by side (MOVIE_WORKERS at once): a cold pass's first steady frame waits on them
     mode = calibration.mode()
@@ -5017,16 +6489,24 @@ def movie_footprint(u, cache, p=None):
             ox, oy = track[t["n"]] if track else t["offset"]
             bx, by, bw, bh = t["box"]
             boxes.append((ox + bx, oy + by, ox + bx + bw, oy + by + bh))
+    # every frame's own drawn box on the pass's axes (pass_boxes, from the geometry cache), so no frame between the
+    # tiles made falls outside the footprint, with STEADY_REACH round it: the furthest stabilization moves a tile
+    # from its SPICE place (and about what the geometry cache is off from the tiles' places at worst); a track's
+    # footprint has every frame at its steady place (places the geometry cache does not know), with MOVIE_MARGIN
+    # round it, as has a pass the geometry cache has none of
+    own = None if track else pass_boxes(u)
+    if own is not None:
+        boxes.append((*own[:, :2].min(0), *own[:, 2:].max(0)))
     if boxes:
-        m = MOVIE_MARGIN * FRAME
+        m = MOVIE_MARGIN * FRAME if own is None else STEADY_REACH
         fp = [min(b[0] for b in boxes) - m, min(b[1] for b in boxes) - m, max(b[2] for b in boxes) + m, max(b[3] for b in boxes) + m]
-        # the geometry cache's footprint too, so no frame between the samples falls outside both (a track's
-        # footprint has every frame, at places the geometry cache does not know)
+        # the plan's footprint too where the frames' own boxes are not known (the geometry cache has none of them)
         g = p["footprint"]
-        if not track:
+        if not track and own is None:
             fp = [min(fp[0], g[0]), min(fp[1], g[1]), max(fp[2], g[2]), max(fp[3], g[3])]
     else:
         fp = list(p["footprint"])
+    fp = [float(v) for v in fp]
     reel._cached(path, lambda: json.dumps(fp).encode())
     if rec is not None:
         rec["track_footprint" if u.get("track") else "footprint"] = fp
@@ -5098,6 +6578,137 @@ def _chain(made, pic, there, believed, step, guide=None):
     return places, hows
 
 
+STEADY_LINKS = int(os.environ.get("CASSINI_STEADY_LINKS", "4"))   # frames back each frame is matched to (1: the chain alone)
+STEADY_AGREE = 2.0        # px: a link further than this from the solve is left out (_chain_links)
+STEADY_WINDOW = 32        # tiles whose links are measured with their pictures read at once (_chain_links)
+STEADY_LINK_NOISE = 0.3   # px: a frame-to-frame match's spread (_chain_links)
+STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SPICE's place), so the solve is held; the
+#                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
+
+
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
+    """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
+    each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
+    "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
+    by more than STEADY_AGREE left out, the worst first, several a round), as the global mosaic solve does. The chain
+    adds each frame's match to the one before, so a fraction of a pixel off in each adds up like a random walk over a
+    movie (steady_places pulls it back to SPICE only over STEADY_SMOOTH frames); linked several frames back, the places
+    are held by several paths. As _chain, no place ends further than the guide's reach from the tile's own SPICE place:
+    a tile the solve put past it (a run of frames another moon pulled along together) keeps SPICE's place and its links
+    are left out. The pictures are read a window at a time (STEADY_WINDOW tiles and the links before them), so a movie
+    of hundreds of tiles never holds them all. ({n: [x, y]}, how)."""
+    import scipy.sparse as sps
+    import scipy.sparse.linalg as spla
+    tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
+    if not tiles:
+        return {}, {}
+    order = [t["n"] for t in tiles]
+    at = {n: i for i, n in enumerate(order)}
+    by = {t["n"]: t for t in tiles}
+    spice = {n: list(by[n]["offset"]) for n in order}
+    pairs = []
+    newest = {}
+    for i, n in enumerate(order):
+        cands = order[max(0, i - links):i]
+        if newest.get(by[n]["filter"]) is not None:
+            cands = cands + [newest[by[n]["filter"]]]
+        for j in dict.fromkeys(cands):
+            pairs.append((j, n))
+        newest[by[n]["filter"]] = n
+    reach = None
+
+    def measure(pr, own):
+        nonlocal reach
+        j, n = pr
+        t = by[n]
+        rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
+        g = guide(spice, j, n, None) if guide else {}
+        reach = g.get("reach", reach)
+        shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
+                                 around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
+        if shift is None or math.hypot(*shift) > believed:
+            return pr, None, how
+        d = (rel[0] - shift[0], rel[1] - shift[1])
+        if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
+            return pr, None, "past reach"
+        return pr, d, how
+    got = []
+    with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+        for k in range(0, len(order), STEADY_WINDOW):
+            chunk = set(order[k:k + STEADY_WINDOW])
+            todo = [pr for pr in pairs if pr[1] in chunk]
+            # (this window's pictures and those its links reach back to, read here before the threads: _every_tile's
+            # pic keeps only the last few, and side by side one thread's picture was let go while another wanted it)
+            own = {m: pic(m) for m in sorted({m for pr in todo for m in pr})}
+            got += [g for g in ex.map(lambda pr: measure(pr, own), todo) if g[1] is not None]
+            del own
+    N = len(order)
+    keep = list(range(len(got)))
+    robust = np.ones(len(got))
+    x0 = np.array([spice[n] for n in order], float)
+    held = set()   # tiles past the reach: placed by SPICE's step from the tile before them, as _chain holds one
+    px, py = x0[:, 0].copy(), x0[:, 1].copy()
+    for rnd in range(len(got) + 10):
+        rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []
+        r = 0
+        for k in keep:
+            (j, n), d, _ = got[k]
+            w = math.sqrt(robust[k]) / STEADY_LINK_NOISE
+            rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
+            rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
+            r += 1
+        # (a held tile: linked to the tile before it by SPICE's step alone, so the movie goes on from there as SPICE moved,
+        # where held at SPICE's own place it jumped there and back on a badly placed body: Hyperion 153HY)
+        for n in held:
+            i = at[n]
+            if i == 0:
+                continue
+            j = order[i - 1]
+            w = 1.0 / STEADY_LINK_NOISE
+            rows += [r, r]; cols += [i, i - 1]; vals += [w, -w]
+            rhs_x.append(w * (x0[i, 0] - x0[i - 1, 0])); rhs_y.append(w * (x0[i, 1] - x0[i - 1, 1]))
+            r += 1
+        pw = [1.0 / STEADY_LINK_PRIOR] * N
+        rows += list(range(r, r + N)); cols += list(range(N)); vals += pw
+        rhs_x += list(np.array(pw) * x0[:, 0]); rhs_y += list(np.array(pw) * x0[:, 1])
+        A = sps.csr_matrix((vals, (rows, cols)), shape=(r + N, N))
+        px = spla.lsqr(A, np.array(rhs_x), atol=1e-10, btol=1e-10)[0]
+        py = spla.lsqr(A, np.array(rhs_y), atol=1e-10, btol=1e-10)[0]
+        res = {}
+        for k in keep:
+            (j, n), d, _ = got[k]
+            res[k] = math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1])
+        new = {k: 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k] for k in keep}
+        changed = any(abs(new[k] - robust[k]) > 1e-3 for k in keep)
+        for k in keep:
+            robust[k] = new[k]
+        out_ = sorted((k for k in keep if res[k] > STEADY_AGREE), key=lambda k: -res[k])
+        if out_:
+            # (the worst left out, and with it up to a twentieth of the links that disagree by more than half as much)
+            for k in [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]:
+                keep.remove(k)
+            continue
+        if reach is not None:
+            # (past the guide's reach, as _chain holds each frame: a run of frames another moon pulled along together)
+            dev = np.hypot(px - x0[:, 0], py - x0[:, 1])
+            far = [order[i] for i in range(N) if order[i] not in held and dev[i] > reach]
+            if far:
+                # (past the reach: its links out, SPICE's step from the tile before it in, and the rest solved again)
+                held |= set(far)
+                keep = [k for k in keep if got[k][0][0] not in held and got[k][0][1] not in held]
+                continue
+        if not changed:
+            break
+    places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
+    linked = {}
+    for k in keep:
+        (j, n), _, how = got[k]
+        linked.setdefault(n, []).append(j)
+    hows = {n: ("held from the tile before (past reach)" if n in held else f"linked to {sorted(linked[n])}" if n in linked
+                else "first" if n == order[0] else "SPICE (no link)") for n in order}
+    return places, hows
+
+
 def _chained(u, cache, p, name, key, work):
     """A pass's chain kept with it (in the file name and its record's key): {n: [x, y]}, made by work() once."""
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -5157,6 +6768,10 @@ STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
 STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places;
+if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
+    # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
+    # the chain alone keeps steady4's name
+    STEADY_FILE = f"steady5k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -5199,7 +6814,10 @@ def steady_chain(u, cache, p=None):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-        places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        if STEADY_LINKS > 1:
+            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS)
+        else:
+            places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 
@@ -5287,7 +6905,7 @@ def seen_places(u, made, pic, there):
 def other_bodies(u, names=False):
     """{tile n: [(x, y, r, behind)]} ([(name, x, y, r, behind)] with names): every body but its target that SPICE puts on tile n of pass u
     (bootleg_autonav.bodies_of, the geometry cache's bodies table), its centre from the target's centre and its radius,
-    north up, in the pass's reference pixels (where the tiles are drawn: frames_seen's turn and scale), and whether it
+    on the pass's axes (view_turn), in the pass's reference pixels (where the tiles are drawn: frames_seen's turn and scale), and whether it
     is further off than the target (behind it). Tiles whose frame the table has not
     worked out, or with no other body, are left out."""
     import bootleg_autonav as ba
@@ -5296,12 +6914,13 @@ def other_bodies(u, names=False):
     if not any(got.values()):
         return {}
     angles = reel.north_angles([fr[1] for fr in frames if fr[1] in got])
+    turn = view_turn(u)
     out = {}
     for n, fr in enumerate(frames):
         if not got.get(fr[1]) or not fr[7]:
             continue
         x, y, fz = fr[5], fr[6], fr[7]
-        a = math.radians(angles.get(fr[1], 0.0))
+        a = math.radians(angles.get(fr[1], 0.0) - turn)
         c, sn, k = math.cos(a), math.sin(a), fz / u["z"]
         # (the body from the target on the camera's axes: the target is at -x, -y from the frame's middle)
         out[n] = [((name,) if names else ()) +
@@ -5396,7 +7015,7 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure5-{}-" + PLAN_FILE
+EXPOSURE_FILE = "exposure6-{}-" + PLAN_FILE   # exposure6: measured on movie-3's views (movie_footprint2, follow_view)
 EXPOSURE_ROLL = 0.75     # of a stretch's slow drift past EXPOSURE_FREE: how much the rolling scale takes out (evened_gains)
 EXPOSURE_FREE = 0.26     # log brightness (about 30% either way of the stretch's middle): slow drift kept as it is
 EXPOSURE_RULE = 8        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
@@ -5581,12 +7200,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     chain = steady_chain(u, cache, p)
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     fp = movie_footprint(u, cache, p)
-    x0, y0, x1, y1 = fp
     seen = pass_seen(u) if centre else None
-    fixed = bool((centre and centre_half(fp, radius, seen)) or max(x1 - x0, y1 - y0) <= MOVIE_FIT * FRAME)
-    if not fixed:
-        return {"local": False}
     ns = sorted(chain)
+    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen)):
+        return {"local": False}   # (a view following the frame: the server draws it, follow_view)
     held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
     rect = movie_rect(fp, tiles[ns[0]], radius, centre, seen)
@@ -5637,6 +7254,20 @@ def page_evens(u, cache, colour=True, centre=True):
                 and not (colour and t.get("colour") and not t.get("sets")))
 
 
+def one_white(tiles, scale):
+    """{id(tile): gain} that puts a colour set's tiles drawn on a run of long exposures' white (tile_scale: their
+    "white", pass_scale's "long") on the pass's white, when the set mixes them with tiles drawn on the pass's own;
+    empty when its tiles share one white. A set mixing them came out in one filter's color: 263RI HIPHASE001
+    (2017-03-04) alternates short and long exposures through each filter, and its sets took a 2 s RED frame (long
+    white 0.086 I/F) with 0.1-0.18 s GRN and BL1 frames (pass white 0.31): RED drawn 3.6 times as bright, the rings
+    pink. scale None: only whether they are mixed (a gain of 1 per long tile)."""
+    long = [t for t in tiles if t.get("white")]
+    if not long or len(long) == len(tiles):
+        return {}
+    white = (scale or {}).get("white")
+    return {id(t): (t["white"] / white if white else 1.0) for t in long}
+
+
 def _colour_recipes(u, p, cache, ns, tiles):
     """How movie_frame draws each frame of a colour pass, for the page: {"filters", "mix" (colour_picture's 3x3
     natural mix, or None to draw the filters straight), "gamma", "shoulder", "by": {frame n: the tiles of its colour
@@ -5663,7 +7294,8 @@ def _colour_by(u, want, ns, tiles, grey):
     for n in ns:
         covers = lambda got: set_cover(tiles[n], [tiles[j] for j in got.values()]) >= HELD_COVER
         got, tinted = set_shown(u, n, want, not_shown, lambda j: j in placed, covers)
-        if got and not tinted:
+        if got and not tinted and not one_white([tiles[j] for j in got.values()], None):
+            # (a set whose frames are drawn on two whites is evened by the server: one_white)
             by[str(n)] = [got[f] for f in want]
     return by
 
@@ -5693,7 +7325,8 @@ def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
     """The view of a pass played as a movie (x0, y0, w, h in reference pixels from the body's centre): its whole
     footprint fp (movie_footprint) when that is at most MOVIE_FIT frames across, so the body holds still while the
     pointing wanders; otherwise a window MOVIE_FIT frames across centred on frame t, kept inside fp (a creeping
-    ring or limb movie moves along). Either way one size for the whole pass, so the picture never rescales.
+    ring or limb movie moves along), which movie_frame draws as the frame itself (follow_view). Either way one size
+    for the whole pass, so the picture never rescales.
     centre: a square view centred on the body (radius: its disk, reference pixels), at least a frame or the disk with
     CENTRE_MARGIN round it and wide enough for what the frames show round it (fitted_half: a stare's rings stay in,
     a frame's corners turned north up do not widen it), up to MOVIE_FIT frames, when centre_half centres the pass (seen: its frames, pass_seen): the body sits in the
@@ -5768,30 +7401,39 @@ def kept_share(seen, half):
     return float(kept(seen, half).mean()) if len(seen[1]) else 0.0
 
 
-def frames_seen(frames, z):
+def frames_seen(frames, z, turn=0.0):
     """What centre_half needs of a pass's frames (units' (path, id, filter, t, nm, x, y, fz) tuples; z, the pass's
     reference distance), from the geometry cache: (on, points). on: the body's centre is on at least one frame
     (find_target's shift, from the body's centre to the frame's middle, inside the frame). points: SEEN_GRID x
     SEEN_GRID points spread evenly over each placed frame, turned north up by the frame's own angle as the tiles are
     and put where the frame sits round the body's centre (reference pixels), so the share of the frames' area a
-    view keeps is the share of the points in it. None when SPICE places none of the frames."""
-    placed = [fr for fr in frames if fr[7]]
-    if not placed:
-        return None
-    angles = reel.north_angles([fr[1] for fr in placed])
+    view keeps is the share of the points in it. None when SPICE places none of the frames. turn: the axes the pass is
+    drawn on (view_turn: its own orientation, short of north up)."""
     g = ((np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5) * FRAME
     gx, gy = (a.ravel() for a in np.meshgrid(g, g))
     on, pts = False, []
+    for fr, put in _on_axes(frames, z, turn):
+        on = on or (abs(fr[5]) <= FRAME / 2 and abs(fr[6]) <= FRAME / 2)
+        pts.append(np.stack(put(gx, gy), 1))
+    return (on, np.concatenate(pts)) if pts else None
+
+
+def _on_axes(frames, z, turn):
+    """(frame, put) for each placed frame of frames (units' tuples; z, the pass's reference distance; turn, view_turn):
+    put(dx, dy) takes points dx, dy from the frame's middle on the camera's axes to where they are drawn round the
+    body's centre (reference pixels), turned by the frame's own angle less turn as cv2.getRotationMatrix2D turns its
+    tile (label_handler.middle_rotation) and scaled to the pass's distance (frames_seen, frames_boxes)."""
+    placed = [fr for fr in frames if fr[7]]
+    angles = reel.north_angles([fr[1] for fr in placed]) if placed else {}
     for fr in placed:
         x, y, fz = fr[5], fr[6], fr[7]
-        on = on or (abs(x) <= FRAME / 2 and abs(y) <= FRAME / 2)
-        # the frame's points from the body's centre on the camera's axes, turned as cv2.getRotationMatrix2D turns
-        # them (label_handler.middle_rotation) and scaled to the pass's distance
-        a = math.radians(angles.get(fr[1], 0.0))
+        a = math.radians(angles.get(fr[1], 0.0) - turn)
         c, s, k = math.cos(a), math.sin(a), fz / z
-        px, py = x + gx, y + gy
-        pts.append(np.stack([(c * px + s * py) * k, (c * py - s * px) * k], 1))
-    return on, np.concatenate(pts)
+
+        def put(dx, dy, x=x, y=y, c=c, s=s, k=k):
+            px, py = x + dx, y + dy
+            return (c * px + s * py) * k, (c * py - s * px) * k
+        yield fr, put
 
 
 _seen = {}   # pass key -> pass_seen's answer
@@ -5803,11 +7445,258 @@ def pass_seen(u):
     with _lock:
         if key in _seen:
             return _seen[key]
-    got = frames_seen(u["frames"], u["z"]) if u.get("z") else None
+    got = frames_seen(u["frames"], u["z"], view_turn(u)) if u.get("z") else None
     with _lock:
         if len(_seen) >= UNIT_OF_KEEP // 100:
             _seen.clear()
         _seen[key] = got
+    return got
+
+
+def frames_boxes(frames, z, turn=0.0):
+    """Each placed frame's own box as the pass draws it (units' (path, id, filter, t, nm, x, y, fz) tuples; z, the
+    pass's reference distance; turn, view_turn): the four corners of the frame, turned by its own angle less the
+    pass's and scaled to the pass's distance as its tile is (frames_seen's points), put where the frame sits round
+    the body's centre: an array of (x0, y0, x1, y1) rows, reference pixels. None when SPICE places none of them."""
+    cx, cy = np.array([-1, 1, 1, -1]) * FRAME / 2, np.array([-1, -1, 1, 1]) * FRAME / 2
+    out = []
+    for _, put in _on_axes(frames, z, turn):
+        X, Y = put(cx, cy)
+        out.append((X.min(), Y.min(), X.max(), Y.max()))
+    return np.array(out, float) if out else None
+
+
+_boxes = {}   # pass key -> pass_boxes's answer
+
+
+def pass_boxes(u):
+    """frames_boxes of pass u's frames at its reference distance on its own axes, worked out once for the pass."""
+    key = (u["key"], len(u["frames"]))
+    with _lock:
+        if key in _boxes:
+            return _boxes[key]
+    got = frames_boxes(u["frames"], u["z"], view_turn(u)) if u.get("z") else None
+    with _lock:
+        if len(_boxes) >= UNIT_OF_KEEP // 100:
+            _boxes.clear()
+        _boxes[key] = got
+    return got
+
+
+def follows(fp, rect):
+    """True when a movie's view rect (movie_rect) follows the frame: its footprint fp is wider than MOVIE_FIT frames
+    and the view is not centred on the body."""
+    x0, y0, x1, y1 = fp
+    return max(x1 - x0, y1 - y0) > MOVIE_FIT * FRAME and not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
+
+
+FOLLOW_SLACK = 2   # px: a following frame is drawn this much bigger than the picture and its middle cut out, so its
+#                    edges (placed to the nearest pixel, then turned) never show a part-transparent row (_unturn)
+
+
+def follow_view(u, s, t, out, pic=None):
+    """How a movie that follows the frame (follows: a creeping ring or limb movie, a close-up sweeping across a
+    planet) draws frame s (its tile t, at its place) out px across: the frame as Cassini took it, filling the picture
+    (Sam 2026-11-08: a 271SA close-up sweep was drawn in a window two frames across, the frame a quarter of it and
+    turned 24 degrees by the pass's roll, black round it). (rect, k, turn): the square round the frame turned by turn
+    (degrees: its own angle less the pass's, view_turn, the turn its tile was drawn with) and k canvas px per reference
+    px, FOLLOW_SLACK px more than out across the frame, which _unturn turns back and cuts to it. A frame the geometry
+    cache has no angle for takes the turn its tile shows (pic: the tile's picture path, _drawn_turn)."""
+    fz = u["frames"][s][7] if 0 <= s < len(u["frames"]) else 0
+    side = FRAME * (fz / u["z"] if fz and u.get("z") else 1.0)
+    own = reel.north_angles([t["id"]]).get(t["id"])
+    vt = view_turn(u)
+    if own is None and pic:
+        own = _drawn_turn(pic) + vt   # (the turn its tile shows, on the pass's axes)
+    # turned back by its roll, not its quarter: the frame square, a whole quarter (square_turn) from the camera's frame,
+    # so it faces as the pass's other pictures do (north within 45 degrees of the top); drawn own - vt, square on its
+    # own own - square_turn, so turned back by the difference
+    axes = view_axes(u) if own is not None else None
+    turn = 0.0 if own is None else wrapped(square_turn(own, quarter_of(vt, own if axes is None else axes)) - vt)
+    a = math.radians(turn)
+    big = side * (abs(math.cos(a)) + abs(math.sin(a)))
+    cx, cy = t["offset"]
+    return (cx - big / 2, cy - big / 2, big, big), (out + FOLLOW_SLACK) / side, turn
+
+
+def _drawn_turn(path):
+    """The turn (degrees, within 45 of none) a tile's picture at path was drawn with: the angle of the smallest
+    rectangle round its drawn part. 0.0 when it cannot be read."""
+    try:
+        a = np.asarray(Image.open(path))[..., -1]
+        pts = cv2.findNonZero((a > 127).astype(np.uint8))
+        if pts is None or len(pts) < 16:
+            return 0.0
+        r = cv2.minAreaRect(pts)[2]
+    except (OSError, IndexError, ValueError, cv2.error):
+        return 0.0
+    # (a rectangle's angle is known only up to a quarter turn: the one nearest none; drawn counter clockwise as
+    # cv2.getRotationMatrix2D turns it, minAreaRect's angle runs the other way)
+    return float(-((r + 45.0) % 90.0 - 45.0))
+
+
+def follow_middle(t, rect, k):
+    """Where tile t's middle is drawn on a canvas of view rect (k px per reference px), in pixel coordinates (cv2's:
+    pixel i's centre at i), as _place puts it."""
+    bx, by, bw, bh = t["box"]
+    left = round((t["offset"][0] + bx - rect[0]) * k)
+    top = round((t["offset"][1] + by - rect[1]) * k)
+    return left + max(1, round(bw * k)) / 2 - 0.5, top + max(1, round(bh * k)) / 2 - 0.5
+
+
+def _unturn(a, turn, middle, w, h):
+    """Picture a (H x W [x C] array) drawn on a pass's axes, turned back by turn degrees about middle (the frame's
+    middle, follow_middle: the turn follow_view took out) and cut to the w x h round it: the frame on its own axes."""
+    H, W = a.shape[:2]
+    cx, cy = middle
+    if turn:
+        m = cv2.getRotationMatrix2D((cx, cy), -turn, 1.0)
+        a = cv2.warpAffine(a, m, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    x0, y0 = int(round(cx + 0.5 - w / 2)), int(round(cy + 0.5 - h / 2))
+    x0, y0 = min(max(0, x0), max(0, W - w)), min(max(0, y0), max(0, H - h))
+    return np.ascontiguousarray(a[y0:y0 + h, x0:x0 + w])
+
+
+RING_REACH = 140500   # km from Saturn's centre: the F ring's outer edge; a Saturn pass whose frames reach this far shows
+                     # Saturn's rings, which take Saturn's north as their up (body_in_view)
+
+
+def body_in_view(target, cam, places):
+    """True when a frame of places ((x, y, fz) each: find_target's shift that centres the body, full resolution
+    pixels, and the frame's distance in km) shows its target: the body's disk (RADIUS), for Saturn its rings
+    (RING_REACH), reaches into the frame, or for a body of no known size its centre is on the frame."""
+    if not target:
+        return False
+    r_km = RING_REACH if target == "SATURN" else RADIUS.get(target, 0)
+    for x, y, fz in places:
+        r = r_km / (fz * IFOV.get(cam, IFOV["N"])) if fz else 0.0
+        dx, dy = max(abs(x) - FRAME / 2, 0.0), max(abs(y) - FRAME / 2, 0.0)
+        if dx * dx + dy * dy <= r * r:
+            return True
+    return False
+
+
+def pass_turn(u=None, frame_id=None, target=None, cam=None):
+    """The pass's orientation (degrees, as reel.north_angles: the turn that would put celestial north up), which
+    every picture of the pass (a camera window's still, a movie's or mosaic's tile) is turned short of
+    (color_image.processed_frame's turn). Every picture of a pass is drawn on the same axes, so a pass the camera
+    does not roll under keeps the square frame as Cassini took it, corners and all, and one it rolls under turns
+    only by how far the camera rolled from the pass's average (Sam 2026-11-08: pictures came out tilted a few
+    degrees with their corners cut). The canvas of a pass is then the sky turned by this much: everything worked out
+    on it (frames_seen, other_bodies, hold_of, footprint, surface_field) takes it out of the frames' own turns.
+    Those axes are the camera's own (the circular mean m of the turns of pass u's placed frames, or frame_id's own
+    turn for a frame in no pass) turned by the quarter turn (0, 90, 180 or 270 degrees) that brings north closest to
+    the top: m less the multiple of 90 nearest it, so a picture is never turned more than 45 degrees from north up
+    and never by an angle that cuts its corners (Sam 2026-11-08: square, untilted pictures, but many planets and moons
+    came out sideways). North is SPICE's celestial north; the Saturn system's bodies and rings have their north within
+    about 7 degrees of it, Jupiter within about 25. A pass that shows no body (body_in_view: sky, stars, a target
+    off the frames) keeps the camera's axes (m). 0.0 (north up) when the geometry cache has none of its frames.
+    target, cam: frame_id's (from the index when not given)."""
+    if u:
+        placed = [fr for fr in u["frames"] if fr[7]]
+        places = [(fr[5], fr[6], fr[7]) for fr in placed]
+        ids = [fr[1] for fr in placed]
+        target, cam = (u.get("key") or (None, None, None))[0], (u.get("key") or (None, None, None))[2]
+    else:
+        ids = [frame_id]
+        g = reel.geometry([frame_id]).get(frame_id)
+        places = [tuple(g[:3])] if g and g[2] else []
+        if target is None:
+            try:
+                idx, row = _row_of()
+                r = idx.iloc[row[frame_id]]
+                target, cam = r["TARGET_NAME"], "N" if r["INSTRUMENT_ID"] == "ISSNA" else "W"
+            except Exception:   # noqa: BLE001  (no index, or a frame not in it: no body known)
+                target = None
+    m = mean_turn(ids)
+    if m is None:
+        return 0.0
+    if not body_in_view(target, cam, places):
+        return m
+    return round(m - 90.0 * round(m / 90.0), 2)
+
+
+def mean_turn(ids):
+    """The camera's own axes over the frames ids: the circular mean of their turns (reel.north_angles, degrees,
+    rounded to 0.01), None when the geometry cache has none of them."""
+    angles = list(reel.north_angles(list(ids)).values())
+    if not angles:
+        return None
+    a = np.radians(angles)
+    return round(float(np.degrees(np.arctan2(np.sin(a).mean(), np.cos(a).mean()))), 2)
+
+
+ROLL_SQUARE = 5.0   # degrees: a frame the camera rolled further than this from its pass's axes is shown on its own
+                    # (a still, a movie following the frame) square, turned a whole quarter (frame_quarter), not by
+                    # its roll (Sam 2026-11-08: 271SA HIRESWACS001 rolls 70 degrees; its stills came out 24 off)
+
+
+def wrapped(a):
+    """a degrees as -180 to 180"""
+    return (a + 180.0) % 360.0 - 180.0
+
+
+def frame_quarter(own, q):
+    """The quarter turns (0 to 3) a frame of turn own (reel.north_angles) is drawn by when shown square on its own:
+    its pass's q (quarter_of) while that keeps north within 45 degrees of the top, else the quarter nearest north up
+    for the frame itself, so a rolling pass changes quarter only where it has to."""
+    if abs(wrapped(own - 90.0 * q)) <= 45.0:
+        return q % 4
+    return int(round(own / 90.0)) % 4
+
+
+def square_turn(own, q):
+    """The turn (degrees, -180 to 180, as processed_frame's turn) that draws a frame of turn own square on its own:
+    a whole frame_quarter(own, q) quarters from the camera's frame."""
+    return round(wrapped(own - 90.0 * frame_quarter(own, q)), 2)
+
+
+def quarter_of(turn, m):
+    """The quarter turns (0 to 3, counter clockwise) a pass drawn turn degrees short of north up turns its frames by
+    from the camera's own axes m (pass_turn's circular mean)."""
+    return int(round((m - turn) / 90.0)) % 4
+
+
+def view_shown(view):
+    """Auto center draws the still for view (centre_view's answer): centred, placed where it is on the pass's axes,
+    or turned a whole quarter ("quarter", which may be 0 for the pass); otherwise the picture is shown as it is."""
+    return bool(view and (view.get("centre") or view.get("north") or view.get("quarter") is not None))
+
+
+_view_turns = {}   # pass key -> view_turn's answer
+
+
+def view_turn(u):
+    """pass_turn of pass u, worked out once for the pass (every tile of it is drawn on these axes)."""
+    if not u.get("key"):
+        return pass_turn(u)
+    key = (tuple(u["key"]), len(u["frames"]))
+    with _lock:
+        hit = _view_turns.get(key)
+    if hit is None:
+        hit = pass_turn(u)
+        with _lock:
+            if len(_view_turns) > 100000:
+                _view_turns.clear()
+            _view_turns[key] = hit
+    return hit
+
+
+_view_axes = {}   # pass key -> view_axes's answer
+
+
+def view_axes(u):
+    """mean_turn of pass u's placed frames (the camera's own axes), worked out once for the pass."""
+    key = (tuple(u.get("key") or ()), len(u["frames"]))
+    with _lock:
+        if key in _view_axes:
+            return _view_axes[key]
+    got = mean_turn([fr[1] for fr in u["frames"] if fr[7]])
+    if u.get("key"):
+        with _lock:
+            if len(_view_axes) > 100000:
+                _view_axes.clear()
+            _view_axes[key] = got
     return got
 
 
@@ -5823,9 +7712,13 @@ def centre_view(frame_id):
     round the body, so the picture is the size it is today, only moved so the body is in the middle (a movie's view
     is the pass's, movie_rect). Answers {"centre": True, "side": FRAME, "radius": ..., "pass": [...]}, or
     {"centre": False, "north": True, "side": FRAME, "why": ...} for a close-up (frames on a body too big for the
-    view): turned north up where it is, so the surface holds still; {"centre": False, "why": ...} for a ring, spoke
-    or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
-    picture as it is."""
+    view): placed where it is on the pass's axes, so the surface holds still; both with "turn" (pass_turn: the
+    pass's axes, the camera's own turned the quarter that brings north closest to the top, so each still is turned
+    only by that quarter and how far the camera rolled during the pass); {"centre": False, "why": ...} for a ring,
+    spoke or sky pass (Cassini kept those upright in the camera) or a frame SPICE has no place for, which keep the
+    picture as it is, or, for such a pass that shows its body or Saturn's rings, {"centre": False, "quarter": q,
+    "side": FRAME, "turn": ...}: the picture turned by the pass's quarter turn alone (q quarters counter clockwise),
+    as the pass's movie and mosaic face (view_shown says which views draw a still)."""
     with _lock:
         hit = _centre_of.get(frame_id)
     if hit is not None:
@@ -5851,7 +7744,9 @@ def centre_view(frame_id):
     if hit is None:
         radius = RADIUS.get(target, 0) / (z * IFOV[cam])
         fp = _box(u, z) if found else (-g[0] - HALF, -g[1] - HALF, -g[0] + HALF, -g[1] + HALF)
-        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z)) if fp and radius else None
+        turn = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
+        seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, turn)) \
+            if fp and radius else None
         half = centre_half(fp, radius, seen) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
         if not half:
@@ -5866,6 +7761,19 @@ def centre_view(frame_id):
             # none of its frames is on it)
             on = sum(_on_disk(b, radius) for b in boxes) if radius else 0
             hit["north"] = bool(boxes) and on * 2 > len(boxes)
+        # each still drawn on the pass's axes (pass_turn: the camera's own, turned the quarter that brings north
+        # closest to the top), turned only by how far the camera rolled from them
+        hit["turn"] = turn
+        axes = view_axes(u) if found else mean_turn([frame_id])
+        if axes is not None:
+            hit["axes"] = axes   # the camera's own axes over the pass (mean_turn)
+        places = [(fr[5], fr[6], fr[7]) for fr in u["frames"] if fr[7]] if found else [tuple(g[:3])]
+        if not half and not hit.get("north") and axes is not None and body_in_view(target, cam, places):
+            # a ring or spoke pass, or sky beside its body (the camera's own orientation is the steady one): each
+            # still turned by a whole quarter only (square_turn: the pass's, so they face as its movie and mosaic
+            # do, unless the camera rolled north past 45 degrees from the top); a sky pass that shows no body is
+            # shown as it is
+            hit["quarter"] = quarter_of(hit["turn"], axes)
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
@@ -5873,11 +7781,32 @@ def centre_view(frame_id):
         hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
     else:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
+        if hit.get("quarter") is not None:
+            # turned by a whole quarter alone, so its roll stays as the camera had it. A frame that needs no turn (it
+            # already has north toward the top) or has no turn of its own is shown as it is, as this frame only
+            # ("frame": the page keeps asking for the pass's other stills)
+            own = reel.north_angles([frame_id]).get(frame_id)
+            turn = square_turn(own, hit["quarter"]) if own is not None else None
+            if turn is None or frame_quarter(own, hit["quarter"]) == 0:
+                hit = {k: v for k, v in hit.items() if k != "quarter"}
+                hit.update(frame=True, why="this picture already has north toward the top" if turn is not None
+                           else "SPICE has no turn for this picture")
+            else:
+                hit = dict(hit, side=FRAME, turn=turn)
+    rolled = None
+    if (hit.get("centre") or hit.get("north")) and hit.get("axes") is not None:
+        # a frame the camera rolled more than ROLL_SQUARE from the pass's axes: its still square on its own, a whole
+        # quarter (square_turn) from the camera's frame, not tilted by its roll (it no longer holds with the pass)
+        own = reel.north_angles([frame_id]).get(frame_id)
+        if own is not None and abs(wrapped(own - hit["axes"])) > ROLL_SQUARE:
+            rolled = square_turn(own, quarter_of(hit["turn"], hit["axes"]))
     # a north-up pass's stills hold where the pass has the body (a centred pass's are centred on it, frame_server.centred)
-    if found and not hit["centre"] and hit.get("north"):
-        hold = hold_of(u, found[1])
+    if found and not hit["centre"] and hit.get("north") and rolled is None:
+        hold = hold_of(u, found[1], hit.get("turn", 0.0))
         if hold:
             hit = dict(hit, **hold)
+    if rolled is not None:
+        hit = dict(hit, turn=rolled, square=True)
     with _lock:
         if len(_centre_of) >= UNIT_OF_KEEP:
             _centre_of.clear()
@@ -5889,7 +7818,7 @@ HOLD_SPREAD = 0.25   # of a frame: the most a pass's frames may point away from 
 HOLD_RULE = "h1"     # names the held stills' cache folders (frame_server.centre_folder)
 
 
-def hold_of(u, n):
+def hold_of(u, n, turn=0.0):
     """Auto center's hold for frame n of pass u, when its still cannot be centred (the body's centre off the frame, a
     close-up turned north up, or a disk the frame cuts): the body kept where it sits on average over the pass, so it
     holds still from picture to picture as SPICE places it, as the pass's movie holds it (Sam 2026-10-30: a Saturn
@@ -5897,7 +7826,7 @@ def hold_of(u, n):
     middle moved from the frame's middle by (dx, dy), and where SPICE puts the frame's middle from the body's centre
     (both full resolution pixels of frame n), which centred checks against the picture's own placement; None for a
     pass whose frames point further apart than HOLD_SPREAD of a frame (a mosaic: its stills would be mostly black)
-    or a frame SPICE has not placed."""
+    or a frame SPICE has not placed. turn: the stills' orientation (pass_turn), the axes the hold is on."""
     frames = u["frames"]
     if not (0 <= n < len(frames)) or not frames[n][-1]:
         return None
@@ -5906,9 +7835,10 @@ def hold_of(u, n):
     angles = reel.north_angles([fr[1] for fr in placed])
 
     def middle(fr):
-        # where the frame's middle sits from the body's centre, north up, reference pixels (frames_seen's turn)
+        # where the frame's middle sits from the body's centre, on the stills' axes (turn short of north up),
+        # reference pixels
         x, y, fz = fr[5], fr[6], fr[7]
-        a = math.radians(angles.get(fr[1], 0.0))
+        a = math.radians(angles.get(fr[1], 0.0) - turn)
         c, s, k = math.cos(a), math.sin(a), fz / z
         return np.array(((c * x + s * y) * k, (c * y - s * x) * k))
     pts = np.array([middle(fr) for fr in placed])
@@ -5970,12 +7900,19 @@ def hdr_map(placed, W, H):
     zero = calibration.HDR_ZERO
     by = {}
     found = False
-    for f, path, left, top, sw, sh in placed:
+    for f, path, left, top, sw, sh, *frac in placed:
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         if not (x0 < x1 and y0 < y1):
             continue
         part = _part(path, sw, sh)
         m = _map_part(path, sw, sh)
+        fx, fy = frac[0] if frac else (0.0, 0.0)
+        if abs(fx) > 0.01 or abs(fy) > 0.01:
+            # (where _place drew the tile: moved by the part of a pixel its rounding left out, the map with it)
+            part = _subpixel(part, fx, fy)
+            if m is not None:
+                m = cv2.warpAffine(m, np.float32([[1, 0, fx], [0, 1, fy]]), (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR,
+                                   borderMode=cv2.BORDER_REPLICATE)
         canvas = by.setdefault(f, np.full((H, W), zero, np.uint8))
         a = part[y0 - top:y1 - top, x0 - left:x1 - left, 3] > 0
         v = m[y0 - top:y1 - top, x0 - left:x1 - left] if m is not None else np.full(a.shape, zero, np.uint8)
@@ -5985,6 +7922,37 @@ def hdr_map(placed, W, H):
     if not found:
         return None
     return np.max(np.stack(list(by.values())), axis=0)
+
+
+SUBPIXEL = os.environ.get("CASSINI_SUBPIXEL", "1") != "0"   # tiles drawn at their sub-pixel places (_subpixel_at; off: =0)
+
+
+def _subpixel(part, fx, fy, turn=0.0, centre=None):
+    """RGBA uint8 part moved by (fx, fy) px (each within half a pixel), premultiplied by its alpha so no black comes in
+    from outside it; its edge softens by the part of a pixel moved."""
+    a = part[..., 3:4].astype(np.float32) / 255
+    pm = np.concatenate([part[..., :3].astype(np.float32) * a, a * 255], axis=2)
+    m = np.float32([[1, 0, fx], [0, 1, fy]])
+    if turn:
+        m = cv2.getRotationMatrix2D(centre, turn, 1.0).astype(np.float32)
+        m[:, 2] += (fx, fy)
+    moved = cv2.warpAffine(pm, m, (part.shape[1], part.shape[0]), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT)
+    al = np.clip(moved[..., 3:4], 0, 255)
+    rgb = np.where(al > 0.5, moved[..., :3] / np.maximum(al / 255, 1e-6), 0)
+    return np.concatenate([np.clip(rgb, 0, 255), al], axis=2).round().astype(np.uint8)
+
+
+def _subpixel_at(part, t, rect, k, left, top):
+    """Tile t's part (drawn at canvas pixel left, top: its place rounded) moved by the part of a pixel the rounding left
+    out, so the place registration measured to a hundredth of a pixel is where it is drawn, and a pointing's filters,
+    each rounded on its own, no longer land up to a pixel apart."""
+    fx = (t["offset"][0] + t["box"][0] - rect[0]) * k - left
+    fy = (t["offset"][1] + t["box"][1] - rect[1]) * k - top
+    if t.get("turn"):
+        # (a pointing the solve turned: turned about the frame's middle, then moved by the part of a pixel)
+        return _subpixel(part, fx, fy, t["turn"], (-t["box"][0] / t["box"][2] * part.shape[1] - 0.5,
+                                                   -t["box"][1] / t["box"][3] * part.shape[0] - 0.5))
+    return _subpixel(part, fx, fy) if abs(fx) > 0.01 or abs(fy) > 0.01 else part
 
 
 def _place(u, t, rect, k, W, H, cache, scale):
@@ -5998,10 +7966,13 @@ def _place(u, t, rect, k, W, H, cache, scale):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
+        if SUBPIXEL:
+            part = _subpixel_at(part, t, rect, k, left, top)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     drew = _hdr_drawn.get()
     if drew is not None:
-        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh))
+        frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
+        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac))
     return frame
 
 
@@ -6056,6 +8027,36 @@ def empty(t):
     return t["top"] - t.get("floor", 0) < EMPTY_SPREAD and t.get("floor", 0) < EMPTY_FLOOR
 
 
+MOVIE_HOLD_LOST = 0.25   # of a frame: a movie frame with more than this lost in downlink (and not made up) is held (unfit).
+#                          Under it a frame whose lost lines are a strip along an edge plays, the strip left out; lines
+#                          lost across the picture (lost_inside past MOVIE_LOST) still hold it. 286RI FNTHPLE001
+#                          (2017-07-24, the F ring turning) lost 6-22% of each of its last twelve frames as a strip along
+#                          one edge, and MOVIE_LOST held the movie on frame 5 for all twelve. A mosaic movie keeps
+#                          MOVIE_LOST (patchy); a colour set with such a frame is drawn where all its frames have the
+#                          picture (colour_picture, HELD_COVER)
+
+
+def lost_inside(alpha):
+    """The share of a tile's picture (alpha: its tile's alpha, > 0 where drawn) lost inside it: the holes within the
+    hull of what is drawn. A strip lost along an edge (286RI FNTHPLE001's) leaves the hull, so it counts ~0; lines lost
+    across the frame (265RF FMOVIE001 2017-04-02: 7-34% lost, every few lines, which drew the F ring as a comb) count."""
+    drawn = (alpha > 0).astype(np.uint8)
+    cnts, _ = cv2.findContours(drawn, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return 0.0
+    hull = np.zeros_like(drawn)
+    cv2.fillPoly(hull, [cv2.convexHull(np.vstack(cnts))], 1)
+    return round(float((hull & (1 - drawn)).sum()) / max(1, int(hull.sum())), 4)
+
+
+def lost_held(t):
+    """True when tile report t is a movie frame unfit holds for its lost lines or for showing nothing lit (empty):
+    lost past MOVIE_HOLD_LOST, or past MOVIE_LOST inside its picture (lost_inside: lines lost across it, not a strip
+    along an edge; its "lost" when the report has none)."""
+    lost = t.get("lost", 0.0)
+    return "offset" in t and (lost > MOVIE_HOLD_LOST or t.get("lost_inside", lost) > MOVIE_LOST or empty(t))
+
+
 def patchy(t):
     """True when tile report t is a movie frame with lines lost past MOVIE_LOST, or nothing lit (empty): a mosaic
     movie draws it only where its place has no other copy (rolling_layout), a movie holds the frame before it."""
@@ -6073,13 +8074,64 @@ def _silhouette(t):
     s = t.get("saturated", 0.0)
     if "offset" not in t or s < OVER_LEAST or s < SATURATED_LIT * t.get("lit", 1.0):
         return t
-    out = {k: v for k, v in t.items() if k not in ("offset", "box", "native_offset", "spice_offset", "outline", "registered")}
+    gone = BLOWN_KEYS
+    out = {k: v for k, v in t.items() if k not in gone}
     out["why"] = f"saturated over {s / max(t.get('lit', 1.0), 1e-6):.0%} of what is lit in it: left out of the mosaic"
+    # (its place kept aside: where nothing else was taken, the luminance base draws it under everything, blown_fills)
+    out["blown"] = {k: t[k] for k in gone if k in t}
+    return out
+
+
+BLOWN_KEYS = ("offset", "box", "native_offset", "spice_offset", "outline", "registered")   # a left-out tile's place
+ENCLOSE_REACH = 1.5   # frames: (enclosed) how far from a hole a drawn tile may lie and still close that side of it
+
+
+def enclosed(o, box, shown):
+    """True when a tile at offset o (box: its crop, reference px) has drawn tiles (their offsets, shown) on all four
+    sides close by: one centred over half its width and at most ENCLOSE_REACH widths to its left and to its right,
+    within its height, and so above and below. A tile further off (another strip, a frame out in the sky) closes
+    nothing: past the mosaic's edge a silhouette stays out."""
+    w, h = box[2], box[3]
+    across = lambda d: any(abs(q[1] - o[1]) < h and w / 2 < (q[0] - o[0]) * d <= ENCLOSE_REACH * w for q in shown)
+    down = lambda d: any(abs(q[0] - o[0]) < w and h / 2 < (q[1] - o[1]) * d <= ENCLOSE_REACH * h for q in shown)
+    return across(-1) and across(1) and down(-1) and down(1)
+
+
+def blown_fills(tiles, drawn):
+    """{tile n: its place} for the left-out saturated tiles (_silhouette's, and frames saturated all over, _tile_made:
+    their place kept as "blown") the luminance base draws under everything (under_first): at a place where no tile of
+    the filters drawn (drawn: the colour and luminance filters) is, with drawn tiles close on all four sides of it
+    (enclosed), one per place, the least saturated, of a luminance filter. Left out there, the place was a hole to the
+    sky in the middle of a lit disk, a black square: 039RI PHOTLIT004 (2007) pointed at Saturn's disk centre with
+    exposures made for the rings, and all seven of its frames there saturated 95-99%. What the camera saw was at least
+    as bright as its clip, so the tile's saturated white, tinted to the colour round it (over_grey), says more than a
+    hole. Its place moves as the drawn tiles round it were moved (registration, the global solve, a person's tuning):
+    their median move. At the mosaic's edge a silhouette is a white outline out in the sky, a second limb (Iapetus
+    049IA REGMAPTRL001's CL1/CL2 frames off the dark leading side, why _silhouette leaves them out), not a hole."""
+    shown = [t for t in tiles if "offset" in t and t["filter"] in drawn]
+    at = [t["offset"] for t in shown]
+    near = lambda o, os_, r: [q for q in os_ if math.hypot(o[0] - q[0], o[1] - q[1]) <= r]
+    out = {}
+    for t in sorted((t for t in tiles if t.get("blown", {}).get("offset") and t["filter"] in drawn),
+                    key=lambda t: (t.get("saturated", 1.0), t["n"])):
+        o, box = t["blown"]["offset"], t["blown"]["box"]
+        if near(o, at, SAME_PLACE * FRAME) or near(o, [q["offset"] for q in out.values()], SAME_PLACE * FRAME) \
+                or not enclosed(o, box, at):
+            continue
+        reach = ENCLOSE_REACH * max(box[2], box[3])
+        moves = [(q["offset"][0] - q["spice_place"][0], q["offset"][1] - q["spice_place"][1])
+                 for q in shown if "spice_place" in q and near(o, [q["spice_place"]], reach)]
+        dx, dy = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) if moves else (0.0, 0.0)
+        out[t["n"]] = dict(t["blown"], offset=[o[0] + dx, o[1] + dy], **({"spice_place": o} if moves else {}))
     return out
 
 
 BLANK_SHARE = 0.5    # a frame whose levels span (top over floor) less than this share of both its filter's nearest
 #                      frames either side shows little of what they show (blank)
+BLANK_CLIPPED = 0.01   # of a frame: a frame of the filter saturated over this much is no measure for blank_frame: its top is
+#                        the camera's clip, not the scene (263RI HIPHASE001, 2017-03-04: short and long exposures in turn
+#                        through each filter; the short ones, rings at levels 0-76 to 99, read as blank against the long
+#                        ones' clipped 255, and were held along with the long ones, a whole filter pair at a time)
 
 
 def _span(t):
@@ -6098,7 +8150,8 @@ def blank_frame(frames, n, tile_of):
     f = frames[n][2]
     near = []
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
-        j = next((j for j in js if frames[j][2] == f and _span(tile_of(j)) is not None), None)
+        j = next((j for j in js if frames[j][2] == f and _span(tile_of(j)) is not None
+                  and tile_of(j).get("saturated", 0.0) < BLANK_CLIPPED), None)
         if j is None:
             return False
         near.append(_span(tile_of(j)))
@@ -6114,12 +8167,12 @@ def unfit(frames, n, tile_of):
     and plays), or a long exposure among short ones: saturated OVER_LEAST of the frame or more and OVER_STEP times as
     much as its filter's frames on either side (007RI HIPHASE001's clear frames, ~9% saturated after ones that are not:
     the B ring a white band, flashing), or a frame saturated all over (SATURATED_ALL), which shows nothing, or one
-    with lines lost past MOVIE_LOST or nothing lit (patchy), or a blank among its filter's frames (blank_frame). One rule
+    with lines lost past MOVIE_HOLD_LOST or nothing lit (lost_held), or a blank among its filter's frames (blank_frame). One rule
     for the server's movies and the page's (steady table's "partial")."""
     t = tile_of(n)
     if "offset" not in t:
         return False
-    if partial(t) or patchy(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
+    if partial(t) or lost_held(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
         return True
     s = t.get("saturated", 0.0)
     if s < OVER_LEAST:
@@ -6132,10 +8185,13 @@ def unfit(frames, n, tile_of):
     # frames saturated OVER_LEAST or more are held too, as the rest of them are, so its least saturated one is not
     # left to play alone, half white (SPOLEDYN001 2009: clear frames 92-100% saturated round W1609834686_1, 39%,
     # which played twice, held in the 65% one's place, late in the dark south pole movie). A run in a pass whose
-    # filter is mostly well exposed still plays (a bright limb coming in)
+    # filter is mostly well exposed still plays (a bright limb coming in). Over-exposed here is saturated over
+    # OVER_EXPOSED of the whole frame, not of its lit part: a limb coming into a dark frame is saturated over most of
+    # its lit part from its first frames, yet shows the scene (293EN ENCSET001 2017-09-13, Enceladus setting behind
+    # Saturn: clear frames 5-40% saturated, all of it the limb; 34 of 45 counted as blown held the movie on one frame)
     mine = [j for j in range(len(frames)) if frames[j][2] == f and "offset" in tile_of(j)]
-    blown = sum(1 for j in mine if over_exposed(tile_of(j)) or tile_of(j).get("saturated", 0.0) >= SATURATED_ALL
-                or patchy(tile_of(j)) or blank_frame(frames, j, tile_of))
+    blown = sum(1 for j in mine if tile_of(j).get("saturated", 0.0) >= OVER_EXPOSED
+                or lost_held(tile_of(j)) or blank_frame(frames, j, tile_of))
     if len(mine) >= 3 and blown > BLOWN * len(mine):
         return True
     # its filter's nearest frames either side that show a picture: one saturated all over is held itself, so it is no
@@ -6284,6 +8340,48 @@ def held_band(f):
 
 
 def set_shown(u, n, want, not_shown, placed, covers=None):
+    """_set_shown's set, its exposures matched (matched_exposures)."""
+    got, tint = _set_shown(u, n, want, not_shown, placed, covers)
+    return (matched_exposures(u, got, not_shown, placed) if got else got), tint
+
+
+def _frame_exposure(u, j):
+    """Frame j of pass u's exposure in s (its label), or None; read once per pass."""
+    kept = u.setdefault("_exposures", {})
+    if j not in kept:
+        try:
+            kept[j] = _exposure(label_handler.label(u["frames"][j][0], as_png=True))
+        except Exception:   # (no label: a synthetic pass, a frame missing from the archive)
+            kept[j] = None
+    return kept[j]
+
+
+def matched_exposures(u, got, not_shown, placed):
+    """Colour set got ({filter: frame}) with a frame exposed LONG_EXPOSURE times longer than the set's shortest
+    swapped for its filter's frame nearest in time (within HOLD_AGE, shown and placed) exposed under that, when there
+    is one. A pass alternating short and long exposures through each filter groups a long frame with short ones of the
+    other filters: its saturated part (the clipped arc of the rings) was mixed against the short frames' unclipped one,
+    and came out red where the others had no picture to match (263RI HIPHASE001 2017-03-04: a 2 s RED with 0.1 s GRN
+    and 0.18 s BL1, the bright arc pure red and every frame tinted pink from it). got as it is when the exposures are
+    not known or there is no such frame."""
+    es = {f: _frame_exposure(u, j) for f, j in got.items()}
+    if any(e is None or e <= 0 for e in es.values()):
+        return got
+    least = min(es.values())
+    frames, out = u["frames"], dict(got)
+    for f, j in got.items():
+        if es[f] < LONG_EXPOSURE * least:
+            continue
+        t = frames[j][3]
+        near = [i for i in range(len(frames)) if frames[i][2] == f and i != j and abs(frames[i][3] - t) <= HOLD_AGE
+                and placed(i) and not not_shown(i)]
+        near = [i for i in near if (_frame_exposure(u, i) or 0) > 0 and _frame_exposure(u, i) < LONG_EXPOSURE * least]
+        if near:
+            out[f] = min(near, key=lambda i: abs(frames[i][3] - t))
+    return out
+
+
+def _set_shown(u, n, want, not_shown, placed, covers=None):
     """(the colour set frame n of a movie playing in colour shows, or None; True when it shows it as the colour of
     frame n's own picture) (pure but for the pass's sets: movie_frame's and the page's, _colour_by). The set is
     set_of's. A frame of the set, or one taken within HOLD_AGE of it (the same moment: a cycle's other filters, which
@@ -6518,9 +8616,18 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         rep["exposure"] = {"smooth": exposure, "gain": gain}
     radius = RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]])
     seen = pass_seen(u) if centre and not track else None
-    rect = movie_rect(movie_footprint(u, cache, p), t, radius, centre and not track, seen)
+    fp = movie_footprint(u, cache, p)
+    rect = movie_rect(fp, t, radius, centre and not track, seen)
     rep["centred"] = rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2
     k = out / max(rect[2], rect[3])
+    # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view)
+    # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view); with a
+    # rolling trail asked for, the window MOVIE_FIT frames across as before, so the frames before it show round it
+    unturn = None
+    if not track and not trail and follows(fp, rect):
+        rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
+        unturn = (turn, follow_middle(t, rect, k), out, out)
+        rep["follow"] = {"turn": round(turn, 2)}
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the colour set's, the trail
     used, newest = None, {}
@@ -6531,9 +8638,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     if got:
         want = p["colour"]
         own_gain = {}
+        bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
+        to_white = one_white(list(bases.values()), p["display_scale"])
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
-            base = own if j == n else tile(u, j, cache, p["display_scale"])
+            base = bases[f]
+            if to_white.get(id(base)):
+                base = dict(base, gain=round((base.get("gain") or 1.0) * to_white[id(base)], 4),
+                            gamma=base.get("gamma", gamma))
             newest[f] = at(base)
             own_gain[f] = base.get("gain")
         used = want
@@ -6571,6 +8683,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         # the first cycle's, are covered at their own place only; an unfit clear frame held to the one before, as in
         # the 2009 south pole movie, is covered at the held frame's place.)
         if max(held_cover(at(own), planes, rect, k), held_cover(t, planes, rect, k)) >= HELD_COVER:
+            shown = None
+            if tint and not moved:
+                # each filter's plane moved onto the frame it tints, by its lit outline (_onto_frame): a set's filters a
+                # minute apart are placed by their own pointings and can sit 20 px from each other and from the frame,
+                # and their limbs then crossed the frame's disk as ghost arcs, blue on one side and orange on the other
+                # (133TI CLOUD002, CB3 + MT1; Sam 11-08)
+                shown = _place(u, t, rect, k, W, H, cache, p["display_scale"])
+                planes = [_onto_frame(plane, shown) for plane in planes]
             rgba = colour_picture(u, p, used, planes, away)
             if late:
                 rgba = _shade_rgb(rgba, gain, gamma)
@@ -6578,7 +8698,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
                 # frame n's own picture in the set's colour (set_shown): its brightness and detail, the set's hue
-                rgba = tinted_frame(rgba, _place(u, t, rect, k, W, H, cache, p["display_scale"]), gamma, tint == "near")
+                rgba = tinted_frame(rgba, shown if shown is not None else _place(u, t, rect, k, W, H, cache, p["display_scale"]),
+                                    gamma, tint == "near")
                 rep["tint"] = True
         else:
             used = None
@@ -6601,10 +8722,17 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             acc[..., 3:] = np.maximum(acc[..., 3:], rgba[..., 3:])
             rgba = (acc + 0.5).astype(np.uint8)
             rep["trail"] = len(older)
+    if unturn:
+        drawn = (W, H)
+        rgba = _unturn(rgba, *unturn)
+        H, W = rgba.shape[:2]
     if sharpens(p["display_scale"]) and sharpen:
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
-    return Image.fromarray(rgba, "RGBA"), rep
+    im = Image.fromarray(rgba, "RGBA")
+    if unturn:
+        im.info["unturn"] = (unturn, drawn)   # (its recovery map turned back the same way, _with_hdr_map)
+    return im, rep
 
 
 def _with_hdr_map(make):
@@ -6620,7 +8748,12 @@ def _with_hdr_map(make):
             _hdr_drawn.reset(token)
         if im is not None:
             try:
-                m = hdr_map(drew, im.width, im.height)
+                turn = im.info.pop("unturn", None)
+                # (a movie following the frame: the map on the canvas the tiles were drawn on, turned back as the
+                # picture was, follow_view)
+                m = hdr_map(drew, *turn[1]) if turn else hdr_map(drew, im.width, im.height)
+                if m is not None and turn:
+                    m = _unturn(m, *turn[0])
                 if m is not None:
                     im.info["hdr"] = m
             except Exception as e:
@@ -6656,7 +8789,8 @@ movie_frame = _kept_for_next_size(movie_frame, lambda u, n, cache, trail=0, colo
 
 
 # a pass's movie frames, renamed whenever the way they are drawn changes (movie-2: colour frames mixed as the mosaic is)
-MOVIE_DIR = "movie-2"
+MOVIE_DIR = "movie-3"   # movie-3: views sized to the frames' own boxes (movie_footprint2) and following ones drawn as
+                        # the frame (follow_view)
 MOVIE_SIZES = (512, 1024)   # the sizes the windows play a movie at, smallest first (a smaller one is shrunk from them)
 
 
@@ -6684,6 +8818,28 @@ def _exposure_ready(u, cache, rec, how):
 def _steady_ready(u, cache, rec):
     """True when the pass's stabilization chain is in memory or in the cache."""
     return (rec is not None and rec.get("steady") is not None) or os.path.exists(os.path.join(folder(u, cache), STEADY_FILE))
+
+
+_movie_making_now, _movie_making_lock = {}, threading.Lock()   # movie picture path -> [its lock, threads making or waiting]
+
+
+@contextlib.contextmanager
+def _making_movie(path):
+    """One thread at a time makes the movie picture at path: another asking for it meanwhile waits for it and then
+    finds it in the cache (reel._cached), instead of drawing the same frame again beside it. The Movie Editor's levels
+    (export.measure, 3 threads) and a Pre-process (Segments, 4 threads) walk the same stretch from its start at once,
+    and a frame not made yet (a Jupiter WAC color frame with Exposure normalization: 3 to 4 s) was drawn by both."""
+    with _movie_making_lock:
+        held = _movie_making_now.setdefault(path, [threading.Lock(), 0])
+        held[1] += 1
+    try:
+        with held[0]:
+            yield
+    finally:
+        with _movie_making_lock:
+            held[1] -= 1
+            if not held[1]:
+                del _movie_making_now[path]
 
 
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
@@ -6744,7 +8900,8 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         return buf.getvalue()
 
     try:
-        data = reel._cached(path, make)
+        with _making_movie(path):
+            data = reel._cached(path, make)
         calibration.hdr_note_served(path, path[:-len(".webp")] + ".hdr.webp")
     except LookupError:
         return None, report
@@ -7003,7 +9160,14 @@ LAP_MIN = 400            # lit pixels both copies share, at LAP_SIDE, for a matc
 LAP_BELIEVE = 3.2        # the largest step (linear) from one copy to the next taken for an exposure (either way):
                          # SPOLEDYN001's short and long exposures of one place differ 2.6-2.8 times
 LAP_GAIN = (0.25, 4.0)   # the furthest a copy's gain goes, over every lap
-LAP_FREE = 0.12          # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
+LAP_CELLS = 3            # the shared ground is also measured in LAP_CELLS x LAP_CELLS parts ...
+LAP_EVEN = 0.5           # ... and a step is an exposure only when the parts agree: the spread (std) of their log steps
+                         # under LAP_EVEN x the step's own log. An exposure scales the whole frame alike (SPOLEDYN001's
+                         # 2.6-2.8x steps: parts within 0.01 log, 0.18 at worst); a step that differs part to part is
+                         # the scene's own (Cassini closing in on the 2017-04-26 north pole movie, 271SA NPOLMOV001: the
+                         # night side's column measured 0.7x a lap, its parts 0.23-0.86x, and its tiles were drawn at
+                         # half brightness by lap 3, dark blocks in the mosaic)
+LAP_FREE = 0.12         # log: a step smaller than this (about 12% either way) is the scene's own change, kept as it is.
                          # Taken out lap after lap, the slow brightening of the 2013 hexagon movie's places (2-5% a lap,
                          # more at some places than others) left them up to twice as bright as each other by its end
 LAP_RULE = "g3s"         # in the pictures' names: these gains, the base drawn under the picture, and whole colour sets (set_laps)
@@ -7057,8 +9221,29 @@ def _lap_step(u, p, cache, a, b):
             if lit.sum() >= LAP_MIN and lb[lit].mean() > 0:
                 step = float(la[lit].mean() / lb[lit].mean())
                 g = step if 1 / LAP_BELIEVE <= step <= LAP_BELIEVE else None
+                if g is not None and not _lap_even(la, lb, lit, step):
+                    g = 1.0   # (the scene's own change, kept as it is)
     memo[key] = g
     return g
+
+
+def _lap_even(la, lb, lit, step):
+    """(_lap_step) Whether a step between two copies is alike over their shared lit ground, as an exposure's is: the
+    ground cut in LAP_CELLS x LAP_CELLS parts, the spread of the parts' log steps under LAP_EVEN x |log step|. True
+    when fewer than three parts have lit ground enough to say (LAP_MIN / LAP_CELLS^2 pixels each)."""
+    H, W = lit.shape
+    logs = []
+    for i in range(LAP_CELLS):
+        for j in range(LAP_CELLS):
+            s = (slice(i * H // LAP_CELLS, (i + 1) * H // LAP_CELLS), slice(j * W // LAP_CELLS, (j + 1) * W // LAP_CELLS))
+            m = lit[s]
+            if m.sum() >= LAP_MIN / LAP_CELLS ** 2:
+                a, b = float(la[s][m].mean()), float(lb[s][m].mean())
+                if a > 0 and b > 0:
+                    logs.append(math.log(a / b))
+    if len(logs) < 3:
+        return True
+    return float(np.std(logs)) < LAP_EVEN * abs(math.log(step))
 
 
 def _lap_lead(u):
@@ -7211,6 +9396,45 @@ def colour_start(u, colour, report=None):
     return max(need) if need else 0
 
 
+CLIP_UNDER = 0.05   # of a frame: (clipped_under) a mosaic movie's tile the camera saturated over this much, and OVER_STEP
+                    # times as much as the median of the picture's other tiles of its filter, goes under them
+
+
+def clipped_under(tiles):
+    """(rolling_layout) The tiles (n) of a mosaic movie's picture drawn under the others: saturated CLIP_UNDER of the
+    frame or more, and OVER_STEP times the median of the picture's other tiles of its filter. Its saturated part is
+    drawn white in its band, while the other bands of its place did not saturate there, and the color mix turned it
+    a green or magenta blotch: the 2017-04-26 north pole movie's pointings at 03:53 and 05:22 (271SA_NPOLMOV001:
+    VIO 16-33%, GRN 11-29%, CB3 7-21%, RED 4-15% saturated, the others under 1%). Under, its neighbours' frames show
+    wherever they reach. A long exposure taken again in a colour set (long_repeats) goes under the same way."""
+    out, by = set(), {}
+    for t in tiles:
+        if "offset" in t:
+            by.setdefault(t["filter"], []).append(t)
+    for mine in by.values():
+        if len(mine) < MIN_PLACES:
+            continue
+        for t in mine:
+            s = t.get("saturated", 0.0)
+            if s < CLIP_UNDER:
+                continue
+            others = [o.get("saturated", 0.0) for o in mine if o["n"] != t["n"]]
+            if s >= OVER_STEP * float(np.median(others)):
+                out.add(t["n"])
+    return out
+
+
+def clipped_pointings(u, tiles):
+    """(clipped_under) The tiles of pass u that go under: those clipped_under picks and every tile of the same pointing
+    (slot and lap), so the pointing's filters stay together."""
+    low = clipped_under(tiles)
+    if low:
+        where, lap = slots(u), lap_of(u)
+        at = {(where[j], lap[j]) for j in low if where[j] is not None}
+        low |= {t["n"] for t in tiles if where[t["n"]] is not None and (where[t["n"]], lap[t["n"]]) in at}
+    return low
+
+
 def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0)):
     """What a mosaic movie (a raster repeated over the same places: kind "mosaic_movie") shows at frame n, in the
     form of layout(): every place's newest tile of each filter taken by then, so the mosaic never empties when a
@@ -7279,6 +9503,11 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         seen[key] = seen.get(key, 0) + 1
         keep.append(t)
     keep += [t for key, t in spare.items() if not seen.get(key)]
+    # a copy the camera saturated much more than the picture's other tiles of its filter goes under them (clipped_under)
+    # (every filter of that pointing alike: one band under and the others over put the pole's eye in two places, a
+    # blue spot at 05:32 on the 2017-04-26 north pole movie)
+    low = clipped_pointings(u, keep)
+    keep = [dict(t, under=True) if t["n"] in low else t for t in keep]
     # (in the order they are drawn, so a fade's brightness map, _faded and the page's, lays them alike)
     tiles = under_first(sorted(keep, key=lambda t: (rank.get(t["n"], t["n"]), t["n"])))
     count = {}
@@ -7301,7 +9530,8 @@ def rolling_layout(u, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 
         out.append(t)
     tiles = out
     drawn = [t for t in tiles if t.get("drawn")]
-    ids = hashlib.sha1((LAP_RULE + ":" + ",".join(f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"]) for t in drawn)).encode()).hexdigest()[:12]
+    ids = hashlib.sha1((LAP_RULE + ":" + ",".join((f"{t['n']}x{t['gain']}" if "gain" in t else str(t["n"])) + ("u" if t["n"] in low else "")
+                                                  for t in drawn)).encode()).hexdigest()[:12]
     if not fade[0]:
         return p, tiles, rect, count, used, f"lap-{laps}-{ids}"
     # ages from the newest tile drawn, so frames of a filter the picture does not draw share its picture
@@ -7354,6 +9584,8 @@ def _fade_part(t, rect, w, h, there):
     a0, b0, a1, b1 = max(left, 0), max(top, 0), min(left + sw, w), min(top + sh, h)
     if a1 <= a0 or b1 <= b0:
         return None
+    # (at the rounded pixel, not moved by the part of a pixel _window moves the tile: the page draws the fade from this
+    # table line for line (web/test_fade_local.py), and a half-pixel edge on a broad fade map shows nowhere)
     return (a0, b0, a1, b1), _part(os.path.join(there, f"{t['n']}.png"), sw, sh)[b0 - top:b1 - top, a0 - left:a1 - left, 3]
 
 

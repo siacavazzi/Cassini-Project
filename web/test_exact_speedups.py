@@ -206,7 +206,7 @@ def floor_before(iofs, levels, sky=None):
     lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & cal._inner(lum.shape)
     lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
     floor, top = (float(v) for v in np.percentile(dark[lit], (cal.FLOOR_PCT, cal.WHITE_PCT)))
-    black = cal.FLOOR_SHARE * max(floor, 0.0)
+    black = min(cal.FLOOR_SHARE * max(floor, 0.0), cal._floor_cap(top))
     dim = np.log(cal.GLOW_IOF[1] / max(middle, 1e-12)) / np.log(cal.GLOW_IOF[1] / cal.GLOW_IOF[0])
     smooth = (cal.GLOW_FINE[1] - cal.fine_structure(lum)) / (cal.GLOW_FINE[1] - cal.GLOW_FINE[0])
     return black + min(max(float(dim), 0.0), 1.0) * min(max(smooth, 0.0), 1.0) * max(bright - black, 0.0)

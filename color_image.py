@@ -606,6 +606,10 @@ MOVED_LIT = 0.08       # of full brightness: lit
 MOVED_RATIO = 6.0      # the other frame at least this much fainter: something there in one frame only
 MOVED_RATIO_LOW = 1.5  # what is widened over: still this much fainter, next to a patch kept
 MOVED_AREA = 4         # px at MOVED_SIZE, once thinned by a px: smaller or thinner patches are left
+MOVED_BODY = 0.2       # of full brightness: a patch whose brighter frame's median is under this is dim light seen a little
+                       # differently by two filters (a faint ring band near IR3's noise, a glow), not a body that moved, and
+                       # stays in color: drawn gray from a reference frame that has it near black, it was a black hole (2017
+                       # set 41340, IR3/RED rings: an octagon of the C ring, 19% of the picture, Sam 11-08)
 MOVED_GROW = 8         # full resolution px the region is widened by (the soft edges of what moved)
 MOVED_SOFT = 16        # full resolution px over which the region fades
 MOVED_WHOLE = 0.4      # of the lit picture: the whole set drawn grey
@@ -666,6 +670,9 @@ def moved_region(channels, ref, valid=None, bands=None):
             patch = np.pad((labels[y:y + h, x:x + w] == i).astype(np.uint8), 1)
             if int((cv2.erode(patch, k) > 0).sum()) < MOVED_AREA:
                 # a line or a speck (a cosmic ray, a star's trail): no body
+                continue
+            if float(np.median(hi[y:y + h, x:x + w][labels[y:y + h, x:x + w] == i])) < MOVED_BODY:
+                # dim light, not a body (MOVED_BODY)
                 continue
             kept[y:y + h, x:x + w] |= patch[1:-1, 1:-1] > 0
             # how far it is widened below: no further than the patch is across (a limb's glow, not the sky's)
@@ -1255,8 +1262,11 @@ that middle sits relative to the target's centre (canvas pixels, x right, y down
 panels keep their places on the body, so they can mosaic. report["centred"] is True when the
 target's centre is on the frame. Without SPICE, the 1024 px frame as it is.
 hdr, scale, repeat_window, around = as load_aligned (for whole-observation mosaics and movies)
+turn = degrees (as find_target's angle) the picture is drawn short of north up: a camera window's still is turned
+only to its pass's own orientation (obs_mosaic.pass_turn), so a pass the camera does not roll under keeps the
+square frame as Cassini took it; frame_offset is then on those turned axes. 0 (movies, mosaics, reels): north up
 """
-def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None):
+def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=120, around=None, turn=0.0):
     imgs, valid, lbl, report = load_aligned(list(paths), hdr, scale, repeat_window, around=around)
     chans = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img for img in imgs]
     if len(chans) == 1:
@@ -1276,6 +1286,11 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
         middle = np.array([(shape[1] - 1) / 2, (shape[0] - 1) / 2])
         moved = (lbl.placement @ np.array([ba.CCD_CENTER, ba.CCD_CENTER, 1.0]))[:2]
         offset = moved - middle
+        if turn:
+            # drawn turn degrees short of north up: the offset turned back by turn about the canvas's middle
+            t = np.radians(turn)
+            offset = np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]]) @ offset
+            report["turn"] = round(float(turn), 2)
         report["frame_offset"] = [round(float(v), 1) for v in offset]
         report["offset_px"] = round(float(np.hypot(*offset)), 1)
         report["centred"] = bool(report["offset_px"] <= max_offset)
@@ -1283,7 +1298,7 @@ def processed_frame(paths, max_offset=600, hdr=False, scale=None, repeat_window=
             report["why"] = f"the target's centre is off the frame (close-up), {report['offset_px']:.0f} px from its middle"
         # the same rotation without the shift: the frame north up at the middle of the canvas
         # (a close-up's shift would push it off the canvas)
-        angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0]))
+        angle = np.degrees(np.arctan2(lbl.placement[0, 1], lbl.placement[0, 0])) - turn
         drawn = lbl.translate("png", 0, 0, angle, border)
         _place_hdr_map(lbl, alpha, angle)
         return drawn, lbl, report
@@ -1395,6 +1410,11 @@ def find_small_body(image, cx, cy, radius, reach=FIND_REACH):
     lum = cv2.GaussianBlur(rgb.mean(axis=2), (0, 0), FIND_SMOOTH)
     inside = cv2.erode(valid.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
     values = lum[inside]
+    if not values.size:
+        # (a sliver of picture between blank rows, a tile a few rows tall where a frame's data stops, has 1000 valid
+        # pixels but none 3 px inside its edge: nothing to look in, never an empty percentile, which stopped
+        # JUPITER_ISS_C23JU_18ATM2X2A013_PRIME_W_6's chains on its 5-row tile, 2026-11-09)
+        return None
     sky = float(np.median(values))
     noise = 1.4826 * float(np.median(np.abs(values - sky))) + 0.5
     top = float(np.percentile(values, 99.9))
@@ -1423,49 +1443,6 @@ def find_small_body(image, cx, cy, radius, reach=FIND_REACH):
     if (area < FIND_LIT * disk or cut) and away <= radius:
         return None
     return fx, fy
-
-
-# A light unsharp mask, the last step of every picture the site serves (frame_server's stills and composites, and every
-# tile obs_mosaic draws into a movie frame or a mosaic, at the size it is drawn): fine detail raised a little, the same
-# for everyone (Sam, 2026-11-02: "build it into the pipeline", no setting)
-SHARPEN = 0.5                    # how much: each pixel moved away from its neighbourhood by this times the difference
-SHARPEN_TAPS = (1, 4, 6, 4, 1)   # the neighbourhood: binomial, a Gaussian of sigma 1 px
-SHARPEN_GATE = 3.0               # differences under this many levels (of 255) are raised less, so sky noise stays quiet
-
-
-def unsharp(px, amount=SHARPEN, taps=SHARPEN_TAPS, gate=SHARPEN_GATE):
-    """Picture px (uint8: H x W grey, or H x W x 2|3|4 with alpha last when 2 or 4) with its fine detail raised: each
-    pixel's brightness (the mean of its colors) less its neighbourhood's (the binomial blur taps, over the picture's own
-    pixels only, weighted by alpha, so the empty canvas round a frame or a tile does not ring at its edge), times
-    amount, added to every channel alike (no colour fringes where the filters are slightly off). A difference d under
-    gate levels is scaled by |d| / gate, so faint noise is raised far less than edges. Alpha is kept as it is; a pixel
-    with none is not touched."""
-    px = np.asarray(px)
-    if amount <= 0 or px.size == 0:
-        return px.copy()
-    a3 = px[..., None] if px.ndim == 2 else px
-    n = a3.shape[2]
-    colors = n - 1 if n in (2, 4) else n
-    rgb = a3[..., :colors].astype(np.float32)
-    alpha = a3[..., colors].astype(np.float32) / 255 if colors < n else None
-    lum = rgb[..., 0] if colors == 1 else rgb.mean(axis=2)
-    k = np.asarray(taps, np.float32) / float(sum(taps))
-    blur = lambda v: cv2.sepFilter2D(v, cv2.CV_32F, k, k, borderType=cv2.BORDER_CONSTANT)
-    if alpha is None:
-        # outside the picture counts as nothing: the blur of a picture of ones is the weight
-        weight = blur(np.ones_like(lum))
-        mean = blur(lum) / weight
-    else:
-        weight = blur(alpha)
-        mean = np.where(weight > 1e-6, blur(lum * alpha) / np.maximum(weight, 1e-6), lum)
-    d = lum - mean
-    d = np.where(np.abs(d) < gate, d * (np.abs(d) / gate), d) * amount
-    out = np.clip(rgb + d[..., None], 0, 255) + 0.5
-    out = out.astype(np.uint8)
-    if alpha is not None:
-        out = np.where((alpha > 0)[..., None], out, a3[..., :colors])
-    res = np.concatenate([out, a3[..., colors:]], axis=2) if colors < n else out
-    return res[..., 0] if px.ndim == 2 else res
 
 
 """

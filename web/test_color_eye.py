@@ -107,7 +107,7 @@ with cal.coloring("natural"):
         got = cal.color_mix(cam, bands, target)
         assert not isinstance(got, cal.FalseMix) and np.allclose(got, cal.eye_mix(cam, bands, target)), bands
     assert isinstance(cal.color_mix("N", ["IR3", "GRN", "UV3"], "ENCELADUS", own=True), cal.FalseMix)
-    assert cal.color_mix("N", ["CB3", "MT1"], "TITAN") is None
+    assert np.allclose(cal.color_mix("N", ["CB3", "MT1"], "TITAN"), cal.pair_mix("N", ["CB3", "MT1"], "TITAN"))
     assert np.allclose(cal.color_mix("N", ["RED", "GRN", "BL1"], "SATURN"), cal.natural_mix("N", ["RED", "GRN", "BL1"]))
 # False color (Settings > Filter colors) balances methane sets as Natural color did before, in its own cache
 with cal.coloring("false"):

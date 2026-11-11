@@ -39,6 +39,7 @@
    "free": true,
    "env": {
     "CASSINI_DATA": "~/cassini-build/inputs/cassini_lut8.zip",
+    "CASSINI_KERNELS": "~/cassini-build/inputs/cassiniprojectJAN05.zip",
     "CASSINI_GEOMETRY_CACHE": "~/cassini-build/inputs/geometry-usgs.sqlite",
     "CASSINI_SPICE_CACHE": "~/cassini-build/inputs/spice_cache",
     "CASSINI_CISSCAL": "~/cassini-build/inputs/cisscal",

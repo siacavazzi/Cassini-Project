@@ -158,13 +158,17 @@ _filters = None
 def filter_table():
     global _filters
     if _filters is None:
-        _filters = {}
+        # filled in its own dict and only then published: the threads that calibrate a pass's first frames at once
+        # (obs_mosaic.pass_scale's pool) saw a half-filled table, found no factor for their filter and dropped the frame
+        # (calibrate None): the MacBook's 269RI_HIPHASEFB001 plan without its first IR3 frame (2026-11-09)
+        table = {}
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_calibration.csv")
         with open(path) as f:
             next(f)
             for line in f:
                 camera, filters, wavelength, factor, k = line.strip().split(",")
-                _filters[(camera, filters)] = float(k)
+                table[(camera, filters)] = float(k)
+        _filters = table
     return _filters
 
 
@@ -719,12 +723,19 @@ STREAK_BODY = 2000    # _clean_streaks: a patch of this many pixels not sky is a
 SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
-FLOOR_SHARE = 0.8    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
+FLOOR_SHARE = 0.4    # balanced: the black is at least this share of the lit picture's floor, the FLOOR_PCT percentile of
 FLOOR_PCT = 0.05     # its brightness (the channels' mean above their sky levels, after a 3x3 median), so a picture whose lit
                      # part is one even surface (Titan's haze, a moon close-up) spreads over the range instead of the gamma
                      # lifting it to near-white, and a lit sky that fails the sky test (a plume's, stray light) goes dark.
                      # The floor is the lit part's darkest real feature: at the 0.5 percentile, the few cracks and crater
                      # shadows under it went black ink on Enceladus and Rhea close-ups (spot check round 3)
+                     # 0.8 until 11-08: through the gamma it took the darkest real feature down to a fifth of its light,
+                     # and every even surface's contrast with it, so the 2017 cache looked stretched, deep and blocky
+                     # everywhere (Titan haze, rings, cloud decks; Sam, 11-08: "pushing the data way too far")
+FLOOR_GAIN = 1.5     # ... but the floor black never stretches a picture more than this many times its contrast with the
+                     # black at its sky (or at zero): black at most (1 - 1 / FLOOR_GAIN) of the lit part's WHITE_PCT
+                     # percentile. Uncapped, an even surface (Titan's haze, a cloud deck) was spread 2-3x over the range,
+                     # past what MAX_STRETCH allows the white, and showed its compression blocks and 8-bit steps
 FLOOR_EDGE = 10      # With sky, the floor is taken at least FLOOR_EDGE pixels from it (none when under FLOOR_MIN of the
 FLOOR_MIN = 0.01     # picture is that far), and only an even lit part has it taken off (with sky or without): none when
 FLOOR_EVEN = (0.3, 0.6)  # the floor is under FLOOR_EVEN[0] of the lit part's WHITE_PCT percentile, all of FLOOR_SHARE from
@@ -906,8 +917,9 @@ solid blue). Two visible color filters (NATURAL_PAIR: RED with BL1 or GRN) alrea
 """
 NATURAL_PAIR = ("RED", "GRN", "BL1", "BL2", "VIO")
 # A pair with the one filter a body's surface shows through, a window in its haze (Titan's CB3, 938 nm: its other filters
-# see the haze and clouds above), stays straight too: its surface shows as the difference between the bands (dark
-# markings bluer, the haze rim blue), which the false color balance flattens into one orange
+# see the haze and clouds above), is never false color balanced: its surface shows as the difference between the bands
+# (dark markings bluer, the haze rim blue), which the balance flattens into one orange. It is drawn in approximate
+# color (pair_mix: the body's own color, the bands' difference kept), straight where that has nothing to go on
 SURFACE_WINDOW = {"TITAN": "CB3"}
 
 
@@ -945,7 +957,7 @@ def mix_target(target, bands, camera=None, obs=None):
     return body if body and _known_body(body, bands, camera) else target
 
 
-def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
+def color_mix(camera, bands, target=None, gains=None, own=False, obs=None, levels=None):
     if len(bands) in (2, 3) and (style() == "eye" or style() == "balanced" and emulated(bands, target)):
         if len(bands) == 3 and natural_mix(camera, bands) is not None:
             return natural_mix(camera, bands)
@@ -956,8 +968,12 @@ def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
     if not false_balanced() or len(bands) not in (2, 3):
         return None
     if len(bands) == 2:
-        if all(b in NATURAL_PAIR for b in bands) or SURFACE_WINDOW.get(str(target or "").upper()) in bands:
+        if all(b in NATURAL_PAIR for b in bands):
             return None
+        if SURFACE_WINDOW.get(str(target or "").upper()) in bands:
+            # (approximate color: the body's own color, its surface markings as the bands' difference; straight, as
+            # before, where the body has no measured color or the bands no typical level)
+            return pair_mix(camera, bands, target, levels or ([1 / g for g in gains] if gains else None))
         if gains:
             # gains bring each band to the set's mean: the levels they balance are as their inverses
             gains = balance(two_bands([1 / g for g in gains]), tint_of(target))
@@ -975,6 +991,45 @@ def color_mix(camera, bands, target=None, gains=None, own=False, obs=None):
     m = np.diag(np.asarray(gains, np.float32)).view(FalseMix)
     m.tint = tint_of(target)
     return m
+
+
+"""
+Approximate color for a two-filter set whose false color balance would flatten what it shows (a surface window pair,
+SURFACE_WINDOW: Titan's CB3 with MT1, IR1, RED...; 94% of Titan's two-filter sets). Drawn straight (longer red, the
+mean green, shorter blue) such a pair came out cream to gray, though Titan is orange-tan in every true color set.
+Each band is read against the body's typical brightness in it (body_level, the mission's measure), drawn straight as
+two_bands, and times the body's own color (eye_tint, as the pipeline's true color sets draw it): where both bands are
+at their typical share the body has its true color, and where they differ (a dark surface marking in CB3, the haze
+rim brighter in MT1) the color leans the way the straight pair leans, by as much. Nothing is invented between the
+bands: two filters can't measure a hue, so the hue is the body's measured one and only the bands' difference varies.
+levels: the set's own lit levels per band (load_linear, or a mosaic pass's pass_scale), used for both bands when the
+table lacks one (WAC IR2/IR1), so the ratio is still one picture's own. None (drawn straight) for a body with no
+measured color (eye_colors.json) or with no level for a band.
+camera = "N" or "W"; bands = the two filters, longer wavelength first; target = TARGET_NAME
+"""
+def approximate_pair(camera, bands, target=None):
+    """True when natural color draws the two-filter set in approximate color (pair_mix, given the set's levels where
+    the table lacks a band): a surface window pair of a body with a measured color, in the balanced natural look."""
+    t = str(target or "").upper()
+    eye_tint(t)   # (loads the eye colors)
+    return len(bands) == 2 and style() in ("balanced", "false", "eye") and SURFACE_WINDOW.get(t) in bands and t in _eye_colors
+
+
+def pair_mix(camera, bands, target=None, levels=None):
+    if len(bands) != 2:
+        return None
+    t = str(target or "").upper()
+    eye_tint(t)   # (loads the eye colors)
+    if t not in _eye_colors:
+        return None
+    ref = [body_level(t, b, camera) for b in bands]
+    if any(v is None for v in ref):
+        if not levels or len(levels) != 2 or min(levels) <= 0:
+            return None
+        ref = [float(v) for v in levels]
+    level = (ref[0] + ref[1]) / 2
+    gains = [level / v for v in two_bands(ref)]
+    return np.diag(np.asarray(_eye_colors[t]["rgb"], np.float64) * gains).astype(np.float32)
 
 
 """
@@ -1028,7 +1083,7 @@ def band_wavelength(camera, band):
     two stacked filters ("IR2/IR1") the pair's (filter_calibration.csv), or None."""
     global _wavelengths
     if _wavelengths is None:
-        _wavelengths = {}
+        table = {}   # filled, then published (filter_table)
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_calibration.csv")) as f:
             next(f)
             for line in f:
@@ -1037,10 +1092,11 @@ def band_wavelength(camera, band):
                     for name in (filters[3:] if filters.startswith(clear) else None,
                                  filters[:3] if filters.endswith(clear) and len(filters) == 6 else None):
                         if name and name not in ("CL1", "CL2"):
-                            _wavelengths[(cam[3], name)] = float(nm)
+                            table[(cam[3], name)] = float(nm)
                 if len(filters) == 6 and "CL" not in (filters[:2], filters[3:5]):
                     # two color filters stacked, one on each wheel ("IR2/IR1", as band_of names it): the pair's own
-                    _wavelengths[(cam[3], filters[:3] + "/" + filters[3:])] = float(nm)
+                    table[(cam[3], filters[:3] + "/" + filters[3:])] = float(nm)
+        _wavelengths = table
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     return _wavelengths.get((cam, band)) or _wavelengths.get(("W" if cam == "N" else "N", band))
 
@@ -1051,10 +1107,11 @@ def body_level(target, band, camera=None, sure=True):
     global _bodies
     if _bodies is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
-        _bodies = {}
+        table = {}   # filled, then published (filter_table)
         if os.path.exists(path):
             with open(path) as f:
-                _bodies = json.load(f)
+                table = json.load(f)
+        _bodies = table
     body = _bodies.get(str(target or "").upper(), {})
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     for m in (body.get(cam, {}).get(band), body.get(band)):
@@ -1106,10 +1163,11 @@ def eye_tint(target):
     global _eye_colors
     if _eye_colors is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eye_colors.json")
-        _eye_colors = {}
+        table = {}   # filled, then published (filter_table)
         if os.path.exists(path):
             with open(path) as f:
-                _eye_colors = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+                table = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+        _eye_colors = table
     got = _eye_colors.get(str(target or "").upper())
     return got["rgb"] if got else tint_of(target) or [1.0, 1.0, 1.0]
 
@@ -1186,10 +1244,11 @@ def false_gains(target, bands, camera=None):
     global _bodies
     if _bodies is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "false_color_bodies.json")
-        _bodies = {}
+        table = {}   # filled, then published (filter_table)
         if os.path.exists(path):
             with open(path) as f:
-                _bodies = json.load(f)
+                table = json.load(f)
+        _bodies = table
     body = _bodies.get(str(target or "").upper(), {})
     cam = "N" if str(camera or "").startswith("N") or camera == "ISSNA" else "W"
     meds = []
@@ -1499,8 +1558,15 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
     infos = [lbl.get_info() for lbl in labels]
+    # a two-filter set's own lit level per band, for its approximate color where the table lacks a band (pair_mix)
+    pair = None
+    if len(channels) == 2:
+        both = np.mean(channels, axis=0)
+        lit = both > 0.2 * np.percentile(both, 99)
+        if lit.sum() > 100:
+            pair = [float(np.median(c[lit])) for c in channels]
     mix = color_mix(_value(infos[0], "INSTRUMENT_ID", ""), [band_of(i) for i in infos], _value(infos[0], "TARGET_NAME", ""),
-                    own=True, obs=_value(infos[0], "OBSERVATION_ID", ""))
+                    own=True, obs=_value(infos[0], "OBSERVATION_ID", ""), levels=pair)
     false = isinstance(mix, FalseMix)
     lum = None
     if false:
@@ -2021,7 +2087,7 @@ def _floor(iofs, levels, sky=None, glow=1.0):
         lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & _inner(lum.shape)
         lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
         floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
-        black = FLOOR_SHARE * max(floor, 0.0)
+        black = min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top))
         dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
         bright = max(bright - black, 0.0)
         if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
@@ -2049,7 +2115,12 @@ def _floor(iofs, levels, sky=None, glow=1.0):
             floor = min(floor, float(np.median(lum[y:y + h, x:x + w][box])))
     if floor <= 0 or top <= 0:
         return 0.0
-    return FLOOR_SHARE * _even(floor, top) * floor
+    return min(FLOOR_SHARE * _even(floor, top) * floor, _floor_cap(top))
+
+
+"""The highest floor black (FLOOR_GAIN) for a lit part whose WHITE_PCT percentile above the sky levels is top"""
+def _floor_cap(top):
+    return (1.0 - 1.0 / FLOOR_GAIN) * max(top, 0.0)
 
 
 """The pixels of a picture of shape (rows, columns) at least FLOOR_BORDER (scaled from 1024 px) from its edge"""

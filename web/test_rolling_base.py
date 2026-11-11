@@ -173,6 +173,19 @@ lv = [float(middles(pic(om.rolling_webp(u["frames"][n][1], 512, cache, 1, wait=T
 print("short and long exposures in turn, place 1:", [round(v) for v in lv])
 assert max(lv) / min(lv) < 1.03, lv
 
+# a lap whose copy differs part to part (the scene's own change: Cassini closing in, the night side's edge moved under
+# the place) is not an exposure: drawn as it came. Before, the mean step was taken out lap after lap and the place
+# went to half brightness by lap 3 (2017-04-26 north pole movie, 271SA NPOLMOV001: dark blocks)
+RAMP = 1.0 + 2.0 * (xx / 1023) ** 2   # 1x at one side of the frame, 3x at the other
+EXPO4 = [1.0] * 4 + [1.0, RAMP, 1.0, 1.0] + [1.0] * 4   # place 1 brighter one side in lap 2, back in lap 3
+u, cache = make_pass("UNEVEN", [("CL1/CL2", i % 4, e) for i, e in enumerate(EXPO4)], None, "CL1/CL2")
+use(u)
+p = om.plan(u, cache)
+gains = [om.lap_gain(u, p, cache, n, lambda i: om.tile(u, i, cache, SCALE)) for n in (5, 9)]
+print("a step uneven over the place:", gains)
+assert gains == [1.0, 1.0], gains
+assert om._lap_even(np.ones((30, 30)) * 2.7, np.ones((30, 30)), np.ones((30, 30), bool), 2.7)
+
 # made_only: a copy whose earlier copies are not made yet is drawn on the level of those made, the picture is not
 # the frame's own yet (skipped), and its name is not the one the frame's own picture will have
 u, cache = make_pass("ONLY", seq, None, "CL1/CL2")
