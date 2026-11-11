@@ -120,6 +120,30 @@ class Build(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class DataCheck(unittest.TestCase):
+    def test_both_replay_layouts_pass_the_input_check(self):
+        for layout in (["mission.json", "catalog.json"], ["mission.json", "catalog/2004.json", "months/2004-07.json"]):
+            d, out = tempfile.mkdtemp(), tempfile.mkdtemp()
+            try:
+                for f in layout:
+                    os.makedirs(os.path.dirname(os.path.join(d, f)), exist_ok=True)
+                    open(os.path.join(d, f), "w").write("{}")
+                os.rmdir(out)
+                with redirect_stdout(io.StringIO()):
+                    info = cf.build(d, out, "local")
+                self.assertTrue(os.path.exists(os.path.join(out, "data", layout[1])), layout)
+                self.assertEqual(info["env"], "local")
+            finally:
+                shutil.rmtree(d); shutil.rmtree(out, ignore_errors=True)
+        d = tempfile.mkdtemp()
+        try:
+            open(os.path.join(d, "mission.json"), "w").write("{}")
+            with self.assertRaises(SystemExit):
+                cf.build(d, os.path.join(d, "out"), "local")
+        finally:
+            shutil.rmtree(d)
+
+
 class Manifest(unittest.TestCase):
     def test_mirror_manifest(self):
         d = tempfile.mkdtemp()

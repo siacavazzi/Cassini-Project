@@ -143,7 +143,9 @@ SITE_TOP = ["index.html", "about", "how", "icons", "models", "vendor", "favicon.
             "share.jpg", "robots.txt", "sitemap.xml"]
 SKIP_NAME = re.compile(r"(^\.|^__pycache__$|^README|\.md$|\.py$|\.pyc$|\.cjs$|\.sh$|^make_|\.bak$|~$|\.tmp$|\.log$)")
 SKIP_DIR = {"src", "bench", "replay", "evidence", "flags", "prebuild", "cache", "out", "output", "node_modules"}
-DATA_NEEDS = ["mission.json", "catalog.json"]
+# built replay data: mission.json, and the catalog either whole (the old one-year layout's catalog.json) or by year
+# (the whole-mission layout's catalog/<year>.json, build_data.py --years 1997-2017)
+DATA_NEEDS = ["mission.json", ("catalog.json", "catalog")]
 
 
 def _copy_tree(src, dst, skipped):
@@ -173,7 +175,8 @@ def build(data, out, env="local", commit="HEAD", allow_unswitched=False):
     with the replay data from data/ (web/replay/build_data.py and build_coverage.py output)."""
     data = os.path.abspath(os.path.expanduser(data))
     out = os.path.abspath(out)
-    missing = [f for f in DATA_NEEDS if not os.path.exists(os.path.join(data, f))]
+    need = [f if isinstance(f, tuple) else (f,) for f in DATA_NEEDS]
+    missing = [" or ".join(alt) for alt in need if not any(os.path.exists(os.path.join(data, f)) for f in alt)]
     if missing:
         raise SystemExit(f"{data} is not built replay data (missing {', '.join(missing)}): run web/replay/build_data.py "
                          "and build_coverage.py at this commit first")
