@@ -51,7 +51,9 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) process
     await page.evaluate(u => setTime(utcToEt(u)), utc); await page.waitForTimeout(1200); await look(); await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(out, name + ".png") });
   }
-  await page.evaluate(() => cassiniSettings.set("view.seenSoFar", false)); await page.waitForTimeout(1500);
+  // (a paused page draws about once a second, slower in software: wait for the frame that takes the setting)
+  await page.evaluate(() => cassiniSettings.set("view.seenSoFar", false));
+  await page.waitForFunction("meshes.ENCELADUS.mat.uniforms.covOn.value === 0", null, { timeout: 20000 }).catch(() => {});
   ok(await page.evaluate(() => meshes.ENCELADUS.mat.uniforms.covOn.value) === 0, "off: the shader draws the whole map again");
   await page.screenshot({ path: path.join(out, "seen_off.png") });
 

@@ -203,7 +203,9 @@ cameras took nothing: dish on Earth (sending data; the menu bar says how long th
 crossing the rings or bent around Saturn's or Titan's limb (radio occultations), dish on a body (radar or radio
 science; on 14 January 2005, receiving Huygens), a long roll (fields and particles), or the instruments on a body.
 It shows as a line in the menu bar, a thin strip along the top of the timeline (windows up to 120 days) and a faint
-beam from the dish. Settings > View: "What Cassini is doing", "Radio beam". Nothing is fetched or pre-built.
+beam from the dish. While the dish is on Earth, Earth gets its marker and tag like any other body (it is otherwise
+off stage at Saturn), and a faint thread runs from the beam to it. Settings > View: "What Cassini is doing", "Radio
+beam", "Earth's marker while the dish is on it". Nothing is fetched or pre-built.
 `bench/activity.cjs` checks it against ten things known to have happened in 2005.
 
 ## Seen so far, and pictures of a place

@@ -14,8 +14,9 @@
 
      It shows as a thin strip along the top edge of the timeline (the months whose pointing is loaded), as a line in
      the menu bar, and as a faint beam from the dish while it is on Earth or on a body. Settings > View: "What Cassini
-     is doing" and "Radio beam". window.cassiniActivity (now(), at(et), spans(), KINDS) is the way in for other parts
-     of the page and for bench/activity.cjs, which checks it against the dates above. -->
+     is doing", "Radio beam" and "Earth's marker while the dish is on it". window.cassiniActivity (now(), at(et),
+     spans(), KINDS) is the way in for other parts of the page and for bench/activity.cjs, which checks it against the
+     dates above. -->
 <style>
 #mact { font-size: 12px; color: var(--q-dim, #555); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
 #mact i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
@@ -33,9 +34,12 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     hint: "A thin strip along the top of the timeline and a line in the menu bar: sending data to Earth, radio signal through the rings, radar, rolling, or pointed at a body. Worked out from the recorded pointing." });
   let beamOn = S.define({ key: "view.radioBeam", section: "View", label: "Radio beam", type: "toggle", value: true,
     hint: "A faint beam from Cassini's dish while it points at Earth or at a body." });
+  let earthOn = S.define({ key: "view.earthMarker", section: "View", label: "Earth's marker while the dish is on it", type: "toggle", value: true,
+    hint: "Earth is too far away to be on stage at Saturn. While Cassini's dish points at it, Earth gets its marker and tag like any other body, so you can see where the beam is going." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
   S.on("view.activity", v => { on = v; if (!v) status(null); redraw(); });
   S.on("view.radioBeam", v => { beamOn = v; redraw(); });
+  S.on("view.earthMarker", v => { earthOn = v; redraw(); });
 
   const KINDS = { NONE: 0, DOWN: 1, OCC: 2, DISH: 3, ROLL: 4, LOOK: 5, LIMB: 6 };
   //             strip and dot colors, and the legend's names
@@ -227,8 +231,18 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     if (html !== shown) { host.innerHTML = shown = html; host.title = t ? t[1] : ""; }
   }
 
+  // ---------- Earth's marker ----------
+  // The viewer keeps the planets off stage while Cassini is at Saturn (shown(), in the replay page). While the dish is
+  // on Earth (sending data, or with the rings or a body in the radio signal's way) Earth counts as on stage, so it gets
+  // the same dot and tag as every other body, and the beam has somewhere to end.
+  const toEarth = () => on && earthOn && (live.kind === KINDS.DOWN || live.kind === KINDS.OCC || live.kind === KINDS.LIMB);
+  if (typeof window.shown === "function") {
+    const was = window.shown;
+    window.shown = name => (name === "EARTH" && toEarth() && present("EARTH")) || was(name);
+  }
+
   // ---------- the beam from the dish ----------
-  const BEAM_N = 24;
+  const BEAM_N = 24, BEAM_THREAD = 0.22;   // the thread to Earth is this bright next to the beam's start at 0.8
   let beam = null;
   const vDish = new THREE.Vector3(), vTo = new THREE.Vector3();
   function drawBeam() {
@@ -248,11 +262,14 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     const s = cassini.scale.x, reach = Math.max(camera.position.distanceTo(cassini.position) * 8, s * 40);
     const P = beam.geometry.attributes.position.array, C = beam.geometry.attributes.color.array;
     const col = a.kind === KINDS.DISH ? [0.88, 0.6, 0.29] : a.kind === KINDS.OCC || a.kind === KINDS.LIMB ? [0.94, 0.9, 0.77] : [0.29, 0.7, 0.65];
+    // with Earth's marker up, a faint thread carries on from the beam all the way to Earth, so the two join on screen
+    const earth = toEarth() && a.kind !== KINDS.LIMB && meshes.EARTH ? meshes.EARTH.group.position : null, floor = earth ? BEAM_THREAD : 0;
     for (let i = 0; i < BEAM_N; i++) {
-      const f = i / (BEAM_N - 1), d = s * 2.2 + reach * f * f, k = 0.8 * (1 - f) * (1 - f * f);
+      const f = i / (BEAM_N - 1), d = s * 2.2 + reach * f * f, k = Math.max(0.8 * (1 - f) * (1 - f * f), floor);
       P[3 * i] = cassini.position.x + vDish.x * d; P[3 * i + 1] = cassini.position.y + vDish.y * d; P[3 * i + 2] = cassini.position.z + vDish.z * d;
       C[3 * i] = col[0] * k; C[3 * i + 1] = col[1] * k; C[3 * i + 2] = col[2] * k;
     }
+    if (earth) { const i = BEAM_N - 1; P[3 * i] = earth.x; P[3 * i + 1] = earth.y; P[3 * i + 2] = earth.z; }
     beam.geometry.attributes.position.needsUpdate = true; beam.geometry.attributes.color.needsUpdate = true;
   }
 
@@ -303,6 +320,6 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     drawBeam(); };
   window.studyHud = ms => { if (prevHud) prevHud(ms); if (on) tick(); status(live); };
   window.studyTimeline = (g, w, h, xn) => { strip(g, w); if (prevTl) prevTl(g, w, h, xn); };
-  window.cassiniActivity = { KINDS, now: () => live, at, spans: () => spans, words, busy: () => job ? job.k / job.att.count : 0 };
+  window.cassiniActivity = { KINDS, now: () => live, at, spans: () => spans, words, toEarth, busy: () => job ? job.k / job.att.count : 0 };
 })();
 </script>

@@ -12,6 +12,8 @@
 //   - 9 Mar 09:00  pointed at Enceladus (the close flyby)
 //   - the spans of the months loaded around 3 May: the dish on Earth for 30 to 50% of the time, and the eight ring
 //     occultations of May to September on their days when their months are loaded
+//   - 1 Jun 00:00 (dish on Earth): Earth counts as on stage and its tag shows when the camera faces it, with the
+//     range in it; twelve hours later (pointed at the rings) and with the setting off it does not
 let pw; try { pw = require("playwright-core"); } catch (e) { pw = require("playwright"); }
 const fs = require("fs"), path = require("path");
 const [origin, out] = process.argv.slice(2);
@@ -73,5 +75,23 @@ const CASES = [
   await page.evaluate(() => setView(2 * 86400, state.et));
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(out, "strip_2005-05-03.png") });
+  // Earth's marker: look back along the line from Earth through Cassini, a little off to the side
+  const earth = async (utc, on) => {
+    await page.evaluate(([u, on]) => { cassiniSettings.set("view.earthMarker", on); setFocus("CASSINI"); setTime(utcToEt(u)); }, [utc, on]);
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => {
+      const e = meshes.EARTH.group.position.clone().sub(cassini.position).normalize(), d = camera.position.distanceTo(cassini.position);
+      const side = new THREE.Vector3().crossVectors(e, new THREE.Vector3(0, 1, 0)).normalize();
+      camera.position.copy(cassini.position).addScaledVector(e, -d * 0.9).addScaledVector(side, d * 0.35); camera.lookAt(cassini.position); cassiniPerf.invalidate();
+    });
+    await page.waitForTimeout(1500);
+    return page.evaluate(() => ({ stage: shown("EARTH"), tag: !labels.EARTH.hidden, text: labels.EARTH.textContent, href: location.href }));
+  };
+  const e1 = await earth("2005-06-01T00:00:00", true);
+  ok(e1.stage && e1.tag && /Earth.*r 1,4\d\d,\d{3},\d{3} km/i.test(e1.text), `dish on Earth: Earth's tag shows ("${e1.text.replace(/^Earth/i, "Earth · ")}") ${e1.href}`);
+  await page.screenshot({ path: path.join(out, "earth_marker_2005-06-01.png") });
+  const e2 = await earth("2005-06-01T12:00:00", true), e3 = await earth("2005-06-01T00:00:00", false);
+  ok(!e2.stage && !e2.tag, "twelve hours later, pointed at the rings: no Earth tag");
+  ok(!e3.stage && !e3.tag, "with the setting off: no Earth tag");
   await br.close();
 })();
