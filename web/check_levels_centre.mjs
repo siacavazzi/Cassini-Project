@@ -6,12 +6,18 @@
 //   node web/check_levels_centre.mjs http://127.0.0.1:8765 [--from 2005-04-16T15:00:00 --until 2005-04-16T23:00:00]
 //     [--pictures color] [--chrome]
 //
+// For a picture that differs, the picture the page used is measured again by the server's own Python
+// (export.brightness on export.Pictures._on_black of the served WebP; PYTHON, default python3, with the server's
+// environment): "the page measured the served picture right" means the server's /export/levels.json measured some
+// other picture (a server-side defect, cold-levels-finding.md), not the page port.
+//
 // Needs playwright (or playwright-core with --chrome, which uses the installed Google Chrome) and a frame server
 // running this commit's web/frames. The page code is taken from this checkout and put into the server's page.
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -80,7 +86,20 @@ for (const ctr of ["0", "1"]) {
     `${most === Infinity ? "lit vs too little lit" : most.toFixed(4) + " EV"}; ${missing} measured on one side only)`);
   for (const id of shown.slice(0, 10)) {
     console.log(`  ${id}: server ${want.level[id]} EV, page ${got.level[id]} EV; the page fetched:`);
-    for (const f of fetched.filter(f => f.includes(id))) console.log(`    ${f}`);
+    const mine = fetched.filter(f => f.includes(id));
+    for (const f of mine) console.log(`    ${f}`);
+    const used = mine.find(f => f.startsWith("200 "));
+    if (used && id in got.level) {
+      const py = `import sys, io, math, urllib.request; sys.path[:0] = [sys.argv[1] + "/frames", sys.argv[1] + "/replay"]
+import export; from PIL import Image
+im = Image.open(io.BytesIO(urllib.request.urlopen(sys.argv[2]).read())); lv = export.brightness(export.Pictures(None)._on_black(im, 512))
+print("null" if lv is None else round(round(lv, 5) / math.log(2), 4))`;
+      try {
+        const v = execFileSync(process.env.PYTHON || "python3", ["-c", py, HERE, server + used.slice(4).replace(/&amp;/g, "&")], { encoding: "utf8" }).trim();
+        const served = v === "null" ? null : +v;
+        console.log(`    the server's Python on that picture: ${served} EV: ` + (served === got.level[id] ? "the page measured the served picture right; the server's levels measured another picture" : "the page differs from it"));
+      } catch (e) { console.log(`    (the server's Python could not measure it: ${String(e.message).split("\n")[0]})`); }
+    }
   }
 }
 console.log("the page read pixels through:", await page.evaluate(() => window.cassiniPlanLocal._levels && window.cassiniPlanLocal._levels.pixelsHow ? window.cassiniPlanLocal._levels.pixelsHow() || "nothing" : "unknown"));
