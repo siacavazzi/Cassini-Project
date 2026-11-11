@@ -189,6 +189,13 @@ def test_r2(tmp):
     verify = publish.store(r2, led, [(key, b"MOVIE", "image/webp", custom, "trimmed")], verify=True)
     check(not verify[0][3] and [s[0] for s in FakeS3.seen[n:]] == ["HEAD"], "--verify asks with one HEAD and writes nothing")
     check(all("s3cr3t-never-sent" not in json.dumps(s) for s in FakeS3.seen), "the secret key is never sent")
+    r2.SINGLE_PUT_MAX = 4
+    try:
+        r2.put("big", b"12345", "image/webp", {})
+        check(False, "an object past one PUT's limit is refused, never sent as multipart (its ETag would not be its md5)")
+    except RuntimeError:
+        check("/cassini-os/big" not in FakeS3.objects,
+              "an object past one PUT's limit is refused, never sent as multipart (its ETag would not be its md5)")
     check(r2._url_path("a/b~c=1&d=2,3") == "/cassini-os/a/b~c%3D1%26d%3D2%2C3", "keys are escaped in the S3 path")
     srv.shutdown()
 

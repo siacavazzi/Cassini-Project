@@ -240,7 +240,11 @@ class R2:
         custom = {k[len("x-amz-meta-"):]: v for k, v in h.items() if k.startswith("x-amz-meta-")}
         return h.get("etag", "").strip('"'), h.get("content-type"), custom
 
+    SINGLE_PUT_MAX = 5 * 1024 ** 3   # S3's limit for one PUT; one PUT keeps the ETag the object's md5 (no multipart)
+
     def put(self, key, data, content_type, custom):
+        if len(data) > self.SINGLE_PUT_MAX:
+            raise RuntimeError(f"R2 PUT {key}: {len(data)} bytes is past one PUT's limit; multipart would break the md5 ETag check")
         headers = {"Content-Type": content_type, "Content-MD5": base64.b64encode(hashlib.md5(data).digest()).decode()}
         headers.update({f"x-amz-meta-{k}": v for k, v in custom.items()})
         status, h, _ = self._request("PUT", key, data, headers)
@@ -632,7 +636,11 @@ def main(argv=None):
     ap.add_argument("--from", dest="since")
     ap.add_argument("--until")
     ap.add_argument("--families", default=",".join(FAMILIES))
-    ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    ap.add_argument("--jobs", "--workers", dest="jobs", type=int, default=os.cpu_count() or 4)
+    ap.add_argument("--no-manifest", action="store_true", help="publish the objects only (a later --manifest-only "
+                    "writes the manifest from the state's published.json)")
+    ap.add_argument("--manifest-only", action="store_true", help="write only the manifest, from the last finished "
+                    "run's published.json in --state")
     ap.add_argument("--verify", action="store_true", help="ask the target for every object, past the ledger")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="at most this many units per family (a quick look)")
@@ -662,6 +670,8 @@ def main(argv=None):
     os.makedirs(state, exist_ok=True)
     commit = git_commit()
     publish_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + commit[:12]
+    if args.manifest_only:
+        return manifest_only(args, cache, state, target_spec, publish_id, commit, versions, tags)
     print(f"publish {publish_id}: cache {cache}, stretch {spans or 'the whole mission'}, to {target_spec}", flush=True)
     print("family tags: " + ", ".join(f"{f} {t}" for f, t in tags.items()), flush=True)
 
@@ -710,15 +720,50 @@ def main(argv=None):
     man_key = keys.KEYS["manifest"]["key_format"].format(publish_id=publish_id)
     report = dict(s, publish_id=publish_id, manifest_key=man_key, target=target_spec, cache=cache,
                   spans=spans, commit=commit, seconds=round(time.monotonic() - started), partial=False,
-                  dry_run=args.dry_run, urls=sum(1 for r in recs if r.get("url")))
-    if not args.dry_run:
+                  dry_run=args.dry_run, urls=sum(1 for r in recs if r.get("url")), tags=tags)
+    if args.no_manifest:
+        report["manifest_key"] = None
+    elif not args.dry_run:
         store(target, None, [(man_key, json.dumps(man, indent=1).encode(), "application/json", {}, "manifest")])
     write_json(os.path.join(state, "published.json"), report)
     print(f"done in {time.monotonic() - started:.0f} s: {s['total']['objects']} objects, {s['total']['bytes'] / 1e9:.2f} GB; "
           f"outcomes {s['outcomes']}; storage {s['storage']}; {len(s['missing'])} missing, {len(s['refused'])} refused",
           flush=True)
     print(f"published.json: {os.path.join(state, 'published.json')}")
-    print(("(dry run, nothing written) " if args.dry_run else "") + f"manifest: {man_key}")
+    if args.no_manifest:
+        print("no manifest written (--no-manifest): write it with --manifest-only")
+        return 0
+    if args.dry_run:
+        print(f"(dry run, nothing written) the manifest would be {man_key}")
+        return 0
+    print(man_key)   # the last line: the manifest's key, which WP8 points MANIFEST_KEY at
+    return 0
+
+
+def manifest_only(args, cache, state, target_spec, publish_id, commit, versions, tags):
+    """The manifest of the last finished run (its published.json in state), uploaded alone; prints its key last."""
+    import frame_server
+    try:
+        with open(os.path.join(state, "published.json")) as fh:
+            last = json.load(fh)
+    except (OSError, ValueError):
+        raise SystemExit(f"no published.json in {state}: run the publish first")
+    if last.get("partial") or last.get("dry_run"):
+        raise SystemExit(f"the last run in {state} did not finish (partial or dry run): no manifest for it")
+    if last.get("target") != target_spec or last.get("cache") != cache:
+        raise SystemExit(f"the last run in {state} published {last.get('cache')} to {last.get('target')}, not this")
+    spans = [tuple(s) for s in last["spans"]] if last.get("spans") else None
+    site = os.path.abspath(args.site) if args.site else None
+    man = manifest(publish_id, commit, versions, tags, published_slices(cache, versions, spans),
+                   json.loads(json.dumps(frame_server.site_version(site), default=str)),
+                   {"total": last["total"], "families": last["families"], "by_year": last["by_year"]})
+    man_key = keys.KEYS["manifest"]["key_format"].format(publish_id=publish_id)
+    if last.get("tags") != tags:
+        raise SystemExit("the picture versions (family tags) changed since the run: publish again first")
+    store(make_target(target_spec), None, [(man_key, json.dumps(man, indent=1).encode(), "application/json", {}, "manifest")])
+    last["manifest_key"] = man_key
+    write_json(os.path.join(state, "published.json"), last)
+    print(man_key)
     return 0
 
 
