@@ -13322,7 +13322,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d96a8a36990b";
+  const BUILD = /*BUILD*/"2515a82f919d";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -19127,10 +19127,10 @@ window.huygensModels = (() => {
   S.on("view.activity", v => { on = v; if (!v) status(null); redraw(); });
   S.on("view.radioBeam", v => { beamOn = v; redraw(); });
 
-  const KINDS = { NONE: 0, DOWN: 1, OCC: 2, DISH: 3, ROLL: 4, LOOK: 5 };
+  const KINDS = { NONE: 0, DOWN: 1, OCC: 2, DISH: 3, ROLL: 4, LOOK: 5, LIMB: 6 };
   //             strip and dot colors, and the legend's names
   const LOOKS = [null, ["#49b3a6", "Dish on Earth"], ["#efe6c4", "Radio through rings or behind a body"], ["#e0994a", "Dish on a body"],
-                 ["#8f76d6", "Rolling"], ["rgba(138,182,255,.6)", "Pointed at a body"]];
+                 ["#8f76d6", "Rolling"], ["rgba(138,182,255,.6)", "Pointed at a body"], ["#efe6c4", ""]];
   const DEG = Math.PI / 180, C_KM_S = 299792.458;
   const ON_EARTH = Math.cos(0.5 * DEG);          // the dish's beam is about a third of a degree wide
   const DISH_PAD = 0.3 * DEG, LOOK_PAD = 0.15 * DEG;   // how far off a body's limb still counts (the NAC's half field is 0.18 deg)
@@ -19139,6 +19139,11 @@ window.huygensModels = (() => {
   const AIR_KM = { TITAN: 1200, SATURN: 0 };      // the radio signal is lost this far above the surface (Titan's air)
   const HUYGENS = [utcToEt("2005-01-14T06:50:00"), utcToEt("2005-01-14T14:00:00")];   // Cassini's dish on Titan, receiving the probe
   const NOT_TARGETS = { CASSINI: 1, SUN: 1 };
+  // Earth behind Saturn or Titan with the dish held on that body's limb, within this of Earth: the dish is following the
+  // radio signal as the atmosphere bends it (measured on 3 May 2005: the dish stays 59,700 to 60,500 km from Saturn's
+  // center for 25 minutes each side while Earth moves 4 degrees behind it)
+  const LIMB_EARTH = Math.cos(8 * DEG), LIMB_BAND = [0.88, 1.03];
+  const DISH_MIN_S = 900;                         // the dish crossing a body for less than this is a turn, not an observation
   const name = n => n === "RINGS" ? "the rings" : titleCase(n);
 
   // ---------- the rule: one moment, from the attitude q (J2000 -> spacecraft) and positions (name -> J2000 km, or null) ----------
@@ -19189,7 +19194,17 @@ window.huygensModels = (() => {
       if (disc > MIN_DISC && aDish / (disc + DISH_PAD) < dishBest) { dishBest = aDish / (disc + DISH_PAD); dish = i; }
       if (aLook / (disc + LOOK_PAD) < lookBest) { lookBest = aLook / (disc + LOOK_PAD); look = i; }
     }
-    if (dish >= 0) return KINDS.DISH + 16 * (dish + 1);
+    if (dish >= 0) {
+      const b = names[dish], p = P[b];
+      if (earth && AIR_KM[b] !== undefined && -(bz[0] * e3[0] + bz[1] * e3[1] + bz[2] * e3[2]) > LIMB_EARTH) {
+        w3[0] = p[0] - cas[0]; w3[1] = p[1] - cas[1]; w3[2] = p[2] - cas[2];
+        const s = w3[0] * e3[0] + w3[1] * e3[1] + w3[2] * e3[2], sd = -(w3[0] * bz[0] + w3[1] * bz[1] + w3[2] * bz[2]);
+        const hidden = s > 0 && Math.hypot(w3[0] - s * e3[0], w3[1] - s * e3[1], w3[2] - s * e3[2]) < radii[b] + AIR_KM[b];
+        const graze = Math.hypot(w3[0] + sd * bz[0], w3[1] + sd * bz[1], w3[2] + sd * bz[2]) / radii[b];
+        if (hidden && graze > LIMB_BAND[0] && graze < LIMB_BAND[1] + AIR_KM[b] / radii[b]) return KINDS.LIMB + 16 * (dish + 1);
+      }
+      return KINDS.DISH + 16 * (dish + 1);
+    }
     if (rolling) return KINDS.ROLL;
     if (look >= 0) return KINDS.LOOK + 16 * (look + 1);
     d3[0] = -by[0]; d3[1] = -by[1]; d3[2] = -by[2];
@@ -19238,7 +19253,10 @@ window.huygensModels = (() => {
       else if (c) { job.T0.push(t); job.T1.push(a.t[k + 1]); job.C.push(c); }
       if ((k & 255) === 0 && performance.now() > t1) return;
     }
-    spans = { att: a, n: job.C.length, T0: Float64Array.from(job.T0), T1: Float64Array.from(job.T1), C: Uint16Array.from(job.C), names: job.names };
+    // the dish sweeping across a body during a turn is not an observation of it
+    const keep = job.C.map((c, i) => (c & 15) !== KINDS.DISH || job.T1[i] - job.T0[i] >= DISH_MIN_S);
+    const pick = arr => arr.filter((_, i) => keep[i]);
+    spans = { att: a, n: pick(job.C).length, T0: Float64Array.from(pick(job.T0)), T1: Float64Array.from(pick(job.T1)), C: Uint16Array.from(pick(job.C)), names: job.names };
     job = null; redraw();
   }
   function tick() {
@@ -19282,6 +19300,7 @@ window.huygensModels = (() => {
       case KINDS.DISH: return a.body === "TITAN" && state.et > HUYGENS[0] && state.et < HUYGENS[1]
         ? [`<b>Dish on Titan</b> · receiving Huygens`, "Cassini's dish points at Titan to record everything the Huygens probe sends on its way down."]
         : [`<b>Dish on ${B}</b> · radar or radio science`, `Cassini's dish points at ${B}: the radar and the radio science experiments use it as their antenna, so the cameras look elsewhere.`];
+      case KINDS.LIMB: return [`<b>Radio through ${B}'s atmosphere</b> · dish follows the bent signal`, `Earth is behind ${B}. The dish holds on ${B}'s limb, where the atmosphere bends the radio signal around toward Earth; how the signal bends and fades measures the atmosphere (a radio occultation).`];
       case KINDS.ROLL: return [`<b>Rolling</b> · fields and particles`, "A long roll about one axis, with no pictures: the instruments that sense magnetic fields, dust and plasma sweep the whole sky."];
       case KINDS.LOOK: return [`Pointed at <b>${B}</b>`, `The cameras and the spectrometers beside them point at ${B}.`];
     }
@@ -19311,14 +19330,14 @@ window.huygensModels = (() => {
       beam = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
       beam.frustumCulled = false; beam.visible = false; hudScene.add(beam);
     }
-    const a = live, show = on && beamOn && state.pointed && (a.kind === KINDS.DOWN || a.kind === KINDS.OCC || a.kind === KINDS.DISH) && !document.body.classList.contains("cutscene");
+    const a = live, show = on && beamOn && state.pointed && (a.kind === KINDS.DOWN || a.kind === KINDS.OCC || a.kind === KINDS.DISH || a.kind === KINDS.LIMB) && !document.body.classList.contains("cutscene");
     if (beam.visible !== show) { beam.visible = show; redraw(); }
     if (!show) return;
     // along the dish's own axis (the model's +Z), from its rim outward, fading with distance from Cassini
     vDish.set(0, 0, 1).applyQuaternion(cassini.quaternion);
     const s = cassini.scale.x, reach = Math.max(camera.position.distanceTo(cassini.position) * 8, s * 40);
     const P = beam.geometry.attributes.position.array, C = beam.geometry.attributes.color.array;
-    const col = a.kind === KINDS.DISH ? [0.88, 0.6, 0.29] : a.kind === KINDS.OCC ? [0.94, 0.9, 0.77] : [0.29, 0.7, 0.65];
+    const col = a.kind === KINDS.DISH ? [0.88, 0.6, 0.29] : a.kind === KINDS.OCC || a.kind === KINDS.LIMB ? [0.94, 0.9, 0.77] : [0.29, 0.7, 0.65];
     for (let i = 0; i < BEAM_N; i++) {
       const f = i / (BEAM_N - 1), d = s * 2.2 + reach * f * f, k = 0.8 * (1 - f) * (1 - f * f);
       P[3 * i] = cassini.position.x + vDish.x * d; P[3 * i + 1] = cassini.position.y + vDish.y * d; P[3 * i + 2] = cassini.position.z + vDish.z * d;
@@ -19334,7 +19353,7 @@ window.huygensModels = (() => {
     const v0 = state.view[0], v1 = state.view[1], span = v1 - v0;
     if (!on || !spans.n || span > STRIP_SPAN) return;
     // each pixel column shows the kind that fills most of it
-    const W = Math.ceil(w), NK = 6;
+    const W = Math.ceil(w), NK = 7;
     if (cols.length !== W * NK) cols = new Float32Array(W * NK); else cols.fill(0);
     let lo = 0, hi = spans.n - 1;
     while (lo < hi) { const m = (lo + hi) >> 1; if (spans.T1[m] < v0) lo = m + 1; else hi = m; }
@@ -19352,7 +19371,7 @@ window.huygensModels = (() => {
     flush(W);
     if (!keyed) {
       const keys = $("lkeys");
-      if (keys && keys.children.length) { keyed = true; keys.insertAdjacentHTML("beforeend", LOOKS.slice(1).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join("")); }
+      if (keys && keys.children.length) { keyed = true; keys.insertAdjacentHTML("beforeend", LOOKS.slice(1, 6).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join("")); }
     }
   }
   // the strip's own tooltip: what Cassini was doing at the time under the pointer
@@ -19368,7 +19387,10 @@ window.huygensModels = (() => {
 
   // ---------- hooks: after the viewer has turned Cassini, with the read-outs, and on the timeline ----------
   const prevAtt = window.studyAttitude, prevHud = window.studyHud, prevTl = window.studyTimeline;
-  window.studyAttitude = (...a) => { if (prevAtt) prevAtt(...a); live = on ? now() : { kind: 0, body: null }; drawBeam(); };
+  window.studyAttitude = (...a) => { if (prevAtt) prevAtt(...a); live = on ? now() : { kind: 0, body: null };
+    // (a dish crossing too short to be an observation: the finished spans have dropped it, so the read-out does too)
+    if (live.kind === KINDS.DISH && spans.att === att && spans.n) { const a = at(state.et); if (!a || a.kind !== KINDS.DISH) live = { kind: 0, body: null }; }
+    drawBeam(); };
   window.studyHud = ms => { if (prevHud) prevHud(ms); if (on) tick(); status(live); };
   window.studyTimeline = (g, w, h, xn) => { strip(g, w); if (prevTl) prevTl(g, w, h, xn); };
   window.cassiniActivity = { KINDS, now: () => live, at, spans: () => spans, words, busy: () => job ? job.k / job.att.count : 0 };

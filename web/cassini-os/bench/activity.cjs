@@ -7,6 +7,7 @@
 //   - 15 Feb 07:00 and 7 Sep 08:15  dish on Titan (the T3 and T7 radar passes)
 //   - 3 May 03:30  the radio signal crossing the rings (the first radio occultation of the rings, Rev 7)
 //   - 20 Aug 17:30  behind Saturn, the signal blocked (Rev 13)
+//   - 3 May 05:00  Earth behind Saturn and the dish held on Saturn's limb, following the bent signal (Rev 7)
 //   - 1 Jun 00:00  dish on Earth, with a light time between 67 and 84 minutes (Saturn's distance that year)
 //   - 9 Mar 09:00  pointed at Enceladus (the close flyby)
 //   - the spans of the months loaded around 3 May: the dish on Earth for 30 to 50% of the time, and the eight ring
@@ -22,6 +23,7 @@ const CASES = [
   ["2005-09-07T08:15:00", 3, "TITAN", /Dish on Titan/],
   ["2005-05-03T03:30:00", 2, "RINGS", /Radio through the rings/],
   ["2005-08-20T17:30:00", 2, "SATURN", /Behind Saturn/],
+  ["2005-05-03T05:00:00", 6, "SATURN", /Radio through Saturn's atmosphere/],
   ["2005-06-01T00:00:00", 1, null, /Dish on Earth · data takes (6[7-9]|7\d|8[0-4]) min/],
   ["2005-03-09T09:00:00", 5, "ENCELADUS", /Pointed at Enceladus/],
 ];
