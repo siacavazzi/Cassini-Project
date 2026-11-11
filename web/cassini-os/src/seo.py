@@ -120,7 +120,7 @@ def write_files(site):
         robots += f"\nSitemap: {site['url']}sitemap.xml\n"
         open(sitemap, "w").write(
             '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-            + "".join(f"  <url><loc>{html.escape(site['url'] + p)}</loc></url>\n" for p in ("", "about/"))
+            + "".join(f"  <url><loc>{html.escape(site['url'] + p)}</loc></url>\n" for p in ("", "about/", "how/"))
             + "</urlset>\n")
     elif os.path.exists(sitemap):
         os.remove(sitemap)
