@@ -61,7 +61,7 @@ def test_guard():
         ("thread", lambda: threading.Thread(target=lambda: None).start()),
     ]:
         try:
-            with resolve.cache_only():
+            with resolve.cache_only(d):
                 act()
         except resolve.NotMade:
             stopped.append(name)
@@ -69,7 +69,7 @@ def test_guard():
     check(not os.listdir(d), "nothing was made in the folder")
     # a maker's broad except cannot swallow it
     try:
-        with resolve.cache_only():
+        with resolve.cache_only(d):
             try:
                 open(os.path.join(d, "c"), "w")
             except Exception:
@@ -81,7 +81,7 @@ def test_guard():
     p = os.path.join(d, "r")
     with open(p, "w") as fh:
         fh.write("x")
-    with resolve.cache_only():
+    with resolve.cache_only(d):
         with open(p) as fh:
             check(fh.read() == "x", "reading inside cache_only")
     t = threading.Thread(target=lambda: None)
@@ -94,7 +94,7 @@ def test_guard():
         with open(os.path.join(d, "o"), "w") as fh:
             fh.write("ok")
         seen.append(True)
-    with resolve.cache_only():
+    with resolve.cache_only(d):
         pass
     th = threading.Thread(target=other)
     th.start()
@@ -192,6 +192,8 @@ def test_servers(args):
             tally["not r2/table"] += 1
             continue
         c = canonical_url(ans, urlsplit(u).path)
+        if ans["route"] == "mosaic_kind":
+            c += ("&" if "?" in c else "?") + "warm=1"   # (the key drops warm=, which is what makes it this table)
         if c in seen_canonical:
             continue
         seen_canonical.add(c)

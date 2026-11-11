@@ -70,7 +70,7 @@ class NotMade(BaseException):
 
 
 # ---------- cache only: nothing written, nothing started ----------
-_cache_only = contextvars.ContextVar("cache_only", default=False)
+_cache_only = contextvars.ContextVar("cache_only", default=None)   # the picture cache being read (its real path)
 _WRITE_EVENTS = {"os.mkdir", "os.rename", "os.remove", "os.rmdir", "os.link", "os.symlink", "os.truncate",
                  "os.chmod", "os.utime", "shutil.copyfile", "shutil.move", "shutil.rmtree", "shutil.make_archive"}
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
@@ -78,21 +78,33 @@ _installed = []
 _install_lock = threading.Lock()
 
 
+def _inside(path, cache):
+    if isinstance(path, bytes):
+        path = os.fsdecode(path)
+    if not isinstance(path, str):
+        return False   # (an open file descriptor: nothing new is opened for writing by name)
+    real = os.path.realpath(path)
+    return real == cache or real.startswith(cache + os.sep)
+
+
 def _audit(event, args):
-    if not _cache_only.get():
+    cache = _cache_only.get()
+    if cache is None:
         return
     if event == "open":
         mode, flags = args[1], args[2]
-        if (isinstance(mode, str) and any(c in mode for c in "wax+")) or (isinstance(flags, int) and flags & _WRITE_FLAGS):
+        if ((isinstance(mode, str) and any(c in mode for c in "wax+")) or (isinstance(flags, int) and flags & _WRITE_FLAGS)) \
+                and _inside(args[0], cache):
             raise NotMade(f"would write {args[0]}")
-    elif event in _WRITE_EVENTS:
-        raise NotMade(f"would {event} {args[0] if args else ''}")
+    elif event in _WRITE_EVENTS and args and _inside(args[0], cache):
+        raise NotMade(f"would {event} {args[0]}")
 
 
 def _install():
-    """The guards cache_only relies on, installed once per process: an audit hook that stops any file written (or
-    folder made, moved, removed) and a check in Thread.start that stops any thread started, while cache_only is on in
-    the calling context. Both do nothing anywhere else (the server's own requests, its warmers)."""
+    """The guards cache_only relies on, installed once per process: an audit hook that stops any file of the picture cache
+    written (or folder made, moved, removed in it) and a check in Thread.start that stops any thread started, while
+    cache_only is on in the calling context. Both do nothing anywhere else (the server's own requests, its warmers).
+    Files outside the cache are not pictures: SPICE's kernels extracted to its own cache, for one, stay allowed."""
     if _installed:
         return
     with _install_lock:
@@ -102,7 +114,7 @@ def _install():
         start = threading.Thread.start
 
         def guarded_start(self, *args, **kwargs):
-            if _cache_only.get():
+            if _cache_only.get() is not None:
                 raise NotMade("would start background work")
             return start(self, *args, **kwargs)
         threading.Thread.start = guarded_start
@@ -110,10 +122,10 @@ def _install():
 
 
 @contextlib.contextmanager
-def cache_only():
-    """Code run inside this makes nothing and starts nothing (NotMade where it would)."""
+def cache_only(cache):
+    """Code run inside this writes nothing into the picture cache and starts nothing (NotMade where it would)."""
     _install()
-    token = _cache_only.set(True)
+    token = _cache_only.set(os.path.realpath(cache))
     try:
         yield
     finally:
@@ -145,6 +157,7 @@ def prepare():
         if _prepared:
             return
         fs = _fs()
+        fs.data_source.KEEP_SPICE_CACHE = True   # (as the server: kernels stay extracted, never cleared under a request)
         fs.reel.target_of()
         fs.obs_mosaic._observations()
         fs.obs_mosaic._row_of()
@@ -173,7 +186,7 @@ def resolve(path: str, query: Dict[str, List[str]], cache: str) -> Answer:
     fs = _fs()
     prepare()
     try:
-        with cache_only(), fs.calibration.looking(_first(query, "look", fs.calibration.LOOKS[0])), \
+        with cache_only(cache), fs.calibration.looking(_first(query, "look", fs.calibration.LOOKS[0])), \
                 fs.calibration.coloring(_first(query, "colors", fs.calibration.COLORS[0])), \
                 fs.calibration.stepping(_first(query, "off", "")):
             return _route(fs, path, query, cache) or NONE
@@ -397,7 +410,7 @@ def table(path: str, query: Dict[str, List[str]], cache: str):
     if fs.reel._index is None:
         return None
     try:
-        with cache_only():
+        with cache_only(cache):
             m = re.match(r"^/frames/mosaic/([^/]+)\.json$", path)
             if m and fs.FRAME_ID.match(m.group(1)):
                 return om.tile_map(m.group(1), cache)
