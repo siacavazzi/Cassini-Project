@@ -1,0 +1,394 @@
+<!doctype html>
+<!-- How the pictures are made: the image pipeline explained for a curious visitor, with every picture drawn by the
+     pipeline itself (make_images.py fetches them from a frame server). Linked from the About page and the About window. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How the pictures are made · Cassini OS</title>
+<meta name="description" content="How Cassini OS turns the raw frames in NASA's archive into calibrated, centered, color pictures and mosaics, step by step, with the spacecraft's own navigation data.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-48.png" sizes="48x48">
+<style>
+:root {
+  color-scheme: dark;
+  --ui: -apple-system, "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Verdana, Tahoma, sans-serif;
+  --mono: "Share Tech Mono", ui-monospace, Menlo, monospace;
+  --bg: #000;
+  --panel: rgba(16, 17, 20, .72);
+  --line: rgba(255, 255, 255, .10);
+  --text: rgba(232, 236, 242, .86);
+  --dim: rgba(232, 236, 242, .52);
+  --accent: #8ab6ff;
+  --warm: #ffc478;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg) radial-gradient(1200px 600px at 70% -10%, rgba(255, 196, 120, .07), transparent 60%); color: var(--text); font: 15px/1.65 var(--ui); -webkit-font-smoothing: antialiased; }
+main { max-width: 1080px; margin: 0 auto; padding: 56px 24px 40px; }
+.narrow { max-width: 680px; }
+.kicker { font: 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+h1 { margin: 10px 0 12px; font-size: 42px; line-height: 1.1; font-weight: normal; color: #fff; letter-spacing: -.01em; }
+.lede { margin: 0 0 8px; font-size: 18px; line-height: 1.55; max-width: 720px; }
+section { margin-top: 88px; }
+h2 { margin: 0 0 6px; font-size: 26px; font-weight: normal; color: #fff; letter-spacing: -.005em; }
+h2 .n { font: 13px/1 var(--mono); color: var(--warm); margin-right: 12px; vertical-align: 4px; letter-spacing: .08em; }
+h3 { margin: 22px 0 4px; font-size: 13px; font-weight: normal; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+p { margin: 8px 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.mono { font-family: var(--mono); }
+.dim { color: var(--dim); }
+.small { font-size: 12px; color: var(--dim); }
+img { display: block; max-width: 100%; height: auto; }
+button { font: 12px/1 var(--mono); letter-spacing: .06em; color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
+button:hover { background: rgba(255,255,255,.09); }
+button[aria-pressed="true"] { color: #0b1220; background: var(--accent); border-color: var(--accent); }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=range] { accent-color: var(--accent); width: 100%; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+figure { margin: 0; }
+figcaption { margin-top: 8px; font-size: 12px; color: var(--dim); }
+.frame { background: #050505; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+
+/* the flow (the poster GIF): raw frames + SPICE -> color, body location -> mosaic */
+.flow { display: grid; grid-template-columns: 150px 40px 1fr 40px 1.35fr; grid-template-rows: auto auto; gap: 0; align-items: center; margin-top: 34px; }
+.flow .tag { font: 11px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+.flow .tag b { color: var(--warm); font-weight: normal; }
+.flow .raws { grid-row: 1; grid-column: 1; display: grid; gap: 6px; }
+.flow .raws figure { position: relative; }
+.flow .raws span { position: absolute; left: 6px; bottom: 4px; font: 10px/1 var(--mono); color: var(--dim); }
+.flow .color { grid-row: 1; grid-column: 3; }
+.flow .where { grid-row: 2; grid-column: 3; margin-top: 18px; }
+.flow .spice { grid-row: 2; grid-column: 1; margin-top: 18px; }
+.flow .mosaic { grid-row: 1 / span 2; grid-column: 5; }
+.flow .arrow { color: var(--dim); font: 18px/1 var(--mono); text-align: center; }
+.flow .spice .panel { padding: 12px; font: 11px/1.6 var(--mono); color: var(--dim); }
+.flow .spice .panel b { color: var(--text); font-weight: normal; }
+.flow svg { display: block; width: 100%; height: auto; }
+.scrub { display: flex; gap: 14px; align-items: center; margin-top: 18px; }
+.scrub .count { font: 12px/1 var(--mono); color: var(--dim); white-space: nowrap; min-width: 112px; }
+
+/* where the pictures come from */
+.cams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.cams .panel b { color: #fff; font-weight: normal; font-size: 17px; display: block; }
+.big { font-size: 34px; color: #fff; line-height: 1.1; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+.facts .panel span { display: block; }
+#filters svg { width: 100%; height: auto; display: block; }
+
+/* compare slider */
+.compare { position: relative; user-select: none; touch-action: none; cursor: ew-resize; }
+.compare img { width: 100%; }
+.compare .top { position: absolute; inset: 0; overflow: hidden; }
+.compare .top img { width: auto; height: 100%; max-width: none; }
+.compare .bar { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); margin-left: -1px; }
+.compare .bar::after { content: ""; position: absolute; top: 50%; left: -8px; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: var(--accent); }
+.compare .lab { position: absolute; top: 8px; font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; background: rgba(0,0,0,.6); padding: 5px 7px; border-radius: 4px; }
+.compare .lab.l { left: 8px; } .compare .lab.r { right: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+
+/* SPICE kernels */
+.kernels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.kernels .panel { padding: 14px; }
+.kernels .panel .mono { color: var(--warm); font-size: 12px; letter-spacing: .1em; }
+.kernels .panel b { display: block; color: #fff; font-weight: normal; margin: 2px 0 4px; }
+.kernels .panel p { margin: 0; font-size: 13px; color: var(--dim); }
+
+/* the pointing diagram */
+#pointing .stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; margin-top: 18px; }
+#pointing canvas.scene { width: 100%; height: 470px; display: block; background: radial-gradient(800px 400px at 50% 40%, rgba(138,182,255,.05), transparent 70%), #020203; border: 1px solid var(--line); border-radius: 12px; cursor: grab; touch-action: none; }
+#pointing canvas.scene:active { cursor: grabbing; }
+#pointing canvas.sensor { width: 100%; aspect-ratio: 1; display: block; }
+#pointing .steps { display: flex; gap: 6px; flex-wrap: wrap; }
+#pointing dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0 0; font: 12px/1.5 var(--mono); }
+#pointing dt { color: var(--dim); }
+#pointing dd { margin: 0; color: var(--text); text-align: right; }
+#pointing .step-text { min-height: 72px; margin: 12px 0 0; max-width: 760px; }
+#pointing .sliders { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 14px; font: 11px/1 var(--mono); color: var(--dim); letter-spacing: .06em; }
+#pointing .sliders label span { display: block; margin-bottom: 6px; }
+.formula { font: 14px/1.6 var(--mono); color: #fff; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; overflow-x: auto; white-space: nowrap; }
+
+/* color */
+.trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.trio figure { position: relative; }
+.trio figcaption { margin-top: 6px; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+
+footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--dim); }
+.never { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
+.never .panel b { color: #fff; font-weight: normal; display: block; }
+
+@media (max-width: 860px) {
+  main { padding: 36px 16px 32px; }
+  h1 { font-size: 32px; }
+  .cols, .cams, .facts, .kernels, .never { grid-template-columns: 1fr; }
+  .flow { grid-template-columns: 90px 20px 1fr; }
+  .flow .mosaic { grid-row: 3; grid-column: 1 / span 3; margin-top: 18px; }
+  .flow .arrow.m { display: none; }
+  #pointing .stage { grid-template-columns: 1fr; }
+  #pointing canvas.scene { height: 340px; }
+  #pointing .sliders { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="narrow" style="max-width:780px">
+    <div class="kicker"><a href="../">Cassini OS</a> · <a href="../about/">About</a> · How the pictures are made</div>
+    <h1>From raw frames to color mosaics</h1>
+    <p class="lede">Cassini's cameras only ever took black-and-white pictures, one filter at a time. Every color picture and mosaic in Cassini OS is put together from those frames, using the spacecraft's own navigation data to know exactly where it was looking. Here is how, step by step, with real pictures from each step.</p>
+  </header>
+
+  <!-- 0 · the whole process at a glance (the poster GIF) -->
+  <section id="flow" style="margin-top:40px">
+    <div class="flow" aria-label="Jupiter, 29 December 2000: raw frames and SPICE data become a color picture, a body location and a mosaic">
+      <div class="raws">
+        <div class="tag"><b>1</b> · Raw frames</div>
+        <figure class="frame"><img data-flow="raw-CB2" alt="Raw frame, CB2 filter (750 nm)" width="240" height="240"><span>CB2 · 750 nm</span></figure>
+        <figure class="frame"><img data-flow="raw-GRN" alt="Raw frame, green filter" width="240" height="240"><span>GRN · 569 nm</span></figure>
+        <figure class="frame"><img data-flow="raw-BL1" alt="Raw frame, blue filter" width="240" height="240"><span>BL1 · 457 nm</span></figure>
+      </div>
+      <div class="arrow" style="grid-row:1;grid-column:2">→</div>
+      <div class="color">
+        <div class="tag"><b>2</b> · Calibrated, aligned, in color</div>
+        <div class="frame"><img data-flow="color" alt="The three frames combined into one color picture" width="480" height="480"></div>
+      </div>
+      <div class="spice">
+        <div class="tag"><b>3</b> · SPICE data</div>
+        <div class="panel">
+          <div>time <b data-spice="time">–</b></div>
+          <div>range <b data-spice="km">–</b></div>
+          <div>Jupiter's center</div>
+          <div>sample <b data-spice="sample">–</b></div>
+          <div>line <b data-spice="line">–</b></div>
+          <div>north <b data-spice="north">–</b></div>
+        </div>
+      </div>
+      <div class="arrow" style="grid-row:2;grid-column:2;margin-top:18px">→</div>
+      <div class="where">
+        <div class="tag"><b>4</b> · Where Jupiter is on the sensor</div>
+        <div class="frame" style="background:#020203">
+          <svg viewBox="-1560 -1560 4140 4140" aria-label="The camera's sensor, a square, on Jupiter's disk as SPICE places it">
+            <circle data-where="disk" cx="0" cy="0" r="0" fill="rgba(255,196,120,.08)" stroke="rgba(255,196,120,.7)" stroke-width="10"/>
+            <image data-where="img" x="0" y="0" width="1024" height="1024" opacity=".85"/>
+            <rect x="0" y="0" width="1024" height="1024" fill="none" stroke="#8ab6ff" stroke-width="12"/>
+            <circle data-where="dot" cx="0" cy="0" r="48" fill="#ffc478"/>
+            <line data-where="ray" x1="511.5" y1="511.5" x2="0" y2="0" stroke="#ffc478" stroke-width="8" stroke-dasharray="30 24"/>
+            <text x="512" y="1150" text-anchor="middle" fill="rgba(232,236,242,.6)" font-size="110" font-family="Menlo, monospace">sensor</text>
+          </svg>
+        </div>
+      </div>
+      <div class="arrow m" style="grid-row:1 / span 2;grid-column:4">→</div>
+      <div class="mosaic">
+        <div class="tag"><b>5</b> · The mosaic, pointing by pointing</div>
+        <div class="frame"><img data-flow="mosaic" alt="The color mosaic of Jupiter so far" width="900" height="900"></div>
+      </div>
+    </div>
+    <div class="scrub">
+      <button class="flow-play" aria-pressed="true">Pause</button>
+      <input class="flow-n" type="range" min="1" max="9" step="1" value="1" aria-label="Pointing">
+      <span class="count">pointing 1 of 9</span>
+    </div>
+    <p class="small">Jupiter on 29 December 2000, from 9.9 million km. The narrow-angle camera took a 3 × 3 grid of pointings, each in three filters, a minute apart. Every picture above was drawn by the Cassini OS pipeline; the rest of this page goes through each step.</p>
+  </section>
+
+  <!-- 1 · where the pictures come from -->
+  <section id="source">
+    <h2><span class="n">01</span>Where the raw photos come from</h2>
+    <div class="cols">
+      <div>
+        <p>Cassini carried two cameras pointing the same way, the Imaging Science Subsystem. The <b>narrow-angle camera</b> is a telescope; the <b>wide-angle camera</b> sees ten times wider. Each has one 1024 × 1024 pixel sensor that only measures brightness. Color comes from two filter wheels in front of it: the camera takes one picture per filter.</p>
+        <p>Between 1997 and 2017 Cassini took about 443,000 of these frames. Each was stored on board, radioed to NASA's Deep Space Network antennas hours later, and is kept in NASA's <a href="https://pds-imaging.jpl.nasa.gov/" rel="noopener">Planetary Data System</a> archive with a label that says when it was taken, through which filters, for how long and with which camera settings.</p>
+      </div>
+      <div class="cams">
+        <div class="panel"><span class="kicker">NAC</span><b>Narrow angle</b><span class="big">0.35°</span><span class="small">field of view: a dime seen from 3 meters. 2,000 mm focal length.</span></div>
+        <div class="panel"><span class="kicker">WAC</span><b>Wide angle</b><span class="big">3.5°</span><span class="small">field of view: ten times wider. 200 mm focal length.</span></div>
+      </div>
+    </div>
+    <h3>The filters, by wavelength</h3>
+    <div id="filters" class="panel" style="padding:14px 16px 8px"></div>
+    <p class="small">Hover a filter for its name. Red, green and blue filters together give natural color; the others (ultraviolet, infrared, methane bands) show things an eye can't see. Highlighted: the three filters of the Rhea picture below.</p>
+  </section>
+
+  <!-- 2 · a raw frame -->
+  <section id="raw">
+    <h2><span class="n">02</span>What a raw frame looks like</h2>
+    <div class="cols">
+      <figure class="frame"><img src="img/step-fill-raw.jpg" alt="The PNG copy of a Dione frame with black bands where lines were lost" width="640" height="640"><figcaption style="padding:0 10px 8px">Dione, 4 May 2006, N1525449680 · the PNG copy the pipeline starts from</figcaption></figure>
+      <div>
+        <p>This is a frame as the pipeline starts from it: an 8-bit PNG copy made from NASA's archive. A few things to notice:</p>
+        <p><b style="color:#fff;font-weight:normal">It is gray.</b> One filter, one brightness per pixel.</p>
+        <p><b style="color:#fff;font-weight:normal">Its brightness is relative.</b> The PNG copy is stretched so its darkest pixel is black and its brightest is white, which hides how bright things really were (NASA's archive itself keeps the camera's own numbers). Put three such frames together as red, green and blue and the colors come out wrong, so the pipeline undoes the stretch, from the frame's label, before it calibrates.</p>
+        <p><b style="color:#fff;font-weight:normal">Parts are missing.</b> The black bands are lines lost on the way to Earth. The streaks and specks are cosmic rays and stars.</p>
+        <p><b style="color:#fff;font-weight:normal">It is not where you'd expect.</b> The camera's "up" is wherever the spacecraft happened to be turned, not north.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · cleaning and calibrating -->
+  <section id="calibrate">
+    <h2><span class="n">03</span>Cleaning up and calibrating</h2>
+    <div class="cols">
+      <div>
+        <p>Each frame goes through the camera team's own calibration recipe (CISSCAL), using their calibration files. It turns the numbers the camera recorded back into what the scene really looked like: how much sunlight each spot reflects, called <span class="mono">I/F</span>.</p>
+        <ol class="small" style="padding-left:18px;line-height:1.75">
+          <li>undo the PNG copy's stretch and the camera's 12-to-8-bit compression table</li>
+          <li>subtract the electronic offset (bias) and the 2 Hz hum that makes faint horizontal bands</li>
+          <li>subtract the dark current, the signal the sensor makes with no light at all, and fix hot pixels</li>
+          <li>correct the sensor's slight nonlinearity</li>
+          <li>divide by the exposure time</li>
+          <li>divide out the flat field: dust rings on the optics and uneven pixels</li>
+          <li>account for the gain setting, pixel binning and the sensor's slow aging</li>
+          <li>divide by how much sunlight that filter lets through and how far the Sun was</li>
+        </ol>
+        <p>Around that: lines lost in transmission are filled from the lines above and below, and when the camera took the same shot more than once in quick succession, the repeats are stacked to beat down noise and cosmic-ray hits.</p>
+      </div>
+      <div>
+        <div class="chips" id="step-chips"></div>
+        <div class="compare frame" id="step-compare" data-left="step off" data-right="step on"></div>
+        <p class="small" id="step-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · SPICE -->
+  <section id="spice">
+    <h2><span class="n">04</span>SPICE: where everything was</h2>
+    <div class="narrow" style="max-width:780px">
+      <p>To place a picture you need to know where Cassini was, where the moon or planet was, and exactly which way the camera pointed, all at the instant the shutter opened. NASA's navigation team kept that record for the whole mission in files called <b style="color:#fff;font-weight:normal">SPICE kernels</b>. Cassini OS reads them with NASA's own SPICE toolkit.</p>
+    </div>
+    <div class="kernels">
+      <div class="panel"><span class="mono">SPK</span><b>Where things are</b><p>Positions of Cassini, the Sun, planets and moons over time, from radio tracking and orbit fits.</p></div>
+      <div class="panel"><span class="mono">CK</span><b>Which way Cassini faced</b><p>The spacecraft's orientation, many times a second, from its star trackers and gyros.</p></div>
+      <div class="panel"><span class="mono">FK · IK</span><b>Where the cameras point</b><p>How each camera is mounted on the spacecraft, its focal length and pixel size.</p></div>
+      <div class="panel"><span class="mono">PCK</span><b>Bodies' size and spin</b><p>Each body's radius and which way its north pole points.</p></div>
+      <div class="panel"><span class="mono">LSK · SCLK</span><b>Clocks</b><p>Converts the spacecraft's own clock and UTC into one time scale.</p></div>
+      <div class="panel"><span class="mono">C-smithed</span><b>Pointing, refined</b><p>Where available, pointing corrected afterward by matching stars and limbs in the pictures, plus USGS's refined pointing for Titan.</p></div>
+    </div>
+  </section>
+
+  <!-- 5 · the pointing diagram -->
+  <section id="pointing">
+    <h2><span class="n">05</span>Finding the body on the sensor</h2>
+    <div class="narrow" style="max-width:780px">
+      <p>With SPICE we can work out, for any frame, exactly where its target lands on the sensor. Here is roughly how. Drag the scene to turn it; play the steps or click through them.</p>
+    </div>
+    <div class="stage">
+      <div>
+        <canvas class="scene" aria-label="Cassini, a ray to the target body, the plane at its distance and the camera's four corner rays"></canvas>
+        <div class="sliders">
+          <label><span>body left ↔ right</span><input class="fx" type="range" min="-1.6" max="1.6" step="0.005"></label>
+          <label><span>body up ↕ down</span><input class="fy" type="range" min="-1.6" max="1.6" step="0.005"></label>
+          <label><span>distance</span><input class="dist" type="range" min="0.5" max="1.6" step="0.01"></label>
+        </div>
+      </div>
+      <div>
+        <div class="steps">
+          <button data-step="1">1</button><button data-step="2">2</button><button data-step="3">3</button><button data-step="4">4</button><button data-step="5">5</button>
+          <button class="play">Play the steps</button>
+        </div>
+        <canvas class="sensor" style="margin-top:12px" aria-label="Where the body lands on the sensor"></canvas>
+        <dl>
+          <dt>distance</dt><dd class="r-dist">–</dd>
+          <dt>across the frame</dt><dd class="r-across">–</dd>
+          <dt>down the frame</dt><dd class="r-down">–</dd>
+          <dt>on the sensor</dt><dd class="r-pixel">–</dd>
+          <dt>its radius</dt><dd class="r-radius">–</dd>
+        </dl>
+        <div class="presets chips" style="margin-top:14px">
+          <button data-preset="rhea">Rhea · 16 Jan 2005</button>
+          <button data-preset="jupiter">Jupiter · 29 Dec 2000</button>
+        </div>
+        <p class="small preset-note"></p>
+      </div>
+    </div>
+    <p class="step-text" data-step="1"><b style="color:var(--warm);font-weight:normal">1 · A line to the body.</b> SPICE gives Cassini's position and the body's at the moment of the picture, so we can draw a line from one to the other, and its length is the distance. It is where the body <i>appeared</i>: light takes time to cross that distance (1.7 seconds from Rhea here, 33 seconds from Jupiter), so SPICE looks back by that much and corrects for Cassini's own motion.</p>
+    <p class="step-text" data-step="2" hidden><b style="color:var(--warm);font-weight:normal">2 · A plane at that distance.</b> Put a flat sheet out at the body's distance, square to the direction the camera is looking.</p>
+    <p class="step-text" data-step="3" hidden><b style="color:var(--warm);font-weight:normal">3 · The camera's four corners.</b> From the pointing record (CK) and the camera's mounting and lens (FK, IK), draw four lines through the four corners of the sensor. Where they meet the sheet is the rectangle of sky the picture covers. (The field of view is drawn far wider than the narrow-angle camera's real 0.35° so it can be seen.)</p>
+    <p class="step-text" data-step="4" hidden><b style="color:var(--warm);font-weight:normal">4 · Where the line lands among them.</b> The body's line crosses the sheet somewhere in (or outside) that rectangle. How far across and how far down it lands is how far across and down the sensor the body is: a fraction of 1024 pixels. Move the body or the distance with the sliders: the rectangle grows with distance, but the fraction only changes when the body moves.</p>
+    <div class="step-text" data-step="5" hidden><p><b style="color:var(--warm);font-weight:normal">5 · The shortcut the code takes.</b> Because only the fraction matters, Cassini OS skips the sheet. It turns the body's position into the camera's own directions (x across, y down, z straight out) and divides by the distance straight out, the way any pinhole camera works:</p>
+      <div class="formula">pixel = 511.5 − (x ÷ z) × <span title="focal length ÷ pixel size, from the camera's instrument kernel">166,953</span></div>
+      <p class="small">166,953 is the narrow-angle camera's focal length divided by its pixel size. The same sum, with a point a little north of the body, gives which way north is in the frame.</p></div>
+  </section>
+
+  <!-- 6 · centering -->
+  <section id="center">
+    <h2><span class="n">06</span>Centered and turned north up</h2>
+    <div class="cols">
+      <div class="compare frame" id="center-compare" data-left="as taken" data-right="placed by SPICE"
+           data-a="img/rhea-raw-clear.jpg" data-b="img/rhea-centered.jpg"></div>
+      <div>
+        <p>Knowing where the body's center lands, and which way is north, each frame is moved so the body sits in the middle and turned so north points up. Drag across the picture to compare.</p>
+        <p>That is what lets frames taken minutes or hours apart, from a spacecraft that kept turning, play one after another without the moon jumping around, and what lets the tiles of a mosaic go in the right place.</p>
+        <p class="small">Rhea, 16 January 2005, from 495,886 km. SPICE put its center 4 pixels from the middle of the sensor, and the frame turns 5.4° to put north up.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · color -->
+  <section id="color">
+    <h2><span class="n">07</span>Three filters make one color picture</h2>
+    <div class="narrow" style="max-width:780px">
+      <p>For a color picture the camera shot the same scene through red, green and blue filters, a few seconds apart. Each frame is calibrated, so the three are on the same brightness scale, then lined up and combined.</p>
+    </div>
+    <div class="trio" style="margin-top:16px">
+      <figure class="frame"><img src="img/rhea-frame-red.jpg" alt="Rhea through the red filter" width="512" height="512"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#e5554a"></span>RED · 651 nm</figcaption></figure>
+      <figure class="frame"><img src="img/rhea-frame-green.jpg" alt="Rhea through the green filter" width="512" height="512"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#58c46a"></span>GRN · 569 nm</figcaption></figure>
+      <figure class="frame"><img src="img/rhea-frame-blue.jpg" alt="Rhea through the blue filter" width="512" height="512"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#5a8cff"></span>BL1 · 457 nm</figcaption></figure>
+    </div>
+    <div class="cols" style="margin-top:28px">
+      <div>
+        <div class="chips" id="color-chips"></div>
+        <div class="compare frame" id="color-compare"></div>
+      </div>
+      <div>
+        <h3 style="margin-top:6px">Lining up</h3>
+        <p>Cassini moved between the three exposures, so the moon is in a slightly different spot in each. Stack them as they are and the edges split into red and blue fringes. The pipeline lines the channels up on the picture itself, with SPICE's prediction as a guide and as a check.</p>
+        <h3>Natural color</h3>
+        <p>Cassini's filters aren't the same as the eye's red, green and blue. A small color matrix, fitted to how each filter responds, turns them into the colors a person would have seen. "Filters straight" puts each filter directly into one color channel instead.</p>
+        <h3>Calibrated or not</h3>
+        <p>Without calibration, each filter keeps its PNG copy's own stretch, so each channel is as bright as it can be no matter what the camera saw, and the colors are off.</p>
+        <p class="small" id="color-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · mosaics (and mosaic movies) -->
+  <section id="mosaic">
+    <h2><span class="n">08</span>Mosaics, tile by tile, and mosaic movies</h2>
+    <div class="cols">
+      <div class="frame" style="background:#000"><img id="mos-img" alt="Jupiter's color mosaic as it grows" width="900" height="900"></div>
+      <div>
+        <p>When the body is bigger than the camera's view, Cassini took a grid of pointings. Each pointing becomes a color picture as above. SPICE says where each one goes, the tiles are nudged so their overlaps agree, their brightness is evened out along the seams, and they are blended together.</p>
+        <p>Jupiter's portrait didn't stop at one grid: Cassini went round the same 3 × 3 grid again an hour later, so it is a <b style="color:#fff;font-weight:normal">mosaic movie</b>. Each new tile replaces the same spot from the lap before. Play it and watch the Great Red Spot ride Jupiter's ten-hour day; halfway through a lap, old and new tiles sit side by side, so a storm can show up twice.</p>
+        <div class="scrub" style="margin-top:14px">
+          <button id="mos-play">Play</button>
+          <input id="mos-n" type="range" min="1" max="18" step="1" value="9" aria-label="Pointings added">
+        </div>
+        <p class="mono small" id="mos-count"></p>
+        <p class="small">Jupiter, 29 December 2000, 04:18 to 06:32 UTC: two laps of the portrait, CB2 / GRN / BL1 in each pointing (the last pointing of lap 2 has no CB2 frame, so that tile stays from lap 1).</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="never">
+    <h2><span class="n">09</span>What we never do</h2>
+    <div class="never">
+      <div class="panel"><b>Nothing invented</b><span class="small">Every pixel comes from a frame in the archive. Short runs of lines lost in transmission are filled from the lines next to them; bigger gaps that no frame covers stay black.</span></div>
+      <div class="panel"><b>No sharpening, no AI</b><span class="small">No detail is invented or exaggerated; the pictures are as sharp as the camera was.</span></div>
+      <div class="panel"><b>Placed by the record</b><span class="small">Where a picture goes comes from SPICE and the picture itself, not by hand.</span></div>
+    </div>
+    <p style="margin-top:24px"><a href="../?t=2005-01-16T00:38:30&amp;view=rhea&amp;play=0">See Rhea's color set in Cassini OS</a> · <a href="../?t=2000-12-29T05:19:00&amp;view=jupiter&amp;play=0">See the Jupiter mosaic</a></p>
+  </section>
+
+  <footer>
+    <p>Pictures NASA/JPL-Caltech/Space Science Institute, processed by the Cassini OS pipeline. Navigation data NASA/JPL's SPICE archive; calibration after the camera team's CISSCAL (Porco et al. 2004, West et al. 2010, Knowles et al. 2020); Titan pointing from USGS (Weller, Karkoschka et al.).</p>
+    <p>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute. <a href="../about/">About Cassini OS</a></p>
+  </footer>
+</main>
+<script src="page.js"></script>
+<script src="pointing.js"></script>
+</body>
+</html>
