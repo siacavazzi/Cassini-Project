@@ -420,7 +420,7 @@ def pass_units(u, cache, movie_pass, om):
                 urls.append(url(f"/frames/movie/{fid}.webp", size=PLANE_SIZE, color=0, detail=0))
             if evens is not True:
                 urls += [url(f"/frames/movie/{fid}.webp", size=s, exposure=EVENED) for s in PASS_SIZES]
-        yield {"family": "pass", "frame": fid, "urls": urls,
+        yield {"family": "pass", "frame": fid, "urls": urls, "pass": "_".join(map(str, u["key"])),
                "unsure": {"detail=0": filled is None, "exposure": evens is None}}
 
 
@@ -459,7 +459,10 @@ _W = {}
 
 
 def _init(cache, target_spec, state, tags, verify, dry):
+    import faulthandler
+    import signal
     import resolve
+    faulthandler.register(signal.SIGUSR1, all_threads=True)   # kill -USR1 <worker>: where it is, on stderr
     _W.update(cache=cache, tags=tags, verify=verify, dry=dry, resolve=resolve)
     resolve.prepare()
     _W["target"] = make_target(target_spec)
@@ -480,9 +483,13 @@ def read_answer(answer):
         return fh.read()
 
 
-def one(u, tags=None, cache=None, resolve_fn=None, target=None, ledger=None, verify=False, dry=False, read_fn=None):
+def one(u, tags=None, cache=None, resolve_fn=None, target=None, ledger=None, verify=False, dry=False, read_fn=None,
+        gave_up=None):
     """Publishes one unit; returns its records: {url, key, family, year, outcome, bytes, objects, role, reason}.
-    outcome: published (written now), held (already there), marker, missing, refused."""
+    outcome: published (written now), held (already there), marker, missing, refused.
+    gave_up: {route: why} shared by the units of one pass: a route whose resolve() took longer than SLOW and found
+    nothing (work the server does on a first view and the cache does not keep, such as a ring pass's fits) is not
+    asked again for the pass's later frames; they are listed missing with that reason."""
     tags = tags if tags is not None else _W["tags"]
     cache = cache or _W.get("cache")
     resolve_fn = resolve_fn or _W["resolve"].resolve
@@ -507,9 +514,19 @@ def one(u, tags=None, cache=None, resolve_fn=None, target=None, ledger=None, ver
         route = ROUTE[ans["route"]]
         rec["route"] = ans["route"]
         parts = urllib.parse.urlsplit(link)
+        if gave_up is not None and ans["route"] in gave_up:
+            rec.update(outcome="missing", reason=gave_up[ans["route"]])
+            recs.append(rec)
+            continue
+        t0 = time.monotonic()
         answer = resolve_fn(parts.path, urllib.parse.parse_qs(parts.query), cache)
+        took = time.monotonic() - t0
         if answer.kind == "none":
             rec.update(outcome="missing", reason="not in the cache (resolve: none)")
+            if took > SLOW and gave_up is not None:
+                gave_up[ans["route"]] = (f"not asked: an earlier frame of this pass took {took:.0f} s to resolve to "
+                                         "none (work the cache does not keep)")
+                rec["reason"] += f", after {took:.0f} s"
             recs.append(rec)
             continue
         if answer.kind == "negative" and not route.get("markers"):
@@ -534,8 +551,18 @@ def one(u, tags=None, cache=None, resolve_fn=None, target=None, ledger=None, ver
     return recs
 
 
+SLOW = 60   # s: a resolve (or a unit) slower than this is named on stderr
+
+
 def _batch(us):
-    return [r for u in us for r in one(u)]
+    out, gave_up = [], {}
+    for u in us:
+        t0 = time.monotonic()
+        out += one(u, gave_up=gave_up.setdefault(u.get("pass"), {}) if u.get("pass") else None)
+        took = time.monotonic() - t0
+        if took > SLOW:
+            print(f"slow unit ({took:.0f} s): {u['family']} {u['urls'][:1]}", file=sys.stderr, flush=True)
+    return out
 
 
 def tables_units(folder, tags):
@@ -655,11 +682,14 @@ def main(argv=None):
         ap.error(f"no such family: {', '.join(sorted(unknown))}")
     versions = frame_server.picture_versions()
     tags = keys.family_tags(versions)
-    spans = prebuild.spans_of(args)
-    if spans is None:
-        import slices
-        covered = slices.covered(cache, versions)["spans"]
-        spans = [tuple(s) for s in covered] if covered else None
+    import slices
+    asked = prebuild.spans_of(args)
+    covered = slices.covered(cache, versions)["spans"]   # None: the cache holds the whole mission
+    covered = slices.merge([tuple(s) for s in covered]) if covered is not None else None
+    spans = (slices.intersect(slices.merge(asked), covered) if asked and covered is not None
+             else asked or covered)
+    if spans == []:
+        raise SystemExit("the stretch asked holds nothing this cache's slices.json records under these versions")
     if args.to_r2:
         target_spec = "r2:"
         state = args.state or os.path.expanduser(f"~/.cassini-publish/{os.environ.get('R2_BUCKET', 'r2')}")
@@ -697,7 +727,23 @@ def main(argv=None):
         for y in sorted(by_year):
             us = by_year[y]
             size = max(1, min(200, len(us) // (args.jobs * 4) or 1))
-            batches = [us[k:k + size] for k in range(0, len(us), size)]
+            # (a pass's frames stay together in one batch, in order: a route that resolve() gives up on is not asked
+            # again for the rest of the pass)
+            passes = collections.OrderedDict()
+            for u in us:
+                passes.setdefault(u.get("pass") or id(u), []).append(u)
+            batches, cur = [], []
+            for group in passes.values():
+                if len(group) > 1:
+                    batches.append(group)
+                    continue
+                cur += group
+                if len(cur) >= size:
+                    batches.append(cur)
+                    cur = []
+            if cur:
+                batches.append(cur)
+            batches.sort(key=len, reverse=True)   # the longest passes first, so they do not finish last
             t0 = time.monotonic()
             for got in pool.map(_batch, batches):
                 recs += got

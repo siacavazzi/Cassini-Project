@@ -233,6 +233,21 @@ def test_one():
                        target=None, ledger=None, dry=True, read_fn=lambda a: b"P")
     check(len(recs) == 1, "a centred picture is published without its as-is copy")
 
+    calls, slow = [], publish.SLOW
+    publish.SLOW = -1   # every resolve counts as slow
+
+    def nothing(path, q, cache):
+        calls.append(path)
+        return NONE
+    gave_up = {}
+    for n in (1, 2, 3):
+        recs = publish.one({"family": "pass", "year": 2009, "pass": "P",
+                            "urls": [f"/frames/mosaic/N150000000{n}_1.webp?size=1024"]},
+                           tags=tags, cache="/c", resolve_fn=nothing, target=None, ledger=None, dry=True, gave_up=gave_up)
+    publish.SLOW = slow
+    check(len(calls) == 1 and recs[0]["outcome"] == "missing" and "earlier frame" in recs[0]["reason"],
+          "a route resolve() gives up on slowly is not asked again for the rest of the pass, and is listed missing")
+
 
 def test_manifest():
     tags = keys.family_tags({"frame_server.FRAME_VERSION": "frames-q95"})
