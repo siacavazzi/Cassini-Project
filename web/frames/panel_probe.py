@@ -26,6 +26,8 @@ import time
 import numpy as np
 from PIL import Image
 
+# (this probe reads panel_places' per-tile report of the one-pointing-at-a-time rule: the global solve reports pairs)
+os.environ.setdefault("CASSINI_GLOBAL_PANELS", "0")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 

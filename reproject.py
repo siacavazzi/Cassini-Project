@@ -242,6 +242,29 @@ def sky_to_surface(view, x, y, km_px):
     return view["rot"] @ -view["c"] + t[..., None] * ray, hit
 
 
+RING_INNER = 74490    # km from Saturn's centre: the C ring's inner edge (ring_plane)
+RING_OUTER = 140220   # km: the F ring
+
+
+def ring_plane(view, x, y, km_px):
+    """Where the lines of sight through sky places x, y (reference pixels from the body's centre, as sky_to_surface)
+    cross the body's equator plane (its rings' plane): (radius km from the body's centre, on: True where that is
+    within RING_INNER..RING_OUTER, in front of Cassini and not behind the body's disk). Rings in shadow count as
+    rings: the mask says where the ring plane is, not whether it is lit."""
+    ray = (view["c"] + (-x * km_px)[..., None] * view["east"] + (-y * km_px)[..., None] * view["north"]) @ view["rot"].T
+    o = view["rot"] @ -view["c"]
+    dz = ray[..., 2]
+    t = np.where(np.abs(dz) > 1e-12, -o[2] / np.where(np.abs(dz) > 1e-12, dz, 1.0), -1.0)
+    point = o + t[..., None] * ray
+    radius = np.hypot(point[..., 0], point[..., 1])
+    on = (t > 0) & (radius >= RING_INNER) & (radius <= RING_OUTER)
+    # (behind the disk: the line of sight meets the body before the ring plane)
+    surface, hit = sky_to_surface(view, x, y, km_px)
+    t_disk = np.linalg.norm(surface - o, axis=-1) / np.maximum(np.linalg.norm(ray, axis=-1), 1e-12)
+    on &= ~(hit & (t_disk < t))
+    return radius, on
+
+
 def surface_to_sky(view, points, km_px):
     """Sky places (reference pixels from the body's centre) of body-fixed points, and which are on the near side."""
     observer = view["rot"] @ -view["c"]
