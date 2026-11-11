@@ -1,0 +1,63 @@
+# The Worker's deploy config (WP8). deploy.sh renders this to a wrangler.toml in a scratch folder, filling the placeholders
+# from site.env and the Worker's entry point, so no domain, account or secret is written into the repo. The account
+# ID and token come from the environment (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN).
+#
+# The Worker answers the frames routes on the same host as the Pages site (Worker routes run before Pages on a host
+# of the zone), so the page asks its own origin, as it does from the frame server today: no ?frames=, no CORS.
+# The route list is policy.json's, made by `python web/deploy/cf.py routes` (test_deploy.py checks it).
+
+name = "@WORKER_NAME@"
+main = "@WORKER_MAIN@"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+# never on workers.dev and no preview URLs: the Worker is reachable only through the routes below
+workers_dev = false
+preview_urls = false
+
+# local dry run (wrangler dev): local R2 loaded from WP3's mirror, no routes
+[vars]
+MANIFEST_KEY = "@MANIFEST_KEY@"
+SITE_ENV = "local"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "@R2_BUCKET_NAME@"
+
+[[analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "cassini_public_local"
+
+[observability]
+enabled = true
+
+[env.staging]
+workers_dev = false
+preview_urls = false
+routes = [
+@STAGING_ROUTES@
+]
+[env.staging.vars]
+MANIFEST_KEY = "@MANIFEST_KEY@"
+SITE_ENV = "staging"
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "@R2_BUCKET_NAME@"
+[[env.staging.analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "@USAGE_DATASET_STAGING@"
+
+[env.production]
+workers_dev = false
+preview_urls = false
+routes = [
+@PRODUCTION_ROUTES@
+]
+[env.production.vars]
+MANIFEST_KEY = "@MANIFEST_KEY@"
+SITE_ENV = "production"
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "@R2_BUCKET_NAME@"
+[[env.production.analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "@USAGE_DATASET_PRODUCTION@"

@@ -24,7 +24,14 @@
      Editing: Edit opens the item in Cassini Studio (studio.html). An edited item keeps the original's recipe (src or
      film), the edit's own recipe (edit, studio.html's short string) and the original's id (editOf); its file is the
      edited one. A shared link to an edited picture carries &edit=…, and the page that opens it applies the edit to
-     the picture the frame server makes. -->
+     the picture the frame server makes.
+
+     On the public site (window.cassiniPublic, docs/public-site/README.md D7) no origin makes anything: a shared film is
+     made in the viewer's browser from its options (cassiniExport.makeFilm: the page's own plan and the published
+     pictures, as the Export window makes one here), with a note that says how far it is; a picture is asked for only as
+     published (cassiniExport.publicUrl: full sizes where the policy has them, no format or download); a mosaic
+     pointing opened on its own (D9) opens as its frame or color picture; a body reel picture (D2) says it is not on
+     the public site. -->
 <style>
 #galcard { top: calc(env(safe-area-inset-top, 0px) + 36px); left: 50%; transform: translateX(-50%); width: clamp(360px, 56vw, 860px); max-height: calc(100% - 200px); display: flex; flex-direction: column; }
 #galcard.zoomed { width: clamp(460px, 80vw, 1280px); max-height: calc(100% - 60px); }
@@ -235,7 +242,23 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       return u.pathname + (q ? "?" + q : "");
     } catch (e) { return null; }
   }
-  const sized = (rec, size) => `${FRAMES}${rec}${rec.includes("?") ? "&" : "?"}size=${size}`;
+  // the public site (window.cassiniPublic): pictures as published (export.html's publicUrl), films made here
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
+  const pub = url => (window.cassiniExport && cassiniExport.publicUrl ? cassiniExport.publicUrl(url) : url);
+  // a recipe as the public site has it: a pointing opened on its own is not published (D9), so frame.webp?ids= opens
+  // as its frame (one id) or its color picture (two or three); a numbered pointing and a body reel picture (D2) have
+  // none (null)
+  function published(rec) {
+    if (!PUB() || !rec) return rec;
+    if (/^\/frames\/reel\//.test(rec) || /^\/frames\/mosaic\/[^/]+\/(p\/\d+|full)\./.test(rec)) return null;
+    const m = /^\/frames\/mosaic\/([NW]\d{10}_\d+)\/frame\.webp\?(.*)$/.exec(rec);
+    if (m) {
+      const ids = (new URLSearchParams(m[2]).get("ids") || m[1]).split(",").filter(x => /^[NW]\d{10}_\d+$/.test(x));
+      return ids.length === 1 ? `/frames/processed/${ids[0]}.webp` : ids.length <= 3 && ids.length ? `/frames/color.webp?ids=${ids.join(",")}` : null;
+    }
+    return rec;
+  }
+  const sized = (rec, size) => pub(`${FRAMES}${rec}${rec.includes("?") ? "&" : "?"}size=${size}`);
   const filmUrl = film => `${FRAMES}/export?${film}`;
   const filmKey = film => { try { const f = new URLSearchParams(film); return f.get("from") && f.get("until") ? f.toString().replace(/%3A/gi, ":") : null; } catch (e) { return null; } };
   function link(item) {
@@ -449,8 +472,8 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   }
 
   // one item, large: its file when it has one, else made again from its recipe by the frame server
-  let filmPoll = 0;
-  function stopFilm() { clearTimeout(filmPoll); filmPoll = 0; }
+  let filmPoll = 0, filmRun = 0;
+  function stopFilm() { clearTimeout(filmPoll); filmPoll = 0; filmRun++; }
   async function view(id, shared) {
     closeShare(); stopFilm(); revoke();
     const item = shared || G.items.find(i => i.id === id);
@@ -465,7 +488,8 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
     $("galorbit").hidden = item.kind === "movie" || !window.cassiniOrbit;
     $("galdel").hidden = !!shared; $("galkeep").hidden = !shared; $("galedit").hidden = !window.cassiniStudio;
-    $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
+    $("galnote").textContent = !shared ? "" : PUB() ? (item.kind === "movie" ? "Made just now in your browser from the published pictures, the same way it was made for whoever shared it." : "The published picture, the same one whoever shared it saw.")
+      : "Made just now by the frame server from the archive, the same way it was made for whoever shared it.";
     let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
     if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
     const dl = $("galdl"), base = fileName(item);
@@ -477,6 +501,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     } else {
       const im = new Image(); im.alt = item.title; im.crossOrigin = "anonymous"; st.appendChild(im);
       if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + "." + ext(file.type)); }
+      else if (item.unpublished) {
+        const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "This kind of picture (a body reel picture, or a mosaic's pointing on its own) is not on the public site. The moment it was saved at is."; st.appendChild(wait);
+      }
       else if (item.src && item.edit && window.cassiniStudio) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture, then the edit goes on…"; st.appendChild(wait);
         edited(item, null).then(b => {
@@ -489,7 +516,9 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
-        dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
+        // (the public site has no PNG or download copy: the picture as published until its JPEG is ready)
+        if (PUB()) { dl.href = sized(item.src, "full"); dl.setAttribute("download", base + ".webp"); }
+        else { dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png"); }
         fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => {
           if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
         }).catch(() => {});
@@ -499,6 +528,17 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   // a film from its export options: the server's film when it has it, otherwise it makes it (sound by the page)
   async function filmFrom(item, v, dl, base) {
     const st = $("galstage"), wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "Asking the frame server for this film…"; st.appendChild(wait);
+    // the public site (D7): made in this browser from the film's options, as the Export window makes one here
+    if (PUB()) {
+      const EX = window.cassiniExport, run = filmRun, alive = () => run === filmRun && (G.cur === item || G.shared === item);
+      if (!EX || !EX.makeFilm) { wait.textContent = "This page cannot make films."; return; }
+      wait.textContent = "Making this film in your browser…";
+      const got = await EX.makeFilm(item.film, { alive, tell: (text, frac) => { if (alive()) wait.textContent = `Making this film in your browser · ${text}`; } });
+      if (!alive()) return;
+      if (got.error) { wait.textContent = got.error; return; }
+      wait.remove(); v.src = objUrl(got.blob); dl.href = v.src; dl.setAttribute("download", got.name || base + ".mp4");
+      return;
+    }
     try {
       const r = await fetch(filmUrl(item.film), { method: "POST" }), job = await r.json();
       if (!r.ok) { wait.textContent = job.error || "The frame server cannot make this film."; return; }
@@ -604,15 +644,17 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
 
   // ---------- a shared link: ?pic=/frames/… or ?film=… shows the picture over the moment it opens on ----------
   function sharedFromUrl() {
-    const q = new URLSearchParams(location.search), pic = recipe(q.get("pic") || ""), film = q.get("film");
+    const q = new URLSearchParams(location.search), asked = recipe(q.get("pic") || ""), film = q.get("film");
+    // the public site: the published picture for it (a pointing as its frame or color picture, D9), or none
+    const pic = published(asked), unpublished = !!asked && !pic;
     const filmOk = film ? filmKey(film) : null;
-    if (!pic && !filmOk) return null;
+    if (!pic && !filmOk && !unpublished) return null;
     const m = [...q].filter(([k]) => ["t", "view", "cam"].includes(k));
     if (!m.some(([k]) => k === "t")) m.unshift(["t", filmOk ? new URLSearchParams(filmOk).get("from") : ""]);
     m.push(["play", "0"]);
-    const ids = [...new Set(((pic || filmOk) || "").match(ID) || [])];
+    const ids = [...new Set(((pic || filmOk || asked) || "").match(ID) || [])];
     const edit = !filmOk && /^[\w.:,_-]{1,400}$/.test(q.get("edit") || "") ? q.get("edit") : null;
-    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0, edit,
+    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0, edit, unpublished,
       title: (filmOk ? `Film · ${new URLSearchParams(filmOk).get("from").replace("T", " ")} UTC` : cap(whatOf(pic))) + (edit ? " · edited" : ""), sub: ids.slice(0, 3).join(" ") };
   }
   function dropShared() {

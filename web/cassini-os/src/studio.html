@@ -21,7 +21,10 @@
      outline over the picture; drag one (or nudge it with the arrows) to move its tiles, or hide it. Every change is
      made by the frame server through the mosaic pipeline (obs_mosaic.tuned_layout: the tiles' SPICE placement with
      the moves laid over it, composed by mosaic.compose), never moved in the page: the picture's address carries the
-     change (&tune=n:dx:dy,…&hide=n,…), so saving, links and Reset all keep working the same way.
+     change (&tune=n:dx:dy,…&hide=n,…), so saving, links and Reset all keep working the same way. On the public site
+     (window.cassiniPublic) there is no frame server to make a mosaic again, so the Mosaic tab is not offered (policy.json
+     page_settings: Studio tile tuning), its tile map is not asked for, and a picture opened with a tuning carried over
+     opens as published, without it; looks, filters and crop are the same everywhere.
 
      A movie's look (the Movie Editor, movieedit.html): open({ kind: "picture", url, look: recipe => … }) edits one frame
      of the film for the look of all of them: only the Adjust and Filters tabs, and Use for the movie hands back the
@@ -192,6 +195,10 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
   const $ = id => document.getElementById(id);
   const S = window.cassiniSettings, WM = window.cassiniWM, card = $("stucard"), cv = $("stucanvas"), stage = $("stustage");
   const GAL = () => window.cassiniGallery;
+  // the public site (window.cassiniPublic): no tile tuning (no frame server to make a mosaic again); a picture asked for
+  // as published (export.html's publicUrl drops a carried-over tune= and hide=)
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
+  const pub = url => (window.cassiniExport && cassiniExport.publicUrl ? cassiniExport.publicUrl(url) : url);
   if (S) {
     S.define({ key: "studio.jpegQuality", section: "Studio", label: "Picture quality", type: "range", value: 92, min: 70, max: 100, step: 1, unit: "%",
       hint: "JPEG quality of edited pictures saved, downloaded and shared." });
@@ -588,7 +595,7 @@ void main() {
   async function mosOpen(item) {
     st.mos = null;
     const src = item && item.src, m = src && new URL(src, location.href).pathname.match(MOSAIC);
-    if (!m || !GAL() || !GAL().fullUrl) return;
+    if (!m || !GAL() || !GAL().fullUrl || PUB()) return;
     try {
       const url = new URL(GAL().fullUrl(`/frames/mosaic/${m[1]}.json`)); url.searchParams.delete("size");
       const r = await fetch(url.href); if (!r.ok) return;
@@ -742,7 +749,7 @@ void main() {
     st.kind = opts.kind === "movie" ? "movie" : "picture";
     try {
       let blob = opts.blob;
-      if (!blob) { const r = await fetch(opts.url); if (!r.ok) throw new Error(r.status); blob = await r.blob(); }
+      if (!blob) { const r = await fetch(pub(opts.url)); if (!r.ok) throw new Error(r.status); blob = await r.blob(); }
       st.src = blob;
       if (isMovie()) {
         const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.loop = false;

@@ -304,6 +304,105 @@
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
+
+  // ---------- the public switch (docs/public-site, WP5): one address per picture ----------
+  // With window.cassiniPublic on, every picture and table comes from Cloudflare R2 under its canonical key
+  // (web/public/keys.json, policy.json), and the Worker's cache is keyed by the address asked. PUBLIC_URL()(url) gives
+  // the address of what url asks for in that canonical form: the parameters the key drops (x, whole, hdr, the default
+  // looks, a route's no-ops) left out, every other one at its value as keys.mjs reads it, defaults left out, sizes
+  // snapped to the sizes the route builds, in the key's order. A camera window asks only for that. One choice is the
+  // page's own (D3): a colour picture in full view and the lens is asked at 1024, which is its full picture (one
+  // address fewer to cache), while a mosaic is asked at full (the Worker answers 1024 while its pass builds). The
+  // fragment (#here=..., #ch=...) is kept: it never leaves the page. A value the route refuses (a channel, a laps or
+  // fade above the published one) is left in, so the zero-origin harness counts it. web/test_public_cameras.mjs checks
+  // the addresses against keys.mjs.
+  const PUBLIC_URL = function () {
+    const ALL = [128, 256, 384, 512, 768, 1024];
+    const size = (built, dflt, full) => v => {
+      if (v === "full") { if (full === "full") return "full"; v = String(full); }
+      let n = dflt;
+      if (/^-?\d+$/.test(v)) { const a = parseInt(v, 10); n = ALL.reduce((b, s) => (Math.abs(s - a) < Math.abs(b - a) ? s : b)); }
+      if (!built.includes(n)) { const up = built.filter(b => b >= n); n = up.length ? Math.min(...up) : Math.max(...built); }
+      return String(n);
+    };
+    const flag = read => v => (read === "not0" ? (v === "0" ? "0" : "1") : read === "eq1" ? (v === "1" ? "1" : "0") : "1");
+    const int = (lo, hi) => v => (/^-?\d+$/.test(v) ? String(Math.max(lo, Math.min(hi, parseInt(v, 10)))) : v);
+    const as = v => v;   // a value kept as asked (a frame id, or a value the route refuses)
+    const ids = v => v.split(",").filter(Boolean).join(",");
+    // [path, the query parameter the route is told apart by (kept, first), {param: [read, its default]}, params dropped]
+    const MOVIE_DROP = ["laps", "fade", "persist"], ROLL_DROP = ["persist", "center", "trail", "steady", "exposure", "color", "detail"];
+    const ROUTES = [
+      [/^\/frames\/color\.webp$/, null, { ids: [ids, null], size: [size([512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"], channel: [as, ""] }],
+      [/^\/frames\/thumb\.webp$/, null, { mosaic: [as, null], frame: [as, null], color: [ids, null], size: [size([256], 256, 256), "256"] }],
+      [/^\/frames\/processed\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([256, 512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"] }],
+      [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.json$/, null, {}],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.fade\.json$/, null, { laps: [int(1, 12), "1"], w: [int(0, 4096), "0"], h: [int(0, 4096), "0"] }],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.steady\.json$/, null, { center: [flag("not0"), "1"], color: [flag("not0"), "0"] }],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.json$/, null, {}],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, "mode", { size: [size([512, 1024], 512, 1024), "512"], laps: [int(1, 12), "1"], fade: [int(0, 120), "0"] }, ROLL_DROP],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([128, 512, 1024], 512, 1024), "512"], color: [flag("not0"), "1"], center: [flag("not0"), "1"],
+        trail: [int(0, 12), "0"], steady: [int(0, 60), "0"], exposure: [int(0, 30), "0"], detail: [flag("not0"), "1"], mode: [as, ""] }, MOVIE_DROP],
+      [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/, "warm", {}],
+      [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([512, 1024], 512, "full"), "512"], force: [flag("nonempty"), "0"], tune: [as, ""], hide: [as, ""] }],
+      [/^\/frames\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([128, 512, 1024], 512, 1024), "512"] }],
+      [/^\/frames\/[NW]\d{10}_\d+\.png$/, null, {}]
+    ];
+    const DROP = ["x", "whole", "hdr"], DEFAULT_ONLY = { look: "balanced", colors: "natural", off: "", format: "webp" };
+    const dec = s => { try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch (e) { return s; } };
+    const enc = s => encodeURIComponent(s).replace(/%2C/g, ",");
+    return function canonical(url) {
+      const hash = url.indexOf("#"), frag = hash < 0 ? "" : url.slice(hash), bare = hash < 0 ? url : url.slice(0, hash);
+      const q0 = bare.indexOf("?"), head = q0 < 0 ? bare : bare.slice(0, q0), query = q0 < 0 ? "" : bare.slice(q0 + 1);
+      const path = head.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, "");
+      const q = {};   // name -> its first nonblank value (as the server's parse_qs reads a query)
+      for (const part of query ? query.split("&") : []) {
+        const i = part.indexOf("="); if (i < 0) continue;
+        const k = dec(part.slice(0, i)), v = dec(part.slice(i + 1));
+        if (v !== "" && !(k in q)) q[k] = v;
+      }
+      const r = ROUTES.find(([re, by]) => re.test(path) && (!by || (by === "mode" ? q.mode === "rolling" : by in q)));
+      if (!r) return url;
+      const [, by, params, drop = []] = r, out = [];
+      for (const [k, v] of Object.entries(q)) {
+        if (k === by || DROP.includes(k) || drop.includes(k) || (k in DEFAULT_ONLY && v === DEFAULT_ONLY[k])) continue;
+        if (!(k in params)) { out.push([k, v]); continue; }   // download, or not this route's (left for the harness to count)
+        const [read, dflt] = params[k], val = read(v);
+        if (val !== dflt) out.push([k, val]);
+      }
+      out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      if (by) out.unshift([by, q[by]]);
+      return head + (out.length ? "?" + out.map(([k, v]) => `${k}=${enc(v)}`).join("&") : "") + frag;
+    };
+  };
+  window.cassiniPublicUrlMaker = PUBLIC_URL;
+  // the address to ask: canonical with the public switch on, as built with it off (nothing changes then)
+  const PUB = () => window.cassiniPublic === true;
+  let publicUrl = null;
+  window.cassiniPublicUrl = url => (PUB() && url ? (publicUrl || (publicUrl = PUBLIC_URL()))(url) : url);
+  // D5: one channel of a colour picture (0 red, 1 green, 2 blue), cut from the composite in the page as the frame
+  // server's channel= cuts it from its own (frame_server.composite: that band, black and white, with the picture's
+  // alpha). rgba: the composite's pixels; returns the channel's. web/test_channel_cut.py checks it against the server.
+  const CHANNEL_CUT = function (rgba, ch) {
+    const out = new Uint8ClampedArray(rgba.length);
+    for (let p = 0; p < rgba.length; p += 4) { const v = rgba[p + ch]; out[p] = out[p + 1] = out[p + 2] = v; out[p + 3] = rgba[p + 3]; }
+    return out;
+  };
+  window.cassiniChannelCutMath = CHANNEL_CUT;
+  // the composite im (loaded with CORS) with only channel ch: a new Image of a PNG made here, or null
+  window.cassiniChannelCut = async (im, ch) => {
+    try {
+      const W = im.naturalWidth, H = im.naturalHeight, c = document.createElement("canvas");
+      c.width = W; c.height = H;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, W, H);
+      g.putImageData(new ImageData(CHANNEL_CUT(d.data, ch), W, H), 0, 0);
+      const blob = await new Promise(r => c.toBlob(r, "image/png")), out = new Image();
+      out.src = URL.createObjectURL(blob);
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; });
+      return out;
+    } catch (e) { return null; }
+  };
   // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
   // the two maps in one float texture, a pass along the rows and one along the columns in blurCPU's order
   const STEADY_GPU = function () {
@@ -442,6 +541,7 @@ onmessage = async e => {
     if (gpuOk === undefined) { try { const c = new OffscreenCanvas(1, 1), g = c.getContext("webgl2"); gpuOk = !!(g && g.getExtension("EXT_color_buffer_float")); } catch (e) { gpuOk = false; } }
     return gpuOk;
   };
+  const evened = new Map();   // the same key -> whether the page evens the frame's pass itself, once its table is here
   const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
   const asked = new Set();
   const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
@@ -453,9 +553,13 @@ onmessage = async e => {
     if (byId.has(k)) return byId.get(k);
     if (!asked.has(k)) {
       asked.add(k);
-      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}&color=${color ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
+      fetch(window.cassiniPublicUrl(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}&color=${color ? 1 : 0}`), { priority: "low" }).then(r => r.ok ? r.json() : PUB() ? { local: false, missing: true } : null).then(t => {
         if (!t || t.working) { setTimeout(() => asked.delete(k), 5000); return; }
-        if (!t.local) { byId.set(k, null); return; }
+        // whether the page evens the pass itself (obs_mosaic.page_evens, on the colour table): the public site then has
+        // no exposure= frames of it (prebuild.make_evened made them only for the passes it does not); a table the
+        // public site does not have says nothing either way
+        if (!t.missing) evened.set(k, !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets)));
+        if (!t.local) { byId.set(k, null); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
         const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
         work().postMessage({ key, table: t });
         t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
@@ -470,6 +574,14 @@ onmessage = async e => {
   }
   window.cassiniSteadyLocal = {
     stats,
+    // with the public switch on: whether this computer evens frame id's pass itself (true), the server's evened frames
+    // are published for it (false), or its colour table is not here yet (undefined, asked for now): until then a
+    // window asks the frame as drawn (exposure 0), which every pass has, never an exposure= variant
+    evens(frames, id, center = true) {
+      const k = `${tag(center, true)}:${id}`;
+      if (!evened.has(k)) lookup(frames, id, center, true);
+      return evened.get(k);
+    },
     // the frame's pass table once it is here (null: the server draws the pass), asking for it as want does
     async ready(frames, id, center = true, color = false) {
       for (let tries = 0; tries < 240; tries++) {
@@ -524,7 +636,7 @@ onmessage = async e => {
       const held = M.heldOf(T, e.n), shown = M.shownOf(T, e.n, !!o.color);
       const load = async j => {
         if (j === e.n || j === held) return createImageBitmap(im);
-        const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
+        const r = await fetch(window.cassiniPublicUrl(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : "")));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
       };
@@ -549,7 +661,7 @@ onmessage = async e => {
     const k = `${laps}:${id}`;
     if (fades.has(k)) return fades.get(k);
     if (!fadeAsked.has(k)) {
-      fadeAsked.set(k, fetch(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`).then(r => r.ok ? r.json() : { local: false }).then(t => {
+      fadeAsked.set(k, fetch(window.cassiniPublicUrl(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`)).then(r => r.ok ? r.json() : { local: false }).then(t => {
         if (!t || t.working) { setTimeout(() => fadeAsked.delete(k), 15000); return; }
         if (!t.local) { fades.set(k, null); return; }
         // each tile's alpha (zlib), unpacked once when a frame first draws it

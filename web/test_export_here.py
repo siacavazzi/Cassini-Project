@@ -11,6 +11,10 @@ for the rest of Cassini OS; export.py's render runs with a stand-in Pictures tha
 
   python web/test_export_here.py
   BOOM=1 python web/test_export_here.py     (the same on a Boomerang film)
+  PUBLIC=1 python web/test_export_here.py   (the public site, window.cassiniPublic: the plan from the page's planner,
+                                             cassiniPlanLocal, here a stand-in that hands it export.py's; not one
+                                             request to /export; and the Gallery's shared film, cassiniExport.makeFilm,
+                                             the same film as the window's)
 """
 import base64
 import io
@@ -28,6 +32,7 @@ sys.path.insert(0, os.path.join(HERE, "frames"))
 import export  # noqa: E402
 
 SIZE = 512
+PUBLIC = bool(os.environ.get("PUBLIC"))
 T0 = 1104537600   # 2005-01-01T00:00:00
 rng = np.random.default_rng(7)
 
@@ -114,6 +119,16 @@ window = src[src.index('<section class="win" id="excard"'):src.index("</section>
 script = src[src.index("<script>"):src.rindex("</script>") + 9]
 stubs = """<script>
 const store = { "export.sound": true };   // sound is off by default (#174); the test checks the soundtrack too
+if (%s) {
+  // the public site: the switch, and the page's planner (plan-local.js) stood in for by export.py's plan, served as
+  // a file of the site
+  window.cassiniPublic = true;
+  window.cassiniPlanLocal = { plan: async () => (await fetch("/plan-local.json")).json() };
+  // movie frames' steps are the page's own on the public site at every film size (the server bakes in none): a
+  // stand-in cassiniSteadyLocal that notes which frames were asked about and leaves each to its published picture
+  store["movies.stabilizeLocal"] = true; window.slAsked = [];
+  window.cassiniSteadyLocal = { want(f, id) { slAsked.push(id); return null; }, async ready() { return null; } };
+}
 window.cassiniSettings = { define(d) { if (!(d.key in store)) store[d.key] = d.value; }, get: k => store[k], set(k, v) { store[k] = v; }, on() {} };
 window.cassiniLook = () => ""; window.cassiniMovieStyle = () => "&trail=0&laps=1";
 const etToMs = et => et * 1000, utcToEt = s => Date.parse(s + "Z") / 1000, etToX = () => 0, xToEt = () => 0, drawTimeline = () => {};
@@ -126,7 +141,7 @@ window.cassiniSound = { async render(events, seconds, rate) {
   for (const ev of events) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 300 + (ev.k %% 7) * 60; g.gain.value = 0.2; o.connect(g).connect(ctx.destination); o.start(ev.t); o.stop(ev.t + 0.08); }
   return ctx.startRendering();
 } };
-</script>""" % json.dumps([e["id"] for e in pics])
+</script>""" % ("true" if PUBLIC else "false", json.dumps([e["id"] for e in pics]))
 page = f"<!doctype html><meta charset=utf-8>{style}<body><canvas id=tl></canvas><ul id=gomenu></ul>{window}{stubs}{script}"
 with open(os.path.join(tmp, "page.html"), "w") as fh:
     fh.write(page)
@@ -148,7 +163,8 @@ const [page_, data_, out_, muxer_] = process.argv.slice(2), D = JSON.parse(fs.re
     const u = new URL(r.request().url());
     if (u.hostname === 'cdn.jsdelivr.net') return r.fulfill({ contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(muxer_) });
     if (u.pathname === '/page.html') return r.fulfill({ contentType: 'text/html', body: fs.readFileSync(page_) });
-    if (u.pathname === '/export/plan.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(D.plan) });
+    if (u.pathname.startsWith('/export')) asked['/export'] = (asked['/export'] || 0) + 1;
+    if (u.pathname === '/export/plan.json' || u.pathname === '/plan-local.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(D.plan) });
     // the picture's address as the plan gives it, without the size and style the page adds
     const q = new URLSearchParams(u.search), ids = q.get('ids'), key = u.pathname + (ids ? `?ids=${ids}` : '');
     asked[key] = (asked[key] || 0) + 1;
@@ -166,11 +182,14 @@ const [page_, data_, out_, muxer_] = process.argv.slice(2), D = JSON.parse(fs.re
     if (!E.state.made) return { error: document.getElementById('exstate').textContent };
     const blob = await (await fetch(document.getElementById('exvid').src)).blob(), buf = new Uint8Array(await blob.arrayBuffer());
     let s = ''; for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode.apply(null, buf.subarray(i, i + 32768));
-    return { made: E.state.made, state: document.getElementById('exstate').textContent, mp4: btoa(s) };
+    // the same film from its key alone, as the Gallery makes a shared one (public site only)
+    let film = null;
+    if (window.cassiniPublic) { const f = await E.makeFilm(E.state.planKey); film = f.error ? { error: f.error } : { made: f.made, name: f.name, bytes: f.blob.size }; }
+    return { made: E.state.made, state: document.getElementById('exstate').textContent, mp4: btoa(s), film, slAsked: window.slAsked || [] };
   }, [D.plan.pictures[0].t - 1, D.plan.pictures[D.plan.pictures.length - 1].t + 1]);
   if (r.error) { console.error(r.error); process.exit(1); }
   fs.writeFileSync(out_, Buffer.from(r.mp4, 'base64'));
-  console.log(JSON.stringify({ made: r.made, state: r.state, asked }));
+  console.log(JSON.stringify({ made: r.made, state: r.state, asked, film: r.film, slAsked: r.slAsked }));
   await b.close();
 })();
 """
@@ -229,6 +248,15 @@ print(f"panes at each picture's middle: {min(panes):.1f} dB worst, {np.median(pa
       f"captions {min(caps):.1f} dB worst (two font renderers)")
 assert min(panes) > 34, panes
 assert kinds_here.get("held behind mosaic"), kinds_here
+if PUBLIC:
+    assert not got["asked"].get("/export"), f"the public page asked the frame server's /export {got['asked'].get('/export')} times"
+    movies = {e["id"] for e in public["pictures"] if e.get("tries") and e["tries"][0][0] == "movie"}
+    assert movies and movies <= set(got["slAsked"]), (sorted(movies), sorted(set(got["slAsked"])))
+    print(f"public: the {SIZE} px film asked this computer to work out all {len(movies)} movie frames' steps")
+    f = got["film"]
+    assert f and not f.get("error"), f
+    assert f["made"]["kinds"] == kinds_here and f["made"]["frames"] == got["made"]["frames"], (f["made"], got["made"])
+    print(f"public: no /export request; the shared film made from its key alone: {f['name']}, {f['bytes'] / 1e6:.2f} MB, the same pictures and frames")
 if os.environ.get("EVIDENCE"):
     # one picture's moment from each film, the server's above the page's
     k = max(range(len(pics)), key=lambda i: bool(pics[i].get("skipped")))

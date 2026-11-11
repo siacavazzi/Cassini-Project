@@ -459,9 +459,8 @@ def picture(ids, cache, group=None):
     return np.asarray(Image.open(io.BytesIO(png)).convert("RGBA")), made
 
 
-def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
-    """Picture n of the body's reel as WebP, drawn over the pictures before it in its mosaic, and its report.
-    slots = a semaphore held while making it (not while serving it from the cache)"""
+def _shot_window(target, n, size, cache, use_mosaic=True):
+    """(the pictures drawn, where the picture is kept) of picture n of the body's reel as shot_webp makes it."""
     reel = shots(target)
     s = reel[n]
     window = [reel[j] for j in s["panels"]] if use_mosaic else []
@@ -471,7 +470,27 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     # a mosaic (more than one picture) drawn with the blend or level steps (mosaic.drawing) is another picture than
     # before them; a lone picture is the same either way
     drawn = "-" + mosaic.drawing() if len(window) > 1 and mosaic.drawing() else ""
-    path = os.path.join(cache, version(), str(size), key + drawn + ".webp")
+    return window, os.path.join(cache, version(), str(size), key + drawn + ".webp")
+
+
+def _shot_report(cache, ids):
+    """Where picture()'s report for ids is kept (shot_webp's report when served from the cache)."""
+    return os.path.join(cache, version(), "pictures", "_".join(ids) + ".json")
+
+
+def shot_path(target, n, size, cache, use_mosaic=True):
+    """Read-only (resolve.py): (where shot_webp keeps picture n of the body's reel, where its report is kept, how
+    many pictures it draws: the report's "mosaic")."""
+    window, path = _shot_window(target, n, size, cache, use_mosaic)
+    return path, _shot_report(cache, shots(target)[n]["ids"]), len(window)
+
+
+def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
+    """Picture n of the body's reel as WebP, drawn over the pictures before it in its mosaic, and its report.
+    slots = a semaphore held while making it (not while serving it from the cache)"""
+    reel = shots(target)
+    s = reel[n]
+    window, path = _shot_window(target, n, size, cache, use_mosaic)
     report = {}
 
     def make():
@@ -500,7 +519,7 @@ def shot_webp(target, n, size, cache, use_mosaic=True, slots=None):
     if not report:
         # served from the cache: the picture's report is kept next to it, no need to open the picture
         try:
-            with open(os.path.join(cache, version(), "pictures", "_".join(s["ids"]) + ".json")) as fh:
+            with open(_shot_report(cache, s["ids"])) as fh:
                 report = json.load(fh)
         except (OSError, ValueError):
             report = picture(s["ids"], cache, group_of(target, n))[1]
