@@ -43,7 +43,7 @@ function serve(dir) {
       let f = path.join(dir, decodeURIComponent(q.url.split("?")[0]));
       try {
         if (fs.statSync(f).isDirectory()) f = path.join(f, "index.html");
-        const type = { ".html": "text/html", ".js": "application/javascript", ".json": "application/json", ".woff2": "font/woff2", ".webp": "image/webp" }[path.extname(f)] || "application/octet-stream";
+        const type = { ".html": "text/html", ".js": "application/javascript", ".mjs": "text/javascript", ".json": "application/json", ".woff2": "font/woff2", ".webp": "image/webp" }[path.extname(f)] || "application/octet-stream";
         r.writeHead(200, { "Content-Type": type }); r.end(fs.readFileSync(f));
       } catch (e) { r.writeHead(404); r.end(); }
     }).listen(0, "127.0.0.1", () => ok(srv));
@@ -110,6 +110,11 @@ function serve(dir) {
     check("public: no body reels", await page.evaluate(() => !document.querySelector("#goreel") && !window.cassiniReel));
     const third = reqs.filter(r => /cdn\.jsdelivr\.net\/npm\/three|fonts\.(googleapis|gstatic)\.com/.test(r.url));
     check("public: three.js and the fonts from vendor/", !third.length && reqs.some(r => /\/vendor\/three\/three\.min\.js$/.test(r.url)), third.map(r => r.url));
+    check("public: the film muxer imports from vendor/", await page.evaluate(async () => { try { const m = await import("./vendor/mp4-muxer/mp4-muxer.mjs"); return typeof m.Muxer === "function"; } catch (e) { return String(e); } }) === true);
+    check("public: every vendored file ships its license", ["three/LICENSE", "mp4-muxer/LICENSE", "fonts/Silkscreen-OFL.txt", "fonts/ShareTechMono-OFL.txt"]
+      .every(f => /Copyright/.test(fs.readFileSync(path.join(pub, "vendor", f), "utf8"))));
+    check("public: the Credits name three.js, mp4-muxer and both fonts", await page.evaluate(() => ["threejs", "mp4-muxer", "font-silkscreen", "font-sharetech"]
+      .every(id => window.cassiniAbout.credits.groups.some(g => g.entries.some(e => e.id === id && /Copyright/.test(e.credit))))));
     check("public: no jump log", !reqs.some(r => /\/jumplog/.test(r.url)));
     const frames = reqs.filter(r => r.url.startsWith(HOST));
     check("public: version.json and slices.json from the frames host", ["/version.json", "/frames/slices.json"].every(p => frames.some(r => r.url === HOST + p)), frames.map(r => r.url));
