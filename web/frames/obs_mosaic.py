@@ -2122,23 +2122,26 @@ MIX_CELL = 16   # reference px: the grid mixes() lays the tiles' boxes on
 
 
 def still_ground(u, tiles):
-    """(mixes) True when the ground under a place can move between the pass's visits as drawn: a clouded body (its
-    clouds move on their own), or, with the surface step on (Settings > Processing), a body some of whose colour
-    tiles surface reprojection did not redraw (surface_pictures: no shape SPICE knows, or the redrawing would distort
-    it), each showing the ground as it was when taken. Phoebe's closest approach (000PH HIRESC001, 2004-06-11): a set
-    of filters, then GRN again ten minutes on, the view turned under it; drawn newest on top, the later GRN over the
-    earlier RED and BL1 fringed every crater green and purple. Decided place by place (drawn_time): a redrawn tile is
-    drawn as at the pass's one moment and never mixes. With the surface step off a moon mosaics as it always did."""
+    """(mixes) True when the ground under a place can move between the pass's visits as drawn (the name: the ground
+    is not held still): a clouded body (its clouds move on their own), or, with the surface step on (Settings >
+    Processing), a body some of whose tiles surface reprojection decided to keep as taken ("as_taken": SURFACE_TAKEN,
+    the redrawing would distort them, layout), each showing the ground as it was when taken. Phoebe's closest
+    approach (000PH HIRESC001, 2004-06-11): a set of filters, then GRN again ten minutes on, the view turned under it;
+    drawn newest on top, the later GRN over the earlier RED and BL1 fringed every crater green and purple. Decided
+    place by place (drawn_time). A tile the step could not redraw for want of kernels or geometry is no decision and
+    mosaics as it always did, as does every moon with the step off."""
     if clouded(u):
         return True
-    return calibration.step("surface") and any("pic" not in t for t in tiles if "offset" in t)
+    return calibration.step("surface") and any(t.get("as_taken") for t in tiles if "offset" in t)
 
 
 def drawn_time(u, t):
-    """(mixes, placed_tiles) When the ground tile t shows was seen, for set_mask: its visit's (set_time), or on a body
-    that is not clouded and whose tile surface reprojection redrew ("pic"), the pass's one moment (its epoch: the
-    middle frame's time, surface_pictures), the same for every redrawn tile, so they never mix."""
-    if not clouded(u) and t.get("pic"):
+    """(mixes, placed_tiles) When the ground tile t shows was seen, for set_mask: its visit's (set_time) on a clouded
+    body or for a tile kept as taken ("as_taken"); any other tile of a body that is not clouded (redrawn as at the
+    pass's epoch, or not redrawn for want of kernels) the pass's one moment (its middle frame's time, surface_pictures'
+    epoch), the same for all of them, so they never mix. A tile kept as taken over redrawn tiles of its own camera set
+    is compared with that epoch: past MIX_SPAN from it that place is gray, the ground there drawn at two moments."""
+    if not clouded(u) and not t.get("as_taken"):
         fr = u["frames"]
         return fr[len(fr) // 2][3]
     return set_time(u, t["n"])
@@ -2252,7 +2255,7 @@ def placed_tiles(u, p, mine, rect, cache):
         left = round((t["offset"][0] + bx - rect[0]) * k)
         top = round((t["offset"][1] + by - rect[1]) * k)
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        yield set_time(u, t["n"]), _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
+        yield drawn_time(u, t), _part(_pic(u, cache, p["display_scale"], t), sw, sh)[..., 3], left, top
 
 
 def set_time(u, n):
@@ -4488,6 +4491,11 @@ def layout(u, n, cache):
     # each tile's surface redrawn as at the pass's epoch (surface reprojection), then each pointing moved onto the
     # ones before it where they overlap (panel registration: what is left is SPICE's pointing, a few pixels)
     surfaced = surface_pictures(u, cache, p, tiles)
+    if calibration.step("surface") and not clouded(u):
+        # (the tiles it decided to keep as taken, as they are: still_ground, drawn_time)
+        kept = _surface_taken(u, cache, p, os.path.join(_tiles(u, cache, p["display_scale"]), SURFACE_DIR))
+        if kept:
+            tiles = [dict(t, as_taken=True) if t["n"] in kept and "offset" in t else t for t in tiles]
     if surfaced:
         tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
                  for t in tiles]
