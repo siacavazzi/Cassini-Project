@@ -110,8 +110,9 @@
 
   // ---- one pipeline step off, on its own example --------------------------------------------------------------
   const STEPS = [
-    { key: "fill", name: "Fill lost lines", note: "Enceladus, 14 July 2005. A third of this frame never reached Earth. Short gaps are filled from the lines above and below; the big lost block is left empty and only filled from other frames in a mosaic." },
-    { key: "calibrate", name: "Calibrate", note: "Rhea in color. Without calibration each filter keeps the archive's stretch, so each channel is as bright as it can be no matter what the camera saw." },
+    { key: "fill", a: "raw", al: "raw", name: "Whole pipeline", note: "Dione, 4 May 2006: the archive's frame next to the same frame through the pipeline: lost lines filled, calibrated and turned north up." },
+    { key: "fill", a: "off", al: "fill off", name: "Fill lost lines", note: "The same frame through the pipeline with only the fill turned off: the lines lost in transmission stay as gaps. On, they are filled from the lines above and below." },
+    { key: "twohz", a: "off", al: "2 Hz off", name: "2 Hz banding", note: "Iapetus, 7 October 2004, a faint frame. The camera's electronics picked up a 2 Hz hum that shows as horizontal bands; it is measured line by line, from the frame's own dark sky where there is enough of it, and taken out." },
   ];
   function steps() {
     const chips = $("#step-chips");
@@ -124,7 +125,7 @@
     function pick(i) {
       $$("button", chips).forEach((b, j) => b.setAttribute("aria-pressed", i === j));
       const s = STEPS[i];
-      compare($("#step-compare"), `img/step-${s.key}-off.jpg`, `img/step-${s.key}-on.jpg`, "step off", "step on");
+      compare($("#step-compare"), `img/step-${s.key}-${s.a}.jpg`, `img/step-${s.key}-on.jpg`, s.al, "pipeline");
       $("#step-note").textContent = s.note;
     }
     pick(0);

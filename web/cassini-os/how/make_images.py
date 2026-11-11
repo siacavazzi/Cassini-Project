@@ -40,8 +40,8 @@ JUPITER = [
 ]
 # one step turned off, each on a frame where it shows (name, frame or color set, the step, what to say)
 STEPS = [
-    ("fill", "N1500061303_1", "fill"),          # Enceladus, 14 Jul 2005: a third of its lines lost in downlink
-    ("calibrate", "color:" + ",".join([RHEA["red"], RHEA["green"], RHEA["blue"]]), "calibrate"),
+    ("fill", "N1525449680_5", "fill"),          # Dione, 4 May 2006: 66 lines lost in downlink, in bands
+    ("twohz", "N1475861757_1", "twohz"),        # Iapetus, 7 Oct 2004: faint sky with the 2 Hz hum's bands
 ]
 
 
@@ -118,14 +118,13 @@ def main():
         save(fetch(base, f"/frames/{JUPITER[0]['GRN']}.png")[0], "point-jupiter", 512, gray=True)
 
     if want("steps"):
-        for name, what, step in STEPS:
-            if what.startswith("color:"):
-                path = f"/frames/color.webp?ids={what[6:]}&size=1024"
-            else:
-                path = f"/frames/{what}.webp?size=1024"
-                save(fetch(base, f"/frames/{what}.png")[0], f"step-{name}-raw", 640, gray=True)
-            save(fetch(base, path)[0], f"step-{name}-on", 640)
-            save(fetch(base, path + f"&off={step}")[0], f"step-{name}-off", 640)
+        # the frame through the whole pipeline (/frames/processed: stacked, filled, calibrated, north up) with one
+        # step turned off, and the archive's raw frame beside it
+        for name, frame, step in STEPS:
+            path = f"/frames/processed/{frame}.webp?size=1024"
+            save(fetch(base, f"/frames/{frame}.png")[0], f"step-{name}-raw", 640, gray=True)
+            save(fetch(base, path)[0], f"step-{name}-on", 640, gray=True)
+            save(fetch(base, path + f"&off={step}")[0], f"step-{name}-off", 640, gray=True)
 
     if a.geometry and want("jupiter"):
         db = sqlite3.connect(f"file:{a.geometry}?mode=ro", uri=True)
