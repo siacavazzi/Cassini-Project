@@ -8843,13 +8843,15 @@ function targetLabel(k) {
   // (hexagon mosaic movies 2012-11-27 and 2013-06-26: 5.5-7.4 s a picture of 2400-3100 px, two made at once)
   const FULL_S_PER_MP = 0.5;
   // the export's choices live in the settings registry, so they are kept on this device and listed in Settings
+  // (on the public site, PUBLIC below: sizes up to 1024 only, and no Full, HDR or server films to choose)
+  const PUBLIC_AT_START = !!window.cassiniPublic || document.documentElement.classList.contains("public");
   if (S) {
-    const D = d => S.define(Object.assign({ section: "Export" }, d));
+    const D = d => (PUBLIC_AT_START && ["export.full", "export.hdr", "export.local"].includes(d.key) ? null : S.define(Object.assign({ section: "Export" }, d)));
     D({ key: "export.adaptive", label: "Adaptive frame rate", type: "toggle", value: true,
         hint: "Pictures stay on screen for their real gap to the next one, sped up: bursts flip fast, quiet spells linger (1/30 to 1/2 s each)." });
     D({ key: "export.fps", label: "Fixed frame rate", type: "range", value: 12, min: 2, max: 30, step: 1, unit: "fps",
         hint: "Pictures per second when the frame rate is not adaptive." });
-    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: 2048, step: 256, unit: "px",
+    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: PUBLIC_AT_START ? 1024 : 2048, step: 256, unit: "px",
         hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Above 1024, mosaics are drawn up to that size, each only as big as its pass has detail for." });
     D({ key: "export.full", label: "Mosaics at full resolution", type: "toggle", value: false,
         hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
@@ -8864,6 +8866,68 @@ function targetLabel(k) {
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const setOpt = (k, v) => { if (S) S.set(k, v); };
+
+  // ---------- the public site (D1, D7): the public build marks the page with the class "public" (WP6), or window.cassiniPublic ----------
+  // every film made here, from the page's own plan (window.cassiniPlanLocal) and the published pictures, up to
+  // PUBLIC_MOST px a camera; the switch is read each time, so a page that sets it after this script still has it
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
+  const PUBLIC_MOST = 1024;
+  const PL = () => window.cassiniPlanLocal;
+  const NO_PLAN = "This page cannot plan films yet (its film planner is missing).";
+  const NO_CODEC = "This browser cannot make films: it has no video encoder (WebCodecs). A recent Chrome, Edge or Safari can.";
+  // a film key's options as the planner takes them (export.py options: every value a string, as parse_qs gives it)
+  const optionsOf = key => Object.fromEntries(new URLSearchParams(key));
+  // the film's plan (export.py plan + public_plan): the page's own on the public site, else the frame server's.
+  // Answers { ok, plan } or { ok: false, error }
+  async function planOf(key) {
+    if (PUB()) {
+      if (!PL() || !PL().plan) return { ok: false, error: NO_PLAN };
+      try { const p = await PL().plan(optionsOf(key)); return p && !p.error ? { ok: true, plan: p } : { ok: false, error: (p && p.error) || "The page cannot plan that film." }; }
+      catch (err) { return { ok: false, error: `The page cannot plan that film: ${err.message || err}` }; }
+    }
+    const r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
+    return r.ok ? { ok: true, plan: p } : { ok: false, error: p.error || "The server cannot plan that film." };
+  }
+  // Even out's change for each picture of a film (export.py levels "even"): the page's own on the public site
+  // (levels-local.js, over the plan's pictures), else measured by the frame server (/export/levels.json), asked again
+  // while it measures. tell(done, total) hears how far it is; stop.done ends it. Answers { even } or null when stopped
+  async function evenOf(key, pictures, stop, tell) {
+    if (PUB()) {
+      if (!PL() || !PL().levels) return { even: {} };
+      try { const j = await PL().levels(optionsOf(key), pictures, tell); return { even: (j && j.even) || {} }; } catch (err) { console.warn("export levels here", err); return { even: {} }; }
+    }
+    for (;;) {
+      if (stop.done) return null;
+      let j = null;
+      try { j = await (await fetch(`${FRAMES}/export/levels.json?${key}`)).json(); } catch (err) { j = { error: String(err) }; }
+      if (!j || j.error || !j.even_ready) return { even: {} };
+      if (j.total != null && j.done >= j.total) return { even: j.even || {} };
+      tell(j.done || 0, j.total);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  // a picture's address as the public site has it (policy.json): a movie frame without the steps the page works out
+  // itself (stabilization and trails from steady.json, a mosaic movie's fade from fade.json, exposure evening, which is
+  // published only as obs_mosaic.EXPOSURE_SMOOTH), a mosaic without Studio's tile tuning, a picture without a format or
+  // download; unchanged off the public site
+  const EXPOSURE_BUILT = 8;
+  function publicUrl(url) {
+    if (!PUB() || !url) return url;
+    let u;
+    try { u = new URL(url, location.href); } catch (e) { return url; }
+    const q = u.searchParams;
+    if (/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) {
+      ["steady", "trail", "persist"].forEach(k => q.delete(k));
+      if (q.get("mode") === "rolling") q.delete("fade");
+      else { q.delete("fade"); q.delete("laps"); }
+      if (q.has("exposure")) { if (+q.get("exposure") > 0) q.set("exposure", String(EXPOSURE_BUILT)); else q.delete("exposure"); }
+      if (q.has("laps") && q.get("laps") !== "1") q.set("laps", "1");
+    }
+    if (/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) { q.delete("tune"); q.delete("hide"); }
+    q.delete("format"); q.delete("download");
+    const out = u.origin + u.pathname + (u.search ? u.search.replace(/%2C/gi, ",").replace(/%3A/gi, ":") : "");
+    return /^https?:/.test(url) ? out : out.slice(u.origin.length);
+  }
 
   // ---------- the marked stretch, in mission time (et) ----------
   const X = { a: null, b: null, cams: null, plan: null, planKey: "", job: null, poll: 0, sent: new Set() };
@@ -8970,11 +9034,11 @@ function targetLabel(k) {
   const bgQ = () => (bg().toLowerCase() === "#000000" ? "" : `&bg=${bg().slice(1)}`);
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
-      size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
+      size: !PUB() && opt("export.full", false) ? "full" : String(PUB() ? Math.min(PUBLIC_MOST, opt("export.size", 1024)) : opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Boomerang (export.py boom=): only when on, so a film made without it keeps its name
     if (opt("export.boomerang", false)) q.set("boom", "1");
     // HDR film (export.py hdr=): only when on, made by the server (filmHere)
-    if (opt("export.hdr", false)) q.set("hdr", "1");
+    if (opt("export.hdr", false) && !PUB()) q.set("hdr", "1");
     // Whole mosaics (Settings > Movie): a mosaic movie's film shows only its whole laps (export.py whole=); Complete
     // mosaics only (Settings > Playback): a mosaic pass only its finished mosaic (complete=); Complete color pictures
     // only off (Settings > Playback): every channel of a color set as well (sets=0); the Movie Editor's cut
@@ -8997,9 +9061,9 @@ function targetLabel(k) {
     timer = setTimeout(async () => {
       const key = params();
       try {
-        const r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
+        const got = await planOf(key), p = got.plan;
         if (key !== params()) return;
-        if (!r.ok) { $("exsum").innerHTML = `<span class="warn">${p.error || "The server cannot plan that film."}</span>`; return; }
+        if (!got.ok) { $("exsum").innerHTML = `<span class="warn">${got.error}</span>`; return; }
         // first plan of a stretch: both cameras when both take part, otherwise the one that does; with one camera
         // window closed, the open one's (its camera is off: cassiniFeeds.liveCams). The pick is this stretch's
         // alone (X.auto): a stretch highlighted after it is picked for again, unless the Cameras were set by hand
@@ -9022,7 +9086,8 @@ function targetLabel(k) {
         const boom = p.boomerang ? " · boomerang (forward, then back)" : suggest ? `<br><span class="tip">A short film: Boomerang plays it forward, then back, to linger on it.</span>` : "";
         $("exsum").innerHTML = p.count ? `${p.count.toLocaleString()} pictures (NAC ${n.N.toLocaleString()}, WAC ${n.W.toLocaleString()}) · film ${fmtDur(p.seconds)} at ${p.width}×${p.height} · about ${mb.toFixed(mb < 10 ? 1 : 0)} MB${p.seconds > SOUND_MOST ? " · without sound (over 30 min)" : ""}${edited}${boom}${fullNote(p.full)}` : `<span class="warn">No pictures in this stretch.</span>`;
         $("exgo").disabled = !p.count;
-      } catch (err) { $("exsum").innerHTML = `<span class="warn">No frame server at ${FRAMES}.</span>`; }
+        if (PUB() && p.count && !(await videoCodec(p.width, p.height))) { $("exsum").innerHTML += `<br><span class="warn">${NO_CODEC}</span>`; $("exgo").disabled = true; }
+      } catch (err) { $("exsum").innerHTML = `<span class="warn">${PUB() ? `Could not plan the film: ${err.message || err}` : `No frame server at ${FRAMES}.`}</span>`; }
     }, 250);
   }
 
@@ -9048,14 +9113,16 @@ function targetLabel(k) {
     if (!X.plan || X.planKey !== params()) {
       clearTimeout(timer);
       try {
-        const key = params(), r = await fetch(`${FRAMES}/export/plan.json?${key}`), p = await r.json();
-        if (!r.ok || !p.count || key !== params()) return estimate();
+        const key = params(), got = await planOf(key), p = got.plan;
+        if (!got.ok || !p.count || key !== params()) return estimate();
         X.plan = p; X.planKey = key;
       } catch (err) { return estimate(); }
     }
     $("exgo").disabled = true; setState("Starting…", 0); $("exdone").hidden = true;
     const plan = X.plan;
     if (await canMakeHere(plan)) return makeHere(plan, X.planKey);
+    // the public site has no frame server to make it (D1)
+    if (PUB()) { $("exgo").disabled = false; return setState(await videoCodec(plan.width, plan.height) ? "This film cannot be made in the page." : NO_CODEC, 0); }
     try {
       // Additional stabilization's moves go in the body (export.py steadied=): one a picture, too long for an address
       await steadied({ done: false });
@@ -9173,34 +9240,49 @@ function targetLabel(k) {
     }
     return null;
   }
+  // a film's own choices, read from its key (params() writes them there, so the window's film and a shared one read
+  // the same): its cameras, captions, sound, background, the Movie Editor's cut and look (cut: ctr=, mos=, crop=,
+  // crop2=, nudge=, edit=, levels=, even=, fedit=) and Color smoothing's strength (cs=)
+  function filmOf(key) {
+    const q = new URLSearchParams(key);
+    return { key, cams: /^(N|W|NW)$/.test(q.get("cams") || "") ? q.get("cams") : "NW", caption: q.get("caption") !== "0", sound: q.get("sound") === "1",
+      bg: /^[0-9a-fA-F]{6}$/.test(q.get("bg") || "") ? `#${q.get("bg")}` : "#000000", cs: Math.max(0, Math.min(100, +q.get("cs") || 0)) / 100,
+      from: q.get("from") || "" };
+  }
   // the pane's side: the film is a pane per camera wide (export.py width)
-  const paneOf = plan => plan.width / (X.cams || "NW").length;
+  const paneOf = (plan, cams = X.cams || "NW") => plan.width / cams.length;
   // export.py caption_h
-  const capH = plan => (opt("export.caption", true) ? 2 * Math.round(CAPTION * paneOf(plan) / 1024 / 2) : 0);
+  const capH = (plan, caption = opt("export.caption", true), cams) => (caption ? 2 * Math.round(CAPTION * paneOf(plan, cams) / 1024 / 2) : 0);
   // whether this film is made here: the setting, a size the windows' pictures already come in (not Full, not "up
-  // to"), a plan that lists its tries, a look the studio's renderer can draw, and a browser that encodes video
-  async function canMakeHere(plan) {
-    if (!opt("export.local", true) || opt("export.hdr", false) || plan.full || !plan.pictures.length || !plan.pictures[0].tries) return false;
-    if (paneOf(plan) > 1024 || plan.height !== paneOf(plan) + capH(plan)) return false;
-    if (editedHere(X.planKey) && !(window.cassiniStudio && window.cassiniStudio.renderer)) return false;
+  // to"), a plan that lists its tries, a look the studio's renderer can draw, and a browser that encodes video. On the
+  // public site the setting and HDR do not count (every film is made here: D1)
+  async function canMakeHere(plan, F = filmOf(X.planKey)) {
+    if (!PUB() && (!opt("export.local", true) || opt("export.hdr", false))) return false;
+    if (plan.full || !plan.pictures.length || !plan.pictures[0].tries) return false;
+    if (paneOf(plan, F.cams) > 1024 || plan.height !== paneOf(plan, F.cams) + capH(plan, F.caption, F.cams)) return false;
+    if (editedHere(F.key) && !(window.cassiniStudio && window.cassiniStudio.renderer)) return false;
     return !!(await videoCodec(plan.width, plan.height));
   }
   // a picture's address at the pane's size, with the look and movie style the plan was made with (the makers
   // export.py's Pictures.make calls)
   // a mosaic movie shown a lap at a time: the Movie Editor's Mosaics for this stretch, else Settings > Movie
-  const wholeLaps = () => { const m = /[&?]mos=(\w+)/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
+  const cutNow = () => (window.cassiniMovieCut ? window.cassiniMovieCut() : "");
+  const wholeLaps = (cut = cutNow()) => { const m = /[&?]mos=(\w+)/.exec(cut); return m ? m[1] === "whole" : opt("movies.mosaicFrames", "rolling") === "whole"; };
   // Auto center for the film: the Movie Editor's Framing for this stretch (ctr=), else Settings > Processing, as the
   // server's film has it (export.py options ctr, Pictures._centred); the film made here ignored the editor's choice
   // and never centred a picture shown on its own (2026-10-30)
-  const centreOn = () => { const m = /[&?]ctr=([01])/.exec(window.cassiniMovieCut ? window.cassiniMovieCut() : ""); return m ? m[1] === "1" : S.get("cameras.autoCenter") !== false; };
-  // plain: a picture shown on its own as it is (the stand-in when the server does not centre it, 404)
-  function pictureUrl(kind, src, size, plain) {
-    const sep = src.includes("?") ? "&" : "?", center = centreOn(), look = window.cassiniLook({ center: center && !plain && (kind === "color" || kind === "processed") }),
+  const centreOn = (cut = cutNow()) => { const m = /[&?]ctr=([01])/.exec(cut); return m ? m[1] === "1" : S.get("cameras.autoCenter") !== false; };
+  // a plan's picture address on the frames host (a planner may give it whole)
+  const onHost = src => (/^https?:/.test(src) ? src : `${FRAMES}${src}`);
+  // plain: a picture shown on its own as it is (the stand-in when the server does not centre it, 404); cut: the
+  // film's key (its Movie Editor choices), else the editor's now
+  function pictureUrl(kind, src, size, plain, cut) {
+    const sep = src.includes("?") ? "&" : "?", center = centreOn(cut), look = window.cassiniLook({ center: center && !plain && (kind === "color" || kind === "processed") }),
       style = window.cassiniMovieStyle ? window.cassiniMovieStyle({ center }) : "";
-    if (kind === "movie") return `${FRAMES}${src}${sep}size=${size}&color=1${style}${look}`;
-    if (kind === "rolling") return `${FRAMES}${src}${sep}size=${size}${style}${look}${wholeLaps() ? "&whole=1" : ""}`;
-    if (kind === "frame") return `${FRAMES}${src}${sep}size=${size}`;
-    return `${FRAMES}${src}${sep}size=${size}${look}`;
+    if (kind === "movie") return publicUrl(`${onHost(src)}${sep}size=${size}&color=1${style}${look}`);
+    if (kind === "rolling") return publicUrl(`${onHost(src)}${sep}size=${size}${style}${look}${wholeLaps(cut) ? "&whole=1" : ""}`);
+    if (kind === "frame") return publicUrl(`${onHost(src)}${sep}size=${size}`);
+    return publicUrl(`${onHost(src)}${sep}size=${size}${look}`);
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
@@ -9215,9 +9297,11 @@ function targetLabel(k) {
     return null;
   }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
-  async function movieHere(id, size, stop) {
-    const SL = window.cassiniSteadyLocal, center = centreOn();
-    if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
+  async function movieHere(id, size, stop, center = centreOn()) {
+    const SL = window.cassiniSteadyLocal;
+    // (the steps are worked out on the 1024 px planes; on the public site, where the server bakes in none of them, a
+    // smaller film takes the 1024 px picture too, and Film.put fits it to the pane)
+    if (!SL || (size !== 1024 && !PUB()) || !S.get("movies.stabilizeLocal")) return null;
     if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
@@ -9231,10 +9315,9 @@ function targetLabel(k) {
     return out ? createImageBitmap(out) : null;
   }
   // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
-  async function rollingHere(id, size, stop) {
-    const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
+  async function rollingHere(id, size, stop, center = centreOn()) {
+    const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
-    const center = centreOn();
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
@@ -9244,10 +9327,11 @@ function targetLabel(k) {
     return out ? createImageBitmap(out) : null;
   }
   // Pictures.picture: the first of the entry's tries the server has, and what it is
-  async function pictureOf(e, size, stop) {
+  async function pictureOf(e, size, stop, cut) {
     for (const [kind, src] of e.tries) {
-      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop) : kind === "rolling" ? await rollingHere(e.id, size, stop) : null) || await fetchPicture(pictureUrl(kind, src, size), stop)
-        || (pictureUrl(kind, src, size, true) !== pictureUrl(kind, src, size) ? await fetchPicture(pictureUrl(kind, src, size, true), stop) : null);
+      const center = centreOn(cut);
+      const bmp = (kind === "movie" ? await movieHere(e.id, size, stop, center) : kind === "rolling" ? await rollingHere(e.id, size, stop, center) : null) || await fetchPicture(pictureUrl(kind, src, size, false, cut), stop)
+        || (pictureUrl(kind, src, size, true, cut) !== pictureUrl(kind, src, size, false, cut) ? await fetchPicture(pictureUrl(kind, src, size, true, cut), stop) : null);
       if (bmp) return { bmp, what: WHAT[kind] };
     }
     return { bmp: null, what: "" };
@@ -9255,8 +9339,8 @@ function targetLabel(k) {
   // the Movie Editor's framing for the film (export.py options crop, crop2, nudge and steady, crop_at, framed): the
   // crop of the film's picture n of count, each frame's nudge, and its Additional stabilization (film-steady.html: the
   // editor's moves, cassiniFilmSteady.at); the film made here took none of it (2026-10-31)
-  function framing() {
-    const q = new URLSearchParams((window.cassiniMovieCut ? window.cassiniMovieCut() : "").replace(/^&/, ""));
+  function framing(cut = cutNow()) {
+    const q = new URLSearchParams(cut.replace(/^&/, ""));
     const box = k => {
       const b = (q.get(k) || "").split("_").map(v => Math.max(0, Math.min(1, Math.round(+v * 1e4) / 1e4)));
       return b.length === 4 && b.every(isFinite) && b[2] - b[0] >= 0.05 && b[3] - b[1] >= 0.05 && b.join() !== "0,0,1,1" ? b : null;
@@ -9295,10 +9379,10 @@ function targetLabel(k) {
     return c;
   }
   // Additional stabilization still measuring the editor's film: the film waits for it (a few seconds a hundred pictures)
-  async function steadied(stop) {
+  async function steadied(stop, tell = setState) {
     const FS = window.cassiniFilmSteady;
     if (!FS || !FS.busy || !FS.busy()) return;
-    setState("Steadying the movie first…", 0);
+    tell("Steadying the movie first…", 0);
     if (FS.run) FS.run();
     for (let t = 0; FS.busy() && t < 1200 && !stop.done; t++) await sleep(500);
   }
@@ -9330,7 +9414,7 @@ function targetLabel(k) {
     }
     return { lv, own, even: Math.max(0, Math.min(30, Math.floor(+q.get("even") || 0))) };
   }
-  async function exposuresHere(plan, key, stop) {
+  async function exposuresHere(plan, key, stop, tell = setState) {
     const pics = plan.pictures, n = pics.length, L = levelsOf(key);
     const pts = pics.map((e, i) => [i, L.lv.get(e.id)]).filter(p => p[1] != null);
     const line = pics.map((e, i) => {
@@ -9340,30 +9424,37 @@ function targetLabel(k) {
     });
     let even = {};
     if (L.even) {
-      // Even out: the frame server measures the stretch's pictures (render waits for the measuring the same way)
-      for (;;) {
-        if (stop.done) return null;
-        let j = null;
-        try { j = await (await fetch(`${FRAMES}/export/levels.json?${key}`)).json(); } catch (err) { j = { error: String(err) }; }
-        if (!j || j.error || !j.even_ready) break;
-        if (j.total != null && j.done >= j.total) { even = j.even || {}; break; }
-        setState(`Measuring the pictures' brightness for Even out: ${(j.done || 0).toLocaleString()} of ${j.total == null ? "…" : j.total.toLocaleString()}`, 0);
-        await new Promise(r => setTimeout(r, 1000));
-      }
+      // Even out: the stretch's pictures measured (by the frame server, or on the public site by the page; render
+      // waits for the measuring the same way)
+      const got = await evenOf(key, pics, stop, (done, total) => tell(`Measuring the pictures' brightness for Even out: ${(done || 0).toLocaleString()} of ${total == null ? "…" : total.toLocaleString()}`, 0));
+      if (!got) return null;
+      even = got.even;
     }
     return { ev: line.map((v, i) => Math.max(-2 * LEVEL_EV, Math.min(2 * LEVEL_EV, v + (even[pics[i].id] || 0)))), own: L.own };
   }
   const editedHere = key => { const L = levelsOf(key); return !!(editOf(key) || L.lv.size || L.even || L.own.size); };
 
+  // the Export window's film made here
   async function makeHere(plan, key) {
-    const stop = { done: false }, cams = X.cams || "NW", size = paneOf(plan), ch = capH(plan), W = plan.width, H = plan.height;
-    const job = X.job = { id: "here:" + key, here: true }, t0 = performance.now();
-    await steadied(stop);
-    if (X.job !== job) return;
+    const job = X.job = { id: "here:" + key, here: true };
+    const out = await filmHere(plan, key, { alive: () => X.job === job, tell: setState });
+    if (!out) return;
+    X.made = out.made;
+    doneHere(out.blob, plan, out.took, out.audio);
+  }
+  // a film made here from its plan and key (export.py render and Film): ui.alive() says whether it is still wanted,
+  // ui.tell(text, fraction) how far it is. Answers { blob, took, audio, made }, or null when it stopped or failed
+  // (ui.tell has said why)
+  async function filmHere(plan, key, ui) {
+    const F = filmOf(key), setState = ui.tell, bg = () => F.bg;
+    const stop = { done: false }, cams = F.cams, size = paneOf(plan, cams), ch = capH(plan, F.caption, cams), W = plan.width, H = plan.height;
+    const t0 = performance.now();
+    await steadied(stop, setState);
+    if (!ui.alive()) return null;
     setState("Making the film here…", 0);
-    const fr = framing();
-    const ex = await exposuresHere(plan, key, stop);
-    if (!ex || X.job !== job) return;
+    const fr = framing(key);
+    const ex = await exposuresHere(plan, key, stop, setState);
+    if (!ex || !ui.alive()) return null;
     setState("Making the film here…", 0);
     let look = null;
     if (editedHere(key)) {
@@ -9375,7 +9466,7 @@ function targetLabel(k) {
     const vc = await videoCodec(W, H), { Muxer, ArrayBufferTarget } = await import(MUXER);
     // the soundtrack first (the live sound's synth, offline, as soundtrack makes it), so the film is written in one go
     let sound = null;
-    if (opt("export.sound", false) && window.cassiniSound && window.cassiniSound.render) {
+    if (F.sound && window.cassiniSound && window.cassiniSound.render) {
       try { sound = await soundOf(plan); } catch (err) { console.warn("export sound", err); }
     }
     const ac = sound ? await audioCodec(sound.sampleRate, sound.numberOfChannels) : null;
@@ -9402,7 +9493,7 @@ function targetLabel(k) {
     // Color smoothing (Settings > Processing, colour-smooth.html), as the camera windows do it: each picture's palette
     // measured as it comes in, and each color picture moved toward the palette of the film's pictures round it of its
     // camera and target (CS.SPAN either side: those pictures are among the ones fetched ahead)
-    const CS = window.cassiniColourSmooth, cs = CS ? CS.strength() : 0, past = [];
+    const CS = window.cassiniColourSmooth, cs = CS ? F.cs : 0, past = [];
     const groupOf = e => `${e.cam}|${e.target || ""}`;
     const measured = (e, p) => !cs ? p : p.then(r => {
       if (!r.bmp) return r;
@@ -9413,9 +9504,9 @@ function targetLabel(k) {
     });
     try {
       for (let n = 0; n < pics.length; n++) {
-        if (X.job !== job) { stop.done = true; venc.close(); return; }
+        if (!ui.alive()) { stop.done = true; venc.close(); return null; }
         if (failed) throw failed;
-        while (nxt < pics.length && nxt < n + ahead) { todo.push(measured(pics[nxt], pictureOf(pics[nxt], size, stop))); nxt++; }
+        while (nxt < pics.length && nxt < n + ahead) { todo.push(measured(pics[nxt], pictureOf(pics[nxt], size, stop, key))); nxt++; }
         const e = pics[n], got = await todo.shift(), { what } = got;
         let { bmp } = got;
         if (got.cs) {
@@ -9492,11 +9583,11 @@ function targetLabel(k) {
       stop.done = true;
       try { venc.close(); } catch (e) {}
       console.warn("export here", err);
-      return setState(`Failed here: ${err.message || err}`, 0);
+      setState(`Failed here: ${err.message || err}`, 0);
+      return null;
     }
     const blob = new Blob([target.buffer], { type: "video/mp4" }), took = (performance.now() - t0) / 1000;
-    X.made = { kinds, codec: vc.codec, audio: ac ? ac.codec : null, seconds: took, bytes: blob.size, frames: at };
-    doneHere(blob, plan, took, !!ac);
+    return { blob, took, audio: !!ac, made: { kinds, codec: vc.codec, audio: ac ? ac.codec : null, seconds: took, bytes: blob.size, frames: at } };
   }
   // the soundtrack's AudioBuffer (soundtrack's, kept here instead of sent)
   async function soundOf(plan) {
@@ -9520,12 +9611,45 @@ function targetLabel(k) {
     await enc.flush(); enc.close();
     if (failed) throw failed;
   }
-  function doneHere(blob, plan, took, audio) {
-    const url = URL.createObjectURL(blob), count = {};
+  // export.py name: cassini-<from, to the minute>-<the target most of its pictures show>.mp4
+  function nameOf(plan, from) {
+    const count = {};
     for (const e of plan.pictures) if (e.target) count[e.target] = (count[e.target] || 0) + 1;
     const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
-    // export.py name
-    const name = `cassini-${iso(X.a).slice(0, 16).replace("T", "-").replace(":", "")}-${(top || "mission").toLowerCase().replace(/_/g, "-")}.mp4`;
+    return `cassini-${from.slice(0, 16).replace("T", "-").replace(":", "")}-${(top || "mission").toLowerCase().replace(/_/g, "-")}.mp4`;
+  }
+  // a film from its key, made here (the Gallery's shared films on the public site, D7): ui.alive(), ui.tell(text,
+  // fraction) as filmHere's. Answers { blob, name, plan } or { error }
+  async function makeFilm(key, ui = {}) {
+    ui = { alive: ui.alive || (() => true), tell: ui.tell || (() => {}) };
+    ui.tell("Planning the film…", 0);
+    const got = await planOf(key).catch(err => ({ ok: false, error: String(err.message || err) }));
+    if (!got.ok) return { error: got.error };
+    const plan = got.plan, F = filmOf(key);
+    if (!plan.count) return { error: "No pictures in this stretch." };
+    if (!(await canMakeHere(plan, F))) return { error: (await videoCodec(plan.width, plan.height)) ? "This film cannot be made in the page." : NO_CODEC };
+    let said = "";
+    const out = await filmHere(plan, key, { alive: ui.alive, tell: (t, f) => { said = t; ui.tell(t, f); } });
+    return out ? { blob: out.blob, name: nameOf(plan, F.from || new Date(plan.pictures[0].t * 1000).toISOString().slice(0, 19)), plan, made: out.made } : { error: ui.alive() ? said || "The film could not be made." : "stopped" };
+  }
+  // a picture as a bitmap, the way the film takes it (the Movie Editor's stage, strip and steadying): a movie frame or
+  // mosaic movie frame whose steps this computer works out is made here, as the camera windows make it; anything else
+  // is fetched (on the public site, its published address). Answers an ImageBitmap; throws when there is none
+  async function bitmapOf(url) {
+    let u = null;
+    try { u = new URL(url, location.href); } catch (e) {}
+    const m = u && /^\/frames\/movie\/([NW]\d{10}_\d+)\.webp$/.exec(u.pathname);
+    if (m && (u.searchParams.get("size") === "1024" || PUB())) {
+      const center = u.searchParams.get("center") !== "0", rolling = u.searchParams.get("mode") === "rolling";
+      const here = rolling ? (u.searchParams.get("whole") === "1" ? null : await rollingHere(m[1], 1024, { done: false }, center)) : u.searchParams.get("color") !== "0" ? await movieHere(m[1], 1024, { done: false }, center) : null;
+      if (here) return here;
+    }
+    const r = await fetch(publicUrl(url));
+    if (!r.ok) throw new Error(r.status);
+    return createImageBitmap(await r.blob());
+  }
+  function doneHere(blob, plan, took, audio) {
+    const url = URL.createObjectURL(blob), name = nameOf(plan, iso(X.a));
     setState(`Done here in ${fmtDur(Math.max(1, Math.round(took)))}${audio ? " · with sound" : ""}`, 1);
     $("exdone").hidden = false;
     const v = $("exvid"); v.hidden = false; v.src = url; v.dataset.src = url;
@@ -9551,22 +9675,28 @@ function targetLabel(k) {
     $("exauto").checked = opt("export.adaptive", true);
     $("exfps").value = opt("export.fps", 12); $("exfps").disabled = $("exauto").checked;
     $("exfpsv").textContent = $("exauto").checked ? "adaptive" : `${opt("export.fps", 12)} fps`;
-    const full = opt("export.full", false), sz = opt("export.size", 1024);
+    const full = opt("export.full", false) && !PUB(), sz = PUB() ? Math.min(PUBLIC_MOST, opt("export.size", 1024)) : opt("export.size", 1024);
     const near = SIZES.slice(0, -1).reduce((m, v, i) => (Math.abs(v - sz) < Math.abs(SIZES[m] - sz) ? i : m), 0);
+    // the public site: up to 1024 a camera, made here (D1)
+    $("exsize").max = PUB() ? SIZES.indexOf(PUBLIC_MOST) : SIZES.length - 1;
+    $("exhdr").parentElement.style.display = PUB() ? "none" : "";
     $("exsize").value = full ? SIZES.length - 1 : near; $("exsizev").textContent = full ? "Full" : sz > 1024 ? `≤ ${sz} px` : `${sz} px`;
     $("exsound").checked = opt("export.sound", false); $("excap").checked = opt("export.caption", true); $("exboom").checked = opt("export.boomerang", false); $("exhdr").checked = opt("export.hdr", false);
     segs();
   }
   // o.full: opens on Picture size Full, or off it (the highlighted stretch's "Full resolution…" and "Save movie…", segment.html)
   function open(o) {
-    if (o && "full" in o) setOpt("export.full", !!o.full);
+    if (o && "full" in o && !PUB()) setOpt("export.full", !!o.full);
     controls();
     card.hidden = false; card.dispatchEvent(new Event("pointerdown"));
     mark();
   }
   function close() { card.hidden = true; }
   // exposures(plan, key): each picture's EV and frame looks the film made here draws with (test_export_levels.py)
-  window.cassiniExport = { open, close, mark, clear, soundtrack, params, exposures: (plan, key) => exposuresHere(plan, key, { done: false }), get state() { return X; } };
+  // makeFilm(key, ui), bitmapOf(url) and publicUrl(url): the Gallery's and the Movie Editor's (above); planOf(key): the
+  // film's plan, the page's own on the public site
+  window.cassiniExport = { open, close, mark, clear, soundtrack, params, exposures: (plan, key) => exposuresHere(plan, key, { done: false }), makeFilm, bitmapOf, publicUrl, planOf,
+    get isPublic() { return PUB(); }, get state() { return X; } };
 
   $("exin").addEventListener("click", () => mark(state.et, null));
   $("exout").addEventListener("click", () => mark(null, state.et));
@@ -9614,7 +9744,8 @@ function targetLabel(k) {
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const MOST_NONE = 200000;                     // the top of Settings > Playback > Make ahead up to: no limit
   const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
-  if (S) {
+  // (on the public site nothing is made ahead, so neither setting is offered: Pre-process, policy.json page_settings)
+  if (S && !(window.cassiniPublic || document.documentElement.classList.contains("public"))) {
     // the most frames one stretch makes ahead (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
     S.define({ key: "segment.maxFrames", section: "Playback", label: "Make ahead up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
       format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
@@ -9712,8 +9843,15 @@ function targetLabel(k) {
   // in the cache: a tenth of a second), or after a moment with how far it is; the page then looks again after 0.1,
   // 0.2, 0.4 and 0.8 s and every second from there. Answers { stop() }.
   const BUSY = /^(queued|planning|making|waiting|finishing)$/;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
   function make(a, b, update) {
     if (J) J.stop();
+    // the public site: every picture is published, nothing to make (and no frame server to ask)
+    if (PUB()) {
+      const none = { a, b, job: { state: "failed", unsupported: true, published: true, done: 0, total: 0 }, stop() {} };
+      setTimeout(() => { try { update(none.job); } catch (err) {} });
+      return none;
+    }
     const me = J = { a, b, job: null, poll: 0, looks: 0, gone: false,
       stop() {
         if (me.gone) return; me.gone = true; clearTimeout(me.poll);
@@ -9784,7 +9922,7 @@ function targetLabel(k) {
   // ---- the note when movie mode keeps waiting ----
   let hintTimer = 0;
   function showHint() {
-    if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (J && J.job && BUSY.test(J.job.state))) return;
+    if (PUB() || !opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (J && J.job && BUSY.test(J.job.state))) return;
     P.hintAt = performance.now();
     const r = ($("dock") || $("tl")).getBoundingClientRect();
     hint.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;
@@ -9903,7 +10041,23 @@ function targetLabel(k) {
       return u.pathname + (q ? "?" + q : "");
     } catch (e) { return null; }
   }
-  const sized = (rec, size) => `${FRAMES}${rec}${rec.includes("?") ? "&" : "?"}size=${size}`;
+  // the public site (window.cassiniPublic): pictures as published (export.html's publicUrl), films made here
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
+  const pub = url => (window.cassiniExport && cassiniExport.publicUrl ? cassiniExport.publicUrl(url) : url);
+  // a recipe as the public site has it: a pointing opened on its own is not published (D9), so frame.webp?ids= opens
+  // as its frame (one id) or its color picture (two or three); a numbered pointing and a body reel picture (D2) have
+  // none (null)
+  function published(rec) {
+    if (!PUB() || !rec) return rec;
+    if (/^\/frames\/reel\//.test(rec) || /^\/frames\/mosaic\/[^/]+\/(p\/\d+|full)\./.test(rec)) return null;
+    const m = /^\/frames\/mosaic\/([NW]\d{10}_\d+)\/frame\.webp\?(.*)$/.exec(rec);
+    if (m) {
+      const ids = (new URLSearchParams(m[2]).get("ids") || m[1]).split(",").filter(x => /^[NW]\d{10}_\d+$/.test(x));
+      return ids.length === 1 ? `/frames/processed/${ids[0]}.webp` : ids.length <= 3 && ids.length ? `/frames/color.webp?ids=${ids.join(",")}` : null;
+    }
+    return rec;
+  }
+  const sized = (rec, size) => pub(`${FRAMES}${rec}${rec.includes("?") ? "&" : "?"}size=${size}`);
   const filmUrl = film => `${FRAMES}/export?${film}`;
   const filmKey = film => { try { const f = new URLSearchParams(film); return f.get("from") && f.get("until") ? f.toString().replace(/%3A/gi, ":") : null; } catch (e) { return null; } };
   function link(item) {
@@ -10117,8 +10271,8 @@ function targetLabel(k) {
   }
 
   // one item, large: its file when it has one, else made again from its recipe by the frame server
-  let filmPoll = 0;
-  function stopFilm() { clearTimeout(filmPoll); filmPoll = 0; }
+  let filmPoll = 0, filmRun = 0;
+  function stopFilm() { clearTimeout(filmPoll); filmPoll = 0; filmRun++; }
   async function view(id, shared) {
     closeShare(); stopFilm(); revoke();
     const item = shared || G.items.find(i => i.id === id);
@@ -10133,7 +10287,8 @@ function targetLabel(k) {
     $("galpos").textContent = shared ? "Shared with you" : `${pos + 1} of ${G.items.length}`;
     $("galorbit").hidden = item.kind === "movie" || !window.cassiniOrbit;
     $("galdel").hidden = !!shared; $("galkeep").hidden = !shared; $("galedit").hidden = !window.cassiniStudio;
-    $("galnote").textContent = shared ? "Made just now by the frame server from the archive, the same way it was made for whoever shared it." : "";
+    $("galnote").textContent = !shared ? "" : PUB() ? (item.kind === "movie" ? "Made just now in your browser from the published pictures, the same way it was made for whoever shared it." : "The published picture, the same one whoever shared it saw.")
+      : "Made just now by the frame server from the archive, the same way it was made for whoever shared it.";
     let file = item.hasFile && !shared ? await getFile(item.id).catch(() => null) : null;
     if (file && item.kind === "picture") file = await jpeg(file);   // items saved as WebP before pictures were kept as JPEG
     const dl = $("galdl"), base = fileName(item);
@@ -10145,6 +10300,9 @@ function targetLabel(k) {
     } else {
       const im = new Image(); im.alt = item.title; im.crossOrigin = "anonymous"; st.appendChild(im);
       if (file) { im.src = objUrl(file); dl.href = im.src; dl.setAttribute("download", base + "." + ext(file.type)); }
+      else if (item.unpublished) {
+        const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "This kind of picture (a body reel picture, or a mosaic's pointing on its own) is not on the public site. The moment it was saved at is."; st.appendChild(wait);
+      }
       else if (item.src && item.edit && window.cassiniStudio) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture, then the edit goes on…"; st.appendChild(wait);
         edited(item, null).then(b => {
@@ -10157,7 +10315,9 @@ function targetLabel(k) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
-        dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
+        // (the public site has no PNG or download copy: the picture as published until its JPEG is ready)
+        if (PUB()) { dl.href = sized(item.src, "full"); dl.setAttribute("download", base + ".webp"); }
+        else { dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png"); }
         fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => {
           if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
         }).catch(() => {});
@@ -10167,6 +10327,17 @@ function targetLabel(k) {
   // a film from its export options: the server's film when it has it, otherwise it makes it (sound by the page)
   async function filmFrom(item, v, dl, base) {
     const st = $("galstage"), wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "Asking the frame server for this film…"; st.appendChild(wait);
+    // the public site (D7): made in this browser from the film's options, as the Export window makes one here
+    if (PUB()) {
+      const EX = window.cassiniExport, run = filmRun, alive = () => run === filmRun && (G.cur === item || G.shared === item);
+      if (!EX || !EX.makeFilm) { wait.textContent = "This page cannot make films."; return; }
+      wait.textContent = "Making this film in your browser…";
+      const got = await EX.makeFilm(item.film, { alive, tell: (text, frac) => { if (alive()) wait.textContent = `Making this film in your browser · ${text}`; } });
+      if (!alive()) return;
+      if (got.error) { wait.textContent = got.error; return; }
+      wait.remove(); v.src = objUrl(got.blob); dl.href = v.src; dl.setAttribute("download", got.name || base + ".mp4");
+      return;
+    }
     try {
       const r = await fetch(filmUrl(item.film), { method: "POST" }), job = await r.json();
       if (!r.ok) { wait.textContent = job.error || "The frame server cannot make this film."; return; }
@@ -10272,15 +10443,17 @@ function targetLabel(k) {
 
   // ---------- a shared link: ?pic=/frames/… or ?film=… shows the picture over the moment it opens on ----------
   function sharedFromUrl() {
-    const q = new URLSearchParams(location.search), pic = recipe(q.get("pic") || ""), film = q.get("film");
+    const q = new URLSearchParams(location.search), asked = recipe(q.get("pic") || ""), film = q.get("film");
+    // the public site: the published picture for it (a pointing as its frame or color picture, D9), or none
+    const pic = published(asked), unpublished = !!asked && !pic;
     const filmOk = film ? filmKey(film) : null;
-    if (!pic && !filmOk) return null;
+    if (!pic && !filmOk && !unpublished) return null;
     const m = [...q].filter(([k]) => ["t", "view", "cam"].includes(k));
     if (!m.some(([k]) => k === "t")) m.unshift(["t", filmOk ? new URLSearchParams(filmOk).get("from") : ""]);
     m.push(["play", "0"]);
-    const ids = [...new Set(((pic || filmOk) || "").match(ID) || [])];
+    const ids = [...new Set(((pic || filmOk || asked) || "").match(ID) || [])];
     const edit = !filmOk && /^[\w.:,_-]{1,400}$/.test(q.get("edit") || "") ? q.get("edit") : null;
-    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0, edit,
+    return { id: "shared", kind: filmOk ? "movie" : "picture", added: Date.now(), moment: m, src: pic, film: filmOk, ids, hasFile: false, bytes: 0, edit, unpublished,
       title: (filmOk ? `Film · ${new URLSearchParams(filmOk).get("from").replace("T", " ")} UTC` : cap(whatOf(pic))) + (edit ? " · edited" : ""), sub: ids.slice(0, 3).join(" ") };
   }
   function dropShared() {
@@ -10790,6 +10963,10 @@ function targetLabel(k) {
   const $ = id => document.getElementById(id);
   const S = window.cassiniSettings, WM = window.cassiniWM, card = $("stucard"), cv = $("stucanvas"), stage = $("stustage");
   const GAL = () => window.cassiniGallery;
+  // the public site (window.cassiniPublic): no tile tuning (no frame server to make a mosaic again); a picture asked for
+  // as published (export.html's publicUrl drops a carried-over tune= and hide=)
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
+  const pub = url => (window.cassiniExport && cassiniExport.publicUrl ? cassiniExport.publicUrl(url) : url);
   if (S) {
     S.define({ key: "studio.jpegQuality", section: "Studio", label: "Picture quality", type: "range", value: 92, min: 70, max: 100, step: 1, unit: "%",
       hint: "JPEG quality of edited pictures saved, downloaded and shared." });
@@ -11186,7 +11363,7 @@ void main() {
   async function mosOpen(item) {
     st.mos = null;
     const src = item && item.src, m = src && new URL(src, location.href).pathname.match(MOSAIC);
-    if (!m || !GAL() || !GAL().fullUrl) return;
+    if (!m || !GAL() || !GAL().fullUrl || PUB()) return;
     try {
       const url = new URL(GAL().fullUrl(`/frames/mosaic/${m[1]}.json`)); url.searchParams.delete("size");
       const r = await fetch(url.href); if (!r.ok) return;
@@ -11340,7 +11517,7 @@ void main() {
     st.kind = opts.kind === "movie" ? "movie" : "picture";
     try {
       let blob = opts.blob;
-      if (!blob) { const r = await fetch(opts.url); if (!r.ok) throw new Error(r.status); blob = await r.blob(); }
+      if (!blob) { const r = await fetch(pub(opts.url)); if (!r.ok) throw new Error(r.status); blob = await r.blob(); }
       st.src = blob;
       if (isMovie()) {
         const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.loop = false;
@@ -11556,6 +11733,12 @@ void main() {
     return "http://localhost:8765";
   })();
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  // the public site (window.cassiniPublic): plan and levels in the page, pictures as published (export.html's helpers)
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public"), PL = () => window.cassiniPlanLocal;
+  const pub = url => (EX.publicUrl ? EX.publicUrl(url) : url);
+  // a picture as a bitmap: on the public site as the film makes it here (a movie frame's steps worked out on this
+  // computer), else the frame server's
+  const bitmapOf = url => (PUB() && EX.bitmapOf ? EX.bitmapOf(url) : fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => createImageBitmap(b)));
   const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   const STORE = "cassini-movie-edits";
   if (S) S.define({ key: "movieEdit.showOut", section: "Movie", label: "Show left-out frames in the Movie Editor", type: "toggle", value: false,
@@ -11618,9 +11801,7 @@ void main() {
     for (const url of urls) {
       if (greys.has(url)) return greys.get(url);
       try {
-        const r = await fetch(url);
-        if (!r.ok) continue;
-        const b = await createImageBitmap(await r.blob()), g = FS.greyOf(b);
+        const b = await bitmapOf(url), g = FS.greyOf(b);
         if (b.close) b.close();
         greys.set(url, g);
         if (greys.size > 1000) greys.delete(greys.keys().next().value);
@@ -11846,19 +12027,30 @@ void main() {
     // how far the frame server is (progress=: /export/plan-progress/<key>.json, every half second; a server without
     // it answers 404 throughout, and the words fall back to the time so far)
     const key = Math.random().toString(36).slice(2, 14);
-    q.set("progress", key); ME.listing = null;
+    if (!PUB()) q.set("progress", key);
+    ME.listing = null;
     let poll = 0;
     const look = async () => {
+      if (PUB()) return;   // the page's own plan says nothing on the way
       try { const r = await fetch(`${FRAMES}/export/plan-progress/${key}.json`, { cache: "no-store" }); if (r.ok && n === ask && ME.loading) { ME.listing = await r.json(); if (L) loadUi(); else render(); } } catch (e) {}
       if (n === ask && ME.loading) poll = setTimeout(look, 500);
     };
     poll = setTimeout(look, 300);
+    const planKey = `${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`;
     try {
-      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
-      if (n !== ask) return;
-      if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
-      ME.frames = p.pictures;
-    } catch (e) { if (n === ask) ME.error = /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : `Could not list the frames: ${e.message || e}`; }
+      if (PUB()) {
+        // the page's own plan (plan-local.js), as the frame server's would be
+        const got = await EX.planOf(planKey);
+        if (n !== ask) return;
+        if (!got.ok) throw new Error(got.error);
+        ME.frames = got.plan.pictures;
+      } else {
+        const r = await fetch(`${FRAMES}/export/plan.json?${planKey}`), p = await r.json();
+        if (n !== ask) return;
+        if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
+        ME.frames = p.pictures;
+      }
+    } catch (e) { if (n === ask) ME.error = !PUB() && /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : PUB() ? String(e.message || e) : `Could not list the frames: ${e.message || e}`; }
     clearTimeout(poll);
     if (n !== ask) return;
     ME.loading = false;
@@ -11881,7 +12073,7 @@ void main() {
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
   const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
   function thumb(img, e) {
-    const urls = thumbTries(e); let at = 0;
+    const urls = thumbTries(e).map(pub); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
     if (img.getAttribute("src") !== urls[0]) img.src = urls[0];
   }
@@ -12026,7 +12218,7 @@ void main() {
   const bitmaps = new Map();
   function bitmap(url) {
     if (bitmaps.has(url)) { const b = bitmaps.get(url); bitmaps.delete(url); bitmaps.set(url, b); return b; }
-    const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => createImageBitmap(b));
+    const p = bitmapOf(url);
     p.catch(() => bitmaps.delete(url));
     bitmaps.set(url, p);
     while (bitmaps.size > 24) { const [k, old] = bitmaps.entries().next().value; bitmaps.delete(k); old.then(b => b.close && b.close(), () => {}); }
@@ -12188,7 +12380,7 @@ void main() {
   // the frame's picture at full size, as shown (the raw frame standing in when the movie's picture cannot be made)
   async function full(e) {
     let r;
-    for (const url of tries(e, "full")) { r = await fetch(url); if (r.ok) break; }
+    for (const url of tries(e, "full")) { r = await fetch(pub(url)); if (r.ok) break; }
     if (!r.ok) throw new Error(`the frame server said ${r.status}`);
     return r.blob();
   }
@@ -12248,15 +12440,26 @@ void main() {
     const n = ++lvAsk, r0 = new URLSearchParams(recipe());
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
+    const lvKey = `${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`;
     try {
-      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`);
-      const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
-      if (n !== lvAsk) return;
-      if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
+      let j;
+      if (PUB()) {
+        // measured on this computer (levels-local.js) over the plan's pictures; tell(done, total) shows how far it is
+        if (!PL() || !PL().levels) throw new Error("This page does not measure brightness yet.");
+        const tell = (done, total) => { if (n === lvAsk) { ME.lv = { ...ME.lv, done, total, error: "" }; graph(); sideLevels(); } };
+        j = await PL().levels(Object.fromEntries(new URLSearchParams(lvKey)), ME.frames, tell);
+        if (n !== lvAsk) return;
+        if (!j || j.error && j.total == null) throw new Error((j && j.error) || "the page could not measure the pictures");
+      } else {
+        const r = await fetch(`${FRAMES}/export/levels.json?${lvKey}`);
+        j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
+        if (n !== lvAsk) return;
+        if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
+      }
       ME.lv = { level: j.level || {}, even: j.even || {}, done: j.done || 0, total: j.total, ready: !!j.even_ready, error: j.error || "" };
     } catch (e) {
       if (n !== lvAsk) return;
-      ME.lv = { ...ME.lv, error: /fetch|network|404/i.test(String(e.message || e)) ? "This frame server does not measure brightness yet." : `Could not measure the brightness: ${e.message || e}` };
+      ME.lv = { ...ME.lv, error: PUB() ? String(e.message || e) : /fetch|network|404/i.test(String(e.message || e)) ? "This frame server does not measure brightness yet." : `Could not measure the brightness: ${e.message || e}` };
     }
     graph(); sideLevels(); if (ME.even) paint();
     if (!ME.lv.error && (ME.lv.total == null || ME.lv.done < ME.lv.total)) levelsSoon(1500);
@@ -12699,9 +12902,10 @@ void main() {
     const n = L.plan ? ME.frames.length : (window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null);
     $("mlwhat").textContent = `${fmtDur(ME.b - ME.a)}${n ? ` · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : ""}`;
     const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
+    mk.hidden = PUB();   // the public site makes nothing ahead: every picture is published
     plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
-    plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
+    plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: ${PUB() ? "this computer" : "the frame server"} works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
     mk.className = !j ? "on" : BUSY.test(j.state) ? "on" : j.state === "done" ? "ok" : j.unsupported ? "" : "warn";
     mk.textContent = !j ? "Making the pictures ahead"
       : BUSY.test(j.state) ? jobText(j) + (j.state === "planning" || j.state === "queued" ? secs(L.makeAt || L.planAt) : "")
@@ -13848,7 +14052,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"9277a0ed591b";
+  const BUILD = /*BUILD*/"b07d58e24846";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {

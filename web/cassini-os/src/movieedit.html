@@ -78,7 +78,14 @@
 
      The edit is one short recipe (from, until, cams, drop, targets, filters, edit, URL-encoded), kept on this device
      for the stretch (and levels, even, ctr, mos, crop, crop2, nudge, fedit), put in links as &cut=…, and sent to the export with its plan (cassiniMovieCut), so Save movie… makes
-     the film edited. window.cassiniMovieEdit = { open({ a, b } | recipe?), close, recipe(), cut(), holds(a, b), get state, get loading }. -->
+     the film edited. window.cassiniMovieEdit = { open({ a, b } | recipe?), close, recipe(), cut(), holds(a, b), get state, get loading }.
+
+     On the public site (window.cassiniPublic, docs/public-site/README.md) the editor asks no origin anything: the plan
+     comes from the page's own port of export.py (window.cassiniPlanLocal.plan, plan-local.js) and the brightness graph
+     and Even out from its port of export.levels (cassiniPlanLocal.levels, levels-local.js) over the plan's pictures;
+     nothing is made ahead (segment.html); and every picture is the published one (cassiniExport.publicUrl), a movie
+     frame stabilized, evened and faded on this computer as the camera windows do it (cassiniExport.bitmapOf through
+     cassiniSteadyLocal and cassiniFadeLocal). -->
 <style>
 #mecard { top: calc(env(safe-area-inset-top, 0px) + 34px); left: 50%; transform: translateX(-50%); width: clamp(600px, 76vw, 1240px); height: min(780px, calc(100% - 110px)); display: flex; flex-direction: column; }
 #mecard[style*="left"] { transform: none; }
@@ -319,6 +326,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     return "http://localhost:8765";
   })();
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
+  // the public site (window.cassiniPublic): plan and levels in the page, pictures as published (export.html's helpers)
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public"), PL = () => window.cassiniPlanLocal;
+  const pub = url => (EX.publicUrl ? EX.publicUrl(url) : url);
+  // a picture as a bitmap: on the public site as the film makes it here (a movie frame's steps worked out on this
+  // computer), else the frame server's
+  const bitmapOf = url => (PUB() && EX.bitmapOf ? EX.bitmapOf(url) : fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => createImageBitmap(b)));
   const isoOf = et => new Date(etToMs(et)).toISOString().slice(0, 19);
   const STORE = "cassini-movie-edits";
   if (S) S.define({ key: "movieEdit.showOut", section: "Movie", label: "Show left-out frames in the Movie Editor", type: "toggle", value: false,
@@ -381,9 +394,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     for (const url of urls) {
       if (greys.has(url)) return greys.get(url);
       try {
-        const r = await fetch(url);
-        if (!r.ok) continue;
-        const b = await createImageBitmap(await r.blob()), g = FS.greyOf(b);
+        const b = await bitmapOf(url), g = FS.greyOf(b);
         if (b.close) b.close();
         greys.set(url, g);
         if (greys.size > 1000) greys.delete(greys.keys().next().value);
@@ -609,19 +620,30 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     // how far the frame server is (progress=: /export/plan-progress/<key>.json, every half second; a server without
     // it answers 404 throughout, and the words fall back to the time so far)
     const key = Math.random().toString(36).slice(2, 14);
-    q.set("progress", key); ME.listing = null;
+    if (!PUB()) q.set("progress", key);
+    ME.listing = null;
     let poll = 0;
     const look = async () => {
+      if (PUB()) return;   // the page's own plan says nothing on the way
       try { const r = await fetch(`${FRAMES}/export/plan-progress/${key}.json`, { cache: "no-store" }); if (r.ok && n === ask && ME.loading) { ME.listing = await r.json(); if (L) loadUi(); else render(); } } catch (e) {}
       if (n === ask && ME.loading) poll = setTimeout(look, 500);
     };
     poll = setTimeout(look, 300);
+    const planKey = `${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`;
     try {
-      const r = await fetch(`${FRAMES}/export/plan.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle() : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`), p = await r.json();
-      if (n !== ask) return;
-      if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
-      ME.frames = p.pictures;
-    } catch (e) { if (n === ask) ME.error = /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : `Could not list the frames: ${e.message || e}`; }
+      if (PUB()) {
+        // the page's own plan (plan-local.js), as the frame server's would be
+        const got = await EX.planOf(planKey);
+        if (n !== ask) return;
+        if (!got.ok) throw new Error(got.error);
+        ME.frames = got.plan.pictures;
+      } else {
+        const r = await fetch(`${FRAMES}/export/plan.json?${planKey}`), p = await r.json();
+        if (n !== ask) return;
+        if (!r.ok) throw new Error(p.error || `the frame server said ${r.status}`);
+        ME.frames = p.pictures;
+      }
+    } catch (e) { if (n === ask) ME.error = !PUB() && /fetch|network/i.test(String(e.message)) ? `No frame server at ${FRAMES}.` : PUB() ? String(e.message || e) : `Could not list the frames: ${e.message || e}`; }
     clearTimeout(poll);
     if (n !== ask) return;
     ME.loading = false;
@@ -644,7 +666,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
   const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
   function thumb(img, e) {
-    const urls = thumbTries(e); let at = 0;
+    const urls = thumbTries(e).map(pub); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
     if (img.getAttribute("src") !== urls[0]) img.src = urls[0];
   }
@@ -789,7 +811,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   const bitmaps = new Map();
   function bitmap(url) {
     if (bitmaps.has(url)) { const b = bitmaps.get(url); bitmaps.delete(url); bitmaps.set(url, b); return b; }
-    const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => createImageBitmap(b));
+    const p = bitmapOf(url);
     p.catch(() => bitmaps.delete(url));
     bitmaps.set(url, p);
     while (bitmaps.size > 24) { const [k, old] = bitmaps.entries().next().value; bitmaps.delete(k); old.then(b => b.close && b.close(), () => {}); }
@@ -951,7 +973,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // the frame's picture at full size, as shown (the raw frame standing in when the movie's picture cannot be made)
   async function full(e) {
     let r;
-    for (const url of tries(e, "full")) { r = await fetch(url); if (r.ok) break; }
+    for (const url of tries(e, "full")) { r = await fetch(pub(url)); if (r.ok) break; }
     if (!r.ok) throw new Error(`the frame server said ${r.status}`);
     return r.blob();
   }
@@ -1011,15 +1033,26 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const n = ++lvAsk, r0 = new URLSearchParams(recipe());
     const q = new URLSearchParams({ from: isoOf(ME.a), until: isoOf(ME.b), cams: camsOf(), fps: "auto", size: "512", sound: "0", caption: "0", pictures: ME.pictures, list: "1" });
     ["drop", "targets", "filters", "even", "ctr"].forEach(k => { if (r0.get(k)) q.set(k, r0.get(k)); });
+    const lvKey = `${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`;
     try {
-      const r = await fetch(`${FRAMES}/export/levels.json?${q}${window.cassiniLook ? window.cassiniLook() : ""}${window.cassiniMovieStyle ? window.cassiniMovieStyle({ center: centreOn() }) : ""}${mosQ()}${window.cassiniSetsQ ? window.cassiniSetsQ() : ""}`);
-      const j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
-      if (n !== lvAsk) return;
-      if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
+      let j;
+      if (PUB()) {
+        // measured on this computer (levels-local.js) over the plan's pictures; tell(done, total) shows how far it is
+        if (!PL() || !PL().levels) throw new Error("This page does not measure brightness yet.");
+        const tell = (done, total) => { if (n === lvAsk) { ME.lv = { ...ME.lv, done, total, error: "" }; graph(); sideLevels(); } };
+        j = await PL().levels(Object.fromEntries(new URLSearchParams(lvKey)), ME.frames, tell);
+        if (n !== lvAsk) return;
+        if (!j || j.error && j.total == null) throw new Error((j && j.error) || "the page could not measure the pictures");
+      } else {
+        const r = await fetch(`${FRAMES}/export/levels.json?${lvKey}`);
+        j = await r.json().catch(() => ({ error: `the frame server said ${r.status}` }));
+        if (n !== lvAsk) return;
+        if (!r.ok || j.error && j.total == null) throw new Error(j.error || r.status);
+      }
       ME.lv = { level: j.level || {}, even: j.even || {}, done: j.done || 0, total: j.total, ready: !!j.even_ready, error: j.error || "" };
     } catch (e) {
       if (n !== lvAsk) return;
-      ME.lv = { ...ME.lv, error: /fetch|network|404/i.test(String(e.message || e)) ? "This frame server does not measure brightness yet." : `Could not measure the brightness: ${e.message || e}` };
+      ME.lv = { ...ME.lv, error: PUB() ? String(e.message || e) : /fetch|network|404/i.test(String(e.message || e)) ? "This frame server does not measure brightness yet." : `Could not measure the brightness: ${e.message || e}` };
     }
     graph(); sideLevels(); if (ME.even) paint();
     if (!ME.lv.error && (ME.lv.total == null || ME.lv.done < ME.lv.total)) levelsSoon(1500);
@@ -1462,9 +1495,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const n = L.plan ? ME.frames.length : (window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null);
     $("mlwhat").textContent = `${fmtDur(ME.b - ME.a)}${n ? ` · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : ""}`;
     const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
+    mk.hidden = PUB();   // the public site makes nothing ahead: every picture is published
     plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
-    plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
+    plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: ${PUB() ? "this computer" : "the frame server"} works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
     mk.className = !j ? "on" : BUSY.test(j.state) ? "on" : j.state === "done" ? "ok" : j.unsupported ? "" : "warn";
     mk.textContent = !j ? "Making the pictures ahead"
       : BUSY.test(j.state) ? jobText(j) + (j.state === "planning" || j.state === "queued" ? secs(L.makeAt || L.planAt) : "")
