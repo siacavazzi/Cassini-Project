@@ -34,7 +34,7 @@ print("global: pointings land on one another")
 # a mosaic of the first 3 tiles takes the whole pass's places, and the kept solve still holds all 5
 fewer = om.panel_places(u, cache, p, reports[:3])
 assert fewer == {n: v for n, v in moved.items() if n < 3}, (fewer, moved)
-path = [f for f in os.listdir(om.folder(u, cache)) if f.startswith("global1-")]
+path = [f for f in os.listdir(om.folder(u, cache)) if f.startswith("global2-")]
 assert len(path) == 1 and json.load(open(os.path.join(om.folder(u, cache), path[0])))["tiles"] == [0, 1, 2, 3, 4]
 print("global: fewer tiles take the pass's solve")
 

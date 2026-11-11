@@ -48,6 +48,23 @@ def test_edge_match_constrains_only_across():
     assert abs(moves[0][1]) < 1e-9 and abs(moves[1][1]) < 1e-9
 
 
+def test_limb_anchors_with_haze():
+    # three pointings round a limb (normals 60 degrees apart), each truly off by err; one filter's haze stands 7 px out.
+    # A limb says o = haze - n.err (how far the picture's limb is out of SPICE's); the solve finds -err and the haze
+    err = {0: np.array([3.0, -2.0]), 1: np.array([-1.0, 4.0]), 2: np.array([2.0, 2.0])}
+    normals = {r: np.array([np.cos(a), np.sin(a)]) for r, a in zip(err, np.radians([-60, 0, 60]))}
+    meas = [("limb", r, "CB2", normals[r], 7.0 + float(normals[r] @ err[r]), 1.0) for r in err]
+    # and the pairs between them, as matches say (pointing b sits err b - err a from a: moves undo that)
+    meas += [(a, b, -(err[b] - err[a]), np.eye(2), 1.0) for a, b in ((0, 1), (1, 2))]
+    haze = {}
+    moves, keep = om._solve_moves([0, 1, 2], meas, 2.0, haze)
+    for r in err:
+        # (within a px: over a 120 degree arc a haze height and a shift along the mean normal are told apart only
+        # by how the normals spread, and SPICE's prior pulls the shared part of the moves toward none)
+        assert np.linalg.norm(np.array(moves[r]) + err[r]) < 1.0, (r, moves[r], err[r])
+    assert abs(haze["CB2"] - 7.0) < 1.0, haze
+
+
 def test_no_matches_keeps_spice():
     moves, keep = om._solve_moves([0, 1, 2], [], 2.0)
     assert all(m == (0.0, 0.0) for m in moves.values()) and keep == []
