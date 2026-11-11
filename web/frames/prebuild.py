@@ -308,6 +308,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         # (every tile made: their reports in one file too, which a server's first look at the pass reads instead of
         # a file a tile, obs_mosaic.REPORTS_FILE)
         obs_mosaic.keep_reports(u, cache, p)
+        # (the pointings solved on all the pass's tiles before any mosaic so far is drawn, so each is drawn where the
+        # whole pass puts it from its first tile on: obs_mosaic.global_places)
+        if u.get("kind") == "mosaic":
+            obs_mosaic.solve_places(u, cache)
     kind, n = u.get("kind"), 0
 
     def movie(f, size):
