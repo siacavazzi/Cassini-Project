@@ -45,6 +45,13 @@ VENDOR = {
     "vendor/fonts/silkscreen-latin.woff2": ("https://fonts.gstatic.com/s/silkscreen/v6/m8JXjfVPf62XiF7kO-i9YLNla0GA1dM.woff2",
                                          "17bb6d80eeea10c69887aa64a1b48e70a3f540de50480da9ec933fac1996bf97"),
 }
+# their licenses (src/licenses/, from the npm packages and google/fonts ofl/<font>/OFL.txt), copied next to them
+VENDOR_LICENSES = {
+    "three.LICENSE": "vendor/three/LICENSE",
+    "mp4-muxer.LICENSE": "vendor/mp4-muxer/LICENSE",
+    "silkscreen.OFL.txt": "vendor/fonts/Silkscreen-OFL.txt",
+    "share-tech-mono.OFL.txt": "vendor/fonts/ShareTechMono-OFL.txt",
+}
 # Google Fonts' own stylesheet for the two fonts (css2?family=Silkscreen&family=Share+Tech+Mono, as a current browser
 # gets it), pointed at vendor/fonts/
 FONT_FACES = """
@@ -98,6 +105,10 @@ def public_tree(root, out):
             shutil.copyfile(os.path.join(root, f), os.path.join(out, f))
     for path in VENDOR:
         vendor_file(path, out)
+    # each vendored file's license, with its copyright notice, next to it (MIT and the SIL Open Font License ask for
+    # that); the About window's Credits (credits.json) names them too
+    for src, dst in VENDOR_LICENSES.items():
+        shutil.copyfile(os.path.join(HERE, "licenses", src), os.path.join(out, dst))
     files, size, biggest = 0, 0, (0, "")
     for dirpath, _, names in os.walk(out):
         for n in names:
