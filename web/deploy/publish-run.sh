@@ -9,16 +9,20 @@
 #           $CASSINI_REPO_<host> (default ~/dev/Cassini-Project) and the cache at $CASSINI_CACHE_<host> (default --cache)
 # --to-dir  publish to a local mirror instead of R2 (WP3's publish.py --to-dir); the default is R2, with the key pair
 #           from ~/.cassini-cloudflare.env
+# --state   the publisher's ledger folder (publish.py --state), the same for every run on a host; default the
+#           publisher's own (~/.cassini-publish/BUCKET for R2). The final run skips, with no R2 request, every object
+#           in this Mac's ledger; years another host published are checked against R2 (md5 and ETag) instead, so a
+#           single host (the one with the cache) is the fastest split
 # --dry-run print the commands only
 # Each host's processes come from its free cores (CASSINI_WORKERS, else the cores not busy now), per the project's
 # compute rule; BLAS threads are pinned to 1 because the parallelism is many processes.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-CACHE="" YEARS="" HOSTS="local" TODIR="" DRY=0
+CACHE="" YEARS="" HOSTS="local" TODIR="" DRY=0 STATE=""
 while [ $# -gt 0 ]; do case "$1" in
   --cache) CACHE="$2"; shift ;; --years) YEARS="$2"; shift ;; --hosts) HOSTS="$2"; shift ;;
-  --to-dir) TODIR="$2"; shift ;; --dry-run) DRY=1 ;; *) echo "unknown $1" >&2; exit 2 ;; esac; shift; done
+  --to-dir) TODIR="$2"; shift ;; --state) STATE="$2"; shift ;; --dry-run) DRY=1 ;; *) echo "unknown $1" >&2; exit 2 ;; esac; shift; done
 [ -n "$CACHE" ] && [ -n "$YEARS" ] || { echo "--cache and --years are needed" >&2; exit 2; }
 
 # the pieces this run drives must exist at this commit (WP2, WP3)
@@ -36,6 +40,7 @@ else
   DEST="--to-dir $TODIR"
 fi
 
+[ -n "$STATE" ] && DEST="$DEST --state $STATE"
 expand() { case "$1" in *-*) seq "${1%-*}" "${1#*-}" ;; *) tr ',' '\n' <<<"$1" ;; esac; }
 read -r -a H <<<"$HOSTS"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
