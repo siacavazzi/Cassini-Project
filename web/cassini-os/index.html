@@ -3611,21 +3611,22 @@ body.ambient.phone .amb-where { font-size: 18px; }
       return String(n);
     };
     const flag = read => v => (read === "not0" ? (v === "0" ? "0" : "1") : read === "eq1" ? (v === "1" ? "1" : "0") : "1");
-    const int = v => (/^-?\d+$/.test(v) ? String(parseInt(v, 10)) : v);
-    const as = v => v;   // a value kept as asked (frame ids, or a value the route refuses)
+    const int = (lo, hi) => v => (/^-?\d+$/.test(v) ? String(Math.max(lo, Math.min(hi, parseInt(v, 10)))) : v);
+    const as = v => v;   // a value kept as asked (a frame id, or a value the route refuses)
+    const ids = v => v.split(",").filter(Boolean).join(",");
     // [path, the query parameter the route is told apart by (kept, first), {param: [read, its default]}, params dropped]
     const MOVIE_DROP = ["laps", "fade", "persist"], ROLL_DROP = ["persist", "center", "trail", "steady", "exposure", "color", "detail"];
     const ROUTES = [
-      [/^\/frames\/color\.webp$/, null, { ids: [as, null], size: [size([512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"], channel: [as, ""] }],
-      [/^\/frames\/thumb\.webp$/, null, { mosaic: [as, null], frame: [as, null], color: [as, null], size: [size([256], 256, 256), "256"] }],
+      [/^\/frames\/color\.webp$/, null, { ids: [ids, null], size: [size([512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"], channel: [as, ""] }],
+      [/^\/frames\/thumb\.webp$/, null, { mosaic: [as, null], frame: [as, null], color: [ids, null], size: [size([256], 256, 256), "256"] }],
       [/^\/frames\/processed\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([256, 512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"] }],
       [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.json$/, null, {}],
-      [/^\/frames\/movie\/[NW]\d{10}_\d+\.fade\.json$/, null, { laps: [int, "1"], w: [int, "0"], h: [int, "0"] }],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.fade\.json$/, null, { laps: [int(1, 12), "1"], w: [int(0, 4096), "0"], h: [int(0, 4096), "0"] }],
       [/^\/frames\/movie\/[NW]\d{10}_\d+\.steady\.json$/, null, { center: [flag("not0"), "1"], color: [flag("not0"), "0"] }],
       [/^\/frames\/movie\/[NW]\d{10}_\d+\.json$/, null, {}],
-      [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, "mode", { size: [size([512, 1024], 512, 1024), "512"], laps: [int, "1"], fade: [int, "0"] }, ROLL_DROP],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, "mode", { size: [size([512, 1024], 512, 1024), "512"], laps: [int(1, 12), "1"], fade: [int(0, 120), "0"] }, ROLL_DROP],
       [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([128, 512, 1024], 512, 1024), "512"], color: [flag("not0"), "1"], center: [flag("not0"), "1"],
-        trail: [int, "0"], steady: [int, "0"], exposure: [int, "0"], detail: [flag("not0"), "1"], mode: [as, ""] }, MOVIE_DROP],
+        trail: [int(0, 12), "0"], steady: [int(0, 60), "0"], exposure: [int(0, 30), "0"], detail: [flag("not0"), "1"], mode: [as, ""] }, MOVIE_DROP],
       [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/, "warm", {}],
       [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([512, 1024], 512, "full"), "512"], force: [flag("nonempty"), "0"], tune: [as, ""], hide: [as, ""] }],
       [/^\/frames\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([128, 512, 1024], 512, 1024), "512"] }],
@@ -13828,7 +13829,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"187fd4b527ee";
+  const BUILD = /*BUILD*/"b8b66fb47539";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
