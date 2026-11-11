@@ -206,7 +206,7 @@ It shows as a line in the menu bar, a thin strip along the top of the timeline (
 beam from the dish. Settings > View: "What Cassini is doing", "Radio beam". Nothing is fetched or pre-built.
 `bench/activity.cjs` checks it against ten things known to have happened in 2005.
 
-## Seen so far, pictures of a place, and the map Cassini made
+## Seen so far, and pictures of a place
 
 `src/coverage.html`, from a small table made once by `python web/replay/build_coverage.py --data web/replay/data`
 (needs the pointing for the years it covers; about 50 KB a moon plus a list of pictures per place, in
@@ -220,18 +220,7 @@ beam from the dish. Settings > View: "What Cassini is doing", "Radio beam". Noth
   that place, one per observation; a row puts the clock on its picture. The place is ringed on the globe and its
   pictures are ticked on the timeline.
 
-- **The map Cassini made** (Settings > View, off unless turned on): the moon in view starts as a blank globe with a
-  faint grid, and each picture lands on it where Cassini took it, as the clock reaches it. A sharper, better-lit
-  picture replaces what was there. The pictures are the page's own (the same ones as Pictures in the footprints),
-  laid on the globe with the recorded pointing; the table (`<moon>.made.json`, 50 to 270 KB for two years) lists the
-  pictures that hold some part of the map at some time, clear and green filters only, so a moon's map is at most a
-  few hundred pictures at once. Going back in time clears the map and lays it again. **Sunlight on the map** mixes
-  the scene's sunlight back in (0%: the map shows as photographed everywhere), and **Even out the sunlight** divides
-  each picture by how low the Sun stood at each place when it was taken (0%: pictures land untouched). Both are
-  display steps in the page. Only the moon in view holds a map (a 4096 by 2048 texture). `--made-only` adds the
-  tables to a coverage folder that is already built.
-
-`bench/coverage.cjs` checks the first two against Enceladus in 2005.
+`bench/coverage.cjs` checks both against Enceladus in 2005.
 
 ## Shareable links
 

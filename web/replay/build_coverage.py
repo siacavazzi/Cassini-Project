@@ -221,122 +221,12 @@ def moon_pass(args):
     return year, moon, (out, top_res, top_ref, int(len(idx)), {r: float(rng[r % 1000000]) for r in kept})
 
 
-# "The map Cassini made" uses pictures taken through these filter pairs only, so the map is one kind of light
-MADE_FILTERS = {"CL1", "CL2", "GRN"}
-MADE_MARGIN = 0.95                   # a picture takes a place over when it is at least this much sharper there
-MADE_MAX_INCIDENCE = math.radians(75)  # nearer the terminator than this a picture is mostly shadow: it does not count
-
-
-def made_pass(args):
-    """One moon, every year in time order: the pictures that were, at some time, the sharpest view of some place.
-
-    "Sharpest" is km per pixel there, divided by the square root of the Sun's height (cos incidence), so of two
-    pictures as fine as each other the better lit one wins.
-    A picture enters the table when it is the sharpest so far somewhere, and leaves (its `until`) when later
-    pictures have taken over every place it held. The pictures with et <= t < until, each drawn where it is the
-    sharpest, are the map as it stood at time t. Each row carries what the page needs to lay the picture down with no
-    geometry of its own: Cassini in the moon's frame (km), the Sun's direction there, and the rotation from the
-    moon's frame to the camera's."""
-    data, years, moon = args
-    mission = json.load(open(os.path.join(data, "mission.json")))
-    b = mission["bodies"][moon]
-    radii = np.asarray(b["radii"], np.float64)
-    thr = np.asarray(tiers_km(b["radii"]))
-    ncell = (W // CELL) * (H // CELL)
-    cell_of = (np.arange(H)[:, None] // CELL * (W // CELL) + np.arange(W)[None, :] // CELL).reshape(-1)
-    perm = np.argsort(cell_of, kind="stable")
-    G = grid()
-    fine = dict(G=np.ascontiguousarray(G[perm]))
-    coarse = dict(G=np.ascontiguousarray(G[perm].reshape(ncell, CELL * CELL, 3).mean(1)))
-    for g in (fine, coarse):
-        g["G"] /= np.linalg.norm(g["G"], axis=1)[:, None]
-        g["P"] = g["G"] * radii
-        g["N"] = g["G"] / radii
-        g["N"] /= np.linalg.norm(g["N"], axis=1)[:, None]
-    best = np.full((ncell, CELL * CELL), np.inf)          # the sharpest view of each texel so far, km per pixel
-    holder = np.full((ncell, CELL * CELL), -1, np.int64)  # the row that holds it
-    rows = {c: [] for c in ("id", "et", "until", "cam", "o", "m", "sun")}
-    held = []                                             # texels each row still holds
-    cos_e_min, cos_i_min = math.cos(MAX_EMISSION), math.cos(MADE_MAX_INCIDENCE)
-    used = 0
-    for year in years:
-        tdir = os.path.join(data, "tracks", str(year))
-        if not os.path.exists(os.path.join(tdir, moon.lower() + ".bin")):
-            continue
-        cat = json.load(open(os.path.join(data, "catalog", f"{year}.json")))
-        q = load_image_q(os.path.join(data, "attitude", f"{year}.bin"))
-        et = np.asarray(cat["et"], np.float64)
-        assert len(q) == len(et), f"{year}: {len(q)} pointings for {len(et)} pictures"
-        cam = np.asarray(cat["cam"])
-        trk = lambda name: load_track(os.path.join(tdir, name.lower() + ".bin"))
-        pc, psun, pb = track_at(trk("CASSINI"), et), track_at(trk("SUN"), et), track_at(trk(moon), et)
-        C = q2m(q)
-        half = np.where(cam == "W", FOV_HALF["W"], FOV_HALF["N"])
-        ifov = np.where(cam == "W", IFOV["W"], IFOV["N"])
-        diag = np.arctan(math.sqrt(2) * np.tan(half))
-        rel = pc - pb
-        rng = np.linalg.norm(rel, axis=1)
-        with np.errstate(invalid="ignore"):
-            off = np.arccos(np.clip(-(C[:, 2, :] * rel).sum(1) / rng, -1, 1))
-            near = np.isfinite(q).all(1) & np.isfinite(rng) & (off < diag + np.arcsin(np.clip(radii.max() / rng, 0, 1))) & ((rng - radii.max()) * ifov < thr[0])
-        want = TITAN_FILTERS if moon == "TITAN" else None
-        near &= np.array([(a in want or c in want) if want else (a in MADE_FILTERS and c in MADE_FILTERS) for a, c in zip(cat["f1"], cat["f2"])])
-        idx = np.nonzero(near)[0]
-        for k in idx[np.argsort(et[idx], kind="stable")]:
-            B = iau_matrix(b, et[k])
-            o = B @ rel[k]
-            sun = B @ (psun[k] - pb[k])
-            sun /= np.linalg.norm(sun)
-            is_coarse = (rng[k] - radii.max()) * ifov[k] > thr[3]
-            g = coarse if is_coarse else fine
-            cos_i = g["N"] @ sun
-            v = np.nonzero((g["G"] @ (o / radii) > 1.0) & (cos_i > cos_i_min))[0]
-            if not len(v):
-                continue
-            to_cam = o - g["P"][v]
-            dist = np.sqrt((to_cam * to_cam).sum(1))
-            cos_e = (g["N"][v] * to_cam).sum(1) / dist
-            cos_i = cos_i[v]
-            M = C[k] @ B.T                                  # the moon's frame -> the camera's
-            Pc = (-to_cam) @ M.T
-            th = math.tan(half[k]) * 0.985                  # (the page leaves the frame's last pixels out)
-            inside = (Pc[:, 2] > 0) & (np.abs(Pc[:, 0]) <= th * Pc[:, 2]) & (np.abs(Pc[:, 1]) <= th * Pc[:, 2]) & (cos_e > cos_e_min)
-            if not inside.any():
-                continue
-            used += 1
-            v, res = v[inside], dist[inside] * ifov[k] / np.sqrt(cos_e[inside] * cos_i[inside])
-            if is_coarse:                                   # a place's 16 texels together
-                v = (v[:, None] * (CELL * CELL) + np.arange(CELL * CELL)[None, :]).reshape(-1)
-                res = np.repeat(res, CELL * CELL)
-            bf, hf = best.reshape(-1), holder.reshape(-1)
-            win = res < bf[v] * MADE_MARGIN
-            if not win.any():
-                continue
-            v, res = v[win], res[win]
-            row = len(held)
-            prev = hf[v]
-            lost = np.bincount(prev[prev >= 0], minlength=row)
-            for r in np.nonzero(lost)[0]:
-                held[r] -= int(lost[r])
-                if held[r] == 0:
-                    rows["until"][r] = round(float(et[k]), 1)
-            bf[v] = res
-            hf[v] = row
-            held.append(int(len(v)))
-            rows["id"].append(cat["id"][k]); rows["et"].append(round(float(et[k]), 1)); rows["until"].append(None); rows["cam"].append(str(cam[k]))
-            rows["o"] += [round(float(x), 3) for x in o]
-            rows["m"] += [round(float(x), 7) for x in M.reshape(-1)]
-            rows["sun"] += [round(float(x), 5) for x in sun]
-    return moon, rows, used
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--data", required=True, help="the page's data folder (mission.json, catalog/, attitude/, tracks/)")
     ap.add_argument("--years", default="2004-2017")
     ap.add_argument("--out", help="default: <data>/coverage")
     ap.add_argument("--workers", type=int, default=os.cpu_count() or 1)
-    ap.add_argument("--made-only", action="store_true", help="only the tables for The map Cassini made (index.json must already be there)")
     a = ap.parse_args()
     lo, _, hi = a.years.partition("-")
     years = [y for y in range(int(lo), int(hi or lo) + 1)
@@ -347,31 +237,12 @@ def main():
     os.makedirs(out, exist_ok=True)
     mission = json.load(open(os.path.join(a.data, "mission.json")))
     t0 = utc_to_et(T0_UTC)
-    tasks = [] if a.made_only else [(a.data, y, m) for y in years for m in MOONS]
-    parts, made = {}, {}
-    with ProcessPoolExecutor(min(a.workers, len(tasks) + len(MOONS))) as ex:
-        making = [ex.submit(made_pass, (a.data, years, m)) for m in MOONS]
+    tasks = [(a.data, y, m) for y in years for m in MOONS]
+    parts = {}
+    with ProcessPoolExecutor(min(a.workers, len(tasks))) as ex:
         for y, m, got in ex.map(moon_pass, tasks):
             if got:
                 parts[(y, m)] = got
-        for f in making:
-            moon, rows, used = f.result()
-            if not rows["id"]:
-                continue
-            name = moon.lower() + ".made.json"
-            json.dump({"moon": moon, "radii": mission["bodies"][moon]["radii"], "fov_half_deg": {"N": 0.3516 / 2, "W": 3.4884 / 2}, "ifov": IFOV,
-                       "max_emission_deg": 80, "max_incidence_deg": 75, "years": years, **rows}, open(os.path.join(out, name), "w"), separators=(",", ":"))
-            et, until = np.array(rows["et"]), np.array([u if u is not None else np.inf for u in rows["until"]])
-            most = max(int(((et <= t) & (until > t)).sum()) for t in et[:: max(1, len(et) // 400)])
-            made[moon] = name
-            print(f"{moon:10s} the map Cassini made: {len(et)} of {used} pictures held a place at some time, at most {most} at once, {os.path.getsize(os.path.join(out, name)) // 1024} KB")
-    if a.made_only:
-        index = json.load(open(os.path.join(out, "index.json")))
-        for moon, name in made.items():
-            index["moons"].setdefault(moon, {})["made"] = name
-        json.dump(index, open(os.path.join(out, "index.json"), "w"), indent=1)
-        print("ok", out)
-        return
     cats = {}
     index = {"t0": t0, "t0_utc": T0_UTC, "dt": DT, "grid": [W, H], "tiers": TIERS, "cell_deg": 360 / W * CELL, "k": K, "years": years, "moons": {}}
     for moon in MOONS:
@@ -410,8 +281,6 @@ def main():
         seen = [float((area * np.isfinite(first[t])).sum() / area.sum()) for t in range(TIERS)]
         index["moons"][moon] = {"cov": moon.lower() + ".cov", "places": moon.lower() + ".places.json", "tier_km": [round(x, 4) for x in tiers_km(mission["bodies"][moon]["radii"])],
                                 "pictures": sum(g[3] for g in got), "seen": [round(s, 4) for s in seen]}
-        if moon in made:
-            index["moons"][moon]["made"] = made[moon]
         print(f"{moon:10s} {index['moons'][moon]['pictures']:6d} pictures  seen by the end, coarse to fine: " + " ".join(f"{s * 100:5.1f}%" for s in seen)
               + f"  {os.path.getsize(os.path.join(out, moon.lower() + '.cov')) // 1024} KB + {os.path.getsize(os.path.join(out, moon.lower() + '.places.json')) // 1024} KB")
     json.dump(index, open(os.path.join(out, "index.json"), "w"), indent=1)
