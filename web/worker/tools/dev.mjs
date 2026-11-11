@@ -31,7 +31,7 @@ if (args.fixtures) {
   await makeFixtureMirror(dir);
 }
 if (!dir || !fs.existsSync(dir)) { console.error("--mirror DIR (a publish.py --to-dir folder) or --fixtures is needed"); process.exit(2); }
-if (args.fresh) fs.rmSync(path.join(state, "v3", "r2"), { recursive: true, force: true });
+if (args.fresh) for (const d of ["r2", "cache"]) fs.rmSync(path.join(state, "v3", d), { recursive: true, force: true });
 
 // wrangler dev keeps local R2 under <persist-to>/v3/r2, one namespace per bucket_name
 const mf = new Miniflare({
