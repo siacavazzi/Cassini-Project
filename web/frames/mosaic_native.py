@@ -53,7 +53,7 @@ CROP_MAX = int(os.environ.get("CASSINI_NATIVE_CROP", "2048"))       # longest si
 BLOCK = int(os.environ.get("CASSINI_NATIVE_BLOCK", "1024"))        # canvas px drawn at a time
 KEEP_MB = int(os.environ.get("CASSINI_FULLRES_MB", "5120"))         # most the native pictures' cache holds
 JPEG_QUALITY = 92
-VERSION = "native-v43"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
+VERSION = "native-v46"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
 # bytes per pixel, roughly, of a saved native mosaic (sky is most of a mosaic's canvas and costs almost nothing)
 EST_BYTES = {"jpg": (0.08, 0.005), "png": (2.0, 0.02)}   # (per pixel of picture, per pixel of empty canvas)
 
@@ -172,10 +172,19 @@ def drawn(u, made):
     return filters, colour, base, tag, max(used, key=lambda f: count[f])
 
 
+def solved_first(mine, tagged):
+    """The tiles of mine that corrections solves together (held_level), as filter_mosaic draws them: all of them for a
+    set of tiles with a name of its own, or a filter that obs_mosaic.grows does not grow (up to GROW_FROM tiles, or one
+    holding a fill or a long exposure taken again: composed whole on screen, so the native picture is too, or 195RI's
+    full-size mosaic kept the lime its window lost); otherwise the first GROW_FROM, each tile after found as _grown
+    finds it."""
+    return mine if tagged or not om.grows(mine) else mine[:om.GROW_FROM]
+
+
 def corrections(u, made, cache):
     """{filter: {tile n: (gains [3], offsets [3])}}: the corrections the windows' mosaic of layout made gave each
     tile, worked out again on its canvas the way obs_mosaic.filter_mosaic draws it: a filter of up to GROW_FROM tiles
-    (or a set of tiles with a name of its own, a tuned layout) solved together, none pinned (held_level); past
+    (or a set of tiles with a name of its own, a tuned layout, or one obs_mosaic.grows does not grow) solved together, none pinned (held_level); past
     that, the first GROW_FROM solved together and each tile after found as _grown finds it, matched (pin 0)
     against the mosaic of the tiles before it, as _over cuts it. The luminance base (obs_mosaic.LUM, its tiles with
     their gains, _mine / _shade) is one more filter; "_grey" is over_grey's match of it to the colour, measured on the
@@ -192,7 +201,7 @@ def corrections(u, made, cache):
         blend = calibration.step("blend")
         for f in filters:
             mine = om._mine(u, p, om.visit_tiles(u, tiles, colour) if colour and f in colour else tiles, f)
-            first = mine if tagged or len(mine) <= om.GROW_FROM else mine[:om.GROW_FROM]
+            first = solved_first(mine, tagged)
             got = out[f] = {}
             window, shown = om._window(u, p, first, rect, cache)
             if len(window) > 1:
