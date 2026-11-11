@@ -1,0 +1,136 @@
+{
+  "contract": "policy",
+  "contract_version": 1,
+  "about": "Every route the frame server answers (web/frames/frame_server.py, get(), do_POST(), do_PUT()), and what the public site does with it: which store answers it and which parameter values it allows. The server's --public mode (WP1), the publisher (WP3), the Worker (WP4) and the page's public switch (WP5, WP6, WP7b) all read this one file. Routes are tried in order and the first whose method, pattern and match_query fit is the one; the order follows the server's own. A request no route fits is refused. Decisions D1 to D9 are in docs/public-site/README.md; each route that depends on one names it.",
+
+  "stores": {
+    "r2": "a picture object under its canonical key (keys.json); a miss is a 404",
+    "marker": "an empty object at the picture's key whose metadata holds a status and headers (headers.json markers); the Worker answers that status with those headers. Written by the publisher where the server's answer is a deliberate negative one, today only Auto center's 404 with X-Center",
+    "table": "per-frame JSON answered from the frame's pass table through its alias (keys.json tables, tables.schema.json)",
+    "manifest": "answered by the Worker from the published manifest (manifest.schema.json)",
+    "worker": "answered by the Worker's own code, no object read",
+    "refused": "not on the public site: the Worker answers 404 (405 for a method) and counts it as a refusal; the page's public switch must never ask for it"
+  },
+
+  "routes": [
+    {"id": "export_plan", "method": "GET", "pattern": "^/export/plan\\.json$", "store": "refused", "why": "the film plan is computed in the page (WP7a plan-local.js)"},
+    {"id": "export_plan_progress", "method": "GET", "pattern": "^/export/plan-progress/[A-Za-z0-9_-]{1,40}\\.json$", "store": "refused", "why": "no server plan on the public site"},
+    {"id": "export_levels", "method": "GET", "pattern": "^/export/levels\\.json$", "store": "refused", "why": "the exposure graph is computed in the page (WP7a levels-local.js)"},
+    {"id": "export_job", "method": "GET", "pattern": "^/export/[0-9a-f]{16}\\.(json|mp4)$", "store": "refused", "why": "D1, D7: films are made in the viewer's browser"},
+    {"id": "export_start", "method": "POST", "pattern": "^/export$", "store": "refused", "why": "D1, D7"},
+    {"id": "export_sound", "method": "PUT", "pattern": "^/export/[0-9a-f]{16}/sound\\.wav$", "store": "refused", "why": "D1, D7"},
+    {"id": "prebuild_status", "method": "GET", "pattern": "^/prebuild/[0-9a-f]{16}\\.json$", "store": "refused", "why": "Pre-process is off on the public site (compute-on-viewer row 9)"},
+    {"id": "prebuild_start", "method": "POST", "pattern": "^/prebuild(/[0-9a-f]{16}/stop)?$", "store": "refused", "why": "Pre-process is off on the public site"},
+    {"id": "flags", "method": "GET", "pattern": "^/flags(/.*)?$", "store": "refused", "why": "flags are Sam's review tool (WP6 hides the flag button)"},
+    {"id": "flags_post", "method": "POST", "pattern": "^/flags(/[^/]+/undo)?$", "store": "refused", "why": "flags are Sam's review tool"},
+    {"id": "version", "method": "GET", "pattern": "^/version\\.json$", "store": "manifest", "field": "version", "why": "the About window's version line; written at publish"},
+    {"id": "jumplog", "method": "GET", "pattern": "^/jumplog$", "store": "refused", "why": "a debugging log; the page posts no jumplog on public (WP6)"},
+    {"id": "jumplog_post", "method": "POST", "pattern": "^/jumplog$", "store": "refused", "why": "as above"},
+    {"id": "stats", "method": "GET", "pattern": "^/stats(/|/usage\\.json)?$", "store": "refused", "why": "usage is counted in Workers Analytics Engine"},
+    {"id": "usage", "method": "POST", "pattern": "^/usage$", "store": "worker", "why": "counted in Workers Analytics Engine; answers 204"},
+    {"id": "health", "method": "GET", "pattern": "^/health$", "store": "worker", "why": "the page asks it when a picture fails, to tell 'no picture' from 'no server'; answers 200 'ok public'"},
+    {"id": "debug_samples", "method": "GET", "pattern": "^/debug/samples$", "store": "refused", "why": "server debugging"},
+    {"id": "slices", "method": "GET", "pattern": "^/frames/slices\\.json$", "store": "manifest", "field": "slices", "why": "which stretches are published"},
+
+    {"id": "color", "method": "GET", "pattern": "^/frames/color\\.webp$", "store": "r2", "family": "composite", "header": "X-Composite", "markers": true,
+     "params": {
+       "ids": {"type": "ids", "min": 2, "max": 3, "same_camera": true, "required": true},
+       "size": {"type": "size", "default": 512, "built": [512, 1024], "full": "full"},
+       "center": {"type": "flag", "read": "eq1", "default": 0},
+       "channel": {"type": "enum", "default": "", "allowed": [""], "decision": "D5: a channel is cut from the composite in the page"}
+     }},
+
+    {"id": "thumb", "method": "GET", "pattern": "^/frames/thumb\\.webp$", "store": "r2", "family": "thumb", "header": "X-Thumb",
+     "params": {
+       "mosaic": {"type": "id"},
+       "frame": {"type": "id"},
+       "color": {"type": "ids", "min": 2, "max": 3, "same_camera": true},
+       "size": {"type": "size", "default": 256, "built": [256], "full": null}
+     },
+     "require_one_of": ["mosaic", "frame", "color"]},
+
+    {"id": "processed", "method": "GET", "pattern": "^/frames/processed/([NW]\\d{10}_\\d+)\\.webp$", "groups": ["id"], "store": "r2", "family": "processed", "header": "X-Composite", "markers": true,
+     "params": {
+       "size": {"type": "size", "default": 512, "built": [256, 512, 1024], "full": 1024},
+       "center": {"type": "flag", "read": "eq1", "default": 0}
+     }},
+
+    {"id": "reel_bodies", "method": "GET", "pattern": "^/reel/bodies\\.json$", "store": "refused", "why": "D2: body reels are off on the public site"},
+    {"id": "reel_list", "method": "GET", "pattern": "^/reel/[A-Z0-9_]+\\.json$", "store": "refused", "why": "D2"},
+    {"id": "reel_picture", "method": "GET", "pattern": "^/frames/reel/[A-Z0-9_]+/\\d+\\.webp$", "store": "refused", "why": "D2"},
+
+    {"id": "tile_map", "method": "GET", "pattern": "^/frames/mosaic/([NW]\\d{10}_\\d+)\\.json$", "groups": ["id"], "store": "table", "part": "maps", "params": {}},
+    {"id": "pointing", "method": "GET", "pattern": "^/frames/mosaic/([NW]\\d{10}_\\d+)/(p/\\d+|frame)\\.webp$", "store": "refused", "why": "D9: a pointing opened on its own is not published; the window opens the pointing's frame or colour picture instead"},
+    {"id": "native", "method": "GET", "pattern": "^/frames/mosaic/([NW]\\d{10}_\\d+)/full\\.(json|webp|jpg|png)$", "store": "refused", "why": "D3: full view and the lens use the published 2048 px full-view picture; native mosaics stay on the private site"},
+
+    {"id": "fade_table", "method": "GET", "pattern": "^/frames/movie/([NW]\\d{10}_\\d+)\\.fade\\.json$", "groups": ["id"], "store": "table", "part": "fade",
+     "params": {
+       "laps": {"type": "int", "default": 1, "min": 1, "max": 12, "allowed": [1]},
+       "w": {"type": "int", "default": 0, "min": 0, "max": 4096},
+       "h": {"type": "int", "default": 0, "min": 0, "max": 4096}
+     },
+     "zero_size_answer": {"local": false},
+     "why": "w or h 0 is answered {\"local\": false} by the Worker, as the server does"},
+    {"id": "steady_table", "method": "GET", "pattern": "^/frames/movie/([NW]\\d{10}_\\d+)\\.steady\\.json$", "groups": ["id"], "store": "table", "part": "steady",
+     "params": {
+       "center": {"type": "flag", "read": "not0", "default": 1},
+       "color": {"type": "flag", "read": "not0", "default": 0}
+     }},
+    {"id": "pass_info", "method": "GET", "pattern": "^/frames/movie/([NW]\\d{10}_\\d+)\\.json$", "groups": ["id"], "store": "table", "part": "info", "params": {}},
+
+    {"id": "mosaic_movie", "method": "GET", "pattern": "^/frames/movie/([NW]\\d{10}_\\d+)\\.webp$", "groups": ["id"], "match_query": {"mode": "rolling"}, "store": "r2", "family": "pass", "header": "X-Movie",
+     "params": {
+       "mode": {"type": "enum", "default": "rolling", "allowed": ["rolling"], "keep": true},
+       "size": {"type": "size", "default": 512, "built": [512, 1024], "full": 1024},
+       "laps": {"type": "int", "default": 1, "min": 1, "max": 12, "allowed": [1], "decision": "laps above 1 stay on the server (compute-on-viewer row 7)"},
+       "fade": {"type": "int", "default": 0, "min": 0, "max": 120, "allowed": [0], "why": "the page fades the time-lapse picture itself from fade.json"},
+       "persist": {"type": "drop", "why": "only matters with fade above 0"},
+       "center": {"type": "drop", "why": "a mosaic movie is drawn without it"},
+       "trail": {"type": "drop"}, "steady": {"type": "drop"}, "exposure": {"type": "drop"}, "color": {"type": "drop"}, "detail": {"type": "drop"}
+     }},
+    {"id": "movie", "method": "GET", "pattern": "^/frames/movie/([NW]\\d{10}_\\d+)\\.webp$", "groups": ["id"], "store": "r2", "family": "pass", "header": "X-Movie",
+     "params": {
+       "mode": {"type": "enum", "default": "", "allowed": [""]},
+       "size": {"type": "size", "default": 512, "built": [128, 512, 1024], "full": 1024},
+       "color": {"type": "flag", "read": "not0", "default": 1},
+       "center": {"type": "flag", "read": "not0", "default": 1},
+       "trail": {"type": "int", "default": 0, "min": 0, "max": 12, "allowed": [0], "why": "the page draws a trail itself"},
+       "steady": {"type": "int", "default": 0, "min": 0, "max": 60, "allowed": [0], "why": "the page stabilizes itself from steady.json"},
+       "exposure": {"type": "int", "default": 0, "min": 0, "max": 30, "allowed": [0, 8], "why": "8 (obs_mosaic.EXPOSURE_SMOOTH) is pre-built for the passes the page cannot even itself (prebuild make_evened); any other value the page evens itself"},
+       "detail": {"type": "flag", "read": "not0", "default": 1},
+       "laps": {"type": "drop", "why": "a no-op on a plain movie frame"},
+       "fade": {"type": "drop", "why": "a no-op on a plain movie frame"},
+       "persist": {"type": "drop", "why": "a no-op on a plain movie frame"}
+     }},
+
+    {"id": "mosaic_kind", "method": "GET", "pattern": "^/frames/mosaic/([NW]\\d{10}_\\d+)\\.webp$", "groups": ["id"], "match_query": {"warm": "*"}, "store": "table", "part": "kind",
+     "params": {"warm": {"type": "drop"}},
+     "no_alias_answer": {"mosaic": false, "movie": false, "kind": null},
+     "why": "warm=1 asks what the frame's pass is; the public site never starts work, so it is answered from the pass table"},
+    {"id": "mosaic", "method": "GET", "pattern": "^/frames/mosaic/([NW]\\d{10}_\\d+)\\.webp$", "groups": ["id"], "store": "r2", "family": "pass", "header": "X-Reel",
+     "params": {
+       "size": {"type": "size", "default": 512, "built": [512, 1024], "full": "full", "decision": "D3: full is the 2048 px full-view picture, made for a pass's last frame only"},
+       "force": {"type": "flag", "read": "nonempty", "default": 0},
+       "tune": {"type": "enum", "default": "", "allowed": [""], "why": "Studio tile tuning is hidden on the public site"},
+       "hide": {"type": "enum", "default": "", "allowed": [""], "why": "as tune"}
+     },
+     "fallback": [
+       {"when": {"size": "full"}, "set": {"size": "1024"}, "why": "D3: while a pass builds, full view shows 1024"},
+       {"when": {"force": "1"}, "unset": ["force"], "why": "force=1 on a frame of a real mosaic pass is the same picture as without it; only toss-up passes publish a force=1 copy"}
+     ]},
+
+    {"id": "frame", "method": "GET", "pattern": "^/frames/([NW]\\d{10}_\\d+)\\.webp$", "groups": ["id"], "store": "r2", "family": "frame",
+     "params": {
+       "size": {"type": "size", "default": 512, "built": [128, 512, 1024], "full": 1024}
+     }},
+    {"id": "archive", "method": "GET", "pattern": "^/frames/([NW]\\d{10}_\\d+)\\.png$", "groups": ["id"], "store": "r2", "family": "archive", "decision": "D6: archive frames come from R2",
+     "params": {}},
+    {"id": "science", "method": "GET", "pattern": "^/frames/([NW]\\d{10}_\\d+)\\.(tif|lbl)$", "store": "refused", "why": "D6: the science TIFF and the PDS label link to OPUS"}
+  ],
+
+  "page_settings": {
+    "about": "What the page's public switch (window.cassiniPublic, WP6) does to Settings so that the page only asks for what this policy allows. WP5 to WP7b keep every change behind the switch.",
+    "hidden": ["processing.* (the 18 step toggles, calibration.STEPS)", "cameras.balancedColor", "cameras.colors values raw and false", "cameras.autoCenter (D4: always on)", "cameras.hdr and cameras.hdrGlow (D8)", "movies.laps above 1", "cameras.passes value mosaic (Always mosaic)", "Pre-process (segment.html)", "the flag button and /flags links", "the reel window (D2)", "Studio tile tuning"],
+    "forced": {"movies.stabilizeLocal": true, "cameras.autoCenter": true, "cameras.hdr": "off"}
+  }
+}

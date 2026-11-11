@@ -1,0 +1,3767 @@
+{
+ "contract": "key_fixtures",
+ "about": "URL-to-answer pairs both keys.py and keys.mjs must reproduce exactly (test_keys.py, test_keys.mjs). Add a case by appending {method, url, note} and running python web/public/keys.py --fixtures, then read the diff: an expect that changed for an old case is a contract change. '{tag}' stands for the family's tag, which comes from the manifest at run time.",
+ "cases": [
+  {
+   "method": "GET",
+   "url": "/export/plan.json?from=2006-09-15T14:32&until=2006-09-15T17:12&cams=NW",
+   "note": "film plan: page port",
+   "expect": {
+    "route": "export_plan",
+    "store": "refused",
+    "refused": "route: the film plan is computed in the page (WP7a plan-local.js)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/export/plan-progress/abc_123.json",
+   "note": "plan progress",
+   "expect": {
+    "route": "export_plan_progress",
+    "store": "refused",
+    "refused": "route: no server plan on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/export/levels.json?from=2006-09-15T14:32",
+   "note": "levels: page port",
+   "expect": {
+    "route": "export_levels",
+    "store": "refused",
+    "refused": "route: the exposure graph is computed in the page (WP7a levels-local.js)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/export/0123456789abcdef.json",
+   "note": "film job",
+   "expect": {
+    "route": "export_job",
+    "store": "refused",
+    "refused": "route: D1, D7: films are made in the viewer's browser",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/export/0123456789abcdef.mp4?download=1",
+   "note": "film download",
+   "expect": {
+    "route": "export_job",
+    "store": "refused",
+    "refused": "route: D1, D7: films are made in the viewer's browser",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": true
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/prebuild/0123456789abcdef.json",
+   "note": "pre-process status",
+   "expect": {
+    "route": "prebuild_status",
+    "store": "refused",
+    "refused": "route: Pre-process is off on the public site (compute-on-viewer row 9)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/flags/",
+   "note": "flags page",
+   "expect": {
+    "route": "flags",
+    "store": "refused",
+    "refused": "route: flags are Sam's review tool (WP6 hides the flag button)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/flags/index.json?version=abc",
+   "note": "flags json",
+   "expect": {
+    "route": "flags",
+    "store": "refused",
+    "refused": "route: flags are Sam's review tool (WP6 hides the flag button)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/flags/some-flag/shown.png",
+   "note": "flag file",
+   "expect": {
+    "route": "flags",
+    "store": "refused",
+    "refused": "route: flags are Sam's review tool (WP6 hides the flag button)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/jumplog",
+   "note": "jumplog",
+   "expect": {
+    "route": "jumplog",
+    "store": "refused",
+    "refused": "route: a debugging log; the page posts no jumplog on public (WP6)",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/stats/",
+   "note": "stats",
+   "expect": {
+    "route": "stats",
+    "store": "refused",
+    "refused": "route: usage is counted in Workers Analytics Engine",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/stats/usage.json?days=30",
+   "note": "stats json",
+   "expect": {
+    "route": "stats",
+    "store": "refused",
+    "refused": "route: usage is counted in Workers Analytics Engine",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/debug/samples",
+   "note": "debug",
+   "expect": {
+    "route": "debug_samples",
+    "store": "refused",
+    "refused": "route: server debugging",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/reel/bodies.json",
+   "note": "reels D2",
+   "expect": {
+    "route": "reel_bodies",
+    "store": "refused",
+    "refused": "route: D2: body reels are off on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/reel/TITAN.json",
+   "note": "reel list D2",
+   "expect": {
+    "route": "reel_list",
+    "store": "refused",
+    "refused": "route: D2",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/reel/TITAN/12.webp?size=768&mosaic=1",
+   "note": "reel picture D2",
+   "expect": {
+    "route": "reel_picture",
+    "store": "refused",
+    "refused": "route: D2",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2/p/3.webp?size=full",
+   "note": "pointing D9",
+   "expect": {
+    "route": "pointing",
+    "store": "refused",
+    "refused": "route: D9: a pointing opened on its own is not published; the window opens the pointing's frame or colour picture instead",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2/frame.webp?ids=N1500060789_2,N1500060850_2",
+   "note": "pointing by ids D9",
+   "expect": {
+    "route": "pointing",
+    "store": "refused",
+    "refused": "route: D9: a pointing opened on its own is not published; the window opens the pointing's frame or colour picture instead",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2/full.json",
+   "note": "native json D3",
+   "expect": {
+    "route": "native",
+    "store": "refused",
+    "refused": "route: D3: full view and the lens use the published 2048 px full-view picture; native mosaics stay on the private site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2/full.webp?crop=0,0,0.5,0.5",
+   "note": "native crop D3",
+   "expect": {
+    "route": "native",
+    "store": "refused",
+    "refused": "route: D3: full view and the lens use the published 2048 px full-view picture; native mosaics stay on the private site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2/full.jpg?download=1",
+   "note": "native jpg D3",
+   "expect": {
+    "route": "native",
+    "store": "refused",
+    "refused": "route: D3: full view and the lens use the published 2048 px full-view picture; native mosaics stay on the private site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": true
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2/full.png",
+   "note": "native png D3",
+   "expect": {
+    "route": "native",
+    "store": "refused",
+    "refused": "route: D3: full view and the lens use the published 2048 px full-view picture; native mosaics stay on the private site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.tif?download=1",
+   "note": "science TIFF D6",
+   "expect": {
+    "route": "science",
+    "store": "refused",
+    "refused": "route: D6: the science TIFF and the PDS label link to OPUS",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": true
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.lbl?download=1",
+   "note": "PDS label D6",
+   "expect": {
+    "route": "science",
+    "store": "refused",
+    "refused": "route: D6: the science TIFF and the PDS label link to OPUS",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": true
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/nothing.webp",
+   "note": "not a frame id",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N123.webp",
+   "note": "short id",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/index.html",
+   "note": "a page file is not the Worker's",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/data/targets.json",
+   "note": "replay data is on Pages",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/bad.json",
+   "note": "bad id",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/W12.webp",
+   "note": "bad id",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/export?from=2006-09-15T14:32",
+   "note": "film start",
+   "expect": {
+    "route": "export_start",
+    "store": "refused",
+    "refused": "route: D1, D7",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "PUT",
+   "url": "/export/0123456789abcdef/sound.wav",
+   "note": "soundtrack",
+   "expect": {
+    "route": "export_sound",
+    "store": "refused",
+    "refused": "route: D1, D7",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/prebuild?from=2006-09-15T14:32:00",
+   "note": "pre-process start",
+   "expect": {
+    "route": "prebuild_start",
+    "store": "refused",
+    "refused": "route: Pre-process is off on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/prebuild/0123456789abcdef/stop",
+   "note": "pre-process stop",
+   "expect": {
+    "route": "prebuild_start",
+    "store": "refused",
+    "refused": "route: Pre-process is off on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/flags",
+   "note": "flag post",
+   "expect": {
+    "route": "flags_post",
+    "store": "refused",
+    "refused": "route: flags are Sam's review tool",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/flags/abc/undo",
+   "note": "flag undo",
+   "expect": {
+    "route": "flags_post",
+    "store": "refused",
+    "refused": "route: flags are Sam's review tool",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/jumplog",
+   "note": "jumplog post",
+   "expect": {
+    "route": "jumplog_post",
+    "store": "refused",
+    "refused": "route: as above",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/usage",
+   "note": "usage beacon",
+   "expect": {
+    "route": "usage",
+    "store": "worker",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "POST",
+   "url": "/frames/color.webp?ids=x",
+   "note": "POST to a picture",
+   "expect": {
+    "route": null,
+    "store": "refused",
+    "refused": "route: not a route of the frame server",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/version.json",
+   "note": "manifest or worker",
+   "expect": {
+    "route": "version",
+    "store": "manifest",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "field": "version"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/slices.json",
+   "note": "manifest or worker",
+   "expect": {
+    "route": "slices",
+    "store": "manifest",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "field": "slices"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/health",
+   "note": "manifest or worker",
+   "expect": {
+    "route": "health",
+    "store": "worker",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/version.json?x=1",
+   "note": "manifest or worker",
+   "expect": {
+    "route": "version",
+    "store": "manifest",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "field": "version"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp",
+   "note": "frame: default size",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=512",
+   "note": "frame: explicit default",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024",
+   "note": "frame: 1024",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=128",
+   "note": "frame: strip",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=128",
+    "fallback": [],
+    "params": {
+     "size": "128"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=256",
+   "note": "frame: 256 snaps up to 512",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=384",
+   "note": "frame: 384 snaps up to 512",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=768",
+   "note": "frame: 768 snaps up to 1024",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=600",
+   "note": "frame: 600 nearest 512",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=900",
+   "note": "frame: 900 nearest 1024",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=2000",
+   "note": "frame: 2000 nearest 1024",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1",
+   "note": "frame: 1 nearest 128",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=128",
+    "fallback": [],
+    "params": {
+     "size": "128"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=full",
+   "note": "frame: full is 1024",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=abc",
+   "note": "frame: not a number: default",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&download=1",
+   "note": "frame: download dropped from key",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": true,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&x=1",
+   "note": "frame: x dropped",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&hdr=1",
+   "note": "frame: hdr dropped (D8)",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&format=png",
+   "note": "frame: png refused",
+   "expect": {
+    "route": "frame",
+    "store": "refused",
+    "refused": "param format: only 'webp' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&format=webp",
+   "note": "frame: format webp is the default",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&look=classic",
+   "note": "frame: classic look refused",
+   "expect": {
+    "route": "frame",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&look=balanced",
+   "note": "frame: balanced is the default",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&colors=raw",
+   "note": "frame: raw colors refused",
+   "expect": {
+    "route": "frame",
+    "store": "refused",
+    "refused": "param colors: only 'natural' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&colors=natural",
+   "note": "frame: natural is the default",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&off=stack",
+   "note": "frame: processing toggles refused",
+   "expect": {
+    "route": "frame",
+    "store": "refused",
+    "refused": "param off: only '' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&center=1",
+   "note": "frame: center is no parameter of a frame",
+   "expect": {
+    "route": "frame",
+    "store": "refused",
+    "refused": "param center: not a parameter of this route",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&size=512",
+   "note": "frame: first value wins",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=&x=",
+   "note": "frame: blank values are missing",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024&bogus=1",
+   "note": "frame: unknown refused",
+   "expect": {
+    "route": "frame",
+    "store": "refused",
+    "refused": "param bogus: not a parameter of this route",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.webp?size=1024#frag",
+   "note": "frame: fragment ignored",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/W1500060800_1.webp?size=1024",
+   "note": "WAC frame",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/W1500060800_1.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/W1500060800_1.webp?size=128",
+   "note": "WAC frame",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/W1500060800_1.webp~size=128",
+    "fallback": [],
+    "params": {
+     "size": "128"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/W1500060800_1.webp?size=512&download=1",
+   "note": "WAC frame",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/W1500060800_1.webp",
+    "fallback": [],
+    "params": {},
+    "download": true,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://frames.example.org/frames/N1500060789_2.webp?size=1024",
+   "note": "whole URL",
+   "expect": {
+    "route": "frame",
+    "store": "r2",
+    "refused": null,
+    "key": "frame/{tag}/frames/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "frame"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.png",
+   "note": "archive png",
+   "expect": {
+    "route": "archive",
+    "store": "r2",
+    "refused": null,
+    "key": "archive/{tag}/frames/N1500060789_2.png",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "archive"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.png?download=1",
+   "note": "archive download",
+   "expect": {
+    "route": "archive",
+    "store": "r2",
+    "refused": null,
+    "key": "archive/{tag}/frames/N1500060789_2.png",
+    "fallback": [],
+    "params": {},
+    "download": true,
+    "family": "archive"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.png?size=1024",
+   "note": "size is no parameter of the archive",
+   "expect": {
+    "route": "archive",
+    "store": "refused",
+    "refused": "param size: not a parameter of this route",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/N1500060789_2.png?format=png",
+   "note": "format png refused globally",
+   "expect": {
+    "route": "archive",
+    "store": "refused",
+    "refused": "param format: only 'webp' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/W1500060800_1.png?download=1",
+   "note": "WAC archive",
+   "expect": {
+    "route": "archive",
+    "store": "r2",
+    "refused": null,
+    "key": "archive/{tag}/frames/W1500060800_1.png",
+    "fallback": [],
+    "params": {},
+    "download": true,
+    "family": "archive"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2",
+   "note": "color: 3 ids default size",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+   "note": "color: 1024",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&center=1",
+   "note": "color: Auto center",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~center=1&ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024",
+     "center": "1"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=512&center=1",
+   "note": "color: 512 centred",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~center=1&ids=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "center": "1"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=full",
+   "note": "color: full",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=full",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "full"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=full&center=1",
+   "note": "color: full centred",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~center=1&ids=N1500060789_2,N1500060850_2,N1500060910_2&size=full",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "full",
+     "center": "1"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=256",
+   "note": "color: 256 snaps to 512",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=768&center=1",
+   "note": "color: 768 snaps to 1024",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~center=1&ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024",
+     "center": "1"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=128",
+   "note": "color: 128 snaps to 512",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2&size=1024",
+   "note": "color: two-filter composite",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&center=0",
+   "note": "color: center=0 is the default",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&center=yes",
+   "note": "color: center reads ==1",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&channel=0",
+   "note": "color: channel refused D5",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param channel: '0' is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&channel=2&size=1024",
+   "note": "color: channel refused D5",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param channel: '2' is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&hdr=1",
+   "note": "color: hdr dropped",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&download=1",
+   "note": "color: download",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024"
+    },
+    "download": true,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&format=png&download=1",
+   "note": "color: png save refused (page encodes PNG)",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param format: only 'webp' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": true
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&look=classic",
+   "note": "color: classic refused",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&colors=false",
+   "note": "color: false colors refused",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param colors: only 'natural' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&off=align,blend",
+   "note": "color: off refused",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param off: only '' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2",
+   "note": "color: one id refused",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param ids: takes 2 to 3 frame ids",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,W1500060800_1",
+   "note": "color: two cameras refused",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param ids: frame ids from one camera",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2,N1866100001_1",
+   "note": "color: four ids refused",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param ids: takes 2 to 3 frame ids",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?size=1024",
+   "note": "color: ids required",
+   "expect": {
+    "route": "color",
+    "store": "refused",
+    "refused": "param ids: required",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,,N1500060850_2",
+   "note": "color: empty entries ignored",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?size=1024&ids=N1500060789_2,N1500060850_2,N1500060910_2",
+   "note": "color: order of params does not matter",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&x=1",
+   "note": "color: x dropped",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060910_2,N1500060850_2,N1500060789_2&size=1024",
+   "note": "color: channel order is kept (R,G,B)",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060910_2,N1500060850_2,N1500060789_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060910_2,N1500060850_2,N1500060789_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/color.webp?ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024&whole=1",
+   "note": "color: whole dropped",
+   "expect": {
+    "route": "color",
+    "store": "r2",
+    "refused": null,
+    "key": "composite/{tag}/frames/color.webp~ids=N1500060789_2,N1500060850_2,N1500060910_2&size=1024",
+    "fallback": [],
+    "params": {
+     "ids": "N1500060789_2,N1500060850_2,N1500060910_2",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "composite"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp",
+   "note": "processed: default",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024",
+   "note": "processed: 1024",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024&center=1",
+   "note": "processed: Auto center",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~center=1&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "center": "1"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=512&center=1",
+   "note": "processed: 512 centred",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~center=1",
+    "fallback": [],
+    "params": {
+     "center": "1"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=256&center=1",
+   "note": "processed: strip 256",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~center=1&size=256",
+    "fallback": [],
+    "params": {
+     "size": "256",
+     "center": "1"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=128",
+   "note": "processed: 128 snaps to 256",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~size=256",
+    "fallback": [],
+    "params": {
+     "size": "256"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=384",
+   "note": "processed: 384 snaps to 512",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=768&center=1",
+   "note": "processed: 768 snaps to 1024",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~center=1&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "center": "1"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=full",
+   "note": "processed: full is 1024",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=full&center=1&download=1",
+   "note": "processed: save full centred",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~center=1&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "center": "1"
+    },
+    "download": true,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024&hdr=1&center=1",
+   "note": "processed: hdr dropped",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~center=1&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "center": "1"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024&format=png",
+   "note": "processed: png refused",
+   "expect": {
+    "route": "processed",
+    "store": "refused",
+    "refused": "param format: only 'webp' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024&off=calibrate",
+   "note": "processed: off refused",
+   "expect": {
+    "route": "processed",
+    "store": "refused",
+    "refused": "param off: only '' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024&channel=1",
+   "note": "processed: channel is no parameter",
+   "expect": {
+    "route": "processed",
+    "store": "refused",
+    "refused": "param channel: not a parameter of this route",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/N1500060789_2.webp?size=1024&center=0",
+   "note": "processed: center=0 default",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/processed/W1500060800_1.webp?size=512&center=1",
+   "note": "WAC processed",
+   "expect": {
+    "route": "processed",
+    "store": "r2",
+    "refused": null,
+    "key": "processed/{tag}/frames/processed/W1500060800_1.webp~center=1",
+    "fallback": [],
+    "params": {
+     "center": "1"
+    },
+    "download": false,
+    "family": "processed"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?mosaic=N1500060789_2",
+   "note": "thumb: mosaic hint",
+   "expect": {
+    "route": "thumb",
+    "store": "r2",
+    "refused": null,
+    "key": "thumb/{tag}/frames/thumb.webp~mosaic=N1500060789_2",
+    "fallback": [],
+    "params": {
+     "mosaic": "N1500060789_2"
+    },
+    "download": false,
+    "family": "thumb"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?mosaic=N1500060789_2&color=N1500060789_2,N1500060850_2,N1500060910_2&frame=N1500060789_2",
+   "note": "thumb: all three hints",
+   "expect": {
+    "route": "thumb",
+    "store": "r2",
+    "refused": null,
+    "key": "thumb/{tag}/frames/thumb.webp~color=N1500060789_2,N1500060850_2,N1500060910_2&frame=N1500060789_2&mosaic=N1500060789_2",
+    "fallback": [],
+    "params": {
+     "mosaic": "N1500060789_2",
+     "frame": "N1500060789_2",
+     "color": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "thumb"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?color=N1500060789_2,N1500060850_2,N1500060910_2",
+   "note": "thumb: color hint",
+   "expect": {
+    "route": "thumb",
+    "store": "r2",
+    "refused": null,
+    "key": "thumb/{tag}/frames/thumb.webp~color=N1500060789_2,N1500060850_2,N1500060910_2",
+    "fallback": [],
+    "params": {
+     "color": "N1500060789_2,N1500060850_2,N1500060910_2"
+    },
+    "download": false,
+    "family": "thumb"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?frame=W1500060800_1&size=256",
+   "note": "thumb: frame hint",
+   "expect": {
+    "route": "thumb",
+    "store": "r2",
+    "refused": null,
+    "key": "thumb/{tag}/frames/thumb.webp~frame=W1500060800_1",
+    "fallback": [],
+    "params": {
+     "frame": "W1500060800_1"
+    },
+    "download": false,
+    "family": "thumb"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?frame=N1500060789_2&size=512",
+   "note": "thumb: 512 snaps to 256 (only built size)",
+   "expect": {
+    "route": "thumb",
+    "store": "r2",
+    "refused": null,
+    "key": "thumb/{tag}/frames/thumb.webp~frame=N1500060789_2",
+    "fallback": [],
+    "params": {
+     "frame": "N1500060789_2"
+    },
+    "download": false,
+    "family": "thumb"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?frame=N1500060789_2&size=full",
+   "note": "thumb: full refused",
+   "expect": {
+    "route": "thumb",
+    "store": "refused",
+    "refused": "param size: size full is not built for this route",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?size=256",
+   "note": "thumb: no hint refused",
+   "expect": {
+    "route": "thumb",
+    "store": "refused",
+    "refused": "param mosaic|frame|color: one of them is needed",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?mosaic=bad",
+   "note": "thumb: bad id",
+   "expect": {
+    "route": "thumb",
+    "store": "refused",
+    "refused": "param mosaic: not a frame id",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?color=N1500060789_2",
+   "note": "thumb: one color id refused",
+   "expect": {
+    "route": "thumb",
+    "store": "refused",
+    "refused": "param color: takes 2 to 3 frame ids",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/thumb.webp?frame=N1500060789_2&x=1",
+   "note": "thumb: x dropped",
+   "expect": {
+    "route": "thumb",
+    "store": "r2",
+    "refused": null,
+    "key": "thumb/{tag}/frames/thumb.webp~frame=N1500060789_2",
+    "fallback": [],
+    "params": {
+     "frame": "N1500060789_2"
+    },
+    "download": false,
+    "family": "thumb"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.json",
+   "note": "pass info: info",
+   "expect": {
+    "route": "pass_info",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "info",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/info.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.json?x=1",
+   "note": "pass info: x dropped",
+   "expect": {
+    "route": "pass_info",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "info",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/info.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.json?look=classic",
+   "note": "pass info: classic refused",
+   "expect": {
+    "route": "pass_info",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/W1500060800_1.json",
+   "note": "pass info WAC",
+   "expect": {
+    "route": "pass_info",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "W1500060800_1",
+    "part": "info",
+    "alias_key": "table/{tag}/alias/W15000.json",
+    "part_key": "table/{tag}/pass/{pass}/info.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json",
+   "note": "steady table: steady default center=1 color=0",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c1k0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c1k0.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?center=1&color=0",
+   "note": "steady table: explicit defaults",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c1k0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c1k0.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?center=0&color=0",
+   "note": "steady table: uncentred",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "center": "0"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c0k0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c0k0.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?center=1&color=1",
+   "note": "steady table: colour",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "color": "1"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c1k1",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c1k1.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?center=0&color=1",
+   "note": "steady table: uncentred colour",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "center": "0",
+     "color": "1"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c0k1",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c0k1.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?center=yes",
+   "note": "steady table: center reads !=0",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c1k0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c1k0.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?color=2",
+   "note": "steady table: color reads !=0",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "color": "1"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c1k1",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c1k1.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.steady.json?center=1&color=0&x=1",
+   "note": "steady table: x dropped",
+   "expect": {
+    "route": "steady_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "steady/c1k0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/steady/c1k0.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=1&w=1024&h=768",
+   "note": "fade table: fade at 1024x768",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "w": "1024",
+     "h": "768"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_1024x768",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_1024x768.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=1&w=512&h=384",
+   "note": "fade table: fade at 512",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "w": "512",
+     "h": "384"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_512x384",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_512x384.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?w=1024&h=1024",
+   "note": "fade table: laps default",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "w": "1024",
+     "h": "1024"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_1024x1024",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_1024x1024.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=2&w=1024&h=768",
+   "note": "fade table: laps 2 refused",
+   "expect": {
+    "route": "fade_table",
+    "store": "refused",
+    "refused": "param laps: 2 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=0&w=1024&h=768",
+   "note": "fade table: laps 0 clamps to 1",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "w": "1024",
+     "h": "768"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_1024x768",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_1024x768.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=1",
+   "note": "fade table: no size: local false",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_0x0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_0x0.json",
+    "answer": {
+     "local": false
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=1&w=1024",
+   "note": "fade table: no h: local false",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "w": "1024"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_1024x0",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_1024x0.json",
+    "answer": {
+     "local": false
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=1&w=9999&h=9999",
+   "note": "fade table: clamped to 4096",
+   "expect": {
+    "route": "fade_table",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {
+     "w": "4096",
+     "h": "4096"
+    },
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "fade/l1_4096x4096",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/fade/l1_4096x4096.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.fade.json?laps=1&w=abc&h=10",
+   "note": "fade table: not a number refused",
+   "expect": {
+    "route": "fade_table",
+    "store": "refused",
+    "refused": "param w: not a whole number",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.json",
+   "note": "tile map: tile map",
+   "expect": {
+    "route": "tile_map",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "maps/{m}",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/maps/{m}.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.json?x=1",
+   "note": "tile map: x dropped (page adds it)",
+   "expect": {
+    "route": "tile_map",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "maps/{m}",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/maps/{m}.json"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.json?x=1&look=classic",
+   "note": "tile map: classic refused",
+   "expect": {
+    "route": "tile_map",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.json?off=blend",
+   "note": "tile map: off refused",
+   "expect": {
+    "route": "tile_map",
+    "store": "refused",
+    "refused": "param off: only '' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?warm=1",
+   "note": "mosaic kind: warm asks the pass kind",
+   "expect": {
+    "route": "mosaic_kind",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "kind",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/kind.json",
+    "no_alias_answer": {
+     "mosaic": false,
+     "movie": false,
+     "kind": null
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?warm=1&look=balanced",
+   "note": "mosaic kind: default look",
+   "expect": {
+    "route": "mosaic_kind",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "kind",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/kind.json",
+    "no_alias_answer": {
+     "mosaic": false,
+     "movie": false,
+     "kind": null
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?warm=yes",
+   "note": "mosaic kind: any warm value",
+   "expect": {
+    "route": "mosaic_kind",
+    "store": "table",
+    "refused": null,
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "frame": "N1500060789_2",
+    "part": "kind",
+    "alias_key": "table/{tag}/alias/N15000.json",
+    "part_key": "table/{tag}/pass/{pass}/kind.json",
+    "no_alias_answer": {
+     "mosaic": false,
+     "movie": false,
+     "kind": null
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?warm=1&off=align",
+   "note": "mosaic kind: off refused",
+   "expect": {
+    "route": "mosaic_kind",
+    "store": "refused",
+    "refused": "param off: only '' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp",
+   "note": "movie: default 512",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024",
+   "note": "movie: 1024",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=128",
+   "note": "movie: strip 128",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=128",
+    "fallback": [],
+    "params": {
+     "size": "128"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=256",
+   "note": "movie: 256 snaps to 512",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=768",
+   "note": "movie: 768 snaps to 1024",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=full",
+   "note": "movie: full is 1024",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&color=1",
+   "note": "movie: color=1 default",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&color=0",
+   "note": "movie: plane color=0",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~color=0&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "color": "0"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&color=0&trail=0&steady=0&exposure=0",
+   "note": "movie: plane, every default",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~color=0&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "color": "0"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&color=1&trail=0&laps=1",
+   "note": "movie: page default style",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&color=1&trail=0&laps=1&exposure=8",
+   "note": "movie: exposure 8 pre-built for passes the page cannot even",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~exposure=8&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "exposure": "8"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=512&color=1&trail=0&laps=1&exposure=8",
+   "note": "movie: exposure 8 at 512",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~exposure=8",
+    "fallback": [],
+    "params": {
+     "exposure": "8"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&exposure=4",
+   "note": "movie: exposure 4 refused (page evens)",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param exposure: 4 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&exposure=99",
+   "note": "movie: exposure clamps to 30, refused",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param exposure: 30 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&steady=12",
+   "note": "movie: steady refused (page stabilizes)",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param steady: 12 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&steady=0",
+   "note": "movie: steady 0 default",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&trail=3",
+   "note": "movie: trail refused (page trails)",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param trail: 3 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&trail=-1",
+   "note": "movie: trail clamps to 0",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&center=0",
+   "note": "movie: uncentred",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~center=0&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "center": "0"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&center=1",
+   "note": "movie: center 1 default",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&center=no",
+   "note": "movie: center reads !=0",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&color=0&detail=0",
+   "note": "movie: plane before detail (filled passes)",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~color=0&detail=0&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "color": "0",
+     "detail": "0"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&detail=1",
+   "note": "movie: detail default",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&laps=3&fade=8&persist=20",
+   "note": "movie: laps fade persist are no-ops",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&hdr=1",
+   "note": "movie: hdr dropped",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&look=classic",
+   "note": "movie: classic refused",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&colors=raw",
+   "note": "movie: raw refused",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param colors: only 'natural' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&format=png&download=1",
+   "note": "movie: png refused",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param format: only 'webp' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": true
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&mode=",
+   "note": "movie: blank mode is a movie",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&mode=other",
+   "note": "movie: unknown mode refused",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param mode: 'other' is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&trail=x",
+   "note": "movie: trail not a number refused",
+   "expect": {
+    "route": "movie",
+    "store": "refused",
+    "refused": "param trail: not a whole number",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&center=0&color=0&trail=0&laps=1",
+   "note": "movie: uncentred plane",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~center=0&color=0&size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024",
+     "color": "0",
+     "center": "0"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/W1500060800_1.webp?size=1024&color=1&trail=0&laps=1",
+   "note": "WAC movie",
+   "expect": {
+    "route": "movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/W1500060800_1.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling",
+   "note": "mosaic movie: rolling default 512",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling",
+    "fallback": [],
+    "params": {
+     "mode": "rolling"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024",
+   "note": "mosaic movie: rolling 1024",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&trail=0&laps=1",
+   "note": "mosaic movie: page style, trail dropped",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&laps=1&fade=0",
+   "note": "mosaic movie: fade 0",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&laps=1&fade=8&persist=35",
+   "note": "mosaic movie: fade refused (page fades)",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "refused",
+    "refused": "param fade: 8 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&laps=2",
+   "note": "mosaic movie: laps 2 refused",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "refused",
+    "refused": "param laps: 2 is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=full",
+   "note": "mosaic movie: rolling full is 1024",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=128",
+   "note": "mosaic movie: 128 snaps to 512",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling",
+    "fallback": [],
+    "params": {
+     "mode": "rolling"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&whole=1",
+   "note": "mosaic movie: whole dropped",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&center=0&steady=12&exposure=8&color=0&detail=0",
+   "note": "mosaic movie: movie-only params dropped",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&persist=50",
+   "note": "mosaic movie: persist dropped",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?size=1024&mode=rolling&hdr=1",
+   "note": "mosaic movie: hdr dropped",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&look=classic",
+   "note": "mosaic movie: classic refused",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/movie/N1500060789_2.webp?mode=rolling&size=1024&laps=0",
+   "note": "mosaic movie: laps 0 clamps to 1",
+   "expect": {
+    "route": "mosaic_movie",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/movie/N1500060789_2.webp~mode=rolling&size=1024",
+    "fallback": [],
+    "params": {
+     "mode": "rolling",
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp",
+   "note": "mosaic: default 512",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024",
+   "note": "mosaic: 1024",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=full",
+   "note": "mosaic: full view 2048 (D3), falls back to 1024",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=full",
+    "fallback": [
+     "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024"
+    ],
+    "params": {
+     "size": "full"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&force=1",
+   "note": "mosaic: force falls back to plain",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~force=1&size=1024",
+    "fallback": [
+     "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024"
+    ],
+    "params": {
+     "size": "1024",
+     "force": "1"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=full&force=1",
+   "note": "mosaic: full and force: two fallbacks",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~force=1&size=full",
+    "fallback": [
+     "pass/{tag}/frames/mosaic/N1500060789_2.webp~force=1&size=1024",
+     "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=full"
+    ],
+    "params": {
+     "size": "full",
+     "force": "1"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=512&force=yes",
+   "note": "mosaic: force reads nonempty",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~force=1",
+    "fallback": [
+     "pass/{tag}/frames/mosaic/N1500060789_2.webp"
+    ],
+    "params": {
+     "force": "1"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&force=",
+   "note": "mosaic: blank force is missing",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=256",
+   "note": "mosaic: 256 snaps to 512",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=128",
+   "note": "mosaic: 128 snaps to 512",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp",
+    "fallback": [],
+    "params": {},
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=768",
+   "note": "mosaic: 768 snaps to 1024",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&tune=1:0.01:0",
+   "note": "mosaic: tune refused",
+   "expect": {
+    "route": "mosaic",
+    "store": "refused",
+    "refused": "param tune: '1:0.01:0' is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&hide=2",
+   "note": "mosaic: hide refused",
+   "expect": {
+    "route": "mosaic",
+    "store": "refused",
+    "refused": "param hide: '2' is not offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&hdr=1",
+   "note": "mosaic: hdr dropped",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&look=classic",
+   "note": "mosaic: classic refused",
+   "expect": {
+    "route": "mosaic",
+    "store": "refused",
+    "refused": "param look: only 'balanced' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&format=png",
+   "note": "mosaic: png refused",
+   "expect": {
+    "route": "mosaic",
+    "store": "refused",
+    "refused": "param format: only 'webp' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&download=1",
+   "note": "mosaic: download",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": true,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&x=1",
+   "note": "mosaic: x dropped",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1500060789_2.webp~size=1024",
+    "fallback": [],
+    "params": {
+     "size": "1024"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&center=1",
+   "note": "mosaic: center is no parameter of a mosaic",
+   "expect": {
+    "route": "mosaic",
+    "store": "refused",
+    "refused": "param center: not a parameter of this route",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1500060789_2.webp?size=1024&off=level",
+   "note": "mosaic: off refused",
+   "expect": {
+    "route": "mosaic",
+    "store": "refused",
+    "refused": "param off: only '' is offered on the public site",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/W1500060800_1.webp?size=1024&force=1",
+   "note": "WAC mosaic forced",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/W1500060800_1.webp~force=1&size=1024",
+    "fallback": [
+     "pass/{tag}/frames/mosaic/W1500060800_1.webp~size=1024"
+    ],
+    "params": {
+     "size": "1024",
+     "force": "1"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/mosaic/N1866100001_1.webp?size=full",
+   "note": "Grand Finale era mosaic full",
+   "expect": {
+    "route": "mosaic",
+    "store": "r2",
+    "refused": null,
+    "key": "pass/{tag}/frames/mosaic/N1866100001_1.webp~size=full",
+    "fallback": [
+     "pass/{tag}/frames/mosaic/N1866100001_1.webp~size=1024"
+    ],
+    "params": {
+     "size": "full"
+    },
+    "download": false,
+    "family": "pass"
+   }
+  }
+ ]
+}

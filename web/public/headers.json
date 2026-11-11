@@ -1,0 +1,63 @@
+{
+  "contract": "headers",
+  "contract_version": 1,
+  "about": "The X-* reports the frame server sends with a picture (each a JSON object in one header), how the publisher keeps them with the R2 object and how the Worker gives them back. The page reads them with fetch(...).headers.get(name), so the Worker must answer the same header names with the same JSON, and expose them to the page across origins.",
+
+  "per_route": {
+    "color": "X-Composite",
+    "processed": "X-Composite",
+    "movie": "X-Movie",
+    "mosaic_movie": "X-Movie",
+    "mosaic": "X-Reel",
+    "thumb": "X-Thumb",
+    "frame": null,
+    "archive": null
+  },
+
+  "page_reads": {
+    "about": "The fields the page reads from each report (head-quiet.html, flag.html; from the rep.* and report.* reads in those files at regression-2017 8c121d5, 2026-11-11; WP5 confirms the list on the rehearsal slice). When a report is too big to keep whole (storage below), these are the fields kept. A package that makes the page read a new field adds it here in its own small contract PR.",
+    "X-Composite": ["observation", "filters", "filter_names", "color", "ids", "aligned", "stacked", "calibrated", "kind", "width", "height", "centre", "why", "grey", "filled", "dropped"],
+    "X-Movie": ["observation", "of", "frame", "filters", "filter_names", "color", "ids", "kind", "width", "height", "rolling", "lap", "laps", "places", "partial", "behind", "centre", "why", "grey", "filled", "dropped"],
+    "X-Reel": ["observation", "mosaic", "of", "lap", "laps", "places", "filters", "filter_names", "color", "ids", "kind", "width", "height", "rolling", "behind", "frame", "centre", "why", "grey", "filled", "dropped"],
+    "X-Thumb": ["kind", "id", "ids"],
+    "X-Center": ["centre", "frame", "why"]
+  },
+
+  "storage": {
+    "about": "Each report goes in the object's R2 customMetadata, under the header's name in lower case (x-composite, x-movie, x-reel, x-thumb), as compact JSON (separators ',' and ':'). The budget is the whole customMetadata of one object, names included.",
+    "metadata_budget_bytes": 2048,
+    "budget_why": "2 KB is the S3 API's limit for user metadata, which an S3-compatible upload (boto3, rclone) is held to; WP3 may raise it to R2's own limit only after uploading a test object of that size through the tool it uses and reading it back through the Worker binding",
+    "order": [
+      "whole: the report as the server sends it, when the object's metadata fits the budget",
+      "trimmed: only the page_reads fields, when that fits; the metadata then also holds x-report-trimmed: 1",
+      "sidecar: the whole report as its own object at <key>.h.json (Content-Type application/json), and x-report-sidecar: 1 in the picture's metadata; the Worker reads both"
+    ],
+    "measured": "see docs/public-site/header-sizes.md: the sizes of real reports on a current cache, and which of the three each route needs"
+  },
+
+  "markers": {
+    "about": "A negative answer that carries information (policy store marker). The publisher writes an empty object at the picture's key with this metadata; the Worker answers the status with the headers and the body given.",
+    "metadata": {"x-status": "the HTTP status, e.g. '404'", "x-center": "the X-Center JSON, compact", "x-body": "the response body, at most 512 bytes (the server sends the X-Center JSON as the body too)"},
+    "content_type": "application/json",
+    "today": ["Auto center's 404 with X-Center {\"centre\": false, \"why\": ...} for a pass it leaves as it is, and with \"frame\": true for one frame SPICE has no place for (frame_server.not_centred), on color and processed routes with center=1"]
+  },
+
+  "worker_adds": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Expose-Headers": "X-Composite, X-Movie, X-Reel, X-Thumb, X-Center",
+    "Cache-Control": "public, max-age=31536000, immutable on every picture and table part (the key changes when the picture does); public, max-age=60 on the manifest answers (version.json, slices.json); no-store on refusals",
+    "Content-Type": "from the object's httpMetadata: image/webp, image/png or application/json",
+    "Content-Disposition": "only when download=1 asked: attachment; filename=<download_names>"
+  },
+
+  "download_names": {
+    "about": "The file name a download=1 answer is saved as, as the server names it today (frame_server.send_picture). {id} is the frame id, {ids} the ids joined by '_'.",
+    "frame": "Cassini_{id}.webp",
+    "archive": "Cassini_{id}_archive.png",
+    "color": "Cassini_{ids}_color.webp",
+    "processed": "Cassini_{id}_processed.webp",
+    "movie": "Cassini_{id}_movie.webp",
+    "mosaic_movie": "Cassini_{id}_mosaic_movie.webp",
+    "mosaic": "Cassini_{id}_mosaic.webp"
+  }
+}
