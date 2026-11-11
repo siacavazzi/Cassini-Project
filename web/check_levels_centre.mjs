@@ -11,6 +11,8 @@
 // environment): "the page measured the served picture right" means the server's /export/levels.json measured some
 // other picture (a server-side defect, cold-levels-finding.md), not the page port.
 //
+// Exit 0: both films the same; 2: the only differences are SERVER-SIDE ones; 1: the page port differs.
+//
 // Needs playwright (or playwright-core with --chrome, which uses the installed Google Chrome) and a frame server
 // running this commit's web/frames. The page code is taken from this checkout and put into the server's page.
 import fs from "node:fs";
@@ -44,7 +46,7 @@ await page.addScriptTag({ content: src("plan-local.js") });
 await page.addScriptTag({ content: src("levels-local.js") });
 
 const ev = 1.5e-4;   // one step of the float32 log, after rounding to 4 places
-let bad = 0;
+let bad = 0, serverSide = 0;   // films with a page differ; films whose every differ is the server's
 for (const ctr of ["0", "1"]) {
   // the film's query, with the page's look and movie style as the Movie Editor sends them to the server
   const extra = await page.evaluate(c => window.cassiniLook() + window.cassiniMovieStyle({ center: c === "1" }), ctr);
@@ -81,10 +83,10 @@ for (const ctr of ["0", "1"]) {
   }
   for (const id of ids) if (!(id in want.level) || !(id in got.level)) shown.push(id);
   const ok = !differ && !missing;
-  bad += !ok;
+  let explained = 0;
   console.log(`ctr=${ctr}: ${ok ? "match" : "differ"} (${ids.size} pictures; ${differ} levels differ, the most by ` +
     `${most === Infinity ? "lit vs too little lit" : most.toFixed(4) + " EV"}; ${missing} measured on one side only)`);
-  for (const id of shown.slice(0, 10)) {
+  for (const id of shown) {
     console.log(`  ${id}: server ${want.level[id]} EV, page ${got.level[id]} EV; the page fetched:`);
     const mine = fetched.filter(f => f.includes(id));
     for (const f of mine) console.log(`    ${f}`);
@@ -97,12 +99,19 @@ print("null" if lv is None else round(round(lv, 5) / math.log(2), 4))`;
       try {
         const v = execFileSync(process.env.PYTHON || "python3", ["-c", py, HERE, server + used.slice(4).replace(/&amp;/g, "&")], { encoding: "utf8" }).trim();
         const served = v === "null" ? null : +v;
-        console.log(`    the server's Python on that picture: ${served} EV: ` + (served === got.level[id] ? "the page measured the served picture right; the server's levels measured another picture" : "the page differs from it"));
+        const right = served === got.level[id];
+        explained += right;
+        console.log(`    the server's Python on that picture: ${served} EV: ` + (right ? "SERVER-SIDE: the page measured the served picture right; the server's levels measured another picture" : "the page differs from it"));
       } catch (e) { console.log(`    (the server's Python could not measure it: ${String(e.message).split("\n")[0]})`); }
     }
   }
+  if (!ok && explained === shown.length) serverSide++;
+  else if (!ok) bad++;
 }
 console.log("the page read pixels through:", await page.evaluate(() => window.cassiniPlanLocal._levels && window.cassiniPlanLocal._levels.pixelsHow ? window.cassiniPlanLocal._levels.pixelsHow() || "nothing" : "unknown"));
 if (errors.length) console.log("page errors:", errors.slice(0, 5).join(" | "));
 await browser.close();
-process.exit(bad ? 1 : 0);
+// exit 0: every level the same; 2: the page matched every picture it was served, and each differ is the server's
+// /export/levels.json measuring another picture (measured, labelled SERVER-SIDE above); 1: the page differs
+if (serverSide && !bad) console.log(`SERVER-SIDE ONLY: ${serverSide} film(s) differ only where the server's levels measured a picture it does not serve`);
+process.exit(bad ? 1 : serverSide ? 2 : 0);
