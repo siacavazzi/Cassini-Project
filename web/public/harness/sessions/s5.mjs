@@ -9,7 +9,7 @@ export default {
     const m = await h.moment(PLAY);
     await h.open({ t: m.t, view: "follow", speed: "600", play: "0" });
     const a = m.t, b = new Date(Date.parse(m.t + "Z") + 2 * 3600e3).toISOString().slice(0, 19);
-    const ok = await page.evaluate(([a, b]) => { if (!window.cassiniMovieEdit) return false; window.cassiniMovieEdit.open({ a, b }); return true; }, [a, b]);
+    const ok = await page.evaluate(([a, b]) => { if (!window.cassiniMovieEdit) return false; window.cassiniMovieEdit.open({ a: utcToEt(a), b: utcToEt(b) }); return true; }, [a, b]);   // the editor takes ET seconds
     if (!ok) { h.skip("no Movie Editor (window.cassiniMovieEdit)", "WP7b"); return; }
     h.step(`Movie Editor open ${a} to ${b}`);
     await page.waitForFunction(() => window.cassiniMovieEdit && !window.cassiniMovieEdit.loading, null, { timeout: 180000 }).catch(() => h.skip("the editor was still loading after 3 min", "WP7b"));

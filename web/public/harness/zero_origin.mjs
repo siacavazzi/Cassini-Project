@@ -44,6 +44,8 @@ for (const f of sessionFiles) {
   if (!want || want.has(s.id)) sessions.push(s);
 }
 
+// routes whose 404 is an answer the page expects (policy.json probe_404), counted apart from misses
+const PROBE = new Set(JSON.parse(fs.readFileSync(path.join(here, "..", "policy.json"), "utf8")).routes.filter(r => r.probe_404).map(r => r.id));
 const hostOf = u => { try { return new URL(u).host; } catch (e) { return ""; } };
 const siteHost = hostOf(site), framesHost = hostOf(frames);
 
@@ -60,6 +62,7 @@ function classify(r) {
     out.origin = mode === "before";
     if (ans.refused) out.verdict = "refused";
     else if (r.status === 404 && r.headers["x-center"]) out.verdict = "marker";
+    else if (r.status === 404 && ans.route && PROBE.has(ans.route)) out.verdict = "probe";
     else if (r.failed || r.status >= 400 || r.status === 0) out.verdict = "miss";
     else out.verdict = "ok";
     return out;
@@ -70,7 +73,7 @@ function classify(r) {
 }
 
 function summarize(reqs) {
-  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, cdn: 0, other_hosts: 0, bytes: 0 };
+  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, probe: 0, cdn: 0, other_hosts: 0, bytes: 0 };
   const byRoute = {}, refusedWhy = {}, missRoutes = {}, otherHosts = {};
   for (const r of reqs) {
     const k = r.k;
@@ -85,6 +88,7 @@ function summarize(reqs) {
       if (k.verdict === "refused") { c.refused++; refusedWhy[k.refused] = (refusedWhy[k.refused] || 0) + 1; }
       if (k.verdict === "miss") { c.miss++; missRoutes[k.route || "(no route)"] = (missRoutes[k.route || "(no route)"] || 0) + 1; }
       if (k.verdict === "marker") c.marker++;
+      if (k.verdict === "probe") c.probe++;
     }
   }
   return { counts: c, by_route: byRoute, refused_why: refusedWhy, miss_routes: missRoutes, other_hosts: otherHosts };
@@ -146,7 +150,7 @@ for (const s of sessions) {
     fs.writeFileSync(path.join(args.out, `${s.id}.json`), JSON.stringify({ ...out, requests: reqs }, null, 1));
   }
   const c = sum.counts;
-  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
+  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
   await ctx.close();
 }
 await browser.close();

@@ -57,7 +57,9 @@ def main(folder):
                     continue
                 u = urlsplit(r["url"])
                 ans = keys.canonical(r.get("method", "GET"), u.path + ("?" + u.query if u.query else ""))
-                route = ans["route"] or "(none)"
+                if not ans["route"]:
+                    continue   # not a frame-server route (a CDN's own x- headers)
+                route = ans["route"]
                 w, t = sizes(name, value)
                 rows.setdefault((route, name), []).append((w, t))
     print(f"# Report sizes as R2 metadata\n\nFrom the harness logs in `{os.path.basename(os.path.abspath(folder))}`, one row per route and header, "

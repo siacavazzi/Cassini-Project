@@ -114,6 +114,7 @@
        "tune": {"type": "enum", "default": "", "allowed": [""], "why": "Studio tile tuning is hidden on the public site"},
        "hide": {"type": "enum", "default": "", "allowed": [""], "why": "as tune"}
      },
+     "probe_404": "the camera windows ask this for frames that may be no mosaic tile; the server's 404 means 'keep the frame' and is an answer, not a miss. The harness counts these 404s as probe, not miss; WP5 stops asking for frames the pass table's kind says are no mosaic, and WP9 checks every probe against the tables",
      "fallback": [
        {"when": {"size": "full"}, "set": {"size": "1024"}, "why": "D3: while a pass builds, full view shows 1024"},
        {"when": {"force": "1"}, "unset": ["force"], "why": "force=1 on a frame of a real mosaic pass is the same picture as without it; only toss-up passes publish a force=1 copy"}
