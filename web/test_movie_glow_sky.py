@@ -45,5 +45,9 @@ assert "black_of" not in om.tile_scale(scale, "RED", True, on_body=True), "a fra
 u = {"key": ("TITAN", "x", "N", 0)}
 assert om.on_disk(u, (None, None, "CB3", 0, 938, 100.0, 50.0, 200000.0))       # Titan 2575 km at 200,000 km: 2146 px
 assert not om.on_disk(u, (None, None, "CB3", 0, 938, 3000.0, 0.0, 200000.0))
+# a ring pass (codes=False: Saturn its target, a ring code in its name) keeps the pass's black on a frame lit all over:
+# that is the rings, real light, not a glow (124RI RDHRCOMP001: the jets frame's rule put black over the rings' median)
+assert "black_of" not in om.tile_scale(scale, "RED", True, codes=False), "a ring pass's frame keeps the pass's black"
+assert om.tile_scale(scale, "RED", True)["black_of"](jets) is not None, "the jets' glow rule is unchanged off ring passes"
 print("ok")
 

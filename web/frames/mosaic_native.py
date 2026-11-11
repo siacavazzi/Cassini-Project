@@ -53,7 +53,7 @@ CROP_MAX = int(os.environ.get("CASSINI_NATIVE_CROP", "2048"))       # longest si
 BLOCK = int(os.environ.get("CASSINI_NATIVE_BLOCK", "1024"))        # canvas px drawn at a time
 KEEP_MB = int(os.environ.get("CASSINI_FULLRES_MB", "5120"))         # most the native pictures' cache holds
 JPEG_QUALITY = 92
-VERSION = "native-v33"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
+VERSION = "native-v37"   # bumped whenever the way native mosaics are made changes (with obs_mosaic.VERSIONS)
 # bytes per pixel, roughly, of a saved native mosaic (sky is most of a mosaic's canvas and costs almost nothing)
 EST_BYTES = {"jpg": (0.08, 0.005), "png": (2.0, 0.02)}   # (per pixel of picture, per pixel of empty canvas)
 
