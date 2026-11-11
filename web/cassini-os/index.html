@@ -13341,7 +13341,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"0e9697953123";
+  const BUILD = /*BUILD*/"3c4302c47a34";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -19423,7 +19423,18 @@ window.huygensModels = (() => {
     hint: "Draw each mapped moon only as sharply as Cassini had photographed it by this moment: places come into focus as their pictures are taken." });
   let placesOn = S.define({ key: "view.places", section: "View", label: "Pictures of a place", type: "toggle", value: true,
     hint: "Click a place on a mapped moon to list the sharpest pictures Cassini took of it." });
+  // the map Cassini made: the one moon that holds a map, and what has been laid into it
+  const mm = { moon: null, rt: null, table: {}, painted: new Set(), failed: new Set(), queue: [], loading: 0, hi: 0, clock: -Infinity, gen: 0 };
+  let madeOn = S.define({ key: "view.madeMap", section: "View", label: "The map Cassini made", type: "toggle", value: false,
+    hint: "The moon in view starts blank and is covered with Cassini's own pictures as they are taken; each place keeps the sharpest picture of it so far." });
+  let madeSun = S.define({ key: "view.madeMapSun", section: "View", label: "Sunlight on the map", type: "range", value: 30, min: 0, max: 100, step: 10, unit: "%",
+    hint: "How much today's sunlight shades the map Cassini made. At 0% the pictures show as they were taken, day side and night side alike." });
+  let madeEven = S.define({ key: "view.madeMapEven", section: "View", label: "Even out the sunlight", type: "range", value: 50, min: 0, max: 100, step: 10, unit: "%",
+    hint: "Brightens each picture in the map Cassini made where the Sun stood low when it was taken, so pictures from different days sit together. At 0% every picture is laid down exactly as taken." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
+  S.on("view.madeMapEven", v => { madeEven = v; if (mm.rt) madeClear(); redraw(); });
+  S.on("view.madeMap", v => { madeOn = v; if (v) need(); redraw(); });
+  S.on("view.madeMapSun", v => { madeSun = v; redraw(); });
   S.on("view.seenSoFar", v => { seenOn = v; if (v) need(); redraw(); });
   S.on("view.places", v => { placesOn = v; if (!v) closePlace(); });
 
@@ -19475,7 +19486,8 @@ window.huygensModels = (() => {
   }
 
   // ---------- Seen so far: the moon's shader blurs its map to what had been seen ----------
-  const HEAD = `uniform sampler2D cov; uniform float covOn; uniform vec2 covNow; uniform float covFade; uniform vec2 covMap; uniform vec3 covGrid;
+  const HEAD = `uniform sampler2D made; uniform float madeOn; uniform float madeSun;
+      uniform sampler2D cov; uniform float covOn; uniform vec2 covNow; uniform float covFade; uniform vec2 covMap; uniform vec3 covGrid;
       // how far tier k has come in at texel ij: 0 before the place was seen that sharply, 1 once it has been
       float covSeen(vec2 ij, float k) {
         vec2 uv = vec2((mod(ij.x, covGrid.x) + 0.5) / covGrid.x, (clamp(ij.y, 0.0, covGrid.y - 1.0) + 0.5 + k * covGrid.y) / (covGrid.y * covGrid.z));
@@ -19495,7 +19507,16 @@ window.huygensModels = (() => {
       }
       uniform sampler2D map;`;
   const WAS = "if (hasMap > 0.5) alb = texture2D(map, vUv).rgb;";
-  const NOW = `if (hasMap > 0.5) {
+  const NOW = `float madeLit = 0.0;
+        if (madeOn > 0.5) {
+          // the map Cassini made: its pictures in their own light, on a blank globe with a faint grid every 30 degrees
+          vec4 mm = texture2D(made, vUv);
+          vec2 gq = vUv * vec2(12.0, 6.0), gl = abs(fract(gq + 0.5) - 0.5) / max(fwidth(gq), 1e-6);
+          if (abs(vUv.y - 0.5) > 0.45) gl.x = 1.0;
+          float line = 1.0 - clamp(min(gl.x, gl.y), 0.0, 1.0), have = smoothstep(0.0, 1.0, mm.a);
+          alb = mix(vec3(0.05, 0.055, 0.065) + 0.045 * line, mm.rgb / max(mm.a, 0.001), have);
+          madeLit = 1.0 - madeSun * have;
+        } else if (hasMap > 0.5) {
           if (covOn > 0.5) {
             float s = covLevel(vUv);
             // the mip level that holds what had been seen (level 0 of a 2k map is tier 5), never sharper than the screen shows
@@ -19508,20 +19529,28 @@ window.huygensModels = (() => {
             alb = mix(vec3(dot(alb, vec3(0.3, 0.59, 0.11))) * 0.6, alb, smoothstep(0.0, 1.0, s));
           } else alb = texture2D(map, vUv).rgb;
         }`;
-  function sharpen(moon) {
-    const m = meshes[moon], c = cov[moon];
-    if (!m || !m.mat || c.patched !== undefined || !c.tex) return;
+  const LIT_WAS = "gl_FragColor = vec4(alb * (1.1 * L + 0.06), 1.0);", LIT_NOW = "gl_FragColor = vec4(alb * mix(1.1 * L + 0.06, 1.0, madeLit), 1.0);";
+  let none = null;   // a one-texel stand-in until a moon's own table or map is there
+  // the moon's shader, taught both looks (once per moon); false when the viewer's shader is no longer the one known here
+  function patch(moon) {
+    const m = meshes[moon], c = cov[moon] || (cov[moon] = {});
+    if (!m || !m.mat) return false;
+    if (c.patched !== undefined) return c.patched;
     const u = m.mat.uniforms, f = m.mat.fragmentShader;
-    c.patched = f.includes(WAS) && f.includes("uniform sampler2D map;");
-    if (!c.patched) { console.warn("Seen so far: the moon shader has changed, " + moon + " is left as it is"); return; }
-    u.cov = { value: c.tex }; u.covOn = { value: 0 }; u.covNow = { value: new THREE.Vector2() }; u.covFade = { value: 1 };
+    c.patched = f.includes(WAS) && f.includes(LIT_WAS) && f.includes("uniform sampler2D map;");
+    if (!c.patched) { console.warn("coverage: the moon shader has changed, " + moon + " is left as it is"); return false; }
+    if (!none) { none = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, THREE.RGBAFormat); none.needsUpdate = true; }
+    u.cov = { value: none }; u.covOn = { value: 0 }; u.covNow = { value: new THREE.Vector2() }; u.covFade = { value: 1 };
     u.covMap = { value: new THREE.Vector2(2048, 1024) }; u.covGrid = { value: new THREE.Vector3(index.grid[0], index.grid[1], index.tiers) };
-    m.mat.fragmentShader = f.replace("uniform sampler2D map;", HEAD).replace(WAS, NOW);
+    u.made = { value: none }; u.madeOn = { value: 0 }; u.madeSun = { value: 0.3 };
+    m.mat.fragmentShader = f.replace("uniform sampler2D map;", HEAD).replace(WAS, NOW).replace(LIT_WAS, LIT_NOW);
     m.mat.extensions = Object.assign(m.mat.extensions || {}, { derivatives: true });
     m.mat.needsUpdate = true;
+    return true;
   }
   function frame() {
     if (!index) return;
+    madeFrame();
     const on = seenOn && !document.body.classList.contains("cutscene");
     const tick = (state.et - index.t0) / index.dt, whole = Math.floor(tick);
     for (const moon in index.moons) {
@@ -19529,9 +19558,10 @@ window.huygensModels = (() => {
       const c = cov[moon];
       if (on && present(moon) && (!c || !c.tex)) load(moon);
       if (!c || !c.tex) continue;
-      if (on) sharpen(moon);
+      if (on) patch(moon);
       if (!c.patched) continue;
       const u = meshes[moon].mat.uniforms, map = u.map.value;
+      u.cov.value = c.tex;
       u.covOn.value = on && u.hasMap.value > 0.5 ? 1 : 0;
       u.covNow.value.set(whole, tick - whole);
       // a place comes into focus over about a second of screen time, whatever the speed
@@ -19539,6 +19569,119 @@ window.huygensModels = (() => {
       if (map && map.image && map.image.width) u.covMap.value.set(map.image.width, map.image.height);
     }
   }
+  // ---------- The map Cassini made: the moon in view, covered with its own pictures ----------
+  const MADE_W = 4096, MADE_H = 2048, MADE_LOADS = 6;
+  const RES_KM = [0.001, 1000];        // the depth buffer's range of km per pixel: the sharper picture wins a place
+  let paint = null;
+  function painter() {
+    if (paint) return paint;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { pic: { value: null }, o: { value: new THREE.Vector3() }, radii: { value: new THREE.Vector3(1, 1, 1) }, sun: { value: new THREE.Vector3() }, M: { value: new THREE.Matrix3() },
+                  h: { value: 0 }, ifov: { value: 0 }, size: { value: new THREE.Vector2(MADE_W, MADE_H) }, res: { value: new THREE.Vector2(RES_KM[0], RES_KM[1]) }, lim: { value: new THREE.Vector2() }, even: { value: 0.5 } },
+      vertexShader: "void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }",
+      // every texel of the map asks: where is this place in the picture? (the same geometry as build_coverage.py)
+      fragmentShader: `uniform sampler2D pic; uniform vec3 o, radii, sun; uniform mat3 M; uniform float h, ifov, even; uniform vec2 size, res, lim;
+        void main(){
+          vec2 uv = gl_FragCoord.xy / size;
+          float lon = (uv.x - 0.5) * 6.283185307, lat = (uv.y - 0.5) * 3.141592654;
+          vec3 n = vec3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
+          if (dot(n, o / radii) <= 1.0) discard;                       // over the horizon
+          vec3 N = normalize(n / radii), toCam = o - n * radii;
+          float dist = length(toCam), ce = dot(N, toCam) / dist, ci = dot(N, sun);
+          if (ce < lim.x || ci < lim.y) discard;                       // too oblique, or the Sun too low
+          vec3 c = M * (-toCam);
+          if (c.z <= 0.0) discard;
+          vec2 ab = c.xy / (c.z * h);
+          if (abs(ab.x) > 0.985 || abs(ab.y) > 0.985) discard;         // outside the frame
+          // samples run toward the camera's -X and lines toward -Y (the footprints' convention)
+          // (evened out: brighter where the Sun stood low; even = 0 lays the picture down as it is)
+          gl_FragColor = vec4(min(texture2D(pic, vec2(0.5 - 0.5 * ab.x, 0.5 + 0.5 * ab.y)).rgb / pow(ci, even), 1.0), 1.0);
+          gl_FragDepthEXT = clamp(log2(dist * ifov / sqrt(ce * ci) / res.x) / log2(res.y / res.x), 0.0, 1.0);
+        }`,
+      extensions: { fragDepth: true }, depthTest: true, depthWrite: true });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); quad.frustumCulled = false;
+    const sc = new THREE.Scene(); sc.add(quad);
+    return paint = { mat, sc, cam: new THREE.Camera() };
+  }
+  function madeTable(moon) {
+    const t = mm.table[moon] || (mm.table[moon] = {});
+    if (!t.asking) {
+      t.asking = true;
+      fetch(DIR + index.moons[moon].made).then(r => r.ok ? r.json() : null).then(j => {
+        if (j) { j.until = j.until.map(u => u === null ? Infinity : u); t.rows = j; redraw(); }
+      }).catch(() => {});
+    }
+    return t.rows;
+  }
+  function madeClear() {
+    const col = renderer.getClearColor(new THREE.Color()), a = renderer.getClearAlpha();
+    mm.rt.scissorTest = false;
+    renderer.setRenderTarget(mm.rt); renderer.setClearColor(0x000000, 0); renderer.clear(true, true, false);
+    renderer.setRenderTarget(null); renderer.setClearColor(col, a);
+    mm.painted.clear(); mm.failed.clear(); mm.queue.length = 0; mm.hi = 0; mm.gen++;
+  }
+  // one picture into the map, inside the box of the map it can reach (the cap of the moon Cassini sees)
+  function madePaint(T, i, tex) {
+    const P = painter(), u = P.mat.uniforms, r = T.radii, cam = T.cam[i];
+    u.pic.value = tex; u.o.value.set(T.o[3 * i], T.o[3 * i + 1], T.o[3 * i + 2]); u.radii.value.set(r[0], r[1], r[2]);
+    u.sun.value.set(T.sun[3 * i], T.sun[3 * i + 1], T.sun[3 * i + 2]); u.M.value.set(...T.m.slice(9 * i, 9 * i + 9));
+    u.even.value = madeEven / 100;
+    u.h.value = Math.tan(T.fov_half_deg[cam] * Math.PI / 180); u.ifov.value = T.ifov[cam];
+    u.lim.value.set(Math.cos(T.max_emission_deg * Math.PI / 180), Math.cos(T.max_incidence_deg * Math.PI / 180));
+    const ox = u.o.value.x / r[0], oy = u.o.value.y / r[1], oz = u.o.value.z / r[2], d = Math.hypot(ox, oy, oz);
+    const lat = Math.asin(oz / d), lon = Math.atan2(oy, ox), cap = Math.acos(Math.min(1, 1 / d)) + 0.02;
+    let x0 = 0, x1 = MADE_W;
+    const y0 = Math.max(0, Math.floor((0.5 + (lat - cap) / Math.PI) * MADE_H)), y1 = Math.min(MADE_H, Math.ceil((0.5 + (lat + cap) / Math.PI) * MADE_H));
+    if (Math.abs(lat) + cap < Math.PI / 2 - 0.02) {
+      const dl = Math.asin(Math.min(1, Math.sin(cap) / Math.cos(lat))) + 0.02, a = 0.5 + (lon - dl) / (2 * Math.PI), b = 0.5 + (lon + dl) / (2 * Math.PI);
+      if (a >= 0 && b <= 1) { x0 = Math.floor(a * MADE_W); x1 = Math.ceil(b * MADE_W); }   // (a box across the map's edge: the whole width)
+    }
+    mm.rt.scissor.set(x0, y0, x1 - x0, y1 - y0); mm.rt.scissorTest = true;
+    renderer.setRenderTarget(mm.rt); renderer.render(P.sc, P.cam); renderer.setRenderTarget(null);
+    u.pic.value = null;
+  }
+  function madePump(T) {
+    while (mm.loading < MADE_LOADS && mm.queue.length) {
+      const i = mm.queue.pop(), gen = mm.gen, moon = mm.moon;
+      mm.loading++;
+      const done = tex => {
+        mm.loading--;
+        if (gen === mm.gen && moon === mm.moon && mm.rt) { if (tex) { madePaint(T, i, tex); mm.painted.add(i); } else mm.failed.add(i); redraw(); }
+        if (tex) tex.dispose();
+        if (mm.moon && mm.table[mm.moon] && mm.table[mm.moon].rows) madePump(mm.table[mm.moon].rows);
+      };
+      new THREE.TextureLoader().load(picUrl(T.id[i]), tex => { tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; done(tex); }, undefined, () => done(null));
+    }
+  }
+  function madeFrame() {
+    const moon = madeOn && !document.body.classList.contains("cutscene") && index.moons[state.focus] && index.moons[state.focus].made && meshes[state.focus] ? state.focus : null;
+    // only the moon in view holds a map: another moon, or the setting off, lets it go
+    if (mm.moon && mm.moon !== moon) {
+      const u = meshes[mm.moon].mat.uniforms; u.madeOn.value = 0; u.made.value = none;
+      if (mm.rt) { mm.rt.dispose(); mm.rt = null; }
+      mm.painted.clear(); mm.failed.clear(); mm.queue.length = 0; mm.hi = 0; mm.gen++; mm.clock = -Infinity; mm.moon = null;
+      redraw();
+    }
+    if (!moon || !patch(moon)) return;
+    const T = madeTable(moon); if (!T) return;
+    const u = meshes[moon].mat.uniforms;
+    if (!mm.rt) {
+      mm.rt = new THREE.WebGLRenderTarget(MADE_W, MADE_H, { minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true, wrapS: THREE.RepeatWrapping, depthBuffer: true });
+      mm.rt.texture.anisotropy = 4;
+      mm.moon = moon; madeClear();
+    }
+    u.made.value = mm.rt.texture; u.madeOn.value = 1; u.madeSun.value = madeSun / 100;
+    // the pictures that make up the map now: taken by now, and still the sharpest somewhere
+    const now = state.et;
+    if (now < mm.clock) { let back = false; for (const i of mm.painted) if (T.et[i] > now) { back = true; break; } if (back || mm.queue.some(i => T.et[i] > now)) madeClear(); }
+    mm.clock = now;
+    let lo = mm.hi, hi = T.et.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (T.et[m] <= now) lo = m + 1; else hi = m; }
+    for (let i = mm.hi; i < lo; i++) if (T.until[i] > now) mm.queue.push(i);
+    mm.hi = lo;
+    madePump(T);
+  }
+
   // the menu bar: how much of the moon in view Cassini has seen so far
   let host = null, shown = "";
   function status() {
@@ -19553,9 +19696,13 @@ window.huygensModels = (() => {
       const pct = v => v > 0 && v < 0.005 ? "under 1%" : Math.round(v * 100) + "%";
       html = s[0] <= 0 ? `<b>${titleCase(moon)}</b> · not yet seen by Cassini` : `<b>${titleCase(moon)}</b> · ${pct(s[0])} seen so far · ${pct(s[1])} in detail`;
     }
+    if (mm.moon && mm.moon === moon) {
+      const n = mm.painted.size, wait = mm.queue.length + mm.loading;
+      html = `<b>${titleCase(moon)}</b> · ${n ? `the map so far: ${n} picture${n === 1 ? "" : "s"}` : wait ? "the map so far" : "no pictures yet"}${wait ? ` · ${wait} on the way` : ""}`;
+    }
     if (html !== shown) {
       host.innerHTML = shown = html;
-      host.title = html ? `The share of ${titleCase(moon)}'s surface Cassini's cameras have photographed in sunlight by now: at all (${index.moons[moon].tier_km[0].toFixed(0)} km per pixel or better), and in detail (${index.moons[moon].tier_km[index.tiers - 1].toFixed(1)} km per pixel or better, the scale of the surface map).` : "";
+      host.title = mm.moon === moon ? "The map Cassini made: each place shows the sharpest picture Cassini had taken of it by now." : html ? `The share of ${titleCase(moon)}'s surface Cassini's cameras have photographed in sunlight by now: at all (${index.moons[moon].tier_km[0].toFixed(0)} km per pixel or better), and in detail (${index.moons[moon].tier_km[index.tiers - 1].toFixed(1)} km per pixel or better, the scale of the surface map).` : "";
     }
   }
 
@@ -19670,7 +19817,8 @@ window.huygensModels = (() => {
   window.studyHud = ms => { if (prevHud) prevHud(ms); status(); };
   window.studyTimeline = (g, w, h, xn) => { if (prevTl) prevTl(g, w, h, xn); ticks(g, w, h); };
   need();
-  window.cassiniCoverage = { index: () => index, need, seen, pick, show, close: closePlace, place: () => place, ready: moon => !!(cov[moon] && cov[moon].tex), patched: moon => !!(cov[moon] && cov[moon].patched) };
+  window.cassiniCoverage = { index: () => index, need, seen, pick, show, close: closePlace, place: () => place, ready: moon => !!(cov[moon] && cov[moon].tex), patched: moon => !!(cov[moon] && cov[moon].patched),
+    made: () => ({ moon: mm.moon, painted: mm.painted.size, failed: mm.failed.size, waiting: mm.queue.length + mm.loading, rows: mm.moon && mm.table[mm.moon].rows ? mm.table[mm.moon].rows.id.length : 0 }) };
 })();
 </script>
 <script>
