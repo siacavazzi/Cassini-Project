@@ -12,7 +12,8 @@
 - a small body's frame lit all over by stray light (no dark sky) takes its own black from everything off the disk
   (tile_scale's disk), so the veil goes (Pallene 139PL, Hati 182OT, Kiviuq 112OT); a frame with dark sky, a plume
   movie's Enceladus (64 px) and a pass without a small body keep the rule they had; Earth from Saturn is one (fix
-  plan PR 10: 195RI's stray-light veil drew gray, yellow and cyan frames with line bands)
+  plan PR 10: 195RI's stray-light veil drew gray, yellow and cyan frames with line bands); a moon of Saturn under a
+  pixel is not (Daphnis 115RI: its A ring went under the veil's black)
 Run: python web/test_movie_strobe.py"""
 import json, os, sys, tempfile  # noqa: E401
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
@@ -191,7 +192,7 @@ spk = (0.0, 0.0, 0.7)
 iof = (2e-4 * (1 + 0.5 * np.linspace(0, 1, 1024)[None, :]) + rng.normal(0, 4e-6, (1024, 1024))).astype(np.float32)
 iof[:, :200] = rng.normal(0, 2e-6, (1024, 200))           # the dark corner (a fifth of the frame)
 iof[509:514, 509:514] = 0.02                               # Earth
-got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk)["black_of"](iof)
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk, speck=True)["black_of"](iof)
 q = iof[::4, ::4]
 assert got is not None and np.mean(q[~om._disk_mask(q.shape, iof.shape, *spk)] > got["black"]) < 0.06, got
 assert got["black"] < 0.02                                 # Earth over it
@@ -201,11 +202,22 @@ band = (2e-4 + rng.normal(0, 2e-6, (1024, 1024))).astype(np.float32)
 rows = rng.choice(1024, 100, replace=False)
 band[rows] *= 1.05
 band[509:514, 509:514] = 0.02
-got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk)["black_of"](band)
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=spk, speck=True)["black_of"](band)
 lines = band[rows]
 assert got is not None and np.mean(lines > got["black"]) < 0.02, (got, np.mean(lines > got["black"]))
 assert got["black"] < 0.02                                 # Earth over it
-print("small body: the stray-light veil under black, the moon over it")
+# a moon of Saturn under a pixel (Daphnis 0.6 px, 115RI MNRNGSHAD004_PRIME N1627449306_1) is not a speck from beyond
+# Saturn's system: its frame is the A ring, lit all over by real light, beside the dark sky past the ring's edge. The
+# ring stays over black (with the speck's veil black, the whole ring went under it and the movie frame was black)
+ring = (2e-3 * (1 + 0.2 * np.sin(np.linspace(0, 40, 1024)))[None, :] + rng.normal(0, 4e-6, (1024, 1024))).astype(np.float32)
+ring[:, :400] = (8e-5 + rng.normal(0, 1e-6, (1024, 400))).astype(np.float32)   # the sky past the ring's edge
+moon = (0.0, 0.0, 0.6)
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=moon)["black_of"](ring)
+assert got is None or np.mean(ring[:, 400:] > got["black"]) > 0.99, got
+# (as Earth is: the same frame with speck=True takes the veil's black, over the ring)
+got = om.tile_scale({**pal, "blacks": {"CL1/CL2": 0.0}, "sky_tops": {"CL1/CL2": 1e-6}}, "CL1/CL2", True, disk=moon, speck=True)["black_of"](ring)
+assert got is not None and np.mean(ring[:, 400:] > got["black"]) < 0.1, got
+print("small body: the stray-light veil under black, the moon over it; a moon under a pixel keeps its rings")
 
 # ---- a mosaic leaves out a tile saturated all over; a movie keeps it (and holds it, unfit)
 cache = tempfile.mkdtemp()

@@ -81,9 +81,22 @@ u6, tiles6 = make("SATURN", [("BL1", 0.0, 0.0), ("GRN", 0.0, 60.0), ("RED", 0.0,
                              ("BL1", 964.0, 900.0), ("GRN", 964.0, 960.0), ("RED", 964.0, 1020.0)])
 assert not om.mixes(u6, {}, tiles6, COLOUR)
 
-# a moon (its surface redrawn as at one epoch) never mixes, nor does a mosaic movie's picture
+# a moon's tiles mix only where surface reprojection decided to keep them as taken ("as_taken", SURFACE_TAKEN: the
+# redrawing would distort them, Phoebe's closest pass); redrawn tiles, or tiles it could not redraw for want of
+# kernels, are drawn as at the pass's one moment and never mix; nor does a mosaic movie's picture
 u4, tiles4 = make("RHEA", old + [("RED", 512.0, 3600.0), ("GRN", 512.0, 3660.0)])
 assert not om.mixes(u4, {}, tiles4, COLOUR)
+assert om.mixes(u4, {}, [dict(t, as_taken=True) for t in tiles4], COLOUR)
+assert not om.mixes(u, {}, [dict(t, base=False) for t in tiles], COLOUR)
+# the drawn mask too: tiles of two visits, none kept as taken, all at one moment, so set_mask finds nothing
+times = [np.full((8, 8), om.drawn_time(u4, t)) for t in tiles4[:3]]
+assert om.set_mask(times, 1.0) is None
+times = [np.full((8, 8), om.drawn_time(u4, dict(t, as_taken=True))) for t in (tiles4[0], tiles4[1], tiles4[-1])]
+assert len({float(a[0, 0]) for a in times}) > 1
+# with the surface step off (Settings > Processing) a moon mosaics as it always did: no mix
+import calibration  # noqa: E402
+with calibration.stepping("surface"):
+    assert not om.mixes(u4, {}, [dict(t, as_taken=True) for t in tiles4], COLOUR)
 assert not om.mixes(u, {}, [dict(t, base=False) for t in tiles], COLOUR)
 
 # unmixed leaves the colour out where it mixes and gray lies under it; over_grey then draws the gray there

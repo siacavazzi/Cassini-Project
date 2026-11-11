@@ -14,6 +14,9 @@ edge against the dark (the limb, a ring's edge) and lines the pointings up acros
 - A pass of a moon still takes #169's detail registration (test_panel_register.py), and its files and names.
 Run: python web/test_edge_register.py"""
 import os, sys, json, tempfile
+# the one-pointing-at-a-time edge rule this test is about (global_places, the default, solves the same edge matches
+# together: test_global_scene.py)
+os.environ["CASSINI_GLOBAL_PANELS"] = "0"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import numpy as np
