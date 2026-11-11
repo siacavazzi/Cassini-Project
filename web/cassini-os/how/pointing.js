@@ -110,6 +110,20 @@
 
     // camera axis, faint
     line([0, 0, 0], [0, 0, D * 1.25], DIM, 1, [3, 5]);
+    // the body, a shaded sphere (lit from the left), behind the lines that pass in front of it
+    const b = proj([n.bx, n.by, D], v);
+    const rr = Math.max(4, n.rWorld * b[2]);
+    ctx.save();
+    const g = ctx.createRadialGradient(b[0] - rr * 0.4, b[1] - rr * 0.35, rr * 0.1, b[0], b[1], rr);
+    g.addColorStop(0, state.preset === "jupiter" ? "#e9dcc4" : "#dcdcdc");
+    g.addColorStop(0.75, state.preset === "jupiter" ? "#8f7a5f" : "#6c6c6c");
+    g.addColorStop(1, "#1d1d1d");
+    ctx.fillStyle = g;
+    ctx.globalAlpha = n.rWorld > T * D * 0.8 ? 0.55 : 0.92;   // a body bigger than the frame lets the rays show through
+    ctx.beginPath();
+    ctx.arc(b[0], b[1], rr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     // 2: the plane facing the camera at the body's distance (drawn a little wider than the footprint)
     if (s >= 2) {
       const k = 1.4, pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => proj([a * T * D * k, b * T * D * k, D], v));
@@ -122,7 +136,7 @@
       ctx.fill();
       ctx.stroke();
       ctx.restore();
-      label([T * D * k, -T * D * k, D], v, "plane at the body's distance", "rgba(138,182,255,.75)", 6, 14);
+      label([-T * D * k, -T * D * k, D], v, "plane at the body's distance", "rgba(138,182,255,.75)", 0, 18, "center");
     }
     // 3: the four corner rays and the footprint they cut out of the plane
     if (s >= 3) {
@@ -142,20 +156,6 @@
       const names = ["(0, 1023)", "(1023, 1023)", "(1023, 0)", "(0, 0)"];
       corners.forEach((c, i) => label(c, v, names[i], ACC, c[0] < 0 ? -6 : 6, c[1] < 0 ? 16 : -6, c[0] < 0 ? "right" : "left"));
     }
-    // the body, a shaded sphere (lit from the left), behind the lines that pass in front of it
-    const b = proj([n.bx, n.by, D], v);
-    const rr = Math.max(4, n.rWorld * b[2]);
-    ctx.save();
-    const g = ctx.createRadialGradient(b[0] - rr * 0.4, b[1] - rr * 0.35, rr * 0.1, b[0], b[1], rr);
-    g.addColorStop(0, state.preset === "jupiter" ? "#e9dcc4" : "#dcdcdc");
-    g.addColorStop(0.75, state.preset === "jupiter" ? "#8f7a5f" : "#6c6c6c");
-    g.addColorStop(1, "#1d1d1d");
-    ctx.fillStyle = g;
-    ctx.globalAlpha = s >= 2 ? 0.92 : 1;
-    ctx.beginPath();
-    ctx.arc(b[0], b[1], rr, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
     // 1: the ray from Cassini to the body, with its length
     line([0, 0, 0], [n.bx, n.by, D], WARM, 2.2);
     ctx.save();
