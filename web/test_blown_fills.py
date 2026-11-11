@@ -47,3 +47,15 @@ moved = [dict(t, offset=[t["offset"][0] + 6, t["offset"][1] + 4], spice_place=t[
 got = om.blown_fills(moved + [om._silhouette(t) for t in middle], DRAWN)
 assert got[102]["offset"] == [8, -127] and got[102]["spice_place"] == [2, -131], got
 print("the fill moves with the registered tiles round it; ok")
+
+# an over-exposed tile alone at the mosaic's edge (260RI's RED frame, 80% saturated, 470 px past the rest) is left out,
+# its place kept; one inside the mosaic, or with another filter at its place, stays
+lone = tile(120, -1850, -130, "RED", saturated=0.80, lit=1.0)
+out = om.lone_blown(grid + [lone])
+assert "offset" not in out[-1] and "blown" in out[-1] and "left out" in out[-1]["why"], out[-1]
+inside = tile(121, 0, -130, "RED", saturated=0.80, lit=1.0)
+assert om.lone_blown(grid + [inside])[-1] is inside
+paired = [lone, tile(122, -1850, -120, "BL1")]
+assert om.lone_blown(grid + paired)[-2] is lone
+assert om.lone_blown(grid + [tile(123, -1850, -130, "RED", saturated=0.2, lit=1.0)])[-1]["offset"] == [-1850, -130]
+print("an over-exposed tile alone at the mosaic's edge is left out; ok")
