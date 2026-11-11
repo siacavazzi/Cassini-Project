@@ -7,6 +7,7 @@ Screenshots of `web/cassini-os/how/` (headless Chromium, 1280 px wide).
 - `pointing_steps.gif`: the pointing diagram's five steps with the Rhea preset (16 Jan 2005, real numbers from the geometry cache).
 - `pointing_jupiter.jpg`: the Jupiter preset, its center off the sensor.
 - `pointing_step5.jpg`: step 5, the shortcut the code takes (`bootleg_autonav.project`).
+- `mosaic_movie.gif`: the mosaic section scrubbed through both laps of the Jupiter portrait (18 steps).
 
 Every picture on the page was fetched from a frame server at this branch by `web/cassini-os/how/make_images.py`
 (archive PNGs, `/frames/processed` with and without one `off=` step, `/frames/color.webp` with `off=align`,

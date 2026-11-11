@@ -355,16 +355,20 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
     </div>
   </section>
 
-  <!-- 8 · mosaics -->
+  <!-- 8 · mosaics (and mosaic movies) -->
   <section id="mosaic">
-    <h2><span class="n">08</span>Mosaics, tile by tile</h2>
+    <h2><span class="n">08</span>Mosaics, tile by tile, and mosaic movies</h2>
     <div class="cols">
       <div class="frame" style="background:#000"><img id="mos-img" alt="Jupiter's color mosaic as it grows" width="900" height="900"></div>
       <div>
         <p>When the body is bigger than the camera's view, Cassini took a grid of pointings. Each pointing becomes a color picture as above. SPICE says where each one goes, the tiles are nudged so their overlaps agree, their brightness is evened out along the seams, and they are blended together.</p>
-        <input id="mos-n" type="range" min="1" max="9" step="1" value="9" aria-label="Pointings added">
-        <p class="mono small" id="mos-count">9 of 9 pointings</p>
-        <p class="small">Jupiter, 29 December 2000. The nine pointings of the portrait's first lap, CB2 / GRN / BL1 in each.</p>
+        <p>Jupiter's portrait didn't stop at one grid: Cassini went round the same 3 × 3 grid again an hour later, so it is a <b style="color:#fff;font-weight:normal">mosaic movie</b>. Each new tile replaces the same spot from the lap before. Play it and watch the Great Red Spot ride Jupiter's ten-hour day; halfway through a lap, old and new tiles sit side by side, so a storm can show up twice.</p>
+        <div class="scrub" style="margin-top:14px">
+          <button id="mos-play">Play</button>
+          <input id="mos-n" type="range" min="1" max="18" step="1" value="9" aria-label="Pointings added">
+        </div>
+        <p class="mono small" id="mos-count"></p>
+        <p class="small">Jupiter, 29 December 2000, 04:18 to 06:32 UTC: two laps of the portrait, CB2 / GRN / BL1 in each pointing (the last pointing of lap 2 has no CB2 frame, so that tile stays from lap 1).</p>
       </div>
     </div>
   </section>

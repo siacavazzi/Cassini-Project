@@ -44,6 +44,195 @@
   "north": -75.29,
   "sample": 1297.4
  },
+ "jup-10-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 30,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-11-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 33,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-12-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 36,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-13-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 39,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-14-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 42,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-15-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 45,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-16-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 48,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-17-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 51,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
+ "jup-18-mosaic": {
+  "behind": 0,
+  "filter_names": [
+   "CB2",
+   "GRN",
+   "BL1"
+  ],
+  "filters": 3,
+  "fixed": true,
+  "height": 1024,
+  "kind": "mosaic_movie",
+  "lap": 2,
+  "laps": 2,
+  "luminance": true,
+  "mosaic": 53,
+  "observation": "ISS_C23JU_PORTRAIT_PRIME",
+  "of": 54,
+  "pass": 0,
+  "places": 9,
+  "width": 1024
+ },
  "jup-2-color": {
   "aligned": [
    "phase -2.4,-9.7",

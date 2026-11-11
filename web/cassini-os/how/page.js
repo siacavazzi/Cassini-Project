@@ -156,8 +156,25 @@
 
   // ---- mosaic scrubber ------------------------------------------------------------------------------------------
   function mosaic() {
-    const set = (n) => { $("#mos-img").src = `img/jup-${n}-mosaic.jpg`; $("#mos-count").textContent = `${n} of 9 pointings`; };
-    $("#mos-n").addEventListener("input", (e) => set(+e.target.value));
+    // pictures 1-9: the first lap, 10-18: the second, each tile replacing its spot from the lap before
+    const LAP_START = ["04:18", "05:32"];
+    let timer = null;
+    const set = (n) => {
+      $("#mos-img").src = `img/jup-${n}-mosaic.jpg`;
+      $("#mos-n").value = n;
+      const lap = n <= 9 ? 1 : 2, k = n <= 9 ? n : n - 9;
+      $("#mos-count").textContent = `lap ${lap} (from ${LAP_START[lap - 1]} UTC) · pointing ${k} of 9`;
+    };
+    for (let n = 1; n <= 18; n++) new Image().src = `img/jup-${n}-mosaic.jpg`;
+    const stop = () => { clearInterval(timer); timer = null; $("#mos-play").textContent = "Play"; $("#mos-play").setAttribute("aria-pressed", false); };
+    $("#mos-n").addEventListener("input", (e) => { stop(); set(+e.target.value); });
+    $("#mos-play").addEventListener("click", () => {
+      if (timer) return stop();
+      if (+$("#mos-n").value >= 18) set(1);
+      $("#mos-play").textContent = "Pause";
+      $("#mos-play").setAttribute("aria-pressed", true);
+      timer = setInterval(() => { const n = +$("#mos-n").value; if (n >= 18) return stop(); set(n + 1); }, 650);
+    });
     set(9);
   }
 

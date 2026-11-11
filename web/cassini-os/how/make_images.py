@@ -38,6 +38,10 @@ JUPITER = [
     {"BL1": "N1356758529_1", "GRN": "N1356758583_1", "CB2": "N1356758648_1"},
     {"BL1": "N1356758979_1", "GRN": "N1356759033_1", "CB2": "N1356759098_1"},
 ]
+# the portrait's second lap, an hour later (the pass is a mosaic movie: the same 3 x 3 grid taken again), the last
+# pointing without its CB2 frame; the mosaic as each pointing's last frame arrives
+JUPITER_LAP2 = ["N1356759918_1", "N1356760378_1", "N1356760798_1", "N1356761248_1", "N1356761698_2", "N1356762148_1",
+                "N1356762598_1", "N1356763048_1", "N1356763433_1"]
 # one step turned off, each on a frame where it shows (name, frame or color set, the step, what to say)
 STEPS = [
     ("fill", "N1525449680_5", "fill"),          # Dione, 4 May 2006: 66 lines lost in downlink, in bands
@@ -116,6 +120,12 @@ def main():
             facts[f"jup-{n}-mosaic"] = report(h, "X-Reel")
             save(d, f"jup-{n}-mosaic", 900)
         save(fetch(base, f"/frames/{JUPITER[0]['GRN']}.png")[0], "point-jupiter", 512, gray=True)
+
+    if want("lap2"):
+        for n, i in enumerate(JUPITER_LAP2, 10):
+            d, h = fetch(base, f"/frames/mosaic/{i}.webp?size=1024")
+            facts[f"jup-{n}-mosaic"] = report(h, "X-Reel")
+            save(d, f"jup-{n}-mosaic", 900)
 
     if want("steps"):
         # the frame through the whole pipeline (/frames/processed: stacked, filled, calibrated, north up) with one
