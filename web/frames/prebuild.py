@@ -398,12 +398,14 @@ def make_tables(u, cache, movie):
 def make_fullview(u, cache):
     """The full view of mosaic pass u (decision D3): its mosaic at its last frame at size=full, as the mosaic route
     makes it for ?size=full (obs_mosaic.mosaic_webp, out CANVAS up to FULL_MAX), after the pass's plan and tiles
-    (made by the mosaics phase; found here). 1."""
+    (made by the mosaics phase; found here). 1, or 0 for a pass with nothing drawn at its last frame (the route answers
+    404 for it as for any size: obs_mosaic.blank, a ring scan whose tiles hold nothing above black)."""
     made = obs_mosaic.mosaic_webp(u["frames"][-1][1], frame_server.FULL, cache, None, fmt="webp",
                                   out=min(obs_mosaic.CANVAS, frame_server.FULL_MAX), force=False,
                                   tune=obs_mosaic.parse_tune("", ""))
     if not made:
-        raise ValueError("no mosaic at the pass's last frame")
+        print(f"fullview {u['frames'][-1][1]}: no mosaic at the pass's last frame (the route's 404)", flush=True)
+        return 0
     if made[1].get("behind"):
         raise ValueError(f"mosaic {made[1]['behind']} frames behind its last frame: run the mosaics phase first")
     return 1
