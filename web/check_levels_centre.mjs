@@ -4,11 +4,11 @@
 // the frame server for the same pictures. Prints "match" or "differ" for each.
 //
 //   node web/check_levels_centre.mjs http://127.0.0.1:8765 [--from 2005-04-16T15:00:00 --until 2005-04-16T23:00:00]
-//     [--pictures color] [--chrome]
+//     [--pictures color] [--chrome] [--python ~/venv/bin/python]
 //
 // For a picture that differs, the picture the page used is measured again by the server's own Python
-// (export.brightness on export.Pictures._on_black of the served WebP; PYTHON, default python3, with the server's
-// environment): "the page measured the served picture right" means the server's /export/levels.json measured some
+// (export.brightness on export.Pictures._on_black of the served WebP; --python PATH or PYTHON, default python3: the
+// frame server's interpreter, with numpy and Pillow): "the page measured the served picture right" means the server's /export/levels.json measured some
 // other picture (a server-side defect, cold-levels-finding.md), not the page port.
 //
 // Exit 0: both films the same; 2: the only differences are SERVER-SIDE ones; 1: the page port differs.
@@ -97,7 +97,7 @@ import export; from PIL import Image
 im = Image.open(io.BytesIO(urllib.request.urlopen(sys.argv[2]).read())); lv = export.brightness(export.Pictures(None)._on_black(im, 512))
 print("null" if lv is None else round(round(lv, 5) / math.log(2), 4))`;
       try {
-        const v = execFileSync(process.env.PYTHON || "python3", ["-c", py, HERE, server + used.slice(4).replace(/&amp;/g, "&")], { encoding: "utf8" }).trim();
+        const v = execFileSync(arg("--python", process.env.PYTHON || "python3"), ["-c", py, HERE, server + used.slice(4).replace(/&amp;/g, "&")], { encoding: "utf8" }).trim();
         const served = v === "null" ? null : +v;
         const right = served === got.level[id];
         explained += right;
