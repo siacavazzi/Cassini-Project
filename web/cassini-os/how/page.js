@@ -110,7 +110,7 @@
 
   // ---- one pipeline step off, on its own example --------------------------------------------------------------
   const STEPS = [
-    { key: "fill", a: "raw", al: "raw", name: "Whole pipeline", note: "Dione, 4 May 2006: the archive's frame next to the same frame through the pipeline: lost lines filled, calibrated and turned north up." },
+    { key: "fill", a: "raw", al: "raw", name: "Whole pipeline", note: "Dione, 4 May 2006: the PNG copy next to the same frame through the pipeline: lost lines filled, calibrated and turned north up." },
     { key: "fill", a: "off", al: "fill off", name: "Fill lost lines", note: "The same frame through the pipeline with only the fill turned off: the lines lost in transmission stay as gaps. On, they are filled from the lines above and below." },
     { key: "twohz", a: "off", al: "2 Hz off", name: "2 Hz banding", note: "Iapetus, 7 October 2004, a faint frame. The camera's electronics picked up a 2 Hz hum that shows as horizontal bands; it is measured line by line, from the frame's own dark sky where there is enough of it, and taken out." },
   ];

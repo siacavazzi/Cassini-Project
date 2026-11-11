@@ -216,11 +216,11 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
   <section id="raw">
     <h2><span class="n">02</span>What a raw frame looks like</h2>
     <div class="cols">
-      <figure class="frame"><img src="img/step-fill-raw.jpg" alt="A raw archive frame of Dione with black bands where lines were lost" width="640" height="640"><figcaption style="padding:0 10px 8px">Dione, 4 May 2006, N1525449680 · as it is in the archive</figcaption></figure>
+      <figure class="frame"><img src="img/step-fill-raw.jpg" alt="The PNG copy of a Dione frame with black bands where lines were lost" width="640" height="640"><figcaption style="padding:0 10px 8px">Dione, 4 May 2006, N1525449680 · the PNG copy the pipeline starts from</figcaption></figure>
       <div>
-        <p>This is a frame exactly as the archive has it. A few things to notice:</p>
+        <p>This is a frame as the pipeline starts from it: an 8-bit PNG copy made from NASA's archive. A few things to notice:</p>
         <p><b style="color:#fff;font-weight:normal">It is gray.</b> One filter, one brightness per pixel.</p>
-        <p><b style="color:#fff;font-weight:normal">Its brightness is relative.</b> The archive's copy is stretched so its darkest pixel is black and its brightest is white, which throws away how bright things really were. Put three such frames together as red, green and blue and the colors come out wrong.</p>
+        <p><b style="color:#fff;font-weight:normal">Its brightness is relative.</b> The PNG copy is stretched so its darkest pixel is black and its brightest is white, which hides how bright things really were (NASA's archive itself keeps the camera's own numbers). Put three such frames together as red, green and blue and the colors come out wrong, so the pipeline undoes the stretch, from the frame's label, before it calibrates.</p>
         <p><b style="color:#fff;font-weight:normal">Parts are missing.</b> The black bands are lines lost on the way to Earth. The streaks and specks are cosmic rays and stars.</p>
         <p><b style="color:#fff;font-weight:normal">It is not where you'd expect.</b> The camera's "up" is wherever the spacecraft happened to be turned, not north.</p>
       </div>
@@ -234,7 +234,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
       <div>
         <p>Each frame goes through the camera team's own calibration recipe (CISSCAL), using their calibration files. It turns the numbers the camera recorded back into what the scene really looked like: how much sunlight each spot reflects, called <span class="mono">I/F</span>.</p>
         <ol class="small" style="padding-left:18px;line-height:1.75">
-          <li>undo the archive's stretch and the camera's 12-to-8-bit compression table</li>
+          <li>undo the PNG copy's stretch and the camera's 12-to-8-bit compression table</li>
           <li>subtract the electronic offset (bias) and the 2 Hz hum that makes faint horizontal bands</li>
           <li>subtract the dark current, the signal the sensor makes with no light at all, and fix hot pixels</li>
           <li>correct the sensor's slight nonlinearity</li>
@@ -349,7 +349,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
         <h3>Natural color</h3>
         <p>Cassini's filters aren't the same as the eye's red, green and blue. A small color matrix, fitted to how each filter responds, turns them into the colors a person would have seen. "Filters straight" puts each filter directly into one color channel instead.</p>
         <h3>Calibrated or not</h3>
-        <p>Without calibration, each filter keeps the archive's own stretch, so each channel is as bright as it can be no matter what the camera saw, and the colors are off.</p>
+        <p>Without calibration, each filter keeps its PNG copy's own stretch, so each channel is as bright as it can be no matter what the camera saw, and the colors are off.</p>
         <p class="small" id="color-note"></p>
       </div>
     </div>
@@ -376,7 +376,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
   <section id="never">
     <h2><span class="n">09</span>What we never do</h2>
     <div class="never">
-      <div class="panel"><b>Nothing painted in</b><span class="small">Every pixel comes from a frame in the archive. Gaps nobody photographed stay black.</span></div>
+      <div class="panel"><b>Nothing invented</b><span class="small">Every pixel comes from a frame in the archive. Short runs of lines lost in transmission are filled from the lines next to them; bigger gaps that no frame covers stay black.</span></div>
       <div class="panel"><b>No sharpening, no AI</b><span class="small">No detail is invented or exaggerated; the pictures are as sharp as the camera was.</span></div>
       <div class="panel"><b>Placed by the record</b><span class="small">Where a picture goes comes from SPICE and the picture itself, not by hand.</span></div>
     </div>
