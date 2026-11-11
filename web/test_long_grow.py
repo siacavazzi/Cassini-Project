@@ -31,3 +31,11 @@ print("a filter mosaic holding a long exposure taken again is composed whole, no
 
 assert not om.grows([dict(t, fill=True) if t["n"] == 3 else t for t in many])
 print("nor one with a fill (as before); ok")
+
+# the full-size (native) mosaic's seam corrections solve the same tiles together as the screen's mosaic
+import mosaic_native as mn  # noqa: E402
+assert mn.solved_first(many, False) == many[:om.GROW_FROM]
+assert mn.solved_first(marked, False) == marked
+assert mn.solved_first(few, False) == few and mn.solved_first(many, True) == many
+assert mn.solved_first([dict(t, fill=True) if t["n"] == 3 else t for t in many], False)[-1]["n"] == many[-1]["n"]
+print("the native mosaic's corrections solve a filter holding a long repeat whole, as the screen does; ok")
