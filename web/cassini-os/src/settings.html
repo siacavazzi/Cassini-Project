@@ -83,6 +83,34 @@ body.phone .srow input[type=range] { width: 96px; }
 (function () {
   const $ = id => document.getElementById(id);
   const KEY = "cassini-os-settings-v1";
+  // ---------- the public switch (docs/public-site, WP6): build.py --public --frames URL writes the two values below ----------
+  // window.cassiniPublic: this page is the public site, where every picture comes from Cloudflare R2 through the
+  // Worker and only what web/public/policy.json allows is there to ask for. Settings then hides what only the frame
+  // server can make and forces what the public site always does (PUBLIC, policy.json page_settings); every other part
+  // of the page reads the switch as false when it is absent.
+  // window.cassiniFrames: where pictures, version.json, slices.json and the usage counts go: ?frames= first, then the
+  // frames host build.py wrote (the Worker), then the page's own origin (a frame server serving the page), then the
+  // frame server on this computer, as every camera window has always chosen it.
+  window.cassiniPublic = /*PUBLIC*/false;
+  window.cassiniFrames = (() => {
+    const q = new URLSearchParams(location.search).get("frames"), host = /*FRAMES_HOST*/"";
+    if (q) return q.replace(/\/$/, "");
+    if (host) return host.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  // hidden: not listed and held at its value (forced, else its default), whatever this browser saved, and set() leaves
+  // it be; options: values a choice does not offer. These carry out policy.json page_settings (the flag settings and
+  // a forced setting are hidden too); web/test_public_switch.cjs checks them line by line against it.
+  const PUBLIC = {
+    hidden: [/^processing\./, "cameras.balancedColor", "cameras.autoCenter", "cameras.hdr", "cameras.hdrGlow", "movies.laps",
+             "movies.stabilizeLocal", /^interface\.flag/],
+    forced: { "cameras.autoCenter": true, "cameras.hdr": "off", "movies.stabilizeLocal": true, "movies.laps": 1 },
+    options: { "cameras.colors": ["raw", "false"], "cameras.passes": ["mosaic"] }
+  };
+  const isPublic = window.cassiniPublic === true;
+  const publicHidden = key => isPublic && PUBLIC.hidden.some(h => typeof h === "string" ? h === key : h.test(key));
+  if (isPublic) document.documentElement.classList.add("public");
   const SECTIONS = ["Interface", "Cameras", "Processing", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
   const NOTES = {
     Cameras: "These settings choose what the camera windows show and how long. How each picture is made is under Processing.",
@@ -108,6 +136,12 @@ body.phone .srow input[type=range] { width: 96px; }
   const S = window.cassiniSettings = {
     define(d) {
       d = Object.assign({ section: "Interface", hint: "" }, d);
+      if (isPublic && PUBLIC.options[d.key]) d.options = d.options.filter(o => !PUBLIC.options[d.key].includes(o[0]));
+      if (publicHidden(d.key)) {
+        d.hidden = true;
+        if (d.key in PUBLIC.forced) d.value = PUBLIC.forced[d.key];
+        if (d.type !== "action") values[d.key] = d.value;
+      }
       defs.set(d.key, d);
       if (d.type !== "action" && !(d.key in values)) {
         const v = saved[d.key], atDefault = d.key in savedDefaults ? [savedDefaults[d.key]] : d.was || [];
@@ -120,7 +154,7 @@ body.phone .srow input[type=range] { width: 96px; }
     get: key => values[key],
     set(key, v) {
       const d = defs.get(key);
-      if (!d || !valid(d, v) || values[key] === v) return;
+      if (!d || d.hidden || !valid(d, v) || values[key] === v) return;
       values[key] = v; store();
       (subs.get(key) || []).forEach(fn => fn(v));
       if (!card.hidden) sync(key);
@@ -147,11 +181,12 @@ body.phone .srow input[type=range] { width: 96px; }
     return d.stops ? d.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a) : Math.round(v);
   };
   function render() {
-    const used = SECTIONS.filter(s => S.defined.some(d => d.section === s));
+    const shown = S.defined.filter(d => !d.hidden);
+    const used = SECTIONS.filter(s => shown.some(d => d.section === s));
     if (!used.includes(section)) section = used[0];
     nav.innerHTML = used.map(s => `<button role="tab" aria-selected="${s === section}" data-s="${s}">${s}</button>`).join("");
     pane.innerHTML = `<h3>${section}</h3>` + (NOTES[section] ? `<p class="note">${NOTES[section]}</p>` : "");
-    for (const d of S.defined.filter(d => d.section === section)) {
+    for (const d of shown.filter(d => d.section === section)) {
       const row = document.createElement("div"), id = "s-" + d.key.replace(/\W/g, "-");
       row.className = "srow"; row.dataset.key = d.key;
       const tag = d.reload ? '<span class="tag">after reload</span>' : "";

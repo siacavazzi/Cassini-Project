@@ -48,6 +48,7 @@ import base64
 import csv
 import datetime
 import json
+import math
 import os
 import re
 import shutil
@@ -70,6 +71,14 @@ SMALL_MOONS = {"ANTHE": 0.5, "AEGAEON": 0.33, "HIMALIA": 75, "YMIR": 9, "PAALIAQ
 # other spellings of the same moon in the image catalog, folded into one name
 TARGET_ALIASES = {"ERRIAPO": "ERRIAPUS", "SUTTUNG": "SUTTUNGR", "THRYM": "THRYMR", "SKADI": "SKATHI"}
 CATALOG_KEYS = ["id", "et", "cam", "f1", "f2", "target", "obs", "range_km", "km_per_px"]
+# what the page needs to list a stretch's frames exactly as the frame server's index does (reel.load_index:
+# Image_index.csv in order of seconds_1970), for the film plan worked out in the page (plan-local.js), added after the
+# keys above: "ut", each row's index second as UT_BASE + ut + floor(et) (et as the catalog rounds it; ut 0 to 6 over the
+# mission), "tr", its place among the index's frames of that same second (0 for the first: 9,230 frames share a second
+# and the catalog's et orders some of them otherwise), and "raw_target", {id: the index's TARGET_NAME} only where
+# TARGET_ALIASES renamed it (the index has both spellings)
+INDEX_KEYS = ["ut", "tr"]
+UT_BASE = 946727930
 MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv")
 # targets in the catalog that are not bodies (the sky, calibration stars, unknown), left out of the body views
 NOT_BODIES = {"SKY", "DARKSKY", "UNK", "NONE", "SPICA", "FOMALHAUT"}
@@ -144,9 +153,43 @@ def slim_catalog(data, year, groups=None):
         cat = json.load(open(path))
         slim = {k: cat[k] for k in CATALOG_KEYS}
         slim["et"] = [round(t, 1) for t in slim["et"]]
+        raw = {i: t for i, t in zip(slim["id"], slim["target"]) if t in TARGET_ALIASES}
         slim["target"] = [TARGET_ALIASES.get(t, t) for t in slim["target"]]
+        index_columns(slim, raw)
     if groups:
         add_groups(slim, groups)
+    return slim
+
+
+_index_times = None
+
+
+def index_columns(slim, raw):
+    """Adds INDEX_KEYS and raw_target (raw: {id: TARGET_NAME} where it was renamed) to a slim catalog, from the repo's
+    Image_index.csv as reel.load_index reads it; rows the index does not have get ut and tr None. Nothing when the
+    index is not there."""
+    global _index_times
+    if _index_times is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Image_index.csv")
+        if not os.path.exists(path):
+            _index_times = {}
+        else:
+            import pandas as pd
+            idx = pd.read_csv(path, usecols=["path", "seconds_1970"], low_memory=False)
+            idx = idx[idx["path"].notna()].sort_values("seconds_1970", kind="stable")
+            got, last, rank = {}, None, 0
+            for p, t in zip(idx["path"].tolist(), idx["seconds_1970"].tolist()):
+                rank = rank + 1 if t == last else 0
+                last = t
+                got[p.rsplit("/", 1)[-1].replace(".png", "")] = (int(t), rank)
+            _index_times = got
+    if not _index_times:
+        return slim
+    at = [_index_times.get(i) for i in slim["id"]]
+    slim["ut"] = [None if a is None else a[0] - UT_BASE - math.floor(e) for a, e in zip(at, slim["et"])]
+    slim["tr"] = [None if a is None else a[1] for a in at]
+    if raw:
+        slim["raw_target"] = raw
     return slim
 
 
@@ -600,7 +643,11 @@ def write_months(out, years, bodies, attitude, groups=None):
                 continue
             rows = np.flatnonzero((et >= t0) & (et < t1))
             key = f"{y}-{m:02d}"
-            part = {k: [cat[k][i] for i in rows] for k in CATALOG_KEYS}
+            part = {k: [cat[k][i] for i in rows] for k in CATALOG_KEYS + INDEX_KEYS if k in cat}
+            if cat.get("raw_target"):
+                raw = {cat["id"][i]: cat["raw_target"][cat["id"][i]] for i in rows if cat["id"][i] in cat["raw_target"]}
+                if raw:
+                    part["raw_target"] = raw
             if groups:
                 add_groups(part, groups)
             json.dump(part, open(os.path.join(out, "months", key + ".json"), "w"), separators=(",", ":"))

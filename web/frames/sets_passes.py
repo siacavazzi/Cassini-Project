@@ -208,21 +208,25 @@ def pass_table():
             if u.get("off"):   # (frames obs_mosaic._drop_strays took out of the pass are in none)
                 mine = mine[~np.isin(ids[mine], list(u["off"]))]
             pass_of[mine] = len(passes)
-            passes.append({"key": u["key"], "kind": u.get("kind"), "rows": [int(mine[0]), int(mine[-1])], "frames": len(mine)})
+            passes.append({"key": u["key"], "kind": u.get("kind"), "rows": [int(mine[0]), int(mine[-1])], "frames": len(mine),
+                           "tossup": bool(u.get("tossup"))})
     return pass_of, passes
 
 
 def groups():
     """{frame id: (set id, pass id)} for every frame of the index, and the tables the page reads with them:
     sets {set id: [kind, [channel frame ids]]} and passes {pass id: [kind or "", observation, pass number in it,
-    last frame id, frames]}. Set ids are reel.load_index's set numbers, pass ids pass_table's."""
+    last frame id, frames, tossup (1 when obs_mosaic calls the pass a toss-up between a movie and a mosaic, else 0:
+    the film plan's Mosaics Off reads it, export._tossup)]}. Set ids are reel.load_index's set numbers, pass ids
+    pass_table's."""
     import reel
     idx, sets = reel.load_index()
     ids = idx["id"].tolist()
     pass_of, passes = pass_table()
     by_id = dict(zip(ids, zip(idx["set"].tolist(), pass_of.tolist())))
     set_table = {n: [s["kind"], [ids[q] for q in s["use"]]] for n, s in enumerate(sets)}
-    pass_table_ = {n: [p["kind"] or "", p["key"][1], p["key"][3], ids[p["rows"][1]], p["frames"]] for n, p in enumerate(passes)}
+    pass_table_ = {n: [p["kind"] or "", p["key"][1], p["key"][3], ids[p["rows"][1]], p["frames"], int(p["tossup"])]
+                   for n, p in enumerate(passes)}
     return by_id, set_table, pass_table_
 
 

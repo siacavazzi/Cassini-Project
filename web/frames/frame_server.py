@@ -495,6 +495,11 @@ def _frame_image(frame_id):
 _frame_bytes = collections.OrderedDict()
 
 
+def frame_path(frame_id, size, cache, fmt="webp"):
+    """Where webp() keeps the frame at size in the cache (read-only: resolve.py names the file with it)."""
+    return os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}")
+
+
 def webp(frame_id, size, cache, fmt="webp"):
     def make():
         im = _frame_image(frame_id)
@@ -512,7 +517,7 @@ def webp(frame_id, size, cache, fmt="webp"):
             while len(_frame_bytes) > FRAMES_KEEP:
                 _frame_bytes.popitem(last=False)
         return data
-    return cached(os.path.join(cache, FRAME_VERSION, size_dir(size, fmt), f"{frame_id}.{fmt}"), make)
+    return cached(frame_path(frame_id, size, cache, fmt), make)
 
 
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
@@ -769,6 +774,36 @@ def centre_folder(folder, centre):
     return f"{folder}-{CENTRE_VERSION}{obs_mosaic.HOLD_RULE if centre and centre.get('hold') else ''}-s{int(centre['side'])}" if centre else folder
 
 
+def centre_decision(query, frame_id):
+    """Auto center's decision for a picture route asked with query (the handler's centre_of): None for the picture as
+    it is (center=1 not asked, or no index of the frames), else the pass's view (obs_mosaic.centre_view), which is a
+    picture centred on it when obs_mosaic.view_shown(view), else Auto center's 404 with X-Center (not_centred).
+    Read-only: it makes no picture (resolve.py answers the same 404 from it)."""
+    if query.get("center", ["0"])[0] != "1" or reel._index is None:
+        return None
+    try:
+        return obs_mosaic.centre_view(frame_id)
+    except Exception as e:
+        return {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
+
+
+def not_centred_answer(view):
+    """(status, headers, body) of Auto center's 404 for view (the handler's not_centred sends these)."""
+    body = json.dumps(view).encode()
+    return 404, {"Content-Type": "application/json", "X-Center": json.dumps(view)}, body
+
+
+def rolling_out(frame_id, cache, full):
+    """The canvas a mosaic movie picture is drawn on: obs_mosaic.OUT, or at full size the biggest size the pass has
+    detail for (export.bucket of its native size), never the canvas enlarged past it."""
+    if not full:
+        return obs_mosaic.OUT
+    try:
+        return export.bucket(mosaic_native.native_side(frame_id, cache) or obs_mosaic.OUT, min(obs_mosaic.CANVAS, FULL_MAX))
+    except (FileNotFoundError, ValueError, KeyError):
+        return min(obs_mosaic.CANVAS, FULL_MAX)
+
+
 def color_folder(cache, centre):
     return centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
 
@@ -777,12 +812,19 @@ def processed_folder(cache, centre):
     return centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
 
 
+def color_base(ids, size, cache, fmt="webp", channel=None, centre=None):
+    """The composite's picture in the cache less its extension (.webp or .png beside its report, .json): color_webp's
+    name for it, read-only (resolve.py names the file with it)."""
+    folder = color_folder(cache, centre)
+    return os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
+
+
 def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image). centre: centred on the body (composite)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
-    folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
-    base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
+    folder = color_folder(cache, centre)
+    base = color_base(ids, size, cache, fmt, channel, centre)
     report = {}
     def make():
         with _color_slots:
@@ -814,11 +856,16 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     return data, report
 
 
+def processed_base(frame_id, size, cache, fmt="webp", centre=None):
+    """processed_webp's picture in the cache less its extension (its report is the .json beside it), read-only."""
+    return os.path.join(processed_folder(cache, centre), size_dir(size, fmt), frame_id)
+
+
 def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), frame_id)
+    base = processed_base(frame_id, size, cache, fmt, centre)
     report = {}
     def make():
         with _movie_slots:
@@ -922,10 +969,15 @@ def thumb_key(hint, size):
     return hashlib.sha1(what.encode()).hexdigest()[:20]
 
 
+def thumb_base(hint, size, cache):
+    """thumb_webp's picture in the cache less its extension (.webp, and .json for what it was made of), read-only."""
+    return os.path.join(cache, THUMB_VERSION, thumb_key(hint, size))
+
+
 def thumb_webp(hint, size, cache):
     """(WebP, what) of the thumbnail, made once and kept under THUMB_VERSION; FileNotFoundError when none of its
     pictures can be made"""
-    base = os.path.join(cache, THUMB_VERSION, thumb_key(hint, size))
+    base = thumb_base(hint, size, cache)
     what = {}
 
     def make():
@@ -1466,22 +1518,17 @@ def make_handler(site, cache, flags=None):
             None for the picture as it is. False for a sky pass that shows no body or a frame SPICE has no place
             for: the answer (404, X-Center says why) is sent, so the window shows the picture as it is (for the
             whole pass unless X-Center has "frame": true)."""
-            if query.get("center", ["0"])[0] != "1" or reel._index is None:
-                return None
-            try:
-                view = obs_mosaic.centre_view(frame_id)
-            except Exception as e:
-                view = {"centre": False, "why": f"{type(e).__name__}: {e}"[:200]}
-            if obs_mosaic.view_shown(view):
+            view = centre_decision(query, frame_id)
+            if view is None or obs_mosaic.view_shown(view):
                 return view
             self.not_centred(view)
             return False
 
         def not_centred(self, view):
-            body = json.dumps(view).encode()
-            self.send_response(404)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("X-Center", json.dumps(view))
+            status, headers, body = not_centred_answer(view)
+            self.send_response(status)
+            for key, value in headers.items():
+                self.send_header(key, value)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -1928,15 +1975,7 @@ def make_handler(site, cache, flags=None):
                         laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
                         fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
                         full = size_of(query, 512) == FULL
-                        # full: the biggest size the pass has detail for (export.bucket of its native size), never
-                        # the canvas enlarged past it
-                        out = obs_mosaic.OUT
-                        if full:
-                            try:
-                                out = export.bucket(mosaic_native.native_side(m.group(1), cache) or obs_mosaic.OUT,
-                                                    min(obs_mosaic.CANVAS, FULL_MAX))
-                            except (FileNotFoundError, ValueError, KeyError):
-                                out = min(obs_mosaic.CANVAS, FULL_MAX)
+                        out = rolling_out(m.group(1), cache, full)
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
                                                        out=out,
                                                        fade=fade, wait=query.get("whole", ["0"])[0] == "1")
@@ -2162,6 +2201,138 @@ def make_handler(site, cache, flags=None):
     return Handler
 
 
+def make_public_handler(site, cache):
+    """--public: the frame server as the public site's stand-in (docs/public-site/briefs/WP1.md). GET only; every
+    request goes first through the public keys (web/public/keys.py canonical()): a route the public site refuses, or
+    a parameter it does not offer, answers 404 and is counted; a picture route answers the cached file resolve.py
+    names for the canonical request (then its fallbacks, as the Worker tries them), Auto center's 404 where the
+    server decides it, or 404; a table route answers what the cache keeps (never {"working": true}); version.json
+    and slices.json as the normal server; /health "ok public"; anything else is the site's own files. Nothing is
+    ever made and no background work starts."""
+    sys.modules.setdefault("frame_server", sys.modules[__name__])
+    import resolve
+    sys.path.insert(0, os.path.join(REPO, "web", "public"))
+    import keys
+    with open(os.path.join(REPO, "web", "public", "headers.json")) as fh:
+        names = json.load(fh)["download_names"]
+    Base = make_handler(site, cache, None)
+    tally = collections.Counter()
+    tally_lock = threading.Lock()
+
+    def count(what):
+        with tally_lock:
+            tally[what] += 1
+            if sum(tally.values()) % 500 == 0:
+                print("public answers so far:", dict(tally), flush=True)
+
+    def query_of(params):
+        return {k: [v] for k, v in params.items()}
+
+    def path_query(key):
+        """(path, query) of a canonical key: {family}/{tag}/{path}~{query}"""
+        rest = key.split("/", 2)[2]
+        p, _, q = rest.partition("~")
+        return "/" + p, parse_qs(q)
+
+    class Public(Base):
+        def do_OPTIONS(self):
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Methods", "GET")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def do_POST(self):
+            self.started = time.monotonic()
+            self.revalidate = False
+            n = int(self.headers.get("Content-Length") or 0)
+            if 0 < n <= 64 * 1024:
+                self.rfile.read(n)
+            if urlparse(self.path).path == "/usage":
+                # the page's usage beacon: the Worker counts it and answers 204; nothing is read or kept here
+                count("usage")
+                self.send_response(204)
+                self.send_header("Content-Length", "0")
+                return self.end_headers()
+            count("refused")
+            self.close_connection = n > 64 * 1024
+            return self.send_error(405, "GET only on the public site")
+
+        def do_PUT(self):
+            self.started = time.monotonic()
+            self.revalidate = False
+            count("refused")
+            self.close_connection = True
+            return self.send_error(405, "GET only on the public site")
+
+        def do_GET(self):
+            self.started = time.monotonic()
+            self.revalidate = False
+            url = urlparse(self.path)
+            if url.path == "/health":
+                return self.send_bytes(b"ok public\n", "text/plain", False)
+            if url.path == "/version.json":
+                return self.send_json(site_version(site))
+            if url.path == "/frames/slices.json":
+                return self.send_json(slices.covered(cache, picture_versions()))
+            ans = keys.canonical("GET", self.path)
+            if ans["route"] is None and site and not url.path.startswith(("/frames/", "/reel/", "/export", "/prebuild",
+                                                                          "/flags", "/stats", "/jumplog", "/debug/")):
+                return self.send_site(url)
+            if ans["refused"]:
+                count("refused")
+                print(f"refused {ans['refused']}: {self.path}", flush=True)
+                return self.send_error(404, "Not on the public site")
+            if ans["store"] == "table":
+                if ans.get("answer") is not None:
+                    count("table")
+                    return self.send_json(ans["answer"])
+                q = query_of(ans["params"])
+                if ans["route"] == "mosaic_kind":
+                    q["warm"] = ["1"]   # (the key drops warm=; it is what makes the mosaic route a table)
+                found = resolve.table(url.path, q, cache)
+                if found is None:
+                    count("miss")
+                    return self.send_json({"error": "not kept"}, 404)
+                count("table")
+                return self.send_json(found)
+            if ans["store"] != "r2":
+                count("refused")
+                return self.send_error(404, "Not on the public site")
+            for key in [ans["key"]] + ans["fallback"]:
+                path, query = path_query(key)
+                answer = resolve.resolve(path, query, cache)
+                if answer.kind == "negative":
+                    count("marker")
+                    self.send_response(answer.status)
+                    self.send_header("Content-Type", "application/json")
+                    for k, v in answer.headers.items():
+                        self.send_header(k, v)
+                    self.send_header("Content-Length", str(len(answer.body)))
+                    self.end_headers()
+                    return self.wfile.write(answer.body)
+                if answer.kind == "file":
+                    count("file")
+                    headers = dict(answer.headers)
+                    if ans["download"]:
+                        frame = re.search(r"([NW]\d{10}_\d+)", url.path)
+                        name = names.get(ans["route"], "Cassini.webp").format(
+                            id=frame.group(1) if frame else "", ids=ans["params"].get("ids", "").replace(",", "_"))
+                        headers["Content-Disposition"] = f'attachment; filename="{name}"'
+                    return self.send_bytes(resolve.read(answer), answer.mime, True, headers)
+            count("miss")
+            return self.send_error(404, "Not in the cache")
+
+        def send_site(self, url):
+            # the page and its replay data, as the normal server sends them (Pages on the public site)
+            self.revalidate = url.path.endswith(("/", ".html", ".json"))
+            if self.send_gzipped(url.path):
+                return
+            return SimpleHTTPRequestHandler.do_GET(self)
+
+    return Public
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8765)
@@ -2176,12 +2347,17 @@ def main():
                          "never add their own visits to it")
     ap.add_argument("--allow-no-replay-data", action="store_true",
                     help="start even though the site has no replay data (the page then stops at its loading screen)")
+    ap.add_argument("--public", action="store_true",
+                    help="the public site's stand-in: GET only, every picture answered from the cache through resolve.py "
+                         "(nothing made, no background work), refused requests 404 (docs/public-site/briefs/WP1.md)")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
     missing = replay_data_missing(site)
     if missing and not args.allow_no_replay_data:
         sys.exit(missing)
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
+    if args.public:
+        return serve_public(args, site)
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
@@ -2206,6 +2382,19 @@ def main():
     site_version(site)   # read git once now, before requests come in
     server = Server((args.host, args.port), make_handler(site, args.cache, flags))
     print(f"Serving on http://{args.host}:{args.port}/" + (f" (site: {site})" if site else ""))
+    server.serve_forever()
+
+
+def serve_public(args, site):
+    """--public: no warmers, no usage counts, no flags; the index of the frames loaded before it listens."""
+    data_source.KEEP_SPICE_CACHE = True
+    data_source._zip_index() if data_source.using_zip() else None
+    handler = make_public_handler(site, args.cache)
+    import resolve
+    resolve.prepare()
+    site_version(site)
+    server = Server((args.host, args.port), handler)
+    print(f"Serving the public site's answers on http://{args.host}:{args.port}/ from {args.cache}" + (f" (site: {site})" if site else ""), flush=True)
     server.serve_forever()
 
 

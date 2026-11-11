@@ -2510,6 +2510,34 @@ body.ambient.phone .amb-where { font-size: 18px; }
 (function () {
   const $ = id => document.getElementById(id);
   const KEY = "cassini-os-settings-v1";
+  // ---------- the public switch (docs/public-site, WP6): build.py --public --frames URL writes the two values below ----------
+  // window.cassiniPublic: this page is the public site, where every picture comes from Cloudflare R2 through the
+  // Worker and only what web/public/policy.json allows is there to ask for. Settings then hides what only the frame
+  // server can make and forces what the public site always does (PUBLIC, policy.json page_settings); every other part
+  // of the page reads the switch as false when it is absent.
+  // window.cassiniFrames: where pictures, version.json, slices.json and the usage counts go: ?frames= first, then the
+  // frames host build.py wrote (the Worker), then the page's own origin (a frame server serving the page), then the
+  // frame server on this computer, as every camera window has always chosen it.
+  window.cassiniPublic = /*PUBLIC*/false;
+  window.cassiniFrames = (() => {
+    const q = new URLSearchParams(location.search).get("frames"), host = /*FRAMES_HOST*/"";
+    if (q) return q.replace(/\/$/, "");
+    if (host) return host.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  // hidden: not listed and held at its value (forced, else its default), whatever this browser saved, and set() leaves
+  // it be; options: values a choice does not offer. These carry out policy.json page_settings (the flag settings and
+  // a forced setting are hidden too); web/test_public_switch.cjs checks them line by line against it.
+  const PUBLIC = {
+    hidden: [/^processing\./, "cameras.balancedColor", "cameras.autoCenter", "cameras.hdr", "cameras.hdrGlow", "movies.laps",
+             "movies.stabilizeLocal", /^interface\.flag/],
+    forced: { "cameras.autoCenter": true, "cameras.hdr": "off", "movies.stabilizeLocal": true, "movies.laps": 1 },
+    options: { "cameras.colors": ["raw", "false"], "cameras.passes": ["mosaic"] }
+  };
+  const isPublic = window.cassiniPublic === true;
+  const publicHidden = key => isPublic && PUBLIC.hidden.some(h => typeof h === "string" ? h === key : h.test(key));
+  if (isPublic) document.documentElement.classList.add("public");
   const SECTIONS = ["Interface", "Cameras", "Processing", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
   const NOTES = {
     Cameras: "These settings choose what the camera windows show and how long. How each picture is made is under Processing.",
@@ -2535,6 +2563,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const S = window.cassiniSettings = {
     define(d) {
       d = Object.assign({ section: "Interface", hint: "" }, d);
+      if (isPublic && PUBLIC.options[d.key]) d.options = d.options.filter(o => !PUBLIC.options[d.key].includes(o[0]));
+      if (publicHidden(d.key)) {
+        d.hidden = true;
+        if (d.key in PUBLIC.forced) d.value = PUBLIC.forced[d.key];
+        if (d.type !== "action") values[d.key] = d.value;
+      }
       defs.set(d.key, d);
       if (d.type !== "action" && !(d.key in values)) {
         const v = saved[d.key], atDefault = d.key in savedDefaults ? [savedDefaults[d.key]] : d.was || [];
@@ -2547,7 +2581,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     get: key => values[key],
     set(key, v) {
       const d = defs.get(key);
-      if (!d || !valid(d, v) || values[key] === v) return;
+      if (!d || d.hidden || !valid(d, v) || values[key] === v) return;
       values[key] = v; store();
       (subs.get(key) || []).forEach(fn => fn(v));
       if (!card.hidden) sync(key);
@@ -2574,11 +2608,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
     return d.stops ? d.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a) : Math.round(v);
   };
   function render() {
-    const used = SECTIONS.filter(s => S.defined.some(d => d.section === s));
+    const shown = S.defined.filter(d => !d.hidden);
+    const used = SECTIONS.filter(s => shown.some(d => d.section === s));
     if (!used.includes(section)) section = used[0];
     nav.innerHTML = used.map(s => `<button role="tab" aria-selected="${s === section}" data-s="${s}">${s}</button>`).join("");
     pane.innerHTML = `<h3>${section}</h3>` + (NOTES[section] ? `<p class="note">${NOTES[section]}</p>` : "");
-    for (const d of S.defined.filter(d => d.section === section)) {
+    for (const d of shown.filter(d => d.section === section)) {
       const row = document.createElement("div"), id = "s-" + d.key.replace(/\W/g, "-");
       row.className = "srow"; row.dataset.key = d.key;
       const tag = d.reload ? '<span class="tag">after reload</span>' : "";
@@ -3089,12 +3124,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
   // the frame server, chosen as the camera window chooses it; it keeps the usage counts
-  const FRAMES = (() => {
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
   // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own, nor a
   // landing moment the settings put there (settings.html)
@@ -7449,13 +7479,10 @@ function targetLabel(k) {
 <script>
 // ---------- flagging pictures ----------
 (function () {
+  // no flags on the public site (policy.json: /flags is the Mini's only): no button, no menu item, no R key
+  if (window.cassiniPublic) return;
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const S = window.cassiniSettings, WM = window.cassiniWM;
   const PICTURES = ".camwin, .bodywin, #reelcard";
   const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
@@ -8038,13 +8065,10 @@ function targetLabel(k) {
 <script>
 // ---------- body reels ----------
 (function () {
+  // body reels are off on the public site (decision D2: the reels' pictures are made on demand, never published)
+  if (window.cassiniPublic) return;
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const card = $("reelcard");
   // one well per camera; a picture goes to its own camera's well and the other well keeps its last picture,
   // so the two cameras never take turns in one place
@@ -8218,12 +8242,7 @@ function targetLabel(k) {
 // ---------- highlight reel ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const card = $("hlcard"), list = $("hllist"), menu = $("hlmenu");
   const CAMS = { N: "imgcard", W: "wacard" };
   // H: the reel. list: the highlights; i: the one playing (-1: none); auto: Play all is moving through them;
@@ -13783,7 +13802,7 @@ void main() {
 // ---------- About: what Cassini OS is, and every credit in one list (credits.json) ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"},{"id":"soi-facts","title":"Saturn arrival numbers","credit":"ESA, \"Approach and arrival at Saturn\"; NASA Cassini Significant Event Reports (July 2004); NASA/JPL Saturn Arrival press kit; Spaceflight Now (June 2004)","short":"NASA · ESA · Spaceflight Now","detail":"The times and numbers the Saturn arrival cutscene is pinned to (src/soi-data.json names the source of each): the ring plane crossing, the 96.4-minute main engine burn from 01:12 UTC, 626.17 m/s, about 850 kg of propellant, 445 N, the 46-degree steering, the closest approach 19,980 km above the clouds, and the 83-minute light time. Cassini's path in it is its real trajectory, which puts the crossing and the closest approach within a minute of these times.","license":"Facts, with their sources named","url":"https://sci.esa.int/web/cassini-huygens/-/approach-and-arrival-at-saturn"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"shape-small-moons","title":"Saturn's small moons (shapes)","credit":"Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia","license":"CC0 1.0","files":["models/pan.mesh.b64.txt","models/daphnis.mesh.b64.txt","models/atlas.mesh.b64.txt","models/prometheus.mesh.b64.txt","models/pandora.mesh.b64.txt","models/epimetheus.mesh.b64.txt","models/janus.mesh.b64.txt","models/telesto.mesh.b64.txt","models/calypso.mesh.b64.txt","models/helene.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"},{"id":"huygens-dm","title":"Huygens 3D models (entry shell and descent module)","credit":"ESA SPICE Service (Huygens SPICE dataset, doi:10.5270/esa-ssem3np)","detail":"Huygens from its mounting on Cassini to Titan's surface: ESA's meshes from its Cosmographia \"Huygens descent\" set, the entry shell split into the back cover and the heat shield that come off during the descent, and the descent module under its parachutes and on Titan's surface; scaled to the real sizes and colored for Cassini OS.","license":"CC BY-NC 3.0 IGO","url":"https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"three.js authors, r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Jason Kottke, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Carrois Apostrophe, via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
+  const CREDITS = {"groups":[{"title":"Cassini mission data","entries":[{"id":"iss","title":"Cassini camera pictures","credit":"NASA/JPL-Caltech/Space Science Institute","short":"NASA/JPL-Caltech/SSI","detail":"Every picture in the camera windows, mosaics, color sets, movies and highlights is a frame from Cassini's Imaging Science Subsystem (the narrow-angle and wide-angle cameras), archived by NASA's Planetary Data System, Cartography and Imaging Sciences Node. Cassini OS calibrates, stacks, aligns and centers them with SPICE; the colors are its own reconstruction, not NASA's.","license":"NASA material, not copyrighted in the US (NASA media usage guidelines)","url":"https://pds-imaging.jpl.nasa.gov/"},{"id":"spice","title":"Trajectory, pointing and planet positions","credit":"NASA/JPL Navigation and Ancillary Information Facility (NAIF), Cassini SPICE archive co-s_j_e_v-spice-6-v1.0","short":"NASA/JPL NAIF SPICE","detail":"Where Cassini, the planets and the moons were, which way Cassini pointed (its reconstructed attitude kernels), and the camera frames. Read with SpiceyPy.","license":"NASA material, not copyrighted in the US","url":"https://naif.jpl.nasa.gov/naif/"},{"id":"calibration","title":"Camera calibration","credit":"Cassini ISS team: CISSCAL and the Cassini ISS Data User's Guide (Porco et al. 2004; West et al. 2010; Knowles et al. 2020)","detail":"The steps and constants Cassini OS uses to turn raw frames into brightness (I/F): the bias, exposure, gain and per-filter sensitivity, and each filter's effective wavelength.","license":"Published by NASA's Planetary Data System","url":"https://pds-imaging.jpl.nasa.gov/documentation/iss_data_user_guide_180916.pdf"},{"id":"finale-data","title":"Grand Finale readings","credit":"NASA Planetary Data System, Planetary Plasma Interactions Node; Cassini INMS (Southwest Research Institute), MAG (Imperial College London) and RPWS (University of Iowa) teams","short":"NASA PDS · INMS, MAG, RPWS","detail":"The real readings from Cassini's last hour shown in the Grand Finale: INMS raw count rates (counts, not densities), the magnetometer at full resolution, and RPWS 60 s key parameters, from 15 September 2017.","license":"NASA material, not copyrighted in the US","url":"https://pds-ppi.igpp.ucla.edu/"},{"id":"facts","title":"Mission facts and numbers","credit":"NASA, NASA/JPL and ESA mission pages","detail":"The facts on the loading screen (each one names its source as it shows), and the numbers and timings the Grand Finale is pinned to (JPL, \"Cassini Spacecraft Makes Its Final Approach to Saturn\", 13 September 2017; \"Cassini by the Numbers\"), and the opening at the start of the mission (ESA, \"Cassini-Huygens: Launch information\"; NASA, \"Cassini Quick Facts\").","license":"Facts, with their sources named","url":"https://science.nasa.gov/mission/cassini/"},{"id":"soi-facts","title":"Saturn arrival numbers","credit":"ESA, \"Approach and arrival at Saturn\"; NASA Cassini Significant Event Reports (July 2004); NASA/JPL Saturn Arrival press kit; Spaceflight Now (June 2004)","short":"NASA · ESA · Spaceflight Now","detail":"The times and numbers the Saturn arrival cutscene is pinned to (src/soi-data.json names the source of each): the ring plane crossing, the 96.4-minute main engine burn from 01:12 UTC, 626.17 m/s, about 850 kg of propellant, 445 N, the 46-degree steering, the closest approach 19,980 km above the clouds, and the 83-minute light time. Cassini's path in it is its real trajectory, which puts the crossing and the closest approach within a minute of these times.","license":"Facts, with their sources named","url":"https://sci.esa.int/web/cassini-huygens/-/approach-and-arrival-at-saturn"}]},{"title":"Huygens probe","entries":[{"id":"disr","title":"Huygens descent pictures","credit":"ESA/NASA/JPL/University of Arizona; mosaics by Erich Karkoschka (DISR team)","short":"ESA/NASA/JPL/UA","detail":"The probe's own pictures of Titan from its Descent Imager/Spectral Radiometer (DISR), and the nested mosaics of the landing site (60 m down to 1 m per pixel) Erich Karkoschka assembled from them, from ESA's Planetary Science Archive (HP-SSA-DISR-2-3-EDR-RDR-V1.3).","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"},{"id":"huygens-track","title":"Huygens trajectory","credit":"ESA Huygens Descent Trajectory Working Group (B. Kazeminejad, ESTEC), HP-SSA-DTWG-6-TRAJECTORY-V2.0; NASA/JPL NAIF","detail":"The probe's path through Titan's atmosphere to the ground; its coast from Cassini to Titan comes from NAIF's reconstructed trajectory.","license":"ESA Planetary Science Archive data","url":"https://archives.esac.esa.int/psa/"}]},{"title":"Surface maps and shapes","note":"Maps come from the Celestia project's CelestiaContent collection, resized into the 1k, 2k and 4k sizes; credit lines follow Celestia's license files. Maps marked \"No license stated\" are reworks of NASA/JPL and other material without a license file and will be rebuilt from public-domain originals before a public launch.","entries":[{"id":"map-saturn","title":"Saturn","credit":"Cassini imagery, Björn Jónsson; recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","url":"https://github.com/CelestiaProject/CelestiaContent","files":["saturn.webp"]},{"id":"map-rings","title":"Saturn's rings","credit":"Björn Jónsson ring data (Celestia composite)","license":"No license stated","url":"https://bjj.mmedia.is/","files":["rings/saturn_rings.png"]},{"id":"map-icy","title":"Mimas, Enceladus, Tethys, Dione, Iapetus","credit":"Paul Schenk's Cassini color maps (NASA/JPL/LPI), via Celestia","license":"No license stated","files":["mimas.webp","enceladus.webp","tethys.webp","dione.webp","iapetus.webp"]},{"id":"map-rhea","title":"Rhea","credit":"Paul Schenk's map and Björn Jónsson's albedo, via Celestia","license":"No license stated","files":["rhea.webp"]},{"id":"map-titan","title":"Titan","credit":"Cassini haze images, Gordan Ugarković, Kevin M. Gill, ShadowDragon777, AstroChara (via Celestia)","license":"CC BY 4.0","files":["titan.webp"]},{"id":"map-titan-surface","title":"Titan's surface","credit":"Cassini VIMS and ISS map (Seignovert et al. 2019) with radar lakes, via Celestia","license":"CC BY 3.0","files":["titan_surface.webp"]},{"id":"map-hyperion","title":"Hyperion","credit":"Map: reprojected Cassini imagery (ItzImcool), via Celestia. Shape: P. C. Thomas et al., NASA Planetary Data System","license":"Map CC BY 4.0; shape CC0","files":["hyperion.webp","models/hyperion.mesh.b64.txt"]},{"id":"map-phoebe","title":"Phoebe","credit":"Map: John van Vliet, via Celestia. Shape: R. W. Gaskell, NASA Planetary Data System","license":"No license stated","files":["phoebe.webp","models/phoebe.mesh.b64.txt"]},{"id":"shape-small-moons","title":"Saturn's small moons (shapes)","credit":"Pan, Daphnis, Atlas, Prometheus, Pandora, Epimetheus, Janus, Telesto, Calypso and Helene: P. Thomas, J. Joseph and T. Ansty, Saturn Small Moon Shape Models V1.0, NASA Planetary Data System, 2018 (doi:10.26033/ewy3-jy61), from Cassini ISS images; via Celestia","license":"CC0 1.0","files":["models/pan.mesh.b64.txt","models/daphnis.mesh.b64.txt","models/atlas.mesh.b64.txt","models/prometheus.mesh.b64.txt","models/pandora.mesh.b64.txt","models/epimetheus.mesh.b64.txt","models/janus.mesh.b64.txt","models/telesto.mesh.b64.txt","models/calypso.mesh.b64.txt","models/helene.mesh.b64.txt"]},{"id":"map-jupiter","title":"Jupiter","credit":"Cassini 2000 flyby and Juno data, recolored by Askaniy Anpilogov (via Celestia)","license":"CC BY 3.0","files":["jupiter.webp"]},{"id":"map-venus","title":"Venus","credit":"Cloud tops by Björn Jónsson, recolored by FarGetaNik (via Celestia)","license":"No license stated","files":["venus.webp"]},{"id":"map-earth","title":"Earth","credit":"\"Mappamondo\" (earthstartsbeating.com), Natural Earth II (Tom Patterson), NASA Blue Marble Next Generation (via Celestia)","license":"No license stated","files":["earth.webp"]},{"id":"map-moon","title":"The Moon","credit":"Celestia's lunar map (NASA data)","license":"No license stated","files":["moon.webp"]},{"id":"map-io","title":"Io","credit":"ItzImcool, AstroChara; NASA/JPL-Caltech/ASI/USGS; NASA/JPL/SwRI/MSSS/Gerald Eichstädt/Jason Perry/John Rogers (via Celestia)","license":"CC BY 4.0","files":["io.webp"]},{"id":"map-europa","title":"Europa","credit":"John van Vliet (via Celestia)","license":"No license stated","files":["europa.webp"]},{"id":"map-ganymede","title":"Ganymede","credit":"Askaniy Anpilogov; NASA/JPL-Caltech/ASI/USGS; Björn Jónsson; NASA/JPL-Caltech/SwRI/MSSS/Brian Swift (via Celestia)","license":"CC BY 3.0","files":["ganymede.webp"]},{"id":"map-callisto","title":"Callisto","credit":"Askaniy Anpilogov, from John van Vliet's map (via Celestia)","license":"No license stated","files":["callisto.webp"]}]},{"title":"Sky","entries":[{"id":"star-sky","title":"Stars and the Milky Way","credit":"NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC","short":"NASA SVS Deep Star Maps","detail":"The background sky, from NASA's \"Deep Star Maps 2020\": Hipparcos, Tycho-2 and Gaia DR2 stars plus the Milky Way, placed in J2000 where Cassini saw them.","license":"NASA material, public domain","url":"https://svs.gsfc.nasa.gov/4851","files":["sky/sky_2k.webp","sky/sky_4k.webp","sky/sky_8k.webp"]}]},{"title":"Spacecraft","entries":[{"id":"model","title":"Cassini-Huygens 3D model","credit":"NASA/JPL-Caltech, NASA 3D Resources \"Cassini-Huygens\"","detail":"The spacecraft in the 3D view and the wireframe on the loading screen (decoded from Draco compression for the page).","license":"NASA material, not copyrighted in the US","url":"https://github.com/nasa/NASA-3D-Resources"},{"id":"huygens-dm","title":"Huygens 3D models (entry shell and descent module)","credit":"ESA SPICE Service (Huygens SPICE dataset, doi:10.5270/esa-ssem3np)","detail":"Huygens from its mounting on Cassini to Titan's surface: ESA's meshes from its Cosmographia \"Huygens descent\" set, the entry shell split into the back cover and the heat shield that come off during the descent, and the descent module under its parachutes and on Titan's surface; scaled to the real sizes and colored for Cassini OS.","license":"CC BY-NC 3.0 IGO","url":"https://spiftp.esac.esa.int/data/SPICE/HUYGENS/misc/cosmo/models/"}]},{"title":"Sound","entries":[{"id":"sound","title":"Sonification","credit":"Made for Cassini OS, after Erich Karkoschka's \"Titan Descent Data Movie with Bells and Whistles\" (DISR team, University of Arizona)","detail":"Every sound is synthesized in the browser from what Cassini is doing (no recordings); the idea of a chime for each instrument part follows Karkoschka's Huygens descent movie.","license":"Part of Cassini OS"}]},{"title":"Software and fonts","entries":[{"id":"threejs","title":"three.js","credit":"Copyright © 2010-2021 three.js authors; r128, with OrbitControls and GLTFLoader","license":"MIT","url":"https://threejs.org/"},{"id":"mp4-muxer","title":"mp4-muxer","credit":"Copyright (c) 2023 Vanilagy; 5.1.5, writes the films made in the browser","license":"MIT","url":"https://github.com/Vanilagy/mp4-muxer"},{"id":"draco","title":"Draco","credit":"Google, used to decode the spacecraft model ahead of time","license":"Apache 2.0","url":"https://google.github.io/draco/"},{"id":"pipeline-libs","title":"Picture pipeline","credit":"SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib","detail":"The Python libraries the frame server and the image pipeline run on.","license":"MIT, BSD and Apache 2.0 (each project's own)"},{"id":"font-silkscreen","title":"Silkscreen","credit":"Copyright 2001 The Silkscreen Project Authors (Jason Kottke), via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Silkscreen"},{"id":"font-sharetech","title":"Share Tech Mono","credit":"Copyright (c) 2012, Carrois Type Design, Ralph du Carrois, with Reserved Font Name 'Share'; via Google Fonts","license":"SIL Open Font License 1.1","url":"https://fonts.google.com/specimen/Share+Tech+Mono"}]}]};
   const card = $("about"), nav = $("anav"), pane = $("apane");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const TABS = {
@@ -13829,20 +13848,15 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b8b66fb47539";
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const BUILD = /*BUILD*/"9277a0ed591b";
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
     const v = ver.server, el = $("aver");
     const old = v && v.page && BUILD && v.page !== BUILD;
     el.textContent = v ? `Version ${v.version}${old ? " · reload for the newest" : ""}` : BUILD ? `Build ${BUILD}` : "";
     el.title = v ? [`Site ${v.site ? v.site.commit + " " + v.site.subject : "unknown"}`,
-      `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
+      window.cassiniPublic ? `Pictures ${v.server_version}` : `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
   }
   ver.ready = fetch(`${FRAMES}/version.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null, () => null)
     .then(v => { ver.server = v; showVersion(); return ver; });
@@ -16666,7 +16680,7 @@ function frame(now) {
     root.classList.remove("on");
     hideTimer = setTimeout(() => { root.hidden = true; }, 400);
   }
-  // ---------- a slow load is reported to the frame server (POST /jumplog, kept in its jump-log.jsonl) ----------
+  // ---------- a slow load is reported to the frame server (POST /jumplog, kept in its jump-log.jsonl); not on the public site ----------
   // so a wait that only happens now and then can be looked into afterwards: each data file's timings (waiting for
   // a connection, the server's answer, the download), the picture requests that were under way, and the page's own
   // long tasks. The page keeps the latest network and long-task entries itself (the browser's buffer fills up).
@@ -16677,6 +16691,7 @@ function frame(now) {
   } catch (e) {}
   let busyWhat = "";
   function report(t0, t1) {
+    if (window.cassiniPublic) return;     // the public site keeps no jump log (policy.json: /jumplog is the Mini's only)
     if (!/^https?:$/.test(location.protocol) || /claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return;
     const r = n => Math.round(n);
     const data = net.filter(e => /\/data\//.test(e.name) && e.startTime >= t0 - 1000 && e.startTime <= t1).map(e => ({

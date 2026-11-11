@@ -56,13 +56,10 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 <script>
 // ---------- flagging pictures ----------
 (function () {
+  // no flags on the public site (policy.json: /flags is the Mini's only): no button, no menu item, no R key
+  if (window.cassiniPublic) return;
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const S = window.cassiniSettings, WM = window.cassiniWM;
   const PICTURES = ".camwin, .bodywin, #reelcard";
   const TAGS = ["Too dark", "Too bright", "Wrong color", "Channels misaligned", "Stripes or noise", "Blurry", "Blank or missing", "Off-center", "Mosaic wrong", "Out of sync"];
