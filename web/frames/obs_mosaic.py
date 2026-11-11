@@ -2638,8 +2638,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # a ring pass's white has headroom (RING_HEADROOM): since CISSCAL's hot pixel and cosmic ray repair (#153) its 99.9th
     # percentile is the brightest real ringlet, not a defect over it, and the rings drew ~15% brighter than before (124RI,
     # 239RI, 111RI movies: lit median 175 of 255 before, 202 after; 180 at 1.4). Moons' passes are not brighter than
-    # before (their lit median fell from 121 to 64, the sky's stray light gone) and keep their white
-    if _ring(u):
+    # before (their lit median fell from 121 to 64, the sky's stray light gone) and keep their white. Movies only: a ring
+    # mosaic (195RI, 260RI and 269RI HIPHASE) was not brighter, and 1.4x only dimmed its faint rings (lit median 34 to 31)
+    if _ring(u) and u.get("movie") and not u.get("mosaic"):
         white *= RING_HEADROOM
     if calibration.look() == "balanced" and white > 0:
         # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
