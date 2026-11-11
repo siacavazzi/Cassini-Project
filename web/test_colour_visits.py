@@ -86,6 +86,15 @@ assert not om.mixes(u6, {}, tiles6, COLOUR)
 u4, tiles4 = make("RHEA", old + [("RED", 512.0, 3600.0), ("GRN", 512.0, 3660.0)])
 assert not om.mixes(u4, {}, [dict(t, pic="redrawn.png") for t in tiles4], COLOUR)
 assert om.mixes(u4, {}, tiles4, COLOUR)
+# decided place by place: a redrawn tile is drawn as at the pass's one moment, the same for all of them, so only the
+# tiles left as taken mix
+red = [dict(t, pic="redrawn.png") if t["filter"] != "RED" else t for t in tiles4]
+times = {om.drawn_time(u4, t) for t in red if t["filter"] != "RED"}
+assert len(times) == 1, times
+# with the surface step off (Settings > Processing) a moon mosaics as it always did: no mix
+import calibration  # noqa: E402
+with calibration.stepping("surface"):
+    assert not om.mixes(u4, {}, tiles4, COLOUR)
 assert not om.mixes(u, {}, [dict(t, base=False) for t in tiles], COLOUR)
 
 # unmixed leaves the colour out where it mixes and gray lies under it; over_grey then draws the gray there
