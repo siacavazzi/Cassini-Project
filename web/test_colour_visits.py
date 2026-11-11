@@ -81,9 +81,11 @@ u6, tiles6 = make("SATURN", [("BL1", 0.0, 0.0), ("GRN", 0.0, 60.0), ("RED", 0.0,
                              ("BL1", 964.0, 900.0), ("GRN", 964.0, 960.0), ("RED", 964.0, 1020.0)])
 assert not om.mixes(u6, {}, tiles6, COLOUR)
 
-# a moon (its surface redrawn as at one epoch) never mixes, nor does a mosaic movie's picture
+# a moon whose surface is redrawn as at one epoch (surface_pictures: its tiles carry "pic") never mixes, nor does a
+# mosaic movie's picture; a moon none of whose tiles were redrawn (Phoebe's closest pass) mixes as a clouded body does
 u4, tiles4 = make("RHEA", old + [("RED", 512.0, 3600.0), ("GRN", 512.0, 3660.0)])
-assert not om.mixes(u4, {}, tiles4, COLOUR)
+assert not om.mixes(u4, {}, [dict(t, pic="redrawn.png") for t in tiles4], COLOUR)
+assert om.mixes(u4, {}, tiles4, COLOUR)
 assert not om.mixes(u, {}, [dict(t, base=False) for t in tiles], COLOUR)
 
 # unmixed leaves the colour out where it mixes and gray lies under it; over_grey then draws the gray there
