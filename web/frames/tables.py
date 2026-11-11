@@ -168,26 +168,38 @@ def pass_tables(u, cache, movie=False, uncentred=False):
         first = {}
         for f, n in drawn:
             first.setdefault(n, f)
+        # Frames that add nothing to the picture share its layout name (made[5]), and tile_map keeps a map (MAPS_DIR/
+        # <name>.json) the first time one of them is asked with every tile of it made; from then on the server answers
+        # that kept file for all of them, so the kept file is the part (read as tile_map reads it, without working the
+        # layout out again). A name not kept yet is asked of tile_map at each of its frames until one keeps it; a map
+        # never kept is worked out again on every request, and its first frame's answer is written (noted).
         kept = os.path.join(obs_mosaic.folder(u, cache), obs_mosaic.MAPS_DIR)
+
+        def read(m):
+            try:
+                with open(os.path.join(kept, m + ".json")) as fh:
+                    return json.load(fh)
+            except (OSError, ValueError):
+                return None
+        final, loose = {}, {}
         for n, f in sorted(first.items()):
             made = obs_mosaic.layout(u, n, cache)
             if not made:
                 continue
-            path = base + f"maps/{made[5]}.json"
-            if path in parts:
-                layout_of[n] = made[5]
-                continue
-            # the map tile_map keeps for this layout (its own file, read as tile_map reads it, without working the
-            # layout out a second time), else tile_map's answer, which keeps it
-            try:
-                with open(os.path.join(kept, made[5] + ".json")) as fh:
-                    mapped = json.load(fh)
-            except (OSError, ValueError):
-                mapped = obs_mosaic.tile_map(f, cache)
-            if not mapped:
-                continue
-            layout_of[n] = made[5]
-            parts[path] = mapped
+            m = made[5]
+            if m not in final:
+                mapped = read(m) or obs_mosaic.tile_map(f, cache)
+                if not mapped:
+                    continue
+                if read(m) is not None:
+                    final[m] = read(m)
+                else:
+                    loose.setdefault(m, mapped)
+            layout_of[n] = m
+        for m in set(layout_of.values()):
+            if m not in final:
+                notes.append(f"map {m} not kept by tile_map: its first frame's answer")
+            parts[base + f"maps/{m}.json"] = final.get(m) or loose[m]
 
     for f, n in frames:
         entry = {"p": pid, "n": n}
