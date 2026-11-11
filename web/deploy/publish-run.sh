@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The publish run after the full cache build (WP8 brief; WP10 runs it for real): WP2's tables and fullview phases and
-# WP3's publisher, year by year, split across the Macs, then the manifest once every year is up. It prints the
+# WP3's publisher, year by year, split across the Macs, then one run over the whole range that writes the manifest. It prints the
 # manifest key for `deploy.sh --env staging switch --manifest KEY`; it never switches the Worker itself.
 #
 #   web/deploy/publish-run.sh --cache DIR --years 1997-2017 [--hosts "local mini"] [--to-dir MIRROR] [--dry-run]
@@ -27,12 +27,11 @@ need web/frames/prebuild.py '"tables"' WP2
 need web/frames/prebuild.py '"fullview"' WP2
 need web/frames/publish.py '--years' WP3
 need web/frames/publish.py '--no-manifest' WP3
-need web/frames/publish.py '--manifest-only' WP3
 
 if [ -z "$TODIR" ]; then
   CREDS="${CASSINI_CLOUDFLARE_ENV:-$HOME/.cassini-cloudflare.env}"
   [ "$DRY" = 1 ] || { [ -f "$CREDS" ] || { echo "no $CREDS (R2 key pair)" >&2; exit 2; }; set -a; . "$CREDS"; set +a; }
-  DEST=""
+  DEST="--to-r2"
 else
   DEST="--to-dir $TODIR"
 fi
@@ -68,7 +67,12 @@ done
 fail=0; for p in "${pids[@]:-}"; do [ -n "$p" ] && { wait "$p" || fail=1; }; done
 [ "$fail" = 0 ] || { echo "some years failed: no manifest written; rerun them (the publisher skips what is up)" >&2; exit 1; }
 
-# every year is up: the manifest goes last, from this Mac
-if [ "$DRY" = 1 ]; then echo "[local] python web/frames/publish.py --cache $CACHE --years $YEARS --manifest-only $DEST"; exit 0; fi
-KEY="$(cd "$ROOT" && python web/frames/publish.py --cache "$CACHE" --years "$YEARS" --manifest-only $DEST | tail -1)"
+# every year is up: one run over the whole range, from this Mac. It skips every object already up (ledger in --state,
+# else md5 against the ETag) and is the one run whose published.json covers every year, so its manifest (uploaded last,
+# its key alone on the last line) lists the whole range. --manifest-only would build the manifest from the last
+# finished run only, which here is a single year.
+FINAL="python web/frames/publish.py --cache $CACHE --years $YEARS $DEST"
+if [ "$DRY" = 1 ]; then echo "[local] $FINAL"; exit 0; fi
+KEY="$(cd "$ROOT" && $FINAL | tail -1)"
+case "$KEY" in manifest/*.json) ;; *) echo "the final run wrote no manifest (last line: $KEY)" >&2; exit 1 ;; esac
 echo "published; switch with: web/deploy/deploy.sh --env staging switch --manifest $KEY"

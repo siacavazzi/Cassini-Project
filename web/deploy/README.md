@@ -28,7 +28,7 @@ those prefixes, and `cf.py build` refuses a build that would.
 | `wrangler.template.toml` | the Worker's config (bindings `BUCKET`, `USAGE`, vars `MANIFEST_KEY`, `SITE_ENV`; no workers.dev, no preview URLs); rendered per run with names from `site.env` |
 | `site.env` | names only: domain, hosts, Pages projects, Worker, bucket, datasets, wrangler version, local ports |
 | `cloudflare.env.example` | the credentials file Sam fills on the MacBook as `~/.cassini-cloudflare.env`, mode 600 |
-| `publish-run.sh` | WP2's tables and fullview phases and WP3's publisher, year by year across the Macs, manifest last |
+| `publish-run.sh` | WP2's tables and fullview phases and WP3's publisher, year by year across the Macs, then one whole-range run that writes the manifest |
 | `cost.py`, `pricing.json` | the cost sheet: requests and bytes per viewer-minute, and a month at 1,000 viewers |
 | `before-counts.json` | WP0's measured frames requests per session, for a first cost sheet until real harness logs are copied |
 | `dry_run.sh` | the local dry run: build, serve, deploy publish A, switch to B, roll back to A, each step checked |
@@ -102,8 +102,11 @@ instead of the test cards. Until WP4 merges it runs the stand-in Worker; set `WO
 ## Pages limits
 
 Pages takes at most 20,000 files and 25 MiB a file. `deploy.sh build` measures every build and stops when it does
-not fit. Without the replay data (the cloud has none) the site is 175 files and 33.6 MiB, the largest file the 8k
-sky (10.6 MiB); the measurement with the full replay and coverage data is made on the Mini.
+not fit. Measured on the Mini at df204dd with the whole-mission replay and coverage data (main e56c1f4's build, the
+private page since WP6's `--public` has not merged): **1,357 files, 505.2 MiB, largest file 10.6 MiB (the 8k sky);
+fits**, with 18,643 files and about 14.4 MiB per file to spare. The biggest folders are data/months (480 files,
+227 MiB), data/tracks (561, 119 MiB), data/attitude (19, 57 MiB) and data/catalog (21, 50 MiB, largest 2007.json at
+5.4 MiB, growing a little with WP7a's catalog fields).
 
 ## Costs
 
