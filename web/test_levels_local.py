@@ -12,11 +12,14 @@ stretches, exposures), run here in node against the Python:
 4. The whole answer, export.levels against cassiniPlanLocal.levels, on the four stretches of web/test_plan_local.py
    (its data and pass rule), every frame's picture a made-up one (the same pixels on both sides, as the server's
    makers would give them): exactly, but for the log's last bit as in 2.
+5. The addresses the page asks the frame server for each picture: centred exactly when export.Pictures centres it
+   (the film's Auto center: ctr, the movie style's center), the movie style only on movie routes. On a Mac with real
+   pictures, web/check_levels_centre.mjs compares the whole graph with a running frame server's.
 
   python web/test_levels_local.py [--data <export dir>] [--synthetic]
 """
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [HERE]
-import io, json, math, subprocess, zlib  # noqa: E401,E402
+import io, json, math, re, subprocess, zlib  # noqa: E401,E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 import PIL  # noqa: E402
@@ -72,6 +75,25 @@ const b64 = d => Buffer.from(d.buffer, d.byteOffset, d.byteLength).toString('bas
       const q = Object.assign({}, r.q, { cams: 'NW', list: '1' }); delete q.drop; delete q.targets; delete q.filters;
       const plan = r.pictures ? await P.plan(q) : null;
       out.push(await P.levels(r.q, plan && plan.pictures));
+    }
+  }
+  else if (job.cmd === 'urls') {
+    // settings.html's cassiniLook and cassiniMovieStyle as they treat center; fetch records each address and answers
+    // 404 for a centred one of the frames in job.uncentred (the server cannot centre it), else a 1 px picture
+    ctx.cassiniLook = (o = {}) => '&look=x' + (o.center ? '&center=1' : '');
+    ctx.cassiniMovieStyle = (o = {}) => (o.center === false ? '&center=0' : '') + '&trail=0';
+    let asked = [];
+    ctx.fetch = async url => { asked.push(url); const bad = /center=1/.test(url) && job.uncentred.some(id => url.includes(id));
+      return { ok: !bad, blob: async () => null }; };
+    ctx.createImageBitmap = async () => ({ width: 1, height: 1 });
+    ctx.OffscreenCanvas = class { getContext() { return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(4) }) }; } };
+    P.source.allMonths = async () => job.parts.map(p => ({ start: p.start, end: p.end, key: p.file, catalog: () => JSON.parse(fs.readFileSync(p.file, 'utf8')) }));
+    P.source.kind = async id => job.kinds[id];
+    out = [];
+    for (const r of job.runs) {
+      const plan = await P.plan(r.q), opt = P._.options(r.q), got = [];
+      for (const e of plan.pictures) { asked = []; await L.picture(e, 512, opt); got.push({ id: e.id, tries: e.tries.map(t => t[0]), asked }); }
+      out.push(got);
     }
   }
   process.stdout.write(JSON.stringify(out));
@@ -279,4 +301,43 @@ n_ev = sum(len(w.get("even", {})) for w in want)
 print(f"levels: {len(runs)} answers on {len(T.STRETCHES)} stretches, {n_lv:,} levels and {n_ev:,} Even out changes; "
       f"{len(runs) - bad} the same throughout, {lvl_diff} levels and {even_diff} Even out changes apart by the log's last bit")
 assert even_diff <= max(2, n_ev // 200), "Even out differs beyond the log's last bit"
+
+# 5. the addresses the page asks for its pictures, with the film's Auto center as export.Pictures draws with it
+# (options' movie center: _centred makes color and processed pictures centred, movie frames take centre=); the frame
+# server reads center=1 on color and processed routes and center=0 (else on) on movie and rolling routes
+# (web/public/policy.json). A centred picture the server cannot make (404) falls back to the picture as it is.
+uruns, expect = [], []
+for name, (a, b) in T.STRETCHES.items():
+    for extra in ({}, {"ctr": "1"}, {"ctr": "0"}, {"center": "0"}, {"center": "0", "ctr": "1"}, {"pictures": "color", "ctr": "1"},
+                  {"pictures": "processed", "ctr": "1"}, {"pictures": "processed", "ctr": "0"}):
+        q = {"from": T.iso(a), "until": T.iso(b), "cams": "NW", "list": "1", "size": "1024", **extra}
+        uruns.append({"q": q})
+        expect.append(export.options({k: [v] for k, v in q.items()})["movie"]["center"])
+pub = [node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": []})]
+some_id = next(e["id"] for g in pub[0] for e in g if e["tries"][0] in ("color", "processed") and "center=1" in e["asked"][0])
+pub.append(node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": [some_id]}))
+counts = {"color": 0, "movie": 0, "fallback": 0}
+for k, got in enumerate(pub):
+    for r, centre, g in zip(uruns, expect, got):
+        for e in g:
+            assert e["asked"], f"{r['q']}: {e['id']} asked for nothing"
+            url = e["asked"][0]
+            first = e["tries"][0]
+            route = re.search(r"/frames/([a-z]+)[/.]", url).group(1)
+            if first in ("color", "processed"):
+                want_c = centre
+                assert ("center=1" in url) == want_c, f"{r['q']}: {url} (Auto center {centre})"
+                counts["color"] += 1
+                if k == 1 and e["id"] == some_id and centre:
+                    assert len(e["asked"]) == 2 and "center=1" not in e["asked"][1], f"no stand-in after a 404: {e['asked']}"
+                    counts["fallback"] += 1
+            elif first in ("movie", "rolling"):
+                assert ("center=0" not in url) == centre, f"{r['q']}: {url} (Auto center {centre})"
+                counts["movie"] += 1
+            if route not in ("movie", "rolling"):
+                assert "trail=" not in url, f"movie style on {url}"
+assert counts["color"] and counts["fallback"], counts
+print(f"addresses: {len(uruns)} films with Auto center on and off (ctr, center); {counts['color']:,} color and processed "
+      f"pictures centred exactly when export.Pictures centres them, {counts['movie']:,} movie pictures likewise; "
+      f"a centred picture the server cannot make falls back to the picture as it is")
 print("ok")

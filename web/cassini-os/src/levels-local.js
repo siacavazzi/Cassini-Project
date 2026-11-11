@@ -231,28 +231,36 @@
     return [total.map(r4), Array.from(line, r4), Array.from(even, r4)];
   }
 
-  // the picture of plan entry e at size px as the frame server makes it, RGBA, its tries in turn (null: none)
   // the address of a try as export.html's pictureUrl builds it: the movie style only on movie and rolling routes (the
-  // public site's policy refuses it elsewhere), the look on all but plain frames; then cassiniExport.publicUrl when
-  // the public site has it
-  function pictureUrl(kind, src, size, frames) {
-    const sep = src.includes("?") ? "&" : "?", look = root.cassiniLook ? root.cassiniLook() : "",
-      style = root.cassiniMovieStyle ? root.cassiniMovieStyle() : "", base = (/^https?:/.test(src) ? src : frames + src) + sep + `size=${size}`;
+  // public site's policy refuses it elsewhere), the look on all but plain frames, and the film's Auto center
+  // (options' movie.center, which export.Pictures draws with: _centred for color and processed pictures, centre= for
+  // movies); plain: a color or processed picture as it is, the stand-in when the server does not centre it (404).
+  // Then cassiniExport.publicUrl when the public site has it.
+  function pictureUrl(kind, src, size, frames, center, plain) {
+    const sep = src.includes("?") ? "&" : "?",
+      look = root.cassiniLook ? root.cassiniLook({ center: center && !plain && (kind === "color" || kind === "processed") }) : "",
+      style = root.cassiniMovieStyle ? root.cassiniMovieStyle({ center }) : "", base = (/^https?:/.test(src) ? src : frames + src) + sep + `size=${size}`;
     const url = kind === "movie" ? `${base}&color=1${style}${look}` : kind === "rolling" ? `${base}${style}${look}` : kind === "frame" ? base : `${base}${look}`;
     return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
   }
+  async function fetchRGBA(url) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+      const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext("2d", { colorSpace: "srgb" });
+      g.drawImage(bmp, 0, 0);
+      return { data: g.getImageData(0, 0, bmp.width, bmp.height).data, width: bmp.width, height: bmp.height };
+    } catch (err) { return null; }
+  }
+  // the picture of plan entry e at size px as the frame server makes it for the film (opt: the parsed options), RGBA,
+  // its tries in turn (null: none)
   async function picture(e, size, opt) {
-    const P = root.cassiniPlanLocal, frames = (P && P.frames) || "";
+    const P = root.cassiniPlanLocal, frames = (P && P.frames) || "", center = !!(opt && opt.movie && opt.movie.center);
     for (const [kind, src] of e.tries || []) {
-      try {
-        const url = pictureUrl(kind, src, size, frames);
-        const r = await fetch(url);
-        if (!r.ok) continue;
-        const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-        const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext("2d", { colorSpace: "srgb" });
-        g.drawImage(bmp, 0, 0);
-        return { data: g.getImageData(0, 0, bmp.width, bmp.height).data, width: bmp.width, height: bmp.height };
-      } catch (err) { continue; }
+      const url = pictureUrl(kind, src, size, frames, center), plain = pictureUrl(kind, src, size, frames, center, true);
+      const im = await fetchRGBA(url) || (plain !== url ? await fetchRGBA(plain) : null);
+      if (im) return im;
     }
     return null;
   }
@@ -301,7 +309,7 @@
     }
   }
 
-  const API = { levels, _levels: { pictureUrl, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, _levels: { pictureUrl, picture, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};
