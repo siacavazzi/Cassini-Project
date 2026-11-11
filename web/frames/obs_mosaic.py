@@ -2488,7 +2488,7 @@ def _disk_mask(qshape, shape, x, y, radius):
 
 RING_HEADROOM = 1.4  # pass_scale: a ring pass's white this many times
                     # its measured white (the 99.9th percentile), so the brightest ringlet sits under white, as before #153
-SPECK_PX = 1.0      # tile_scale: a small body under this radius (full resolution px) always takes the veil's black
+SPECK_PX = 1.0      # tile_scale: a SPECKS body under this radius (full resolution px) always takes the veil's black
 VEIL_TOP = 99       # tile_scale: a small body's veiled frame's black is over this percentile of its smoothed sky
 GLOW_FLOOR_PCT = 25  # tile_scale: a movie frame with no dark sky, lit all over by a glow: its sky is under this percentile
 GLOW_BLACK_PCT = 50  # ... and its black over this percentile of the frame, smoothed
