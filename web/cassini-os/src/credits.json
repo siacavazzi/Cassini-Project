@@ -154,11 +154,12 @@
     {
       "title": "Software and fonts",
       "entries": [
-        { "id": "threejs", "title": "three.js", "credit": "three.js authors, r128, with OrbitControls and GLTFLoader", "license": "MIT", "url": "https://threejs.org/" },
+        { "id": "threejs", "title": "three.js", "credit": "Copyright © 2010-2021 three.js authors; r128, with OrbitControls and GLTFLoader", "license": "MIT", "url": "https://threejs.org/" },
+        { "id": "mp4-muxer", "title": "mp4-muxer", "credit": "Copyright (c) 2023 Vanilagy; 5.1.5, writes the films made in the browser", "license": "MIT", "url": "https://github.com/Vanilagy/mp4-muxer" },
         { "id": "draco", "title": "Draco", "credit": "Google, used to decode the spacecraft model ahead of time", "license": "Apache 2.0", "url": "https://google.github.io/draco/" },
         { "id": "pipeline-libs", "title": "Picture pipeline", "credit": "SpiceyPy (Andrew Annex et al.), NumPy, pandas, OpenCV, Pillow, scikit-image, Matplotlib", "detail": "The Python libraries the frame server and the image pipeline run on.", "license": "MIT, BSD and Apache 2.0 (each project's own)" },
-        { "id": "font-silkscreen", "title": "Silkscreen", "credit": "Jason Kottke, via Google Fonts", "license": "SIL Open Font License 1.1", "url": "https://fonts.google.com/specimen/Silkscreen" },
-        { "id": "font-sharetech", "title": "Share Tech Mono", "credit": "Carrois Apostrophe, via Google Fonts", "license": "SIL Open Font License 1.1", "url": "https://fonts.google.com/specimen/Share+Tech+Mono" }
+        { "id": "font-silkscreen", "title": "Silkscreen", "credit": "Copyright 2001 The Silkscreen Project Authors (Jason Kottke), via Google Fonts", "license": "SIL Open Font License 1.1", "url": "https://fonts.google.com/specimen/Silkscreen" },
+        { "id": "font-sharetech", "title": "Share Tech Mono", "credit": "Copyright (c) 2012, Carrois Type Design, Ralph du Carrois, with Reserved Font Name 'Share'; via Google Fonts", "license": "SIL Open Font License 1.1", "url": "https://fonts.google.com/specimen/Share+Tech+Mono" }
       ]
     }
   ]

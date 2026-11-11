@@ -1,0 +1,15 @@
+{
+  "name": "cassini-frames-worker",
+  "private": true,
+  "type": "module",
+  "description": "The public site's frames Worker (docs/public-site/briefs/WP4.md)",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "dev": "node tools/dev.mjs"
+  },
+  "devDependencies": {
+    "miniflare": "4.20260730.0",
+    "wrangler": "4.160.1"
+  }
+}

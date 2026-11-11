@@ -1,0 +1,18 @@
+{
+  "about": "Cloudflare prices the cost sheet (cost.py) uses, USD. Checked against developers.cloudflare.com pricing pages; re-check before quoting a number to Sam, and record the date here.",
+  "checked": "2026-10-27 (hosting-capacity study); carried forward 2026-11-11",
+  "workers_paid_monthly": 5.0,
+  "workers_requests_included": 10000000,
+  "workers_per_million_requests": 0.30,
+  "workers_cpu_ms_included": 30000000,
+  "workers_per_million_cpu_ms": 0.02,
+  "analytics_engine_points_included": 10000000,
+  "analytics_engine_per_million_points": 0.25,
+  "r2_storage_per_gb_month": 0.015,
+  "r2_storage_gb_free": 10,
+  "r2_class_b_included": 10000000,
+  "r2_per_million_class_b": 0.36,
+  "r2_egress_per_gb": 0.0,
+  "pages_static_requests": "free and unmetered",
+  "access_free_users": 50
+}

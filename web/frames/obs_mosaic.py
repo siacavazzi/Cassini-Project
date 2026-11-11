@@ -8842,6 +8842,23 @@ def _making_movie(path):
                 del _movie_making_now[path]
 
 
+def movie_ready(u, cache, rec, colour, centre, steady, exposure):
+    """Whether movie_webp draws pass u's frames now (its plan, footprint and the chains steady and exposure need are
+    worked out), rather than answering "working out the pass". rec: the pass's record (_record). Read-only."""
+    return not ((_footprint_kept(u, rec) is None and
+                 not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
+                or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), 0))))
+
+
+def movie_path(u, n, size, cache, trail, colour, centre, steady, exposure, sharpen):
+    """Where movie_webp keeps frame n of pass u played as a movie (its report is the .json beside it); steady and
+    exposure as movie_webp has them (steady_of, exposure_of). Read-only: reads the pass's plan (resolve.py)."""
+    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
+    return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
+                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -8858,9 +8875,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     u, n = found
     steady, exposure = steady_of(u, steady), exposure_of(exposure)
     rec = _record(u, cache)
-    if not wait and ((_footprint_kept(u, rec) is None and
-                      not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
-                     or (steady and not _steady_ready(u, cache, rec)) or (exposure and not _exposure_ready(u, cache, rec, (bool(colour), bool(centre), 0)))):
+    if not wait and not movie_ready(u, cache, rec, colour, centre, steady, exposure):
         # (footprint: a mosaic movie played as a movie, the Mosaic / Movie switch on Movie, needs the footprint its
         # rolling picture does without, or this answers "working out the pass" for ever)
         warm_movie(u, n, ahead, cache, steady=bool(steady), exposure=(bool(colour), bool(centre), 0) if exposure else None,
@@ -8869,10 +8884,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
                       **_progress(u, cache, rec)}
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
-    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
-    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+    path = movie_path(u, n, size, cache, trail, colour, centre, steady, exposure, sharpen)
     report, meta = {}, path[:-4] + "json"
 
     def make():
@@ -9629,6 +9641,12 @@ def fade_table(frame_id, cache, laps=1, W=0, H=0):
             "ids": [fr[1] for fr in u["frames"]], "fade_max": FADE_MAX}
 
 
+def rolling_path(u, made, size, cache, fmt="webp", out=OUT):
+    """Where _rolling_picture keeps the mosaic movie picture of rolling_layout made (its report is the .json beside it),
+    read-only (resolve.py)."""
+    return os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if size == "full" else str(size), f"{made[5]}.{fmt}")
+
+
 def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None, fade=(0, 0)):
     """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
     One frame's picture is made once at a time (a window's request and the one made ahead wait for each other).
@@ -9638,8 +9656,7 @@ def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=T
     if not made:
         return None
     post = _faded(u, made, cache) if fade[0] else None
-    full = size == "full"
-    path = os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    path = rolling_path(u, made, size, cache, fmt, out)
     if os.path.exists(path):
         return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post) if read else True
     with _lock:
@@ -10042,6 +10059,15 @@ def _seam_of(u, p, tiles, rect, ref, t, cache, f=None):
 REPEAT_POINTING = 600   # s: a filter's tiles at one place are one pointing when taken within this of each other
 
 
+def mosaic_pass(frame_id, force=False):
+    """(pass, tile index at frame_id) when mosaic_webp draws frame_id's pass as a mosaic (force: whatever _judge says),
+    else None. Read-only (resolve.py)."""
+    found = unit_of(frame_id)
+    if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
+        return None
+    return found
+
+
 def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False, tune=None):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
     the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
@@ -10051,8 +10077,8 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
     "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
     instead. tune: the person's changes to its tiles (parse_tune), the tuned mosaic (tuned_layout) instead of
     the pass's own; never made ahead."""
-    found = unit_of(frame_id)
-    if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
+    found = mosaic_pass(frame_id, force)
+    if not found:
         return None
     u, n = found
     if tune and (tune[0] or tune[1]):
@@ -10145,6 +10171,13 @@ def _made_through(u, n, cache):
     if j < 0:
         with _asking():
             tile(u, 0, cache)
+    return tiles_made_through(u, n, cache, j)
+
+
+def tiles_made_through(u, n, cache, j=-1):
+    """The last tile j <= n of the pass with tiles 0..j all made, from j on (-1 for none), without making any:
+    _made_through's count after its tile 0, read-only (resolve.py). Needs the pass's plan in the cache."""
+    key = (u["key"], calibration.mode())
     p = plan(u, cache)
     while j < n and _has_tile(u, j + 1, cache, p):
         j += 1
