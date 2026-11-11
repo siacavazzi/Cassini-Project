@@ -13302,7 +13302,7 @@ void main() {
     "Cassini OS": () => `<h2>Cassini OS</h2>
       <p>A replay of NASA and ESA's Cassini-Huygens mission, from launch in 1997 to the plunge into Saturn in 2017. The spacecraft flies its real path and turns the way it really turned, and the camera windows show the pictures it took at that moment, each one calibrated, stacked and aligned from the raw frames.</p>
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
-      <p class="note"><a href="about/" target="_blank" rel="noopener">More about the project</a></p>
+      <p class="note"><a href="about/" target="_blank" rel="noopener">More about the project</a> · <a href="how/" target="_blank" rel="noopener">How the pictures are made</a></p>
       <h3>Credits</h3>
       <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
       <h3>Privacy</h3>
@@ -13341,7 +13341,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"9f98cf29c306";
+  const BUILD = /*BUILD*/"d7f3a165e7d6";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
