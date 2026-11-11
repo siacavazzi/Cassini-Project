@@ -56,43 +56,59 @@
   }
   const ONE = 2 ** PRECISION_BITS;
   const clip8 = v => (v >= ONE * 256 ? 255 : v <= 0 ? 0 : Math.floor(v / ONE));
-  // im: {data (4 bytes a pixel), width, height, bands}; resample to w x h (the whole picture as the box)
-  function resize(im, w, h, filterName) {
-    const filter = FILTERS[filterName], B = im.bands;
-    if (w === im.width && h === im.height) return { data: Uint8ClampedArray.from(im.data), width: w, height: h, bands: B };
-    const needH = w !== im.width, needV = h !== im.height;
-    const ch = coeffs(im.width, 0, im.width, w, filter), cv = coeffs(im.height, 0, im.height, h, filter);
-    const yFirst = cv.bounds[0], yLast = cv.bounds[h * 2 - 2] + cv.bounds[h * 2 - 1];
-    let src = im;
-    if (needH) {
-      const rows = yLast - yFirst, out = new Uint8ClampedArray(w * rows * 4);
-      for (let yy = 0; yy < rows; yy++) {
-        const row = (yy + yFirst) * im.width * 4;
-        for (let xx = 0; xx < w; xx++) {
-          const xmin = ch.bounds[xx * 2], xmax = ch.bounds[xx * 2 + 1], k = xx * ch.ksize;
-          const ss = [ONE / 2, ONE / 2, ONE / 2, ONE / 2];
-          for (let x = 0; x < xmax; x++) { const p = row + (x + xmin) * 4, c = ch.k[k + x]; for (let b = 0; b < 4; b++) ss[b] += im.data[p + b] * c; }
-          const o = (yy * w + xx) * 4;
-          if (B === 1) { out[o] = clip8(ss[0]); }
-          else { for (let b = 0; b < (B === 3 ? 3 : 4); b++) out[o + b] = clip8(ss[b]); }
-        }
+  // ImagingResampleHorizontal_8bpc: every row of src from row `offset` on, to w columns
+  function passH(src, w, rows, offset, c) {
+    const B = src.bands, out = new Uint8ClampedArray(w * rows * 4);
+    for (let yy = 0; yy < rows; yy++) {
+      const row = (yy + offset) * src.width * 4;
+      for (let xx = 0; xx < w; xx++) {
+        const xmin = c.bounds[xx * 2], xmax = c.bounds[xx * 2 + 1], k = xx * c.ksize;
+        const ss = [ONE / 2, ONE / 2, ONE / 2, ONE / 2];
+        for (let x = 0; x < xmax; x++) { const p = row + (x + xmin) * 4, kx = c.k[k + x]; for (let b = 0; b < 4; b++) ss[b] += src.data[p + b] * kx; }
+        const o = (yy * w + xx) * 4;
+        if (B === 1) out[o] = clip8(ss[0]);
+        else for (let b = 0; b < (B === 3 ? 3 : 4); b++) out[o + b] = clip8(ss[b]);
       }
-      src = { data: out, width: w, height: rows, bands: B };
-      for (let i = 0; i < h; i++) cv.bounds[i * 2] -= yFirst;
     }
-    if (!needV) return src;
-    const out = new Uint8ClampedArray(w * h * 4);
+    return { data: out, width: w, height: rows, bands: B };
+  }
+  // ImagingResampleVertical_8bpc: every column of src, to h rows (bounds already relative to src's first row)
+  function passV(src, h, c) {
+    const B = src.bands, w = src.width, out = new Uint8ClampedArray(w * h * 4);
     for (let yy = 0; yy < h; yy++) {
-      const ymin = cv.bounds[yy * 2], ymax = cv.bounds[yy * 2 + 1], k = yy * cv.ksize;
+      const ymin = c.bounds[yy * 2], ymax = c.bounds[yy * 2 + 1], k = yy * c.ksize;
       for (let xx = 0; xx < w; xx++) {
         const ss = [ONE / 2, ONE / 2, ONE / 2, ONE / 2];
-        for (let y = 0; y < ymax; y++) { const p = ((y + ymin) * w + xx) * 4, c = cv.k[k + y]; for (let b = 0; b < 4; b++) ss[b] += src.data[p + b] * c; }
+        for (let y = 0; y < ymax; y++) { const p = ((y + ymin) * w + xx) * 4, ky = c.k[k + y]; for (let b = 0; b < 4; b++) ss[b] += src.data[p + b] * ky; }
         const o = (yy * w + xx) * 4;
         if (B === 1) out[o] = clip8(ss[0]);
         else for (let b = 0; b < (B === 3 ? 3 : 4); b++) out[o + b] = clip8(ss[b]);
       }
     }
     return { data: out, width: w, height: h, bands: B };
+  }
+  // ImagingResampleInner as in Pillow 13 (requirements.txt pins 13.0.0): when the height shrinks more than twice as
+  // much as the width, the vertical pass runs first. im: {data (4 bytes a pixel), width, height, bands}; resample to
+  // w x h with the whole picture as the box.
+  function resize(im, w, h, filterName) {
+    const filter = FILTERS[filterName], B = im.bands;
+    if (w === im.width && h === im.height) return { data: Uint8ClampedArray.from(im.data), width: w, height: h, bands: B };
+    const needH = w !== im.width, needV = h !== im.height;
+    const horizontalFirst = !(im.height - h > 0 && im.height - h > (im.width - w) * 2);
+    const ch = coeffs(im.width, 0, im.width, w, filter), cv = coeffs(im.height, 0, im.height, h, filter);
+    let src = im;
+    if (horizontalFirst) {
+      if (needH) {
+        const yFirst = cv.bounds[0], yLast = cv.bounds[h * 2 - 2] + cv.bounds[h * 2 - 1];
+        if (yFirst !== 0) for (let i = 0; i < h; i++) cv.bounds[i * 2] -= yFirst;
+        src = passH(src, w, yLast - yFirst, yFirst, ch);
+      }
+      if (needV) src = passV(src, h, cv);
+    } else {
+      if (needV) src = passV(src, h, cv);
+      if (needH) src = passH(src, w, h, 0, ch);
+    }
+    return src;
   }
   const MULDIV255 = (a, b) => { const t = a * b + 128; return ((t >> 8) + t) >> 8; };
   const DIV255 = a => { const t = a + 128; return ((t >> 8) + t) >> 8; };
@@ -216,12 +232,20 @@
   }
 
   // the picture of plan entry e at size px as the frame server makes it, RGBA, its tries in turn (null: none)
+  // the address of a try as export.html's pictureUrl builds it: the movie style only on movie and rolling routes (the
+  // public site's policy refuses it elsewhere), the look on all but plain frames; then cassiniExport.publicUrl when
+  // the public site has it
+  function pictureUrl(kind, src, size, frames) {
+    const sep = src.includes("?") ? "&" : "?", look = root.cassiniLook ? root.cassiniLook() : "",
+      style = root.cassiniMovieStyle ? root.cassiniMovieStyle() : "", base = (/^https?:/.test(src) ? src : frames + src) + sep + `size=${size}`;
+    const url = kind === "movie" ? `${base}&color=1${style}${look}` : kind === "rolling" ? `${base}${style}${look}` : kind === "frame" ? base : `${base}${look}`;
+    return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
+  }
   async function picture(e, size, opt) {
     const P = root.cassiniPlanLocal, frames = (P && P.frames) || "";
-    const extra = (root.cassiniLook ? root.cassiniLook() : "") + (root.cassiniMovieStyle ? root.cassiniMovieStyle() : "");
-    for (const [, src] of e.tries || []) {
+    for (const [kind, src] of e.tries || []) {
       try {
-        const url = (/^https?:/.test(src) ? src : frames + src) + (src.includes("?") ? "&" : "?") + `size=${size}` + extra;
+        const url = pictureUrl(kind, src, size, frames);
         const r = await fetch(url);
         if (!r.ok) continue;
         const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
@@ -277,7 +301,7 @@
     }
   }
 
-  const API = { levels, _levels: { brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, _levels: { pictureUrl, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};

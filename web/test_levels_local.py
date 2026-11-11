@@ -19,6 +19,11 @@ import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.pa
 import io, json, math, subprocess, zlib  # noqa: E401,E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
+import PIL  # noqa: E402
+
+# The page ports Pillow 13's resampling (requirements.txt): from 13 on, a picture whose height shrinks more than twice
+# as much as its width is resampled vertically first, which changes the rounding.
+assert int(PIL.__version__.split(".")[0]) >= 13, f"Pillow {PIL.__version__}: install requirements.txt (pillow==13.0.0)"
 import test_plan_local as T  # noqa: E402  (the data, the pass rule and the stretches)
 import export  # noqa: E402
 import obs_mosaic as om  # noqa: E402
@@ -155,7 +160,7 @@ for c, w, g in zip(cases, want, got):
     bands = w.shape[2] if w.ndim == 3 else 1
     assert (g["h"], g["w"]) == w.shape[:2], (c["op"], (g["h"], g["w"]), w.shape)
     assert np.array_equal(arr[..., :bands], w.reshape(w.shape[0], w.shape[1], bands)), f"{c['op']} differs: {int((arr[..., :bands] != w.reshape(w.shape[0], w.shape[1], bands)).sum())} values"
-print(f"Pillow: {len(cases)} pictures resized (BILINEAR, LANCZOS premultiplied) and put on black the same, byte for byte")
+print(f"Pillow {PIL.__version__}: {len(cases)} pictures resized (BILINEAR, LANCZOS premultiplied) and put on black the same, byte for byte")
 
 # 2. brightness
 pics = []
