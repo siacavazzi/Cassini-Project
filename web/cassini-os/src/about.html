@@ -104,19 +104,14 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
   const BUILD = /*BUILD*/"";
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
     const v = ver.server, el = $("aver");
     const old = v && v.page && BUILD && v.page !== BUILD;
     el.textContent = v ? `Version ${v.version}${old ? " · reload for the newest" : ""}` : BUILD ? `Build ${BUILD}` : "";
     el.title = v ? [`Site ${v.site ? v.site.commit + " " + v.site.subject : "unknown"}`,
-      `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
+      window.cassiniPublic ? `Pictures ${v.server_version}` : `Frame server ${v.server_version}${v.server_current ? "" : " (restart pending)"}`, `Page build ${BUILD || "none"}`].join("\n") : "";
   }
   ver.ready = fetch(`${FRAMES}/version.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null, () => null)
     .then(v => { ver.server = v; showVersion(); return ver; });

@@ -1,0 +1,28 @@
+# The public site's frames Worker (docs/public-site/briefs/WP4.md). A template with no secret and no account in it:
+# WP8's deploy (web/deploy/) fills the account, the route and MANIFEST_KEY, and switches MANIFEST_KEY to a new
+# manifest only after a publish has finished uploading.
+#
+#   npm run dev            wrangler dev on port 8911 against the local R2 that npm run seed fills from a mirror
+name = "cassini-frames"
+main = "src/index.mjs"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[vars]
+# manifest/<publish_id>.json, written last by web/frames/publish.py (WP3). Empty: every picture answers 503.
+MANIFEST_KEY = ""
+# local, staging or production (reported on /health as X-Site-Env)
+SITE_ENV = "local"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "cassini-os"
+
+[[analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "cassini_public_local"
+
+[dev]
+port = 8911
+ip = "0.0.0.0"
