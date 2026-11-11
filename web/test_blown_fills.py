@@ -20,17 +20,30 @@ grid = [tile(10 * i + j, x, y) for i, x in enumerate((-920, 0, 920)) for j, y in
 middle = [tile(100, 3, -131, "IR2", saturated=0.9483, lit=1.0), tile(101, 2, -131, "BL1", saturated=0.9493, lit=1.0),
           tile(102, 2, -131, "VIO", saturated=0.946, lit=1.0)]
 laid = grid + [om._silhouette(t) for t in middle]
+DRAWN = {"IR2", "RED", "BL1", "VIO"}
 assert all("offset" not in t and "blown" in t for t in laid[-3:])
-got = om.blown_fills(laid)
-assert [t["n"] for t in got] == [102], got           # one per place, the least saturated
-assert got[0]["fill"] and got[0]["offset"] == [2, -131] and got[0]["box"] == BOX and "why" not in got[0]
-print("a saturated hole inside the mosaic is filled by", got[0]["id"], "; ok")
+got = om.blown_fills(laid, DRAWN)
+assert list(got) == [102], got                       # one per place, the least saturated
+assert got[102]["offset"] == [2, -131] and got[102]["box"] == BOX
+print("a saturated hole inside the mosaic is filled by tile 102; ok")
 
-# the same place with a tile that shows a picture there: nothing filled
-assert om.blown_fills(laid + [tile(103, 0, -120, "RED")]) == []
-# at the mosaic's edge (no tile to its right): nothing filled
-edge = [t for t in grid if t["offset"][0] < 900] + [om._silhouette(tile(104, 920, -130, saturated=0.97, lit=1.0))]
-assert om.blown_fills(edge) == []
-# a mosaic movie's own base (rolling) and a pass with no silhouettes draw as before
-assert om.blown_fills(grid) == []
-print("silhouettes at the edge or under a shown tile stay out; ok")
+# a frame saturated all over keeps its place as "blown" too (_tile_made), so a place whose every frame is 95-99% fills
+allover = [{"n": 110, "id": "W110", "filter": "IR2", "saturated": 0.97, "why": "saturated all over (97%)",
+            "blown": {"offset": [0, -130], "box": BOX}}]
+assert list(om.blown_fills(grid + allover, DRAWN)) == [110]
+
+# the same place with a drawn tile there: nothing filled; a tile of a filter not drawn (a polarizer) does not stop it
+assert om.blown_fills(laid + [tile(103, 0, -120, "RED")], DRAWN) == {}
+assert list(om.blown_fills(laid + [tile(104, 0, -120, "IRP0")], DRAWN)) == [102]
+# at the mosaic's edge (no tile to its right): nothing filled, nor with a tile far out to its right (another strip)
+edge = [t for t in grid if t["offset"][0] < 900] + [om._silhouette(tile(105, 920, -130, saturated=0.97, lit=1.0))]
+assert om.blown_fills(edge, DRAWN) == {}
+assert om.blown_fills(edge + [tile(106, 920 + 3000, -130)], DRAWN) == {}
+assert om.blown_fills(grid, DRAWN) == {}
+print("silhouettes at the edge, past it, or under a drawn tile stay out; ok")
+
+# registered tiles round it (the global solve moved them 6 px right, 4 down): the fill moves with them
+moved = [dict(t, offset=[t["offset"][0] + 6, t["offset"][1] + 4], spice_place=t["offset"]) for t in grid]
+got = om.blown_fills(moved + [om._silhouette(t) for t in middle], DRAWN)
+assert got[102]["offset"] == [8, -127] and got[102]["spice_place"] == [2, -131], got
+print("the fill moves with the registered tiles round it; ok")

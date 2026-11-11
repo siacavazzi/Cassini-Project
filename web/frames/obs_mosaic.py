@@ -66,7 +66,7 @@ import label_handler  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when tiles lie all round it (039RI's black square on the disk); numbered past #396-#402; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+# obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
 VERSIONS = {"balanced": "obs-v105", "raw": "obs-v88", "eye": "obs-v105-eye", "false": "obs-v105-false", "classic": "obs-v75-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
@@ -1934,11 +1934,18 @@ def _mine(u, p, tiles, f):
             t = dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t
             out.append(dict(t, fill=True) if t["n"] in fills else t)
     if not rolling:
-        # (and a saturated place's silhouette, where nothing else is: blown_fills)
-        for t in blown_fills(tiles):
+        # (and a saturated place's left-out tile, where nothing else is: blown_fills, worked out in layout)
+        for t in blown_tiles(tiles):
             g = lum["gains"].get(t["filter"], 1.0)
             out.append(dict(t, gain=round(g * t.get("gain", 1.0), 4), gamma=gamma) if g != 1.0 else t)
     return out
+
+
+def blown_tiles(tiles):
+    """The tiles layout marked as the luminance base's saturated fills ("fill_at": blown_fills), as drawn: at that
+    place, under everything (fill)."""
+    return [dict({k: v for k, v in t.items() if k not in ("blown", "why", "fill_at")}, **t["fill_at"], fill=True, blown_fill=True)
+            for t in tiles if "fill_at" in t]
 
 
 _luts = {}
@@ -1992,11 +1999,10 @@ def lum_base(u, p, tiles, used, base=None):
     drawn in gray, a tile of a filter other than the one drawn). base: the base's tiles (lum_frames' by default)."""
     if any("base" in t for t in tiles):
         return any(t.get("base") for t in tiles)   # (a mosaic movie's picture: rolling_base said)
-    if blown_fills(tiles):
-        return True   # (a saturated place nothing else covers: only the base draws it)
     if base is None:
         frames = lum_frames(u, p) | lum_fills(u, p, tiles)
-        base = [t for t in tiles if "offset" in t and t["n"] in frames]
+        # (and a saturated place's fill, blown_tiles: the colour is never where it is, so the base draws it)
+        base = [t for t in tiles if "offset" in t and t["n"] in frames] + blown_tiles(tiles)
     if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
     by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
@@ -2853,7 +2859,9 @@ def _tile_made(u, n, cache, scale, base):
         # a frame the camera saturated all over carries no picture: calibrated, it is one flat field at the top of the
         # camera's range over its exposure, so a long exposure's is dark and a short one's bright (101SA SPOLEDYN001 W
         # took 10 to 82 s frames between its 2.6 s ones: its places flickered black and white lap to lap). Left out
-        image, rep = None, {**rep, "why": f"saturated all over ({share:.0%}): left out of the mosaic"}
+        # (its picture and place kept aside, "blown": blown_fills draws it under everything where nothing else was
+        # taken, and nothing else uses it)
+        rep = {**rep, "why": f"saturated all over ({share:.0%}): left out of the mosaic", "blown": True}
     out = {"n": n, "id": fid, "filter": f, "t": t, "stacked": rep.get("stacked"), "calibrated": rep.get("calibrated"), **seen}
     if rep.get("spikes_px"):
         out["spikes_px"] = rep["spikes_px"]
@@ -2888,12 +2896,17 @@ def _tile_made(u, n, cache, scale, base):
             _keep_tile_map(sink, image, side, crop, base)
             out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
-            _register(u, n, out, crop, cache, scale)
+            if not rep.get("blown"):
+                _register(u, n, out, crop, cache, scale)
             out["outline"] = _corners(out, crop[..., 3])
             if out.get("lost", 0.0) > MOVIE_LOST:
                 out["lost_inside"] = lost_inside(crop[..., 3])
     else:
         out["why"] = rep.get("why", "not placed by SPICE")
+    if rep.get("blown"):
+        place = {k: out[k] for k in BLOWN_KEYS if k in out}
+        out = {k: v for k, v in out.items() if k not in BLOWN_KEYS}
+        out.update(why=rep["why"], **({"blown": place} if "offset" in place else {}))
     data = json.dumps(out, default=str)
     reel._cached(base + ".json", data.encode)
     return json.loads(data)
@@ -4297,7 +4310,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     ref = ref or f
     solved_on = f"-{ref.replace('/', '_')}{sum(1 for t in tiles if t['filter'] == ref and 'offset' in t)}" if balanced else ""
     path = _filter_path(u, f, len(mine), rect, cache, solved_on)
-    path = path[:-len(".png")] + tag + ".png"
+    # (the base's saturated fills in its name: one can come and go as tiles arrive, at the same count, blown_fills)
+    filled = "".join(f"-B{t['n']}" for t in mine if t.get("blown_fill"))
+    path = path[:-len(".png")] + tag + filled + ".png"
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
@@ -4486,6 +4501,11 @@ def layout(u, n, cache):
     if not count:
         return None
     colour = p["colour"]
+    # a saturated place nothing else covers, filled from its left-out tile where the tiles round it now are
+    # (blown_fills, after every move above)
+    blown = blown_fills(tiles, set(colour or []) | set(_luminance(p)["filters"]))
+    if blown:
+        tiles = [dict(t, fill_at=blown[t["n"]]) if t["n"] in blown else t for t in tiles]
     frames = lum_frames(u, p) | lum_fills(u, p, tiles)
     base = [t["filter"] for t in tiles if "offset" in t and t["n"] in frames]
     if colour and all(count.get(f) for f in colour):
@@ -4499,9 +4519,8 @@ def layout(u, n, cache):
     name = "_".join(f"{f.replace('/', '-')}{count[f]}" for f in used)
     if any(f not in used for f in base):
         name += f"_L{len(base)}"
-    blown = blown_fills(tiles)
     if blown:
-        name += f"_B{len(blown)}"   # (saturated places the base fills in: blown_fills)
+        name += "_B" + "-".join(str(n) for n in sorted(blown))   # (saturated places the base fills in: blown_fills)
     if colour and used == colour and clipped_still(u, tiles, colour):
         name += CLIPPED_TAG   # (its colour planes draw a saturated pointing under: visit_tiles)
     return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
@@ -6722,7 +6741,7 @@ def _silhouette(t):
     s = t.get("saturated", 0.0)
     if "offset" not in t or s < OVER_LEAST or s < SATURATED_LIT * t.get("lit", 1.0):
         return t
-    gone = ("offset", "box", "native_offset", "spice_offset", "outline", "registered")
+    gone = BLOWN_KEYS
     out = {k: v for k, v in t.items() if k not in gone}
     out["why"] = f"saturated over {s / max(t.get('lit', 1.0), 1e-6):.0%} of what is lit in it: left out of the mosaic"
     # (its place kept aside: where nothing else was taken, the luminance base draws it under everything, blown_fills)
@@ -6730,36 +6749,48 @@ def _silhouette(t):
     return out
 
 
+BLOWN_KEYS = ("offset", "box", "native_offset", "spice_offset", "outline", "registered")   # a left-out tile's place
+ENCLOSE_REACH = 1.5   # frames: (enclosed) how far from a hole a drawn tile may lie and still close that side of it
+
+
 def enclosed(o, box, shown):
     """True when a tile at offset o (box: its crop, reference px) has drawn tiles (their offsets, shown) on all four
-    sides: one centred over half its width to its left and to its right within its height, and over half its height
-    above and below within its width."""
+    sides close by: one centred over half its width and at most ENCLOSE_REACH widths to its left and to its right,
+    within its height, and so above and below. A tile further off (another strip, a frame out in the sky) closes
+    nothing: past the mosaic's edge a silhouette stays out."""
     w, h = box[2], box[3]
-    across = lambda d: any(abs(q[1] - o[1]) < h and (q[0] - o[0]) * d > w / 2 for q in shown)
-    down = lambda d: any(abs(q[0] - o[0]) < w and (q[1] - o[1]) * d > h / 2 for q in shown)
+    across = lambda d: any(abs(q[1] - o[1]) < h and w / 2 < (q[0] - o[0]) * d <= ENCLOSE_REACH * w for q in shown)
+    down = lambda d: any(abs(q[0] - o[0]) < w and h / 2 < (q[1] - o[1]) * d <= ENCLOSE_REACH * h for q in shown)
     return across(-1) and across(1) and down(-1) and down(1)
 
 
-def blown_fills(tiles):
-    """The silhouettes (_silhouette: tiles left out as saturated over nearly all that is lit in them) drawn as the
-    luminance base's fills, under everything (under_first), at places where no tile of any filter is drawn: one per
-    place, the least saturated. Left out there, the place was a hole to the sky in the middle of a lit disk, a black
-    square: 039RI PHOTLIT004 (2007) pointed at Saturn's disk centre with exposures made for the rings, and all seven
-    of its frames there saturated 95-99%. What the camera saw there was at least as bright as its clip, so the tile's
-    saturated white, tinted to the colour round it (over_grey), says more than a hole. A place with any tile that
-    shows a picture keeps that, and only a hole inside the mosaic is filled, a place with drawn tiles on all four
-    sides of it (enclosed): at the mosaic's edge a silhouette is a white outline out in the sky, a second limb (Iapetus
+def blown_fills(tiles, drawn):
+    """{tile n: its place} for the left-out saturated tiles (_silhouette's, and frames saturated all over, _tile_made:
+    their place kept as "blown") the luminance base draws under everything (under_first): at a place where no tile of
+    the filters drawn (drawn: the colour and luminance filters) is, with drawn tiles close on all four sides of it
+    (enclosed), one per place, the least saturated, of a luminance filter. Left out there, the place was a hole to the
+    sky in the middle of a lit disk, a black square: 039RI PHOTLIT004 (2007) pointed at Saturn's disk centre with
+    exposures made for the rings, and all seven of its frames there saturated 95-99%. What the camera saw was at least
+    as bright as its clip, so the tile's saturated white, tinted to the colour round it (over_grey), says more than a
+    hole. Its place moves as the drawn tiles round it were moved (registration, the global solve, a person's tuning):
+    their median move. At the mosaic's edge a silhouette is a white outline out in the sky, a second limb (Iapetus
     049IA REGMAPTRL001's CL1/CL2 frames off the dark leading side, why _silhouette leaves them out), not a hole."""
-    shown = [t["offset"] for t in tiles if "offset" in t]
-    near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
-    out = []
-    for t in sorted((t for t in tiles if "blown" in t and "offset" in t["blown"] and "box" in t["blown"]),
+    shown = [t for t in tiles if "offset" in t and t["filter"] in drawn]
+    at = [t["offset"] for t in shown]
+    near = lambda o, os_, r: [q for q in os_ if math.hypot(o[0] - q[0], o[1] - q[1]) <= r]
+    out = {}
+    for t in sorted((t for t in tiles if t.get("blown", {}).get("offset") and t["filter"] in drawn),
                     key=lambda t: (t.get("saturated", 1.0), t["n"])):
-        o = t["blown"]["offset"]
-        if near(o, shown) or near(o, [q["offset"] for q in out]) or not enclosed(o, t["blown"]["box"], shown):
+        o, box = t["blown"]["offset"], t["blown"]["box"]
+        if near(o, at, SAME_PLACE * FRAME) or near(o, [q["offset"] for q in out.values()], SAME_PLACE * FRAME) \
+                or not enclosed(o, box, at):
             continue
-        out.append(dict({k: v for k, v in t.items() if k not in ("blown", "why")}, **t["blown"], fill=True))
-    return sorted(out, key=lambda t: t["n"])
+        reach = ENCLOSE_REACH * max(box[2], box[3])
+        moves = [(q["offset"][0] - q["spice_place"][0], q["offset"][1] - q["spice_place"][1])
+                 for q in shown if "spice_place" in q and near(o, [q["spice_place"]], reach)]
+        dx, dy = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) if moves else (0.0, 0.0)
+        out[t["n"]] = dict(t["blown"], offset=[o[0] + dx, o[1] + dy], **({"spice_place": o} if moves else {}))
+    return out
 
 
 BLANK_SHARE = 0.5    # a frame whose levels span (top over floor) less than this share of both its filter's nearest
