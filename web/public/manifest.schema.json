@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cassini.invalid/public/manifest.schema.json",
+  "title": "Publish manifest",
+  "description": "manifest/{publish_id}.json, uploaded last by a publish (WP3) and named by the Worker's MANIFEST_KEY (WP4, switched by WP8's deploy only after the upload finished). The Worker reads it once per isolate (cached a minute) and builds every key from its family tags; it answers /version.json and /frames/slices.json from it. Version strings live here and only here, written from frame_server.picture_versions() at publish time.",
+  "type": "object",
+  "required": ["publish_id", "published", "commit", "versions", "families", "slices", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "publish_id": {"type": "string", "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}$", "description": "UTC time of the publish and the commit it was made from"},
+    "published": {"type": "string", "format": "date-time"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"},
+    "versions": {"type": "object", "additionalProperties": {"type": ["string", "object"]}, "description": "frame_server.picture_versions() as the cache was built"},
+    "families": {
+      "type": "object",
+      "description": "{family: tag} for every family in keys.json, keys.family_tags(versions)",
+      "propertyNames": {"enum": ["archive", "frame", "composite", "processed", "pass", "thumb", "table"]},
+      "additionalProperties": {"type": "string", "pattern": "^t[0-9a-f]{12}$"},
+      "minProperties": 7
+    },
+    "slices": {"description": "the /frames/slices.json answer for what was published (slices.covered's shape: {spans: [[from, until], ...] or null, phases: {...}})", "type": "object", "required": ["spans"]},
+    "version": {"description": "the /version.json answer (frame_server.site_version's shape) for the site and pictures published", "type": "object"},
+    "counts": {"description": "published.json's summary: objects and bytes per family and year", "type": "object"}
+  }
+}

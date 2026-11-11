@@ -1,0 +1,74 @@
+{
+  "contract": "keys",
+  "contract_version": 1,
+  "about": "How a public request URL becomes an R2 object key. Read together with policy.json, which lists the routes and the parameter values each allows. keys.py (Python, the publisher) and keys.mjs (JavaScript, the Worker and the page) implement this file and are both tested against key_fixtures.json. A change here is a small PR of its own that updates both implementations and the fixtures.",
+
+  "key_format": "{family}/{tag}/{path}{query}",
+  "path": "the URL path without its leading slash, exactly as matched by the route's pattern",
+  "query": "empty when no parameter is left; otherwise '~' followed by name=value pairs joined by '&', in sorted name order. Only parameters whose canonical value differs from the route's default are kept",
+  "value_charset": "^[A-Za-z0-9_.,:-]*$",
+  "value_charset_why": "every value the public site allows is a frame id, a number, a short word or a comma list of those, so keys need no escaping; a value with any other character is refused",
+  "max_key_bytes": 1024,
+
+  "families": {
+    "about": "Each family's {tag} comes from the picture-maker versions it depends on (frame_server.picture_versions(), the same strings that name the cache folders), computed at publish time and recorded in the manifest. Nothing in the contracts names a version, so a version bump changes the tags of the families that depend on it and nothing else. depends is a list of regular expressions over picture_versions() keys; ['.*'] (every version) is the safe default. A package may narrow a family's list only with a test that shows the family's pictures do not change when the versions left out change.",
+    "tag_rule": "t + the first 12 hex digits of sha256 over the JSON of {name: version} for the matching versions, keys sorted, separators (',', ':')",
+    "list": {
+      "archive":   {"depends": [], "holds": "archive frames as they are (/frames/<ID>.png); never change"},
+      "frame":     {"depends": ["^frame_server\\.FRAME_VERSION$"], "holds": "/frames/<ID>.webp"},
+      "composite": {"depends": [".*"], "holds": "/frames/color.webp"},
+      "processed": {"depends": [".*"], "holds": "/frames/processed/<ID>.webp"},
+      "pass":      {"depends": [".*"], "holds": "/frames/movie/<ID>.webp (movie frames and mosaic movies) and /frames/mosaic/<ID>.webp (mosaics so far, full view)"},
+      "thumb":     {"depends": [".*"], "holds": "/frames/thumb.webp"},
+      "table":     {"depends": [".*"], "holds": "pass tables and frame aliases (tables.schema.json)"}
+    }
+  },
+
+  "manifest": {
+    "about": "One small JSON object the Worker reads first (manifest.schema.json). The Worker's MANIFEST_KEY environment variable names it; a publish uploads every object first and the manifest last, and only then is MANIFEST_KEY switched, so a visitor never sees a half-published version.",
+    "key_format": "manifest/{publish_id}.json"
+  },
+
+  "sizes": {
+    "about": "The size= rule. 'full' stays 'full' where the route builds a full picture, else becomes the route's full_as. Any other value is first read as frame_server.size_of reads it (the nearest of all_sizes; not a number gives the route's default), then, when that size is not one the route builds, the smallest built size above it, else the largest built size.",
+    "all_sizes": [128, 256, 384, 512, 768, 1024]
+  },
+
+  "flags": {
+    "about": "How a 0/1 parameter is read, matching the server's own test for it.",
+    "not0": "anything but '0' is 1 (the server tests != '0'); missing is the default",
+    "eq1": "only '1' is 1 (the server tests == '1'); missing is the default",
+    "nonempty": "any non-empty value is 1 (the server tests bool(query.get(k))); missing or empty is 0"
+  },
+
+  "global": {
+    "about": "Parameters every route accepts, applied before the route's own. 'drop' never reaches the key. 'default_only' accepts only the default (which is then dropped) and refuses any other value; these are the server-side looks the public site does not offer (docs/compute-on-viewer.md row 8).",
+    "drop": {
+      "x": "a cache-buster some page code adds",
+      "download": "the Worker adds Content-Disposition itself (headers.json download_names); same object either way",
+      "whole": "Whole mosaics only changes whether the server waits; a published picture is always whole",
+      "hdr": "decision D8: HDR highlights are off on the public site, so hdr=1 gets the usual picture"
+    },
+    "default_only": {
+      "look": "balanced",
+      "colors": "natural",
+      "off": "",
+      "format": "webp"
+    },
+    "unknown": "refuse"
+  },
+
+  "tables": {
+    "about": "Per-frame JSON routes (policy store 'table') are answered from the frame's pass table, found through the frame's alias. The Worker reads the alias shard, then the part named here, all under the table family's prefix. See tables.schema.json.",
+    "alias_key": "table/{tag}/alias/{shard}.json",
+    "shard_rule": "the frame id's camera letter and the first five digits of its ten-digit clock: N1500060789_2 -> N15000 (one shard per camera per 100,000 s, about 28 hours)",
+    "part_key": "table/{tag}/pass/{pass}/{part}.json",
+    "parts": {
+      "info": "info",
+      "kind": "kind",
+      "steady": "steady/c{center}k{color}",
+      "fade": "fade/l{laps}_{w}x{h}",
+      "maps": "maps/{m}"
+    }
+  }
+}

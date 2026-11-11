@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cassini.invalid/public/tables.schema.json",
+  "title": "Pass tables and frame aliases",
+  "description": "What the tables phase (WP2, web/frames/tables.py) writes for each pass and the Worker (WP4) reads to answer the per-frame JSON routes (policy.json store 'table'). A part is exactly what the server's route answers today for any frame of the pass (the same function, called once per pass), so the Worker sends its bytes as they are; the only per-frame value, pass_info's n, comes from the alias. A part is never written while the server would still answer {\"working\": true}: the phase runs on a finished cache. Keys: keys.json tables (alias_key, part_key). The pass id is the prebuild item name of the pass ('_'.join(map(str, u['key']))) with any character outside [A-Za-z0-9_.-] turned into '-'. Validate a part against its own $defs entry (alias_shard, info, kind, steady, fade, maps).",
+  "$defs": {
+    "frame_id": {
+      "type": "string",
+      "pattern": "^[NW]\\d{10}_\\d+$"
+    },
+    "pass_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,200}$"
+    },
+    "alias_shard": {
+      "description": "table/{tag}/alias/{shard}.json: every frame of the shard (keys.json shard_rule) that is in a pass. A frame of the shard not listed is in no pass: the Worker answers the route's no_alias_answer when policy.json gives one, else 404, as the server does.",
+      "type": "object",
+      "required": [
+        "shard",
+        "frames"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "shard": {
+          "type": "string",
+          "pattern": "^[NW]\\d{5}$"
+        },
+        "frames": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/frame_id"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "p",
+              "n"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "p": {
+                "$ref": "#/$defs/pass_id",
+                "description": "the frame's pass"
+              },
+              "n": {
+                "type": "integer",
+                "description": "obs_mosaic.unit_of(frame)[1]: the frame's index in its pass (-1: in the pass, not drawn)"
+              },
+              "m": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9_.-]{1,200}$",
+                "description": "the frame's tile map: the name tile_map keeps it under (MAPS_DIR/<m>.json, the layout name); null or absent when tile_map answers None for it"
+              }
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "description": "table/{tag}/pass/{pass}/info.json: obs_mosaic.pass_info(frame) for the pass, without n. The Worker adds the alias's n and sends the JSON (the server's /frames/movie/<ID>.json).",
+      "type": "object",
+      "required": [
+        "observation",
+        "target",
+        "camera",
+        "pass",
+        "movie",
+        "mosaic",
+        "cadence",
+        "frames"
+      ],
+      "not": {
+        "required": [
+          "n"
+        ]
+      },
+      "properties": {
+        "frames": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/frame_id"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "kind": {
+      "description": "table/{tag}/pass/{pass}/kind.json: obs_mosaic.kind_of(frame, cache) for the pass, the warm=1 answer.",
+      "type": "object",
+      "required": [
+        "mosaic",
+        "movie",
+        "kind"
+      ],
+      "properties": {
+        "mosaic": {
+          "type": "boolean"
+        },
+        "movie": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "mosaic",
+            "movie",
+            "mosaic_movie",
+            null
+          ]
+        },
+        "lap_ends": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frame_id"
+          }
+        },
+        "mosaic_steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frame_id"
+          }
+        }
+      }
+    },
+    "steady": {
+      "description": "table/{tag}/pass/{pass}/steady/c{center}k{color}.json: obs_mosaic.steady_table(frame, cache, center, color) for the pass. Written for every movie pass at the combinations the page asks (c1k0, c1k1; c0k0 and c0k1 where Auto center leaves the pass as it is). {\"local\": false} is a valid table (the server draws that pass).",
+      "type": "object",
+      "required": [
+        "local"
+      ],
+      "not": {
+        "required": [
+          "working"
+        ]
+      },
+      "properties": {
+        "local": {
+          "type": "boolean"
+        }
+      }
+    },
+    "fade": {
+      "description": "table/{tag}/pass/{pass}/fade/l{laps}_{w}x{h}.json: obs_mosaic.fade_table(frame, cache, laps, w, h) for a mosaic movie pass, at laps 1 and the W x H of each published rolling picture size (1024 and 512 on its longest side).",
+      "type": "object",
+      "required": [
+        "local"
+      ],
+      "not": {
+        "required": [
+          "working"
+        ]
+      },
+      "properties": {
+        "local": {
+          "type": "boolean"
+        },
+        "laps": {
+          "const": 1
+        },
+        "W": {
+          "type": "integer"
+        },
+        "H": {
+          "type": "integer"
+        }
+      }
+    },
+    "maps": {
+      "description": "table/{tag}/pass/{pass}/maps/{m}.json: obs_mosaic.tile_map for the frames whose alias names m (the server's kept MAPS_DIR/<m>.json, byte for byte).",
+      "type": "object",
+      "required": [
+        "pointings"
+      ],
+      "properties": {
+        "pointings": {
+          "type": "array"
+        }
+      }
+    }
+  }
+}
