@@ -3589,6 +3589,104 @@ body.ambient.phone .amb-where { font-size: 18px; }
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
+
+  // ---------- the public switch (docs/public-site, WP5): one address per picture ----------
+  // With window.cassiniPublic on, every picture and table comes from Cloudflare R2 under its canonical key
+  // (web/public/keys.json, policy.json), and the Worker's cache is keyed by the address asked. PUBLIC_URL()(url) gives
+  // the address of what url asks for in that canonical form: the parameters the key drops (x, whole, hdr, the default
+  // looks, a route's no-ops) left out, every other one at its value as keys.mjs reads it, defaults left out, sizes
+  // snapped to the sizes the route builds, in the key's order. A camera window asks only for that. One choice is the
+  // page's own (D3): a colour picture in full view and the lens is asked at 1024, which is its full picture (one
+  // address fewer to cache), while a mosaic is asked at full (the Worker answers 1024 while its pass builds). The
+  // fragment (#here=..., #ch=...) is kept: it never leaves the page. A value the route refuses (a channel, a laps or
+  // fade above the published one) is left in, so the zero-origin harness counts it. web/test_public_cameras.mjs checks
+  // the addresses against keys.mjs.
+  const PUBLIC_URL = function () {
+    const ALL = [128, 256, 384, 512, 768, 1024];
+    const size = (built, dflt, full) => v => {
+      if (v === "full") { if (full === "full") return "full"; v = String(full); }
+      let n = dflt;
+      if (/^-?\d+$/.test(v)) { const a = parseInt(v, 10); n = ALL.reduce((b, s) => (Math.abs(s - a) < Math.abs(b - a) ? s : b)); }
+      if (!built.includes(n)) { const up = built.filter(b => b >= n); n = up.length ? Math.min(...up) : Math.max(...built); }
+      return String(n);
+    };
+    const flag = read => v => (read === "not0" ? (v === "0" ? "0" : "1") : read === "eq1" ? (v === "1" ? "1" : "0") : "1");
+    const int = v => (/^-?\d+$/.test(v) ? String(parseInt(v, 10)) : v);
+    const as = v => v;   // a value kept as asked (frame ids, or a value the route refuses)
+    // [path, the query parameter the route is told apart by (kept, first), {param: [read, its default]}, params dropped]
+    const MOVIE_DROP = ["laps", "fade", "persist"], ROLL_DROP = ["persist", "center", "trail", "steady", "exposure", "color", "detail"];
+    const ROUTES = [
+      [/^\/frames\/color\.webp$/, null, { ids: [as, null], size: [size([512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"], channel: [as, ""] }],
+      [/^\/frames\/thumb\.webp$/, null, { mosaic: [as, null], frame: [as, null], color: [as, null], size: [size([256], 256, 256), "256"] }],
+      [/^\/frames\/processed\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([256, 512, 1024], 512, 1024), "512"], center: [flag("eq1"), "0"] }],
+      [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.json$/, null, {}],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.fade\.json$/, null, { laps: [int, "1"], w: [int, "0"], h: [int, "0"] }],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.steady\.json$/, null, { center: [flag("not0"), "1"], color: [flag("not0"), "0"] }],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.json$/, null, {}],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, "mode", { size: [size([512, 1024], 512, 1024), "512"], laps: [int, "1"], fade: [int, "0"] }, ROLL_DROP],
+      [/^\/frames\/movie\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([128, 512, 1024], 512, 1024), "512"], color: [flag("not0"), "1"], center: [flag("not0"), "1"],
+        trail: [int, "0"], steady: [int, "0"], exposure: [int, "0"], detail: [flag("not0"), "1"], mode: [as, ""] }, MOVIE_DROP],
+      [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/, "warm", {}],
+      [/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([512, 1024], 512, "full"), "512"], force: [flag("nonempty"), "0"], tune: [as, ""], hide: [as, ""] }],
+      [/^\/frames\/[NW]\d{10}_\d+\.webp$/, null, { size: [size([128, 512, 1024], 512, 1024), "512"] }],
+      [/^\/frames\/[NW]\d{10}_\d+\.png$/, null, {}]
+    ];
+    const DROP = ["x", "whole", "hdr"], DEFAULT_ONLY = { look: "balanced", colors: "natural", off: "", format: "webp" };
+    const dec = s => { try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch (e) { return s; } };
+    const enc = s => encodeURIComponent(s).replace(/%2C/g, ",");
+    return function canonical(url) {
+      const hash = url.indexOf("#"), frag = hash < 0 ? "" : url.slice(hash), bare = hash < 0 ? url : url.slice(0, hash);
+      const q0 = bare.indexOf("?"), head = q0 < 0 ? bare : bare.slice(0, q0), query = q0 < 0 ? "" : bare.slice(q0 + 1);
+      const path = head.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, "");
+      const q = {};   // name -> its first nonblank value (as the server's parse_qs reads a query)
+      for (const part of query ? query.split("&") : []) {
+        const i = part.indexOf("="); if (i < 0) continue;
+        const k = dec(part.slice(0, i)), v = dec(part.slice(i + 1));
+        if (v !== "" && !(k in q)) q[k] = v;
+      }
+      const r = ROUTES.find(([re, by]) => re.test(path) && (!by || (by === "mode" ? q.mode === "rolling" : by in q)));
+      if (!r) return url;
+      const [, by, params, drop = []] = r, out = [];
+      for (const [k, v] of Object.entries(q)) {
+        if (k === by || DROP.includes(k) || drop.includes(k) || (k in DEFAULT_ONLY && v === DEFAULT_ONLY[k])) continue;
+        if (!(k in params)) { out.push([k, v]); continue; }   // download, or not this route's (left for the harness to count)
+        const [read, dflt] = params[k], val = read(v);
+        if (val !== dflt) out.push([k, val]);
+      }
+      out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      if (by) out.unshift([by, q[by]]);
+      return head + (out.length ? "?" + out.map(([k, v]) => `${k}=${enc(v)}`).join("&") : "") + frag;
+    };
+  };
+  window.cassiniPublicUrlMaker = PUBLIC_URL;
+  // the address to ask: canonical with the public switch on, as built with it off (nothing changes then)
+  const PUB = () => window.cassiniPublic === true;
+  let publicUrl = null;
+  window.cassiniPublicUrl = url => (PUB() && url ? (publicUrl || (publicUrl = PUBLIC_URL()))(url) : url);
+  // D5: one channel of a colour picture (0 red, 1 green, 2 blue), cut from the composite in the page as the frame
+  // server's channel= cuts it from its own (frame_server.composite: that band, black and white, with the picture's
+  // alpha). rgba: the composite's pixels; returns the channel's. web/test_channel_cut.py checks it against the server.
+  const CHANNEL_CUT = function (rgba, ch) {
+    const out = new Uint8ClampedArray(rgba.length);
+    for (let p = 0; p < rgba.length; p += 4) { const v = rgba[p + ch]; out[p] = out[p + 1] = out[p + 2] = v; out[p + 3] = rgba[p + 3]; }
+    return out;
+  };
+  window.cassiniChannelCutMath = CHANNEL_CUT;
+  // the composite im (loaded with CORS) with only channel ch: a new Image of a PNG made here, or null
+  window.cassiniChannelCut = async (im, ch) => {
+    try {
+      const W = im.naturalWidth, H = im.naturalHeight, c = document.createElement("canvas");
+      c.width = W; c.height = H;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, W, H);
+      g.putImageData(new ImageData(CHANNEL_CUT(d.data, ch), W, H), 0, 0);
+      const blob = await new Promise(r => c.toBlob(r, "image/png")), out = new Image();
+      out.src = URL.createObjectURL(blob);
+      await new Promise((res, rej) => { out.onload = res; out.onerror = rej; });
+      return out;
+    } catch (e) { return null; }
+  };
   // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
   // the two maps in one float texture, a pass along the rows and one along the columns in blurCPU's order
   const STEADY_GPU = function () {
@@ -3727,6 +3825,7 @@ onmessage = async e => {
     if (gpuOk === undefined) { try { const c = new OffscreenCanvas(1, 1), g = c.getContext("webgl2"); gpuOk = !!(g && g.getExtension("EXT_color_buffer_float")); } catch (e) { gpuOk = false; } }
     return gpuOk;
   };
+  const evened = new Map();   // the same key -> whether the page evens the frame's pass itself, once its table is here
   const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
   const asked = new Set();
   const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
@@ -3738,9 +3837,13 @@ onmessage = async e => {
     if (byId.has(k)) return byId.get(k);
     if (!asked.has(k)) {
       asked.add(k);
-      fetch(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}&color=${color ? 1 : 0}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(t => {
+      fetch(window.cassiniPublicUrl(`${frames}/frames/movie/${id}.steady.json?center=${center ? 1 : 0}&color=${color ? 1 : 0}`), { priority: "low" }).then(r => r.ok ? r.json() : PUB() ? { local: false, missing: true } : null).then(t => {
         if (!t || t.working) { setTimeout(() => asked.delete(k), 5000); return; }
-        if (!t.local) { byId.set(k, null); return; }
+        // whether the page evens the pass itself (obs_mosaic.page_evens, on the colour table): the public site then has
+        // no exposure= frames of it (prebuild.make_evened made them only for the passes it does not); a table the
+        // public site does not have says nothing either way
+        if (!t.missing) evened.set(k, !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets)));
+        if (!t.local) { byId.set(k, null); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
         const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
         work().postMessage({ key, table: t });
         t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
@@ -3755,6 +3858,14 @@ onmessage = async e => {
   }
   window.cassiniSteadyLocal = {
     stats,
+    // with the public switch on: whether this computer evens frame id's pass itself (true), the server's evened frames
+    // are published for it (false), or its colour table is not here yet (undefined, asked for now): until then a
+    // window asks the frame as drawn (exposure 0), which every pass has, never an exposure= variant
+    evens(frames, id, center = true) {
+      const k = `${tag(center, true)}:${id}`;
+      if (!evened.has(k)) lookup(frames, id, center, true);
+      return evened.get(k);
+    },
     // the frame's pass table once it is here (null: the server draws the pass), asking for it as want does
     async ready(frames, id, center = true, color = false) {
       for (let tries = 0; tries < 240; tries++) {
@@ -3809,7 +3920,7 @@ onmessage = async e => {
       const held = M.heldOf(T, e.n), shown = M.shownOf(T, e.n, !!o.color);
       const load = async j => {
         if (j === e.n || j === held) return createImageBitmap(im);
-        const r = await fetch(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : ""));
+        const r = await fetch(window.cassiniPublicUrl(o.planeUrl(T.ids[j]) + (o.raw ? "&detail=0" : "")));
         if (!r.ok) throw new Error(`plane ${T.ids[j]}: ${r.status}`);
         return createImageBitmap(await r.blob());
       };
@@ -3834,7 +3945,7 @@ onmessage = async e => {
     const k = `${laps}:${id}`;
     if (fades.has(k)) return fades.get(k);
     if (!fadeAsked.has(k)) {
-      fadeAsked.set(k, fetch(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`).then(r => r.ok ? r.json() : { local: false }).then(t => {
+      fadeAsked.set(k, fetch(window.cassiniPublicUrl(`${frames}/frames/movie/${id}.fade.json?laps=${laps}&w=${W}&h=${H}`)).then(r => r.ok ? r.json() : { local: false }).then(t => {
         if (!t || t.working) { setTimeout(() => fadeAsked.delete(k), 15000); return; }
         if (!t.local) { fades.set(k, null); return; }
         // each tile's alpha (zlib), unpacked once when a frame first draws it
@@ -5320,6 +5431,12 @@ function targetLabel(k) {
   // built" on, the viewer keeps its timeline, Moments and Highlights to them (studyCoverage, called as it loads), so
   // a test build of one year plays without the rest of the mission being made on demand. cassiniSlice.has(et): in them
   const slice = window.cassiniSlice = { spans: null, label: "", has: () => true };
+  // the public switch (docs/public-site, WP5; window.cassiniPublic, set by settings.html, read as false when absent):
+  // every picture comes from Cloudflare R2 through the Worker, and a camera window asks only for what the public site
+  // publishes (web/public/policy.json), each at its one canonical address (P: steady-local.html cassiniPublicUrl).
+  // With the switch off, P leaves an address as it is and every branch below is as before
+  const PUB = window.cassiniPublic === true;
+  const P = url => (window.cassiniPublicUrl ? window.cassiniPublicUrl(url) : url);
   const sliceAsked = fetch(`${FRAMES}/frames/slices.json`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
   let sliceDone;
   slice.ready = new Promise(r => { sliceDone = r; });
@@ -5531,8 +5648,8 @@ function targetLabel(k) {
     // picture's true resolution (1024, the cameras' full frame), or 512 when it is shown that small (cassiniWM.sized)
     const size = () => win.classList.contains("full") && S.get("cameras.fullRes") ? "full" : window.cassiniWM.sized(win, well);
     const capped = () => { const s = size(); return s === "full" ? 1024 : s; };
-    const frameUrl = (id, sz) => `${FRAMES}/frames/${id}.webp?size=${sz || size()}`;
-    const colorUrl = (s, sz) => `${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook({ center: centres(s.use[s.use.length - 1]) })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
+    const frameUrl = (id, sz) => P(`${FRAMES}/frames/${id}.webp?size=${sz || size()}`);
+    const colorUrl = (s, sz) => P(`${FRAMES}/frames/color.webp?ids=${s.use.map(k => catalog.id[k]).join(",")}&size=${sz || size()}${window.cassiniLook({ center: centres(s.use[s.use.length - 1]) })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`);
     // Auto center (this window's settings menu, else Settings > Cameras > Auto center): a frame on its own comes
     // centred on its body by the frame server (the pipeline's processed frame, placed north up by SPICE) unless the
     // server said its pass is not centred (rings, sky, a body too big) or could not place the frame: then as it is
@@ -5576,7 +5693,8 @@ function targetLabel(k) {
     }
     orbitBtn.addEventListener("click", e => { e.stopPropagation(); orbitOpen(!orbitPop || orbitPop.hidden); if (e.detail) orbitBtn.blur(); });
     window.addEventListener("keydown", e => { if (e.key === "Escape" && orbitPop && !orbitPop.hidden) orbitOpen(false); });
-    const centreOn = () => opts.get("autoCenter") ?? S.get("cameras.autoCenter") ?? true;
+    // (public: always on, D4; the pre-build makes every picture centred as Auto center asks)
+    const centreOn = () => PUB || (opts.get("autoCenter") ?? S.get("cameras.autoCenter") ?? true);
     const uncentred = new Set(), centreFailed = new Set();   // passes the server does not centre / frames it could not
     const centres = k => centreOn() && !uncentred.has(passOf(k)) && !centreFailed.has(catalog.id[k]);
     // Settings > Cameras > Processed single frames: a frame on its own comes calibrated through the pipeline
@@ -5585,8 +5703,8 @@ function targetLabel(k) {
     const processedFailed = new Set();
     const processes = k => S.get("cameras.processedFrames") !== false && !processedFailed.has(catalog.id[k]);
     const shownFrameUrl = (k, sz) => centres(k)
-      ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`
-      : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
+      ? P(`${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`)
+      : processes(k) ? P(`${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`) : frameUrl(catalog.id[k], sz);
     // a picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
@@ -5602,6 +5720,12 @@ function targetLabel(k) {
     saveMenu.addEventListener("click", e => {
       const a = e.target.closest("a");
       if (a && a.dataset.native && nativeSave(a, e)) return;
+      // public: a PNG made here (the orbit graphic box still adds the graphic to a picture that has no channel cut)
+      if (a && a.dataset.png && !(a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit)) {
+        e.preventDefault();
+        pngHere(a).then(() => setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 300));
+        return;
+      }
       // the Orbit graphic box: a picture comes as a JPEG with the orbit graphic in its corner (cassiniOrbit.download)
       if (a && a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit) {
         e.preventDefault();
@@ -5620,7 +5744,7 @@ function targetLabel(k) {
       if (on) {
         const rows = savesFor(shot.dataset.src || "");
         saveMenu.innerHTML = rows.map(r => r === "-" ? '<li class="sep" role="separator"></li>'
-          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href}" download${r.native ? ` data-native="${r.native}"` : ""}${r.whole !== undefined ? ` data-whole="${r.whole}" data-from="${r.from}"` : ""}${pic(r) ? ' data-pic="1"' : ""}>${r.label}<span>${pic(r) && graphic() ? "JPEG · with orbit graphic" : r.note}</span></a></li>`).join("")
+          : `<li class="${r.now ? "now" : ""}"><a role="menuitem" href="${r.href.replace(/&/g, "&amp;")}"${r.external ? ' target="_blank" rel="noopener" data-external="1"' : " download"}${r.png ? ` data-png="${r.png}" data-name="${r.name || ""}"` : ""}${r.ch !== undefined ? ` data-ch="${r.ch}"` : ""}${r.native ? ` data-native="${r.native}"` : ""}${r.whole !== undefined ? ` data-whole="${r.whole}" data-from="${r.from}"` : ""}${pic(r) ? ' data-pic="1"' : ""}>${r.label}<span>${pic(r) && graphic() ? "JPEG · with orbit graphic" : r.note}</span></a></li>`).join("")
           // a picture can be saved with the orbit graphic in its corner (Sam 2026-11-04): the box at the foot
           + (rows.some(pic) && window.cassiniOrbit ? `<li class="sep" role="separator"></li><li class="orbitrow"><label><input type="checkbox"${graphic() ? " checked" : ""}> Orbit graphic<span>where Cassini was, in the corner</span></label></li>` : "");
         const box = saveMenu.querySelector(".orbitrow input");
@@ -5631,7 +5755,8 @@ function targetLabel(k) {
       saveWrap.classList.toggle("open", !!on); save.setAttribute("aria-expanded", String(!!on));
     }
     // a row that saves a picture (not the archive's raw frame, science data or label), and whether the graphic goes on it
-    const pic = r => r !== "-" && /^PNG/.test(r.note) && !/raw/.test(r.note);
+    // (public: the graphic goes on a published picture, not on one made here from the screen or cut to a channel)
+    const pic = r => r !== "-" && /^PNG/.test(r.note) && !/raw/.test(r.note) && !(PUB && (r.png === "shown" || r.ch !== undefined));
     const graphic = () => !!S.get("gallery.orbitInset");
     // what can be saved from the picture at url: the picture as shown first, then the parts and sources of it
     // (a composite's channels on its scale; a frame on the pipeline's scale and as archived), each a frame server route
@@ -5639,6 +5764,7 @@ function targetLabel(k) {
     const kindOf = ids => { const k = kOf(ids[0]), si = k >= 0 ? catalog.setOf[k] : -1; return si >= 0 ? KIND[catalog.sets[si].kind].toLowerCase() : ids.length === 2 ? "two-filter color" : "color"; };
     function savesFor(url) {
       if (!url) return [];
+      if (PUB) return publicSaves(url);
       const u = new URL(url, location.href), q = u.searchParams, rows = [];
       const frame = id => [
         { label: "This frame on its own scale", note: "PNG · calibrated", href: saveUrl(`${FRAMES}/frames/processed/${id}.webp?size=full${window.cassiniLook()}`) },
@@ -5689,6 +5815,60 @@ function targetLabel(k) {
         rows.push("-", { label: "This picture in HDR", note: "AVIF · HDR10 · 1024 px", href: h.href });
       }
       return rows;
+    }
+    // public (D6): every PNG is made here, from the picture on screen or a published picture (a colour picture's channel
+    // cut from it, D5); the archive's frame comes from R2; the science TIFF and the PDS label are NASA's, so their rows
+    // open the frame's page in OPUS. No full resolution mosaic and no HDR picture (they stay on the private site, D1, D8)
+    function publicSaves(url) {
+      const u = new URL(url, location.href), q = u.searchParams, rows = [], shown = url;
+      const name = ids => `Cassini ${ids[0]}${ids.length > 1 ? ` +${ids.length - 1}` : ""}`;
+      const frame = id => [
+        { label: "This frame on its own scale", note: "PNG · calibrated", href: P(`${FRAMES}/frames/processed/${id}.webp?size=1024&center=1`), png: "url", name: `${id} calibrated` },
+        { label: "Archive frame, unprocessed", note: "PNG · raw", href: P(`${FRAMES}/frames/${id}.png?download=1`) },
+        { label: "Science data and PDS label", note: "NASA's archive (OPUS)", href: opusUrl(id), external: true }];
+      const chOf = /#ch=(\d)$/.exec(url);
+      if (u.pathname.endsWith("/frames/color.webp")) {
+        const ids = (q.get("ids") || "").split(","), slots = ids.length === 2 ? [0, 2] : [0, 1, 2], whole = url.replace(/#.*$/, "");
+        const wholeRow = { label: `Whole ${kindOf(ids)} picture`, note: "PNG", href: whole, png: "url", name: name(ids) };
+        if (chOf) {
+          const id = ids[slots.indexOf(+chOf[1])];
+          rows.push({ label: "This channel as shown", note: "PNG · composite's scale", href: whole, png: "url", ch: +chOf[1], name: `${id || name(ids)} channel`, now: true });
+          if (id) rows.push(...frame(id));
+          rows.push("-", wholeRow);
+        } else {
+          rows.push(Object.assign(wholeRow, { label: `This ${kindOf(ids)} picture`, png: "shown", now: true }), "-");
+          ids.forEach((id, j) => rows.push({ label: `${nameOf(id)} channel, as in it`, note: "PNG", href: whole, png: "url", ch: slots[j], name: `${id} channel` }));
+        }
+      } else if (/\/frames\/mosaic\//.test(u.pathname)) {
+        const m = u.pathname.match(/[NW]\d{10}_\d+/);
+        rows.push({ label: "Whole mosaic, as shown", note: "PNG", href: shown, png: "shown", name: `Cassini mosaic ${m ? m[0] : ""}`.trim(), now: true });
+      } else {
+        const m = u.pathname.match(/\/frames\/(?:processed\/|movie\/)?([NW]\d{10}_\d+)\.webp$/);
+        rows.push({ label: "This frame as shown", note: "PNG", href: shown, png: "shown", name: m ? name([m[1]]) : "Cassini picture", now: true });
+        if (m) rows.push(...frame(m[1]).filter(r => !(u.pathname.includes("/processed/") && r.note.includes("calibrated"))));
+      }
+      return rows;
+    }
+    // a public PNG row clicked: the picture (on screen, or loaded from its address) drawn on a canvas, one channel of
+    // it when the row names one, saved as a PNG made here
+    async function pngHere(a) {
+      const span = a.querySelector("span"), was = span.textContent;
+      try {
+        let im = shot;
+        if (a.dataset.png !== "shown") { im = new Image(); im.crossOrigin = "anonymous"; im.src = a.href; await im.decode(); }
+        const W = im.naturalWidth, H = im.naturalHeight, c = document.createElement("canvas");
+        c.width = W; c.height = H;
+        const g = c.getContext("2d", { willReadFrequently: a.dataset.ch !== undefined });
+        g.drawImage(im, 0, 0);
+        if (a.dataset.ch !== undefined) g.putImageData(new ImageData(window.cassiniChannelCutMath(g.getImageData(0, 0, W, H).data, +a.dataset.ch), W, H), 0, 0);
+        span.textContent = "PNG · making it…";
+        const blob = await new Promise(r => c.toBlob(r, "image/png")), link = document.createElement("a");
+        link.href = URL.createObjectURL(blob); link.download = `${a.dataset.name || "Cassini picture"}.png`;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+        span.textContent = was;
+        return true;
+      } catch (e) { span.textContent = "could not be saved"; return false; }
     }
     // the full resolution mosaic's row: its size and about how big the file is (asked of the frame server when the menu
     // opens; gone when the server has no mosaic for the picture), or how far its making has got
@@ -5802,7 +5982,7 @@ function targetLabel(k) {
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
-        if (here) return { key: movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "") + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}${here.eye ? "y" : ""}`, set: -1, k, movie: true, here };
+        if (here) return { key: P(movieUrl(catalog.id[k], 1024, 0, 0, 0, 0) + (here.raw ? "&detail=0" : "")) + `#here=s${here.steady}e${here.exposure}t${here.trail}c${S.get("cameras.composites") ? 1 : 0}${here.eye ? "y" : ""}`, set: -1, k, movie: true, here };
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
@@ -5966,6 +6146,8 @@ function targetLabel(k) {
           // worked out (the server answers 503), and its steady frame is asked for again, paused or playing; any
           // other answer (SPICE could not place the frame) shows that frame as it is from then on
           const o = passOf(v.k), c0 = catalog, id = catalog.id[v.k];
+          // (public: nothing is worked out on demand, so a frame not published shows as it is from now on, asked once)
+          if (PUB) { movieFailed.add(id); if (want && want.key === v.key) want = { key: shownFrameUrl(v.k), set: -1, k: v.k }; pump(); return; }
           coldAt.set(o, performance.now());
           fetch(v.key, { priority: "low" }).then(r => [r.status, r.statusText], () => [503, ""]).then(([status, why]) => {
             if (catalog !== c0) return;
@@ -6102,7 +6284,17 @@ function targetLabel(k) {
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
     const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
-    const movieUrl = (id, sz, steady, exposure, color, trail) => `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
+    const movieUrl = (id, sz, steady, exposure, color, trail) => PUB ? publicMovieUrl(id, sz, exposure, color) : `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
+    // public: only the movie frames the pre-build makes (prebuild.make_pass, make_planes, make_evened): centred, no
+    // trail and no stabilization from the server (the page does both, steady-local.html), a colour frame at 128, 512 or
+    // 1024, a grey plane (color=0) at 1024; and evened by the server (exposure=8, obs_mosaic.EXPOSURE_SMOOTH) only for a
+    // pass whose steady table says the page cannot even it. Until that table is here the frame is asked as drawn
+    // (exposure 0), never an exposure= variant the public site may not have; the table's arrival asks again
+    const publicMovieUrl = (id, sz, exposure, color) => {
+      const col = (color ?? (S.get("cameras.composites") ? 1 : 0)) ? 1 : 0, z = col ? sz || size() : 1024;
+      const even = col && (exposure ?? window.cassiniExposure()) && window.cassiniSteadyLocal && window.cassiniSteadyLocal.evens(FRAMES, id) === false;
+      return P(`${FRAMES}/frames/movie/${id}.webp?size=${z}&color=${col}${even ? "&exposure=8" : ""}`);
+    };
     // what this computer works out for frame k's movie picture ({steady, exposure}: steady-local.html), null when the server draws it
     const hereWant = k => window.cassiniSteadyLocal ? window.cassiniSteadyLocal.want(FRAMES, catalog.id[k], { center: centreOn() !== false, color: !!S.get("cameras.composites") }) : null;
     const movieFailed = new Set();    // frames the server did not steady: they show as they are
@@ -6117,7 +6309,10 @@ function targetLabel(k) {
     const playsRolling = k => playsAs(k) === "mosaic_movie";
     window.cassiniRolling = true;   // so the pass mosaic lane leaves mosaic movies to this route (mosaicOf)
     // (Whole mosaics: the server makes every tile of the lap before it answers, whole=1)
-    const rollingUrl = (id, sz, fade) => `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
+    // (public: the time-lapse picture as published, one lap, no fade: the page fades it itself from fade.json, and a
+    // pass whose fade it cannot work out plays unfaded)
+    const rollingUrl = (id, sz, fade) => PUB ? P(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}`)
+      : `${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=${sz || size()}${window.cassiniMovieStyle({ center: centreOn(), fade })}${window.cassiniLook()}${wholeLaps() ? "&whole=1" : ""}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // the filmstrip: the pass the frame on screen is in (/frames/movie/<ID>.json: its frames, in time order), its
     // frames drawn along a strip by time, colored by filter, with the frame shown marked and the frames around it
     const passInfos = new Map(), filmAsked = new Set();
@@ -6175,7 +6370,7 @@ function targetLabel(k) {
       while (thumbs.children.length > Math.min(7, fr.length)) thumbs.lastChild.remove();
       [...thumbs.children].forEach((im, j) => {
         const id = fr[first + j][0];
-        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : (S.get("movies.stabilizeLocal") ? movieUrl(id, 128, 0, 0, undefined, 0) : movieUrl(id, 128)); }
+        if (im.dataset.id !== id) { im.dataset.id = id; im.src = playsRolling(k) ? frameUrl(id, 128) : PUB ? movieUrl(id, 128, 0, 0, 1, 0) : (S.get("movies.stabilizeLocal") ? movieUrl(id, 128, 0, 0, undefined, 0) : movieUrl(id, 128)); }
         im.classList.toggle("now", first + j === n);
         im.title = `${id} · ${fr[first + j][2]}`;
       });
@@ -6232,6 +6427,9 @@ function targetLabel(k) {
       if (plays === "mosaic_movie" && rolls()) return;   // a mosaic movie rolls (the movie route), never the pass mosaic
       // without the rolling route, a mosaic movie shows the pass mosaic (newer tiles drawn over older)
       if (mode === "mosaic" || mode === "mosaic_movie") pass = true;   // asked for: the pass's mosaic, whatever the server's call
+      // public: a frame is asked of /frames/mosaic only in a pass the pass table calls a mosaic (the note's answer,
+      // mosaicPass); the pre-build makes mosaics of mosaic passes only, so any other frame would be a miss
+      if (PUB && !pass && !mosaicPass(w.k)) return;
       const sz = size(), id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${sz}`;
       const L = pass ? mLane.pass : mLane.other;
       if (ask === L.last) return;
@@ -6257,7 +6455,7 @@ function targetLabel(k) {
         const patience = () => { if (over) return; if (L.next) { ctl.abort(); done(); } else setTimeout(patience, 1000); };
         setTimeout(patience, 8000);
       }
-      fetch(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz) : ""}`, { signal: ctl.signal }).then(async r => {
+      fetch(P(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}${mode === "mosaic" || mode === "mosaic_movie" ? "&force=1" : ""}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz) : ""}`), { signal: ctl.signal }).then(async r => {
         if (!r.ok) { if (r.status === 404) noMosaic = wid; return; }
         const rep = JSON.parse(r.headers.get("X-Reel") || "null");
         // the frame in the catalog loaded now (another catalog object once the months around have loaded; a
@@ -6460,7 +6658,8 @@ function targetLabel(k) {
       while (levels.length && levels[levels.length - 1].kind === "channel") levels.pop();
       if (t && t.kind === "channel" && t.ch === ch) { hold.levels = levels; return showLevel(); }   // the open channel again: back up
       const up = levels[levels.length - 1].lines || {};
-      levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}&channel=${ch}`,
+      // (public, D5: the composite, whose channel is cut from it here, showLevel; the fragment never leaves the page)
+      levels.push({ kind: "channel", ch, label: `${fname(q)} ${Math.round(nmOf(q))} nm · ${catalog.id[q]}`, url: sz => `${s.url ? s.url(sz) : colorUrl(s, sz)}${PUB ? "#ch=" : "&channel="}${ch}`,
         tag: `CHANNEL · ${fname(q)} · AS IN THE ${s.inMosaic && s.inMosaic() ? "MOSAIC" : "COMPOSITE"}`, shot: catalog.id[q],
         lines: { frame: pdsLinks(`${targetLabel(q)} · ${catalog.id[q]}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
           colour: s.inMosaic && s.inMosaic() ? "One channel of the frame, as in the mosaic" : "One channel of the composite, on its brightness scale", details: up.details || "" } });
@@ -6513,7 +6712,7 @@ function targetLabel(k) {
     function openMosaic() {
       if (!lone()) return;
       const k = lastK, id = passLast(k), info = passInfo(k);
-      hold1([{ kind: "mosaic", mid: id, label: `Mosaic · ${catalog.obs[k]}`, url: sz => `${FRAMES}/frames/mosaic/${id}.webp?size=${sz}&force=1${look()}`,
+      hold1([{ kind: "mosaic", mid: id, label: `Mosaic · ${catalog.obs[k]}`, url: sz => P(`${FRAMES}/frames/mosaic/${id}.webp?size=${sz}&force=1${look()}`),
         tag: "THE PASS'S WHOLE MOSAIC", shot: catalog.obs[k],
         lines: { ...liveLines(), colour: info ? `Mosaic of the pass's ${info[4]} frames` : "Mosaic of the pass" } }]);
       lone();
@@ -6579,7 +6778,7 @@ function targetLabel(k) {
       // a mosaic still being built is a new picture with each tile: the outlines of the one before stay until the
       // new map comes, so they never blink out under the pointer
       tmap = { key, data: null, prev: tmap && (tmap.data || tmap.prev) && tmap.obs === mosaicObs() ? tmap.data || tmap.prev : null, obs: mosaicObs() };
-      fetch(`${FRAMES}/frames/mosaic/${mosaicId}.json?x=1${look()}`).then(r => r.ok ? r.json() : null, () => null).then(d => {
+      fetch(P(`${FRAMES}/frames/mosaic/${mosaicId}.json?x=1${look()}`)).then(r => r.ok ? r.json() : null, () => null).then(d => {
         if (!tmap || tmap.key !== key) return;
         tmap.data = d || { pointings: [] };
         if (pointer) draw(hitAt(pointer));   // the map came while the pointer rests on the mosaic: outline under it now
@@ -6645,9 +6844,11 @@ function targetLabel(k) {
     const redraw = () => (pointer && mosaicId ? (rested && draw(hitAt(pointer))) : draw(null));
     shot.addEventListener("load", () => { if (pointer && mosaicId && rested) draw(hitAt(pointer)); });
     function openPointing(q, m = tmap && (tmap.data || tmap.prev), own = S.get("cameras.pointingLook") === "own") {
+      // public (D9): a pointing is not published on its own (/p/<n>); it opens as its frame or colour picture
+      if (PUB) own = true;
       const fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
-        url(sz) { return this.src.replace(/size=[^&]*/, `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
+        url(sz) { return P(/size=/.test(this.src) ? this.src.replace(/size=[^&]*/, `size=${sz}`) : this.src + (this.src.includes("?") ? "&" : "?") + `size=${sz}`); }, tag: card.querySelector(".kindtag").textContent, shot: m.observation,
         lines: { ...liveLines(), filter: m.filters.join(" "), colour: `Mosaic of ${m.pointings.length} frames` } }];
       while (base.length && base[base.length - 1].kind !== "mosaic") base.pop();
       // the frame's own info lines (not the live frame's)
@@ -6658,7 +6859,8 @@ function targetLabel(k) {
       // mosaic's seam corrections, color mix and detail (/frames/mosaic/<id>/p/<n>, obs_mosaic.pointing_picture), so
       // opening it changes nothing but its size. On its own (the switch by the breadcrumb, Settings > Cameras): the
       // frames as a composite or a frame of their own, on their own scale
-      const mid = base[base.length - 1].mid, inMosaic = sz => `${FRAMES}/frames/mosaic/${mid}/p/${q.n}.webp?size=${sz}&ids=${ids.join(",")}${look()}`;
+      const mid = base[base.length - 1].mid, inMosaic = PUB ? sz => frameUrl(ids[ids.length - 1], sz)
+        : sz => `${FRAMES}/frames/mosaic/${mid}/p/${q.n}.webp?size=${sz}&ids=${ids.join(",")}${look()}`;
       let lv;
       if (ids.length >= 2) {
         const si = k0 >= 0 ? catalog.setOf[k0] : -1, cs = si >= 0 ? catalog.sets[si] : null;
@@ -6685,7 +6887,7 @@ function targetLabel(k) {
     // a frame opened from a mosaic: as in the mosaic, or on its own scale (lv.own); its tag and color line say which
     function lookOf(lv, own) {
       lv.own = !!own && !!lv.ownUrl;
-      const q = lv.pointing, N = lv.map.pointings.length, how = lv.own ? "ON ITS OWN" : "AS IN THE MOSAIC";
+      const q = lv.pointing, N = lv.map.pointings.length, how = lv.own || PUB ? "ON ITS OWN" : "AS IN THE MOSAIC";
       lv.tag = lv.kind === "composite" ? `FRAME ${q.n} OF THE MOSAIC · ${lv.kindName.toUpperCase()} · ${how}` : `FRAME ${q.n} OF THE MOSAIC · ${how}`;
       lv.lines = { ...lv.lines, colour: `${lv.kind === "composite" ? lv.kindName : "Single filter"}, frame ${q.n} of ${N} of the mosaic${lv.own ? ", on its own scale" : ""}` };
     }
@@ -6749,7 +6951,7 @@ function targetLabel(k) {
       crumbs.hidden = false;
       crumbs.innerHTML = '<button data-lv="live" title="Back to the live camera">Live</button><span class="sep">›</span>' + hold.levels.map((l, i) => i < hold.levels.length - 1
         ? `<button data-lv="${i}">${l.label}</button><span class="sep">›</span>` : `<span class="here" title="${l.label}">${l.label}</span>`).join("")
-        + (t.pointing && t.ownUrl ? `<button class="ownbtn" aria-pressed="${t.own}" title="${t.own ? "Show it as it is in the mosaic: the mosaic's levels, seams and colors" : "Show the frames on their own scale, as a picture of their own"}">${t.own ? "On its own" : "As in the mosaic"}</button>` : "")
+        + (t.pointing && t.ownUrl && !PUB ? `<button class="ownbtn" aria-pressed="${t.own}" title="${t.own ? "Show it as it is in the mosaic: the mosaic's levels, seams and colors" : "Show the frames on their own scale, as a picture of their own"}">${t.own ? "On its own" : "As in the mosaic"}</button>` : "")
         + '<button class="heldbadge" title="Back to the live camera (Esc goes one step back)">held · Esc goes back</button>';
       // flags (flag.html) record where the window is
       shot.dataset.path = JSON.stringify(hold.levels.map(l => ({ kind: l.kind, label: l.label, src: l.url(capped()) })));
@@ -6767,16 +6969,18 @@ function targetLabel(k) {
       draw(null);
       if (url === levelKey) return;
       const im = new Image(); im.crossOrigin = "anonymous";
-      im.onload = () => {
+      const up = cut => {
         if (!hold || top() !== t || t.url(size()) !== url) return;
         levelKey = url;
-        shot.src = im.src; shot.dataset.src = url; shot.dataset.report = "";
+        shot.src = (cut || im).src; shot.dataset.src = url; shot.dataset.report = "";
         mosaicId = t.kind === "mosaic" ? t.mid : null;
         well.classList.add("has-frame"); well.classList.remove("kept");
         well.classList.toggle("composite", t.kind !== "mosaic"); well.classList.toggle("mosaic", t.kind === "mosaic");
         if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
         saving();
       };
+      // (public: a channel is cut from its composite here first, D5)
+      im.onload = () => (PUB && /#ch=\d$/.test(url) && window.cassiniChannelCut ? window.cassiniChannelCut(im, +url.slice(-1)).then(up) : up(null));
       // a frame the server cannot draw as in the mosaic: on its own instead, and the switch says so
       im.onerror = () => { if (hold && top() === t && t.pointing && !t.own && t.ownUrl) { lookOf(t, true); showLevel(); } };
       im.src = url;
@@ -6962,7 +7166,7 @@ function targetLabel(k) {
           if (warnedObs.has(o)) continue;
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
+          fetch(P(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`), { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
@@ -10273,7 +10477,8 @@ function targetLabel(k) {
     S.define({ key: "loupe.where", section: "Zoom lens", label: "Lens position", type: "choice", value: "on",
       options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
-    S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
+    // (not offered with the public switch on: native mosaics stay on the private site, D3)
+    S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true, hidden: window.cassiniPublic === true,
       hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
     S.define({ key: "loupe.mosaicFull", section: "Zoom lens", label: "On mosaics in full view", type: "toggle", value: false,
       hint: "In full view a mosaic is shown big enough to look at its seams, so the lens stays away there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
@@ -10320,11 +10525,19 @@ function targetLabel(k) {
     return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
   }
   // the full resolution version of what an image shows: the frame server's size=full of the same picture
+  // Public switch (docs/public-site, WP5, D3): the published pictures only, at their canonical address
+  // (cassiniPublicUrl): a mosaic's full-view picture (size=full, which the Worker answers at 1024 while its pass
+  // builds), 1024 for every other picture. A picture worked out on this computer (a movie frame steadied or faded here,
+  // a channel cut from its composite: an address with a fragment) has no published full version, so the lens
+  // magnifies it as shown
+  const PUB = window.cassiniPublic === true;
   function fullUrl(img) {
-    if (img.dataset.loupe) return img.dataset.loupe;
+    if (img.dataset.loupe) return PUB && window.cassiniPublicUrl ? window.cassiniPublicUrl(img.dataset.loupe) : img.dataset.loupe;
     const src = img.dataset.src || img.currentSrc || img.src;
     if (!src || /^(data|blob):/.test(src)) return null;
     if (!/\/frames\//.test(src)) return null;
+    if (PUB) return src.includes("#") || !window.cassiniPublicUrl ? null
+      : window.cassiniPublicUrl(/size=/.test(src) ? src.replace(/size=[^&]*/, "size=full") : src + (src.includes("?") ? "&" : "?") + "size=full");
     return /size=/.test(src) ? src.replace(/size=[^&]*/, "size=full") : src + (src.includes("?") ? "&" : "?") + "size=full";
   }
   const fulls = new Map();   // url -> Image (a few, newest last)
@@ -10355,7 +10568,8 @@ function targetLabel(k) {
   }
   const natives = new Map();   // route address -> { info, crops: [{ u0, v0, u1, v1, bmp }], ask, timer }
   function nativeFor(img, src) {
-    if (!opt("loupe.native", true)) return null;
+    // (public: native mosaics stay on the private site, D3)
+    if (PUB || !opt("loupe.native", true)) return null;
     const u = nativeUrl(img, src);
     if (!u) return null;
     const key = u.href;
@@ -13614,7 +13828,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"62a421c40428";
+  const BUILD = /*BUILD*/"187fd4b527ee";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
