@@ -10,7 +10,9 @@
      own makers, at the windows' sizes and in the page's look); the editor asks for it, and a line along the foot of
      the timeline shows how far it is. While movie mode keeps waiting on pictures being made ("cassini:movie-slow"), a
      quiet note says a stretch can be opened in the editor to make it ahead, with a button that highlights what is
-     coming up. -->
+     coming up.
+     On the public site (window.cassiniPublic) nothing is made ahead: every picture is published already, so make()
+     sends nothing (no POST /prebuild, compute-on-viewer row 9) and the waiting note never comes up. -->
 <style>
 /* a row of the Cassini Replay window, right above the timeline: it comes and goes with the window, never behind it */
 #segbar { display: flex; gap: 8px; align-items: center; margin: 4px 0 2px; padding: 5px 6px 5px 10px; box-sizing: border-box; border-radius: 6px;
@@ -60,7 +62,8 @@ body.phone #segbar button { padding: 6px 11px; }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const MOST_NONE = 200000;                     // the top of Settings > Playback > Make ahead up to: no limit
   const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
-  if (S) {
+  // (on the public site nothing is made ahead, so neither setting is offered: Pre-process, policy.json page_settings)
+  if (S && !(window.cassiniPublic || document.documentElement.classList.contains("public"))) {
     // the most frames one stretch makes ahead (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
     S.define({ key: "segment.maxFrames", section: "Playback", label: "Make ahead up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
       format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
@@ -158,8 +161,15 @@ body.phone #segbar button { padding: 6px 11px; }
   // in the cache: a tenth of a second), or after a moment with how far it is; the page then looks again after 0.1,
   // 0.2, 0.4 and 0.8 s and every second from there. Answers { stop() }.
   const BUSY = /^(queued|planning|making|waiting|finishing)$/;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
   function make(a, b, update) {
     if (J) J.stop();
+    // the public site: every picture is published, nothing to make (and no frame server to ask)
+    if (PUB()) {
+      const none = { a, b, job: { state: "failed", unsupported: true, published: true, done: 0, total: 0 }, stop() {} };
+      setTimeout(() => { try { update(none.job); } catch (err) {} });
+      return none;
+    }
     const me = J = { a, b, job: null, poll: 0, looks: 0, gone: false,
       stop() {
         if (me.gone) return; me.gone = true; clearTimeout(me.poll);
@@ -230,7 +240,7 @@ body.phone #segbar button { padding: 6px 11px; }
   // ---- the note when movie mode keeps waiting ----
   let hintTimer = 0;
   function showHint() {
-    if (!opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (J && J.job && BUSY.test(J.job.state))) return;
+    if (PUB() || !opt("segment.hint", true) || performance.now() - P.hintAt < 10 * 60e3 || (J && J.job && BUSY.test(J.job.state))) return;
     P.hintAt = performance.now();
     const r = ($("dock") || $("tl")).getBoundingClientRect();
     hint.style.bottom = `${Math.max(8, innerHeight - r.top + 8)}px`;

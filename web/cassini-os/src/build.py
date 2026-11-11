@@ -6,20 +6,147 @@ patched so colours and fonts come from CSS, the HUD draws into its own canvas, a
 NASA's 3D model (data/models/cassini.glb.b64.txt).
 
   python web/cassini-os/src/build.py            # writes web/cassini-os/index.html
+  python web/cassini-os/src/build.py --public --out DIR [--frames URL]
+                                                 # the public site (docs/public-site, WP6): a folder for Pages
   python web/cassini-os/src/build.py SRC HEAD OUT
 
-The page reads web/replay/data (the data/ link), so build that first with web/replay/build_data.py.
+The page reads web/replay/data (the data/ link), so build that first with web/replay/build_data.py (and
+web/replay/build_coverage.py, which the public build needs).
+
+The public switch (site.json "public" and "frames"; --public and --frames win): the page reads them as
+window.cassiniPublic and window.cassiniFrames (settings.html), hides and forces what web/public/policy.json
+page_settings lists, asks the frames host (the Worker; the page's own origin when there is no --frames) for every
+picture, version.json, slices.json and the usage counts, and loads three.js and its fonts from the build's own
+vendor/ folder rather than from jsDelivr and Google Fonts. --out gets the whole static site (public_tree below).
 """
 import os, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
-if len(sys.argv) == 1:
+
+
+# ---------- the public site's static folder (docs/public-site, WP6; WP8 deploys it to Pages) ----------
+# The Worker shares the site's hostname on these prefixes, so no static file may sit under one of them.
+WORKER_PREFIXES = ("frames", "reel", "export", "prebuild", "flags", "stats", "jumplog", "usage", "health", "version.json", "debug")
+# three.js, the film muxer and the two fonts, served from the build's vendor/ folder instead of jsDelivr and Google Fonts: pinned
+# files, checked by their SHA-256 so a changed upstream file fails the build instead of reaching visitors
+VENDOR = {
+    "vendor/three/three.min.js": ("https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js",
+                                         "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2"),
+    "vendor/three/OrbitControls.js": ("https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js",
+                                         "02bb4ade710f3e607329e37a21f098bc3ac70eb6e33daf8a65e79f4db785e7b2"),
+    "vendor/three/GLTFLoader.js": ("https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js",
+                                         "5c15967ba830918a9caea6338712c994c354bccd4edc4569bde411c3ec06a3e6"),
+    # the film muxer (export.html's MUXER, an ES module imported only while a film is made)
+    "vendor/mp4-muxer/mp4-muxer.mjs": ("https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.5/build/mp4-muxer.mjs",
+                                         "69f25ab5dd735289936fedbf72a0430182f6c053a0cc6b555beefb810d3d2ca9"),
+    "vendor/fonts/share-tech-mono-latin.woff2": ("https://fonts.gstatic.com/s/sharetechmono/v16/J7aHnp1uDWRBEqV98dVQztYldFcLowEFA87Heg.woff2",
+                                         "73b87eb7b02dfec4cb1ddfabad6e625d9c77b3c81015064420de88d8dd04816c"),
+    "vendor/fonts/silkscreen-latin-ext.woff2": ("https://fonts.gstatic.com/s/silkscreen/v6/m8JXjfVPf62XiF7kO-i9YL1la0GA1dOkDw.woff2",
+                                         "5ae60a8bb15c2065126fdf5af9912cd548be48fd43f19d543b69b95ee0314240"),
+    "vendor/fonts/silkscreen-latin.woff2": ("https://fonts.gstatic.com/s/silkscreen/v6/m8JXjfVPf62XiF7kO-i9YLNla0GA1dM.woff2",
+                                         "17bb6d80eeea10c69887aa64a1b48e70a3f540de50480da9ec933fac1996bf97"),
+}
+# their licenses (src/licenses/, from the npm packages and google/fonts ofl/<font>/OFL.txt), copied next to them
+VENDOR_LICENSES = {
+    "three.LICENSE": "vendor/three/LICENSE",
+    "mp4-muxer.LICENSE": "vendor/mp4-muxer/LICENSE",
+    "silkscreen.OFL.txt": "vendor/fonts/Silkscreen-OFL.txt",
+    "share-tech-mono.OFL.txt": "vendor/fonts/ShareTechMono-OFL.txt",
+}
+# Google Fonts' own stylesheet for the two fonts (css2?family=Silkscreen&family=Share+Tech+Mono, as a current browser
+# gets it), pointed at vendor/fonts/
+FONT_FACES = """
+@font-face { font-family: 'Share Tech Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(vendor/fonts/share-tech-mono-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Silkscreen'; font-style: normal; font-weight: 400; font-display: swap; src: url(vendor/fonts/silkscreen-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Silkscreen'; font-style: normal; font-weight: 400; font-display: swap; src: url(vendor/fonts/silkscreen-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+"""
+
+
+def vendor_file(path, out):
+    """one pinned file into out/path, from ~/.cache/cassini-vendor/<host>/<path> when it has been fetched before (a
+    machine that cannot reach jsDelivr can be given the files there: they are the npm packages' own, three@0.128.0 and mp4-muxer@5.1.5)"""
+    import hashlib, shutil, urllib.request
+    url, sha = VENDOR[path]
+    cache = os.path.join(os.path.expanduser("~"), ".cache", "cassini-vendor", url.split("://", 1)[1])
+    if not os.path.exists(cache):
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (cassini-os build)"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            body = r.read()
+        open(cache + ".part", "wb").write(body)
+        os.replace(cache + ".part", cache)
+    got = hashlib.sha256(open(cache, "rb").read()).hexdigest()
+    assert sha is None or got == sha, f"{url}: SHA-256 {got}, expected {sha} (delete {cache} to fetch it again)"
+    os.makedirs(os.path.dirname(os.path.join(out, path)), exist_ok=True)
+    shutil.copyfile(cache, os.path.join(out, path))
+
+
+def public_tree(root, out):
+    """Everything Pages serves next to index.html (already written to out): the About and How pages, the icons, the
+    models, the replay data with its coverage, the vendored three.js and fonts, the share card, robots.txt and the
+    sitemap. Nothing from src/, bench/ or replay/, and nothing under a prefix the Worker answers."""
+    import shutil
+    data = os.path.realpath(os.path.join(root, "data"))
+    for need in ("mission.json", "coverage"):
+        assert os.path.exists(os.path.join(data, need)), (
+            f"{os.path.join(data, need)} is missing: build the replay data first (web/replay/build_data.py, then web/replay/build_coverage.py)")
+    skip = shutil.ignore_patterns("*.py", "*.cjs", "make_*.html", "__pycache__", ".DS_Store")
+    for d in ("about", "how", "icons", "models"):
+        if os.path.exists(os.path.join(out, d)):
+            shutil.rmtree(os.path.join(out, d))
+        shutil.copytree(os.path.join(root, d), os.path.join(out, d), ignore=skip)
+    if os.path.exists(os.path.join(out, "data")):
+        shutil.rmtree(os.path.join(out, "data"))
+    shutil.copytree(data, os.path.join(out, "data"), symlinks=False, ignore=shutil.ignore_patterns(".DS_Store", "__pycache__"))
+    for f in ("favicon.svg", "favicon-48.png", "apple-touch-icon.png", "share.jpg", "robots.txt", "sitemap.xml"):
+        if os.path.exists(os.path.join(root, f)):
+            shutil.copyfile(os.path.join(root, f), os.path.join(out, f))
+    for path in VENDOR:
+        vendor_file(path, out)
+    # each vendored file's license, with its copyright notice, next to it (MIT and the SIL Open Font License ask for
+    # that); the About window's Credits (credits.json) names them too
+    for src, dst in VENDOR_LICENSES.items():
+        shutil.copyfile(os.path.join(HERE, "licenses", src), os.path.join(out, dst))
+    files, size, biggest = 0, 0, (0, "")
+    for dirpath, _, names in os.walk(out):
+        for n in names:
+            rel = os.path.relpath(os.path.join(dirpath, n), out).replace(os.sep, "/")
+            assert not rel.startswith(WORKER_PREFIXES), f"{rel}: the Worker answers this path on the site's hostname"
+            b = os.path.getsize(os.path.join(dirpath, n))
+            files += 1; size += b; biggest = max(biggest, (b, rel))
+    print(f"public site in {out}: {files} files, {size / 2**20:.1f} MiB, largest {biggest[1]} ({biggest[0] / 2**20:.1f} MiB)")
+
+
+FLAGS = ("--public", "--frames", "--out")
+if len(sys.argv) == 1 or sys.argv[1] in FLAGS:
+    import argparse
+    ap = argparse.ArgumentParser(description="Build the Cassini OS page")
+    ap.add_argument("--public", action="store_true", help="the public site (window.cassiniPublic)")
+    ap.add_argument("--frames", default=None, help="the frames host (the Worker), when it is not the page's own origin")
+    ap.add_argument("--out", default=None, help="the folder the public site is written to")
+    a = ap.parse_args()
     root = os.path.dirname(HERE)
-    for head, out in [("head-quiet.html", "index.html")]:
-        subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
-                        os.path.join(HERE, head), os.path.join(root, out)], check=True)
     sys.path.insert(0, HERE)
     import seo
-    seo.write_files(seo.load())      # about/, robots.txt, sitemap.xml (site.json)
+    site = seo.load()
+    public = a.public or site.get("public") is True
+    frames = a.frames if a.frames is not None else site.get("frames") or ""
+    if public and not a.out:
+        sys.exit("build.py: the public site is written to a folder of its own: --out DIR (index.html here is the Mini's page)")
+    if a.out and not public:
+        sys.exit("build.py: --out is for the public site (--public)")
+    out_index = os.path.join(a.out, "index.html") if public else os.path.join(root, "index.html")
+    if public:
+        os.makedirs(a.out, exist_ok=True)
+    env = dict(os.environ, CASSINI_PUBLIC="1" if public else "", CASSINI_FRAMES_HOST=frames)
+    for head in ["head-quiet.html"]:
+        subprocess.run([sys.executable, __file__, os.path.join(root, "..", "replay", "index.html"),
+                        os.path.join(HERE, head), out_index], check=True, env=env)
+    seo.write_files(site)      # about/, robots.txt, sitemap.xml (site.json)
+    if public:
+        public_tree(root, a.out)
     sys.exit(0)
 import sys, re, json, hashlib
 src = open(sys.argv[1]).read()           # prototype source
@@ -127,6 +254,17 @@ steadylocal = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "
 assert study.count("<script>\n// ---------- Cassini OS chrome") == 1
 study = study.replace("<script>\n// ---------- Cassini OS chrome", steadylocal[steadylocal.index("<script>"):steadylocal.index("</script>") + 9]
                       + "\n<script>\n// ---------- Cassini OS chrome")
+
+# the Movie Editor's film plan and exposure levels worked out in the page (WP7a: plan-local.js, levels-local.js,
+# window.cassiniPlanLocal): their scripts run before the chrome script, so the export and the Movie Editor find them;
+# each is inlined once it exists in this folder, and left out until then
+for js in ("plan-local.js", "levels-local.js"):
+    jpath = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), js)
+    if os.path.exists(jpath):
+        body = open(jpath).read()
+        assert "</script" not in body.lower(), f"{js}: no </script> inside an inlined script"
+        study = study.replace("<script>\n// ---------- Cassini OS chrome", f"<script>\n// ---------- {js} (inlined by build.py)\n{body}\n</script>"
+                              + "\n<script>\n// ---------- Cassini OS chrome")
 
 # color smoothing on this computer (colour-smooth.html): its script runs before the chrome script, whose camera feed
 # and film export ask window.cassiniColourSmooth to move a color picture toward its neighbours' palette
@@ -784,6 +922,34 @@ script += mpart("script") + "\n"
 # same page, and the frame server's /version.json (which reads it back from index.html) and each flag can tell an
 # older page, open since before the last merge, from the one being served
 page = study + script
+# the public switch (settings.html; docs/public-site, WP6): CASSINI_PUBLIC and CASSINI_FRAMES_HOST come from the
+# top of this file (--public, --frames, site.json)
+PUBLIC, FRAMES_HOST = os.environ.get("CASSINI_PUBLIC") == "1", os.environ.get("CASSINI_FRAMES_HOST", "")
+assert page.count("/*PUBLIC*/false") == 1 and page.count('/*FRAMES_HOST*/""') == 1
+page = page.replace("/*PUBLIC*/false", "/*PUBLIC*/" + ("true" if PUBLIC else "false"))
+page = page.replace('/*FRAMES_HOST*/""', "/*FRAMES_HOST*/" + json.dumps(FRAMES_HOST.rstrip("/")))
+if PUBLIC:
+    # every part that picks its frame server itself (the camera windows, the export, the gallery, the viewer...) takes
+    # the frames host settings.html chose, after ?frames= as before
+    pick = 'const q = new URLSearchParams(location.search).get("frames");\n'
+    n = 0
+    for m in list(re.finditer(re.escape(pick) + r'( *)if \(q\) return q\.replace\(/\\/\$/, ""\);\n', page))[::-1]:
+        page = page[:m.end()] + m.group(1) + "if (window.cassiniFrames) return window.cassiniFrames;\n" + page[m.end():]
+        n += 1
+    assert n == page.count(pick), "a part picks its frame server another way: point it at window.cassiniFrames"
+    # three.js and the fonts from vendor/ (the top of this file copies them there)
+    for url, path in [(u, p) for p, (u, _) in VENDOR.items() if u.endswith(".js")]:
+        assert page.count(f'<script src="{url}"></script>') == 1, url
+        page = page.replace(f'<script src="{url}"></script>', f'<script src="{path}"></script>')
+    # the film muxer, imported by its URL: "./vendor/..." (import() takes a path only with ./, and resolves it against the page)
+    mux = [p for p in VENDOR if p.endswith(".mjs")][0]
+    assert page.count(f'"{VENDOR[mux][0]}"') == 1, VENDOR[mux][0]
+    page = page.replace(f'"{VENDOR[mux][0]}"', f'"./{mux}"')
+    fonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Share+Tech+Mono&display=swap">'
+    assert page.count(fonts) == 1
+    page = page.replace(fonts, "<style>" + FONT_FACES + "</style>")
+    page = re.sub(r'<link rel="preconnect" href="https://fonts\.(googleapis|gstatic)\.com"( crossorigin)?>\n', "", page)
+    assert "fonts.googleapis.com/css" not in page and "cdn.jsdelivr.net" not in page
 assert page.count('/*BUILD*/""') == 1
 page = page.replace('/*BUILD*/""', '/*BUILD*/"%s"' % hashlib.sha256(page.encode()).hexdigest()[:12])
 open(out, 'w').write(page)

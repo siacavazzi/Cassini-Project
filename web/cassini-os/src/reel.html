@@ -61,13 +61,10 @@ body.phone #reelcard:not(.full) { width: calc(100% - 16px) !important; left: 8px
 <script>
 // ---------- body reels ----------
 (function () {
+  // body reels are off on the public site (decision D2: the reels' pictures are made on demand, never published)
+  if (window.cassiniPublic) return;
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const card = $("reelcard");
   // one well per camera; a picture goes to its own camera's well and the other well keeps its last picture,
   // so the two cameras never take turns in one place

@@ -65,7 +65,8 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
     S.define({ key: "loupe.where", section: "Zoom lens", label: "Lens position", type: "choice", value: "on",
       options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
-    S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
+    // (not offered with the public switch on: native mosaics stay on the private site, D3)
+    S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true, hidden: window.cassiniPublic === true,
       hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
     S.define({ key: "loupe.mosaicFull", section: "Zoom lens", label: "On mosaics in full view", type: "toggle", value: false,
       hint: "In full view a mosaic is shown big enough to look at its seams, so the lens stays away there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
@@ -112,11 +113,19 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
     return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
   }
   // the full resolution version of what an image shows: the frame server's size=full of the same picture
+  // Public switch (docs/public-site, WP5, D3): the published pictures only, at their canonical address
+  // (cassiniPublicUrl): a mosaic's full-view picture (size=full, which the Worker answers at 1024 while its pass
+  // builds), 1024 for every other picture. A picture worked out on this computer (a movie frame steadied or faded here,
+  // a channel cut from its composite: an address with a fragment) has no published full version, so the lens
+  // magnifies it as shown
+  const PUB = window.cassiniPublic === true;
   function fullUrl(img) {
-    if (img.dataset.loupe) return img.dataset.loupe;
+    if (img.dataset.loupe) return PUB && window.cassiniPublicUrl ? window.cassiniPublicUrl(img.dataset.loupe) : img.dataset.loupe;
     const src = img.dataset.src || img.currentSrc || img.src;
     if (!src || /^(data|blob):/.test(src)) return null;
     if (!/\/frames\//.test(src)) return null;
+    if (PUB) return src.includes("#") || !window.cassiniPublicUrl ? null
+      : window.cassiniPublicUrl(/size=/.test(src) ? src.replace(/size=[^&]*/, "size=full") : src + (src.includes("?") ? "&" : "?") + "size=full");
     return /size=/.test(src) ? src.replace(/size=[^&]*/, "size=full") : src + (src.includes("?") ? "&" : "?") + "size=full";
   }
   const fulls = new Map();   // url -> Image (a few, newest last)
@@ -147,7 +156,8 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
   }
   const natives = new Map();   // route address -> { info, crops: [{ u0, v0, u1, v1, bmp }], ask, timer }
   function nativeFor(img, src) {
-    if (!opt("loupe.native", true)) return null;
+    // (public: native mosaics stay on the private site, D3)
+    if (PUB || !opt("loupe.native", true)) return null;
     const u = nativeUrl(img, src);
     if (!u) return null;
     const key = u.href;
