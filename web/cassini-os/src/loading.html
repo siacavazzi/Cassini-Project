@@ -135,7 +135,7 @@
     root.classList.remove("on");
     hideTimer = setTimeout(() => { root.hidden = true; }, 400);
   }
-  // ---------- a slow load is reported to the frame server (POST /jumplog, kept in its jump-log.jsonl) ----------
+  // ---------- a slow load is reported to the frame server (POST /jumplog, kept in its jump-log.jsonl); not on the public site ----------
   // so a wait that only happens now and then can be looked into afterwards: each data file's timings (waiting for
   // a connection, the server's answer, the download), the picture requests that were under way, and the page's own
   // long tasks. The page keeps the latest network and long-task entries itself (the browser's buffer fills up).
@@ -146,6 +146,7 @@
   } catch (e) {}
   let busyWhat = "";
   function report(t0, t1) {
+    if (window.cassiniPublic) return;     // the public site keeps no jump log (policy.json: /jumplog is the Mini's only)
     if (!/^https?:$/.test(location.protocol) || /claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return;
     const r = n => Math.round(n);
     const data = net.filter(e => /\/data\//.test(e.name) && e.startTime >= t0 - 1000 && e.startTime <= t1).map(e => ({
