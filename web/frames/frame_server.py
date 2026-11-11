@@ -1095,6 +1095,24 @@ _native_wanted = {}
 SERVER_VERSION = git_version(REPO)   # the code this server runs: read once, as it starts
 
 
+def replay_data_missing(site):
+    """Why the page at --site would stop at "trajectory data could not be loaded", or None when it would not. The replay
+    data (mission.json and the year folders, or one year's bodies.json) is made by web/replay/build_data.py and is not
+    in git, so a fresh worktree has none: the page then asks for data/mission.json, falls back to data/bodies.json and
+    gets 404 for both. Checked as the server starts, so a preview without its data never goes up."""
+    if not site:
+        return None
+    data = os.path.join(site, "data")
+    if any(os.path.isfile(os.path.join(data, name)) for name in ("mission.json", "bodies.json")):
+        return None
+    return (f"No replay data at {data} (neither mission.json nor bodies.json): the page would stop at its loading "
+            "screen. Make it at this commit with\n"
+            "  python web/replay/build_data.py --data <export dir> --years 1997-2017 --attitude <attitude dir> "
+            "--out web/replay/data --groups\n"
+            "  python web/replay/build_coverage.py --data web/replay/data\n"
+            "or pass --allow-no-replay-data to serve the site without it.")
+
+
 def site_version(site):
     """The version as it is now: the site is a checkout that git pull moves on without a restart, and build.py then
     writes index.html again, so the commit and the page build are read when the server starts and again only when
@@ -2156,8 +2174,13 @@ def main():
                     help="where the daily usage counts are kept (usage.py, page /stats/); off to count nothing. "
                          "Left out, only the live site (port 8765) counts, into ~/Documents/cassini-usage, so previews "
                          "never add their own visits to it")
+    ap.add_argument("--allow-no-replay-data", action="store_true",
+                    help="start even though the site has no replay data (the page then stops at its loading screen)")
     args = ap.parse_args()
     site = os.path.abspath(os.path.expanduser(args.site)) if args.site else None
+    missing = replay_data_missing(site)
+    if missing and not args.allow_no_replay_data:
+        sys.exit(missing)
     print(f"Frames from {data_source.get_source()}, kernels from {data_source.get_kernel_source()}, cache in {args.cache}")
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
