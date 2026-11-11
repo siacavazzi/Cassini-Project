@@ -328,11 +328,29 @@ GEOMETRY_VERSION = 1
 _geometry_local = threading.local()
 
 
+class _CloseWithThread:
+    """Closes a thread's geometry connection as the thread ends. The connection itself is only freed by the cycle
+    collector (its statement cache points back at it), which can take hours in a long-running server: every request
+    thread of the frame server left its connection (the .sqlite file and its -wal) open until the process hit its
+    open-file limit and answered 404 to everything (the 8952 preview, 2026-11-11). This holder is in no cycle, so
+    it goes, and closes the connection, as soon as the thread's locals do."""
+    def __init__(self, db):
+        self.db = db
+
+    def __del__(self):
+        try:
+            self.db.close()
+        except Exception:
+            pass
+
+
 def _geometry_db():
     db = getattr(_geometry_local, "db", None)
     if db is None:
         import sqlite3
-        db = sqlite3.connect(GEOMETRY_CACHE, timeout=60, isolation_level=None)
+        # check_same_thread off only so the closer may run wherever the thread's locals are cleared: each connection
+        # is still used by its own thread alone
+        db = sqlite3.connect(GEOMETRY_CACHE, timeout=60, isolation_level=None, check_same_thread=False)
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("CREATE TABLE IF NOT EXISTS target (frame TEXT PRIMARY KEY, version INTEGER, x REAL, y REAL, "
                    "z REAL, angle REAL, et REAL, camera TEXT, target TEXT, scale REAL, error TEXT)")
@@ -340,6 +358,7 @@ def _geometry_db():
         # its tag here was cached before those kernels were added and is worked out again
         db.execute("CREATE TABLE IF NOT EXISTS pointing (frame TEXT PRIMARY KEY, kernels TEXT)")
         _geometry_local.db = db
+        _geometry_local.closer = _CloseWithThread(db)
     return db
 
 
