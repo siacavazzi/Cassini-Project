@@ -1,0 +1,29 @@
+{
+ "about": "The frames requests of the WP0 'before' run (docs/public-site/before-numbers.md, Nov 11, sampler preview, three minutes per playing session): Origin is every request (refusals included) the Worker would answer. Bytes per session were not split by host there, so frames_bytes is left 0; cost.py prices bytes at zero anyway. Replace with --harness on the real logs when they are copied over. static_requests = Requests - Origin - CDN.",
+ "sessions": [
+  {
+   "session": "S1",
+   "seconds": 180,
+   "frames_requests": 86,
+   "frames_bytes": 0,
+   "static_requests": 93,
+   "static_bytes": 0
+  },
+  {
+   "session": "S2",
+   "seconds": 180,
+   "frames_requests": 341,
+   "frames_bytes": 0,
+   "static_requests": 172,
+   "static_bytes": 0
+  },
+  {
+   "session": "S8",
+   "seconds": 180,
+   "frames_requests": 274,
+   "frames_bytes": 0,
+   "static_requests": 203,
+   "static_bytes": 0
+  }
+ ]
+}
