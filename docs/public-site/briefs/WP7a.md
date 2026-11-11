@@ -16,6 +16,8 @@ Read `_common.md` first.
   `nudge`), reading the page's catalog and the pass tables (`/frames/movie/<ID>.json`, `.steady.json`) instead of the
   index. Each picture's `src` is a canonical public URL (`keys.mjs`).
 - `levels-local.js`: brightness, stretches and exposures; Even out reuses the existing `evened_gains` port.
+- The two files reach the page only once WP6's `build.py` inlines them (WP6's brief says so); ask the lead to
+  relay to WP6 when your PR is up.
 - Export an API object WP7b can stub now: `window.cassiniPlanLocal = { plan(options), levels(options, pictures) }`.
 
 **Don't.** Touch `export.py`, other than importing it in the tests.

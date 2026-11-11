@@ -84,7 +84,7 @@ copy and rebuilds. Sizes are agent-days, my estimate.
 | WP3 | 1 | Publisher to R2 and to a local mirror | new `web/frames/publish.py`, new `web/frames/test_publish.py` | WP0; WP1's resolve (stub until it merges) | 1.5 |
 | WP4 | 1 | The Worker | new `web/worker/` | WP0 | 1 |
 | WP5 | 1 | Camera windows, lens and save menu | `src/head-quiet.html`, `src/steady-local.html`, `src/loupe.html`, `web/public/harness/sessions/s1.mjs` to `s4.mjs`, `s8.mjs` | WP0 | 2 |
-| WP6 | 1 | The public switch, settings and small modules | `src/settings.html`, `src/about.html`, `src/link.html`, `src/loading.html`, `src/flag.html`, `src/reel.html`, `src/highlights.html`, `src/dock.html`, `src/build.py`, `src/site.json`, new `web/test_public_switch.cjs`, `web/public/harness/sessions/s9.mjs` | WP0 | 1 |
+| WP6 | 1 | The public switch, settings and small modules | `src/settings.html`, `src/about.html`, `src/link.html`, `src/loading.html`, `src/flag.html`, `src/reel.html`, `src/highlights.html`, `src/dock.html`, `src/bodymode.html`, `src/coverage.html`, `src/build.py` (including inlining WP7a's two files), `src/site.json`, new `web/test_public_switch.cjs`, `web/public/harness/sessions/s9.mjs` | WP0 | 1 |
 | WP7a | 1 | Page ports of the film plan and the exposure levels | new `src/plan-local.js`, `src/levels-local.js`, `web/test_plan_local.py`, `web/test_levels_local.py` | WP0 | 1 |
 | WP7b | 1 | Movie Editor, films, Gallery and Studio | `src/movieedit.html`, `src/export.html`, `src/segment.html`, `src/gallery.html`, `src/studio.html`, `web/public/harness/sessions/s5.mjs` to `s7.mjs` | WP0; WP7a's API (stub until it merges) | 1.5 |
 | WP8 | 1 | Cloudflare setup, deploy and staging | new `web/deploy/` | WP0; Sam's Cloudflare access for the live parts only | 1 |
@@ -200,5 +200,6 @@ plainly what it did not exercise.
   the rehearsal mirror (WP9) lists them, and each goes to WP2 (build it) or WP5 (stop asking).
 - **Pages limits.** Pages takes at most 20,000 files and 25 MiB a file. WP8 measures the replay data with coverage
   before relying on it.
-- **Files shared with other threads.** `head-quiet.html` and `settings.html` change in other PRs; WP5 and WP6 rebase daily
-  and keep every change behind the public switch.
+- **Files shared with other threads.** `head-quiet.html`, `settings.html` and `about.html` (#414) change in other PRs, and
+  `obs_mosaic.py` changes with the mosaic defect work; WP1, WP5 and WP6 merge main in daily and keep every change behind
+  the public switch or output-neutral.
