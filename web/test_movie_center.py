@@ -107,4 +107,65 @@ flyby = [(66, 80), (62, 88), (67, 86), (63, 84), (67, 87), (66, 80)]
 assert om.centre_half(box(*flyby), 250, seen(*flyby)) < 0.53 * F
 angles.clear()
 assert om.kept_share(seen((0, 0)), F / 2) == 1.0
+# the view of a pass that is not centred (Sam 2026-11-08: a 271SA close-up sweep drawn in a window two frames across,
+# the frame a quarter of it): each frame's own box on the pass's axes (frames_boxes, the corners frames_seen turns) ...
+b = om.frames_boxes(frames((0, 0), (300, -120)), Z)
+assert np.allclose(b, [(-F / 2, -F / 2, F / 2, F / 2), (300 - F / 2, -120 - F / 2, 300 + F / 2, -120 + F / 2)])
+angles.update(F0=45.0)
+assert np.allclose(om.frames_boxes(frames((0, 0)), Z)[0], [-F / 2 ** 0.5, -F / 2 ** 0.5, F / 2 ** 0.5, F / 2 ** 0.5])
+assert np.allclose(om.frames_boxes(frames((0, 0)), Z, 45.0)[0], [-F / 2, -F / 2, F / 2, F / 2])   # on its pass's axes: square
+angles.clear()
+# ... a pass sweeping further than MOVIE_FIT frames follows the frame (follows), and draws it as Cassini took it:
+# the square round the frame turned by its own angle less the pass's (follow_view), turned back and cut to the frame
+sweep = [(i * 400.0, 0.0) for i in range(12)]
+fp = (-F / 2, -F / 2, 4400 + F / 2, F / 2)
+t5 = {"offset": (2000.0, 0.0), "id": "F5"}
+assert om.movie_rect(fp, t5) == (2000 - S / 2, -F / 2, S, F)            # the window MOVIE_FIT frames across ...
+assert om.follows(fp, om.movie_rect(fp, t5))                           # ... which follows the frame
+assert not om.follows((-F, -F, F, F), om.movie_rect((-F, -F, F, F), t5))  # a footprint within MOVIE_FIT frames holds still
+U5 = {"key": ("SATURN", "X", "W", 5), "frames": frames(*sweep), "z": Z}
+angles.update({f"F{i}": 10.0 * i for i in range(12)})                  # the spacecraft rolling through the pass
+turn = om.view_turn(U5)
+n = 512
+rect, k, got = om.follow_view(U5, 5, t5, n)
+# (turned back by its roll only: it keeps the pass's quarter, square_turn, so north stays near the top)
+want = om.wrapped(om.square_turn(50.0, om.quarter_of(turn, om.view_axes(U5))) - turn)
+assert abs(k * F - (n + om.FOLLOW_SLACK)) < 1e-9 and abs(got - want) < 1e-9
+# the frame ends up turned a whole number of quarters from the camera's frame (drawn 50 - turn, turned back got)
+assert abs(((50.0 - turn - got) / 90.0) - round((50.0 - turn - got) / 90.0)) < 1e-9 and abs(om.wrapped(50.0 - (50.0 - turn - got))) <= 45.0
+a = math.radians(got)
+assert np.allclose(rect, (2000 - F * (abs(math.cos(a)) + abs(math.sin(a))) / 2, -rect[2] / 2, rect[2], rect[2]))
+# the tile as processed_frame draws it (the frame turned by got about its middle, its box round it) and _place puts
+# it comes back the whole frame, every edge row and column drawn (no part-transparent seam for detail() to darken)
+for got in (got, 10.0, -33.0, 0.0):
+    a = math.radians(got)
+    big = F * (abs(math.cos(a)) + abs(math.sin(a)))
+    rect = (2000 - big / 2, -big / 2, big, big)
+    tb = math.ceil(big)                                     # the tile: the frame turned on a canvas its box wide
+    sq = np.zeros((tb, tb), np.uint8)
+    o0 = (tb - F) / 2
+    sq[math.floor(o0):math.floor(o0) + F, math.floor(o0):math.floor(o0) + F] = 255
+    tile_pic = cv2.warpAffine(sq, label_handler.middle_rotation(sq.shape, got), (tb, tb), flags=cv2.INTER_LINEAR)
+    t6 = {"offset": (2000.0, 0.0), "box": [-tb / 2, -tb / 2, tb, tb]}
+    W = math.ceil(big * k)
+    sw = max(1, round(tb * k))
+    left = round((t6["offset"][0] + t6["box"][0] - rect[0]) * k)
+    canvas = np.zeros((W + 2, W + 2), np.uint8)
+    part = cv2.resize(tile_pic, (sw, sw), interpolation=cv2.INTER_AREA)
+    canvas[left:left + sw, left:left + sw] = part[:W + 2 - left, :W + 2 - left]
+    back = om._unturn(canvas, got, om.follow_middle(t6, rect, k), n, n)
+    assert back.shape == (n, n) and back.min() > 200, (got, back.min(), (back < 200).mean())
+    # ... and the turn a tile shows is found from its picture when the geometry cache has none (_drawn_turn)
+    import tempfile
+    from PIL import Image
+    with tempfile.NamedTemporaryFile(suffix=".png") as fh:
+        rgba = np.zeros((tb, tb, 4), np.uint8)
+        rgba[..., 3] = tile_pic
+        Image.fromarray(rgba, "RGBA").save(fh.name)
+        assert abs(om._drawn_turn(fh.name) - got) < 0.6, (om._drawn_turn(fh.name), got)
+angles.clear()
+# ... and a stare's footprint is its frames' own boxes, a frame across, so the whole footprint is the view
+stare_fp = om.frames_boxes(frames((0, 0), (10, -5)), Z)
+fp = (*stare_fp[:, :2].min(0), *stare_fp[:, 2:].max(0))
+assert max(fp[2] - fp[0], fp[3] - fp[1]) == F + 10
 print("ok")

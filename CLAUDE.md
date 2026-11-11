@@ -40,3 +40,16 @@ small JSON the pre-build already holds. The server measures once per pass in the
 default variant, and handles cold passes and exports. A page-side step is a line-for-line port with a test against
 the Python (`web/test_steady_local.py`, `web/frames/test_studio_look.py`), never a second implementation. Read
 `docs/compute-on-viewer.md` before adding a setting that changes pictures.
+
+## Use every free core
+
+Sam's rule (2026-11-09): there is no one-core limit and no cap on parallel renders. Before a render, an
+evidence batch, a test sweep or a check, look at what is already running on each machine (`uptime`, `ps`,
+the farm dashboard) and size the job to the free cores: the MacBook Pro (M5, 18 cores) and the Mac Mini
+(10 cores), split across both when the job divides. When several threads need compute at once, share the
+cores between them rather than each taking one. Background cache builds give way to thread work.
+
+`OPENBLAS_NUM_THREADS=1` / `OMP_NUM_THREADS=1` are still right where the parallelism comes from many
+processes (prebuild workers, the farm, long-running frame servers), so they don't oversubscribe; a
+one-off job run as a single process should leave BLAS threads at their default or start one process per
+free core.

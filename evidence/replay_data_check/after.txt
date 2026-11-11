@@ -1,0 +1,9 @@
+$ python web/frames/frame_server.py --site web/cassini-os --host 0.0.0.0 --port 8973 --cache /tmp/rd-cache --usage off
+No replay data at /Users/lazarus/dev/scratch/wt-replaydata-check/web/cassini-os/data (neither mission.json nor bodies.json): the page would stop at its loading screen. Make it at this commit with
+  python web/replay/build_data.py --data <export dir> --years 1997-2017 --attitude <attitude dir> --out web/replay/data --groups
+  python web/replay/build_coverage.py --data web/replay/data
+or pass --allow-no-replay-data to serve the site without it.
+exit code 1
+
+$ python web/frames/test_replay_data_check.py
+ok: a site without replay data is refused, one with mission.json or bodies.json is served

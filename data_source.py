@@ -496,20 +496,70 @@ Loads a SPICE meta-kernel. From a folder this is just furnsh (create_spice_index
 have been run). From the zip, every kernel it lists is extracted to the cache and
 loaded in the same order, so later kernels still take priority.
 """
+class KernelsMissing(BaseException):
+    """The SPICE kernels a year needs cannot be loaded (no meta-kernel for it, or more of its kernels missing than
+    MISSING_KERNELS_OK): pictures worked out without them would be placed, calibrated and grouped wrongly, so the work
+    stops instead (Sam 2026-11-08: the 2017 test build's M5 months ran with 3 of 109 kernels and no warning). A
+    BaseException, as KeyboardInterrupt is, so the pipeline's many "except Exception: carry on without SPICE" fallbacks
+    (an uncentred picture, no surface redraw) never swallow it: a build or a render stops with this message."""
+
+
+# the archive lacks a few kernels a meta-kernel lists (2015's ck/15201_15201ra_hf.bc): up to this many missing are
+# skipped, more stop the load (KernelsMissing)
+MISSING_KERNELS_OK = 2
+
+
 def furnsh_metakernel(path):
     import spiceypy as sp
     if not using_zip(get_kernel_source()):
         sp.furnsh(_folder_path(path))
         return
-    for kernel in metakernel_kernels(read_text(path)):
+    kernels = metakernel_kernels(read_text(path))
+    if not kernels:
+        raise KernelsMissing(f"meta-kernel {path} lists no kernels (CASSINI_KERNELS={os.environ.get('CASSINI_KERNELS')!r})")
+    missing = []
+    for kernel in kernels:
         try:
             cached = extract_to_cache(kernel_relative(kernel))
         except FileNotFoundError as e:
-            # the archive lacks a few kernels a meta-kernel lists (2015's ck/15201_15201ra_hf.bc);
-            # load the rest instead of failing the whole year
             print(f"Skipping missing kernel: {e}")
+            missing.append(kernel)
+            if len(missing) > MISSING_KERNELS_OK:
+                raise KernelsMissing(f"{path}: more than {MISSING_KERNELS_OK} of its {len(kernels)} kernels are missing "
+                                     f"from {get_kernel_source()} (CASSINI_KERNELS={os.environ.get('CASSINI_KERNELS')!r})")
             continue
         sp.furnsh(cached)
+
+
+"""
+Checks, without loading anything, that every year in years has its meta-kernel (cosp_1000/index/cas_<year>_*.tm)
+and, from a zip, that at most MISSING_KERNELS_OK of the kernels it lists are missing; raises KernelsMissing otherwise.
+A build checks this before it starts (prebuild.py), so a machine without the kernels archive stops at once.
+"""
+def check_kernels(years):
+    index = "cosp_1000/index"
+    try:
+        metas = listdir(index)
+    except (FileNotFoundError, KeyError):
+        metas = []
+    by_year = {}
+    for m in metas:
+        try:
+            by_year[int(m.split("_")[1])] = f"{index}/{m}"
+        except (IndexError, ValueError):
+            continue
+    lacking = [y for y in years if y not in by_year]
+    if lacking:
+        raise KernelsMissing(f"no SPICE meta-kernel for {', '.join(map(str, lacking))} in {get_kernel_source()} "
+                             f"(set CASSINI_KERNELS to the kernels archive)")
+    if not using_zip(get_kernel_source()):
+        return
+    for y in years:
+        kernels = metakernel_kernels(read_text(by_year[y]))
+        missing = [k for k in kernels if _find(kernel_relative(k)) is None]
+        if not kernels or len(missing) > MISSING_KERNELS_OK:
+            raise KernelsMissing(f"{by_year[y]}: {len(missing)} of its {len(kernels)} kernels are missing from "
+                                 f"{get_kernel_source()}")
 
 
 """

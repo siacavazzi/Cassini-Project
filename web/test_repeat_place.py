@@ -177,7 +177,7 @@ import color_image  # noqa: E402
 made = {}
 
 
-def processed(paths, hdr=False, scale=None, repeat_window=120, around=None):
+def processed(paths, hdr=False, scale=None, repeat_window=120, around=None, turn=0.0):
     side = 2 * om.HALF
     return np.full((side, side, 4), 200, np.uint8), None, {"calibrated": made[paths[0]], "stacked": [1],
                                                           "frame_offset": [0.0, 0.0]}

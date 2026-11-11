@@ -5,3 +5,7 @@ spice_cache
 __pycache__/
 zip_index
 cisscal_calibration
+.DS_Store
+
+# render caches made by evidence tools run from a checkout (never commit)
+/cache-*/

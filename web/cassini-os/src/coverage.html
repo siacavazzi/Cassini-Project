@@ -1,0 +1,375 @@
+<!-- What Cassini had seen of each moon, for Cassini OS: two things made from one small pre-built table
+     (data/coverage, written by web/replay/build_coverage.py from the catalog, the pointing and the tracks; about
+     50 KB a moon). build.py splices the style into the head and the script after the viewer's. Without the table
+     (a site whose data was built without it) both stay silent. The table's index is asked for the first time one of
+     the two is used (Seen so far switched on, or a click on a moon), not on every visit, and a request that fails is
+     tried again after a while, so a table built later is picked up without a reload.
+
+       Seen so far          Settings > View, off unless turned on. Each mapped moon is drawn only as sharply as
+                            Cassini had photographed it by the moment on the clock: a place it has not yet seen in
+                            sunlight is a flat grey, and each place comes into focus as the pictures of it are taken,
+                            up to the map's own detail. The menu bar says how much of the moon in view has been seen.
+                            The moon's shader reads the table (the first time each place was seen at each of six
+                            resolutions) and blurs the surface map by choosing its mip level; nothing is redrawn on
+                            the processor and no picture is changed. Only the moons in view hold their table
+                            (at most three at once). Outside the years a table was built for, the moons are drawn
+                            as the whole map and the menu bar says which years it covers.
+
+       Pictures of a place  Settings > View, on. A click on a mapped moon opens a window listing the sharpest
+                            pictures Cassini took of that place (one per observation, with its date, camera, filters,
+                            range and resolution there); a row takes the clock to its picture. The place is ringed
+                            on the globe and its pictures are ticked on the timeline.
+
+     window.cassiniCoverage (index, seen(moon), pick(moon, lat, lonE), place()) is the way in for other parts of the
+     page and for bench/coverage.cjs. -->
+<style>
+#mcov { font-size: 12px; color: var(--q-dim, #555); white-space: nowrap; }
+#mcov b { font-weight: 400; color: var(--q-text, #111); }
+#mcov:empty { display: none; }
+#mcov:not(:empty) + #mact { display: none; }
+@media (max-width: 1180px) { #mcov { display: none; } }
+body.cutscene #mcov, body.ambient #mcov { display: none; }
+#placewin { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: 330px; max-height: min(520px, calc(100% - 300px)); display: flex; flex-direction: column; }
+#placewin .plhead { flex: none; padding: 8px 12px 7px; font-size: 13px; color: var(--q-text, #111); border-bottom: 1px solid var(--q-line, #ddd); }
+#placewin .plhead small { display: block; margin-top: 2px; font: 10px/1.4 var(--hudf, monospace); color: var(--q-dim, #555); }
+#placewin ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; }
+#placewin li button { display: grid; grid-template-columns: 52px 1fr auto; gap: 1px 10px; align-items: center; width: 100%; padding: 6px 12px; border: 0; border-bottom: 1px solid var(--q-line, #eee);
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#placewin li button:hover, #placewin li button.on { background: rgba(138,182,255,.12); }
+#placewin li img { grid-row: span 2; width: 52px; height: 52px; object-fit: cover; border-radius: 3px; background: #000; }
+#placewin li .d { font-size: 12px; color: var(--q-text, #111); }
+#placewin li .r { font: 11px var(--hudf, monospace); color: var(--q-text, #111); font-variant-numeric: tabular-nums; }
+#placewin li .s { grid-column: 2 / span 2; font: 10px var(--hudf, monospace); color: var(--q-dim, #555); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#placewin .plnone { padding: 14px 12px; font-size: 12px; color: var(--q-dim, #555); }
+</style>
+
+<script>
+// ---------- what Cassini had seen of each moon: "Seen so far" and "Pictures of a place" ----------
+(function () {
+  const S = window.cassiniSettings, $ = id => document.getElementById(id);
+  let seenOn = S.define({ key: "view.seenSoFar", section: "View", label: "Seen so far", type: "toggle", value: false,
+    hint: "Draw each mapped moon only as sharply as Cassini had photographed it by this moment: places come into focus as their pictures are taken." });
+  let placesOn = S.define({ key: "view.places", section: "View", label: "Pictures of a place", type: "toggle", value: true,
+    hint: "Click a place on a mapped moon to list the sharpest pictures Cassini took of it." });
+  const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
+  // (the settings' handlers are at the end of this script: cassiniSettings.on() calls a handler at once with the saved
+  // value, and a handler must not run before the variables it reaches exist)
+
+  const DIR = "data/coverage/";
+  const NO_SURFACE = { TITAN: 1 };   // drawn as its haze: nothing to bring into focus
+  // after a request fails (the table is not built on this site, or the network dropped): how long before the next try,
+  // longer each time. Nothing is asked for on a visit that uses neither feature.
+  const RETRY_MS = [15e3, 60e3, 300e3, 1800e3];
+  const again = (fails, at) => !fails || performance.now() - at >= RETRY_MS[Math.min(fails, RETRY_MS.length) - 1];
+  let index = null, asking = null, fails = 0, failedAt = 0;
+  let built = [-Infinity, Infinity];  // the mission times the table speaks for (a table can be built for some years only)
+  const cov = {};                    // moon -> { tex, seen: [coarse, fine] cumulative tables, places, asking, fails, failedAt, used, patched }
+
+  // the table's index, the first time either feature needs it: resolves to it, or to null when it cannot be had now
+  function need() {
+    if (index) return Promise.resolve(index);
+    if (asking) return asking;
+    if (!again(fails, failedAt)) return Promise.resolve(null);
+    return asking = fetch(DIR + "index.json").then(r => r.ok ? r.json() : null).catch(() => null).then(j => {
+      asking = null;
+      if (!j || !j.moons || !j.grid || !j.years || !j.years.length) { fails++; failedAt = performance.now(); return null; }
+      const year = y => utcToEt(`${y}-01-01T00:00:00`), first = +String(j.t0_utc || "2004").slice(0, 4);
+      built = [j.years[0] <= first ? -Infinity : year(j.years[0]), year(j.years[j.years.length - 1] + 1)];
+      index = j; fails = 0; redraw();
+      return j;
+    });
+  }
+  async function gunzip(resp) {
+    return new Uint8Array(await new Response(resp.body.pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+  }
+  // The file stacks its tiers one under the other (720 x 2160 for six). The texture lays them two across instead
+  // (1440 x 1080), which every GPU the page runs on can hold.
+  const ACROSS = 2;
+  // how much of the globe had been seen by each time something new was seen, for one tier: the times in order and the
+  // share of the globe's area seen up to each (build_coverage.py's own weighting: a texel counts by the cosine of its
+  // latitude; bench/coverage.cjs checks the last value against the builder's)
+  function curve(px, W, H, t) {
+    const w = new Float64Array(H); let all = 0;
+    for (let y = 0; y < H; y++) { w[y] = Math.cos(Math.PI / 2 - (y + 0.5) / H * Math.PI); all += W * w[y]; }
+    const sum = new Map();
+    for (let y = 0; y < H; y++) {
+      let run = -1, acc = 0;
+      for (let x = 0, o = 4 * (t * H + y) * W; x < W; x++, o += 4) {
+        const tick = px[o] * 65536 + px[o + 1] * 256 + px[o + 2];
+        if (tick !== run) { if (acc) sum.set(run, (sum.get(run) || 0) + acc); run = tick; acc = 0; }
+        if (tick !== 0xFFFFFF) acc += w[y] / all;
+      }
+      if (acc) sum.set(run, (sum.get(run) || 0) + acc);
+    }
+    const ticks = Float64Array.from(sum.keys()).sort(), share = new Float64Array(ticks.length);
+    let s = 0; for (let i = 0; i < ticks.length; i++) share[i] = s += sum.get(ticks[i]);
+    return { ticks, share };
+  }
+  function load(moon) {
+    const c = cov[moon] || (cov[moon] = {});
+    if (c.asking || c.tex || !index || !index.moons[moon] || typeof DecompressionStream === "undefined" || !again(c.fails, c.failedAt)) return c;
+    c.asking = true;
+    fetch(DIR + index.moons[moon].cov).then(r => r.ok ? gunzip(r) : null).catch(() => null).then(px => {
+      c.asking = false;
+      const [W, H] = index.grid, T = index.tiers, DOWN = Math.ceil(T / ACROSS);
+      if (!px || px.length !== W * H * T * 4) { c.fails = (c.fails || 0) + 1; c.failedAt = performance.now(); return; }
+      c.fails = 0;
+      if (!seenOn) return;           // switched off while it was on its way
+      const at = new Uint8Array(W * ACROSS * H * DOWN * 4).fill(255);
+      for (let t = 0; t < T; t++) for (let y = 0; y < H; y++)
+        at.set(px.subarray(4 * (t * H + y) * W, 4 * (t * H + y + 1) * W), 4 * ((Math.floor(t / ACROSS) * H + y) * W * ACROSS + (t % ACROSS) * W));
+      c.tex = new THREE.DataTexture(at, W * ACROSS, H * DOWN, THREE.RGBAFormat);
+      c.tex.magFilter = c.tex.minFilter = THREE.NearestFilter; c.tex.generateMipmaps = false; c.tex.needsUpdate = true;
+      if (!c.seen) c.seen = [curve(px, W, H, 0), curve(px, W, H, T - 1)];   // the coarsest and the finest tier
+      redraw();
+    });
+    return c;
+  }
+  // a moon's table off the graphics card again (its shader goes back to drawing the whole map)
+  let blank = null;
+  function drop(moon) {
+    const c = cov[moon]; if (!c || !c.tex) return;
+    if (c.patched) { const u = meshes[moon].mat.uniforms; u.cov.value = blank || (blank = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat)); u.covOn.value = 0; }
+    c.tex.dispose(); c.tex = null;
+  }
+  // The moons whose tables are worth holding: the one in view, the one the cameras are on, and any other drawn large.
+  // A table is 6 MB on the graphics card, so only a few are held at once and the longest unused goes first; a moon
+  // without its table is drawn as the whole map, which at a few pixels across looks the same.
+  const HELD = 3, LARGE_PX = 40;
+  function wanted(moon) {
+    if (!present(moon)) return false;
+    if (moon === state.focus || moon === state.target) return true;
+    const d = camera.position.distanceTo(meshes[moon].group.position);
+    return (bodyRadius(moon) / KM) * enlargeOf(moon) / Math.max(d, 1e-12) * renderer.domElement.clientHeight / 2 / Math.tan(camera.fov * Math.PI / 360) >= LARGE_PX;
+  }
+  // the share of a moon's globe seen by the time on the clock: [at all, at the surface map's own scale], or null
+  function seen(moon, et) {
+    const c = cov[moon]; if (!c || !c.seen) return null;
+    const tick = ((et === undefined ? state.et : et) - index.t0) / index.dt;
+    return c.seen.map(s => { let lo = 0, hi = s.ticks.length; while (lo < hi) { const m = (lo + hi) >> 1; if (s.ticks[m] <= tick) lo = m + 1; else hi = m; } return lo ? s.share[lo - 1] : 0; });
+  }
+
+  // ---------- Seen so far: the moon's shader blurs its map to what had been seen ----------
+  const HEAD = `uniform sampler2D cov; uniform float covOn; uniform vec2 covNow; uniform float covFade; uniform vec2 covMap; uniform vec3 covGrid; uniform vec2 covAcross;
+      // how far tier k has come in at texel ij: 0 before the place was seen that sharply, 1 once it has been
+      float covSeen(vec2 ij, float k) {
+        float col = mod(k, covAcross.x), row = floor(k / covAcross.x);   // tier k's place in the texture
+        vec2 uv = vec2((mod(ij.x, covGrid.x) + 0.5 + col * covGrid.x) / (covGrid.x * covAcross.x), (clamp(ij.y, 0.0, covGrid.y - 1.0) + 0.5 + row * covGrid.y) / (covGrid.y * covAcross.y));
+        vec3 c = floor(texture2D(cov, uv).rgb * 255.0 + 0.5);
+        float d = (c.r * 65536.0 + c.g * 256.0 + c.b) - covNow.x;   // whole ticks from now (exact: both are under 2^24)
+        return clamp((covNow.y - d) / covFade, 0.0, 1.0);
+      }
+      // 0: never seen ... 6: seen at the 2k map's own scale
+      float covLevel(vec2 uv) {
+        vec2 p = vec2(uv.x * covGrid.x - 0.5, (1.0 - uv.y) * covGrid.y - 0.5), i = floor(p), f = p - i;
+        float s = 0.0;
+        for (int k = 0; k < 6; k++) {
+          float kk = float(k);
+          s += mix(mix(covSeen(i, kk), covSeen(i + vec2(1.0, 0.0), kk), f.x), mix(covSeen(i + vec2(0.0, 1.0), kk), covSeen(i + vec2(1.0, 1.0), kk), f.x), f.y);
+        }
+        return s;
+      }
+      uniform sampler2D map;`;
+  const WAS = "if (hasMap > 0.5) alb = texture2D(map, vUv).rgb;";
+  const NOW = `if (hasMap > 0.5) {
+          if (covOn > 0.5) {
+            float s = covLevel(vUv);
+            // the mip level that holds what had been seen (level 0 of a 2k map is tier 5), never sharper than the screen shows
+            float want = s < 1.0 ? mix(11.0, 5.0, s) : 6.0 - s;
+            want = s > 5.999 ? 0.0 : max(0.0, want + log2(covMap.x / 2048.0));
+            vec2 px = vUv * covMap, dx = dFdx(px), dy = dFdy(px);
+            float drawn = max(0.0, 0.5 * log2(max(dot(dx, dx), dot(dy, dy))));
+            alb = texture2D(map, vUv, max(0.0, want - drawn)).rgb;
+            // a place not yet seen is plain and a little dark
+            alb = mix(vec3(dot(alb, vec3(0.3, 0.59, 0.11))) * 0.6, alb, smoothstep(0.0, 1.0, s));
+          } else alb = texture2D(map, vUv).rgb;
+        }`;
+  function sharpen(moon) {
+    const m = meshes[moon], c = cov[moon];
+    if (!m || !m.mat || c.patched !== undefined || !c.tex) return;
+    const u = m.mat.uniforms, f = m.mat.fragmentShader;
+    c.patched = f.includes(WAS) && f.includes("uniform sampler2D map;");
+    if (!c.patched) { console.warn("Seen so far: the moon shader has changed, " + moon + " is left as it is"); return; }
+    u.cov = { value: c.tex }; u.covOn = { value: 0 }; u.covNow = { value: new THREE.Vector2() }; u.covFade = { value: 1 };
+    u.covMap = { value: new THREE.Vector2(2048, 1024) }; u.covGrid = { value: new THREE.Vector3(index.grid[0], index.grid[1], index.tiers) };
+    u.covAcross = { value: new THREE.Vector2(ACROSS, Math.ceil(index.tiers / ACROSS)) };
+    m.mat.fragmentShader = f.replace("uniform sampler2D map;", HEAD).replace(WAS, NOW);
+    m.mat.extensions = Object.assign(m.mat.extensions || {}, { derivatives: true });
+    m.mat.needsUpdate = true;
+  }
+  const covered = () => state.et >= built[0] && state.et < built[1];
+  function frame() {
+    if (!index) { if (seenOn) need(); return; }
+    // (past the years the table was built for it has nothing to say: the moons are drawn as the whole map)
+    const on = seenOn && covered() && !document.body.classList.contains("cutscene");
+    const tick = (state.et - index.t0) / index.dt, whole = Math.floor(tick), t = performance.now();
+    let held = 0;
+    for (const moon in index.moons) {
+      if (NO_SURFACE[moon] || !meshes[moon]) continue;
+      const c = cov[moon] || (cov[moon] = {});
+      if (on && wanted(moon)) { c.used = t; if (!c.tex) load(moon); }
+      if (!c.tex) continue;
+      held++;
+      if (on) sharpen(moon);
+      if (!c.patched) continue;
+      const u = meshes[moon].mat.uniforms, map = u.map.value;
+      u.cov.value = c.tex;
+      u.covOn.value = on && u.hasMap.value > 0.5 ? 1 : 0;
+      u.covNow.value.set(whole, tick - whole);
+      // a place comes into focus over about a second of screen time, whatever the speed
+      u.covFade.value = Math.max(1, Math.min(6 * 3600, Math.abs(state.speed) * 0.9) / index.dt);
+      if (map && map.image && map.image.width) u.covMap.value.set(map.image.width, map.image.height);
+    }
+    while (held > HELD) {
+      let old = null;
+      for (const moon in cov) if (cov[moon].tex && cov[moon].used !== t && (!old || cov[moon].used < cov[old].used)) old = moon;
+      if (!old) break;               // every table held is in use this frame
+      drop(old); held--;
+    }
+  }
+  // the menu bar: how much of the moon in view Cassini has seen so far
+  let host = null, shown = "";
+  function status() {
+    if (!host) {
+      const before = $("mact") || $("mread"); if (!before) return;
+      host = document.createElement("span"); host.id = "mcov"; host.setAttribute("role", "status");
+      before.parentNode.insertBefore(host, before);
+    }
+    let html = "";
+    const moon = state.focus, mine = seenOn && index && index.moons[moon] && !NO_SURFACE[moon], s = mine && covered() ? seen(moon) : null;
+    let tip = "";
+    if (s) {
+      const pct = v => v > 0 && v < 0.005 ? "under 1%" : Math.round(v * 100) + "%";
+      html = s[0] <= 0 ? `<b>${titleCase(moon)}</b> · not yet seen by Cassini` : `<b>${titleCase(moon)}</b> · ${pct(s[0])} seen so far · ${pct(s[1])} in detail`;
+    } else if (mine && !covered()) {
+      // a table built for some years only says nothing about the others
+      const y = index.years, span = y.length > 1 ? `${y[0]} to ${y[y.length - 1]}` : `${y[0]}`;
+      html = `<b>${titleCase(moon)}</b> · seen so far is worked out for ${span} only`;
+      tip = `This site's table of what Cassini had photographed was built for ${span}. Outside those years the moons are drawn as the whole map.`;
+    }
+    if (html !== shown) {
+      host.innerHTML = shown = html;
+      host.title = tip ? tip : html ? `The share of ${titleCase(moon)}'s surface Cassini's cameras have photographed in sunlight by now: at all (${index.moons[moon].tier_km[0].toFixed(0)} km per pixel or better), and in detail (${index.moons[moon].tier_km[index.tiers - 1].toFixed(1)} km per pixel or better, the scale of the surface map).` : "";
+    }
+  }
+
+  // ---------- Pictures of a place ----------
+  const place = { moon: null, lat: 0, lon: 0, rows: [], win: null, ring: null };
+  const fmtLatLon = (lat, lon) => `${Math.abs(lat).toFixed(0)}°${lat >= 0 ? "N" : "S"} ${(lon <= 0 ? -lon : 360 - lon).toFixed(0)}°W`;
+  const fmtRes = m => m >= 10000 ? (m / 1000).toFixed(0) + " km/px" : m >= 1000 ? (m / 1000).toFixed(1) + " km/px" : m.toFixed(0) + " m/px";
+  async function places(moon) {
+    const c = cov[moon] || (cov[moon] = {});
+    if (!c.places && again(c.pfails, c.pfailedAt)) c.places = fetch(DIR + index.moons[moon].places).then(r => r.ok ? r.json() : null).catch(() => null).then(j => {
+      if (!j || !j.cells) { c.places = null; c.pfails = (c.pfails || 0) + 1; c.pfailedAt = performance.now(); return null; }
+      c.pfails = 0; return j;
+    });
+    return c.places || null;
+  }
+  // the sharpest pictures of the place at lat, lonE (degrees) on a moon: [{ id, et, cam, f1, f2, obs, range_km, res_m }]
+  async function pick(moon, lat, lon) {
+    const ix = await need();
+    if (!ix || !ix.moons[moon]) return [];
+    const P = await places(moon); if (!P) return [];
+    const col = Math.min(P.cols - 1, Math.floor(((lon + 540) % 360) / 360 * P.cols)), row = Math.min(P.rows - 1, Math.max(0, Math.floor((90 - lat) / 180 * P.rows)));
+    const e = P.cells[row * P.cols + col] || [], out = [];
+    for (let i = 0; i < e.length; i += 2) { const k = e[i], o = { res_m: e[i + 1] }; for (const key in P.pictures) o[key] = P.pictures[key][k]; out.push(o); }
+    return out;
+  }
+  function ring(moon, lat, lon) {
+    if (!place.ring) {
+      place.ring = new THREE.Mesh(new THREE.RingGeometry(0.034, 0.042, 48), new THREE.MeshBasicMaterial({ color: 0x8ab6ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+      place.ring.renderOrder = 5;
+    }
+    const m = meshes[moon]; if (!m) return;
+    if (place.ring.parent !== m.mesh) m.mesh.add(place.ring);
+    const la = lat * Math.PI / 180, lo = lon * Math.PI / 180, n = new THREE.Vector3(Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la));
+    place.ring.position.copy(n).multiplyScalar(place.hit || 1.004);
+    place.ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    place.ring.visible = true; redraw();
+  }
+  function closePlace() {
+    if (place.win) place.win.hidden = true;
+    if (place.ring) place.ring.visible = false;
+    place.moon = null; place.rows = []; redraw();
+    if (window.cassiniWM) cassiniWM.syncMenu();
+  }
+  function win() {
+    if (place.win) return place.win;
+    const el = place.win = document.createElement("aside");
+    el.className = "win"; el.id = "placewin"; el.dataset.name = "Pictures of a place"; el.setAttribute("aria-label", "Pictures of a place");
+    el.innerHTML = `<div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Pictures of this place</div>
+      <div class="plhead"></div><ul></ul>`;
+    const dock = $("dock"); dock.parentNode.insertBefore(el, dock);
+    if (window.cassiniWM) cassiniWM.wire(el);
+    el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); closePlace(); }, true);
+    return el;
+  }
+  async function show(moon, lat, lon) {
+    const rows = await pick(moon, lat, lon);
+    Object.assign(place, { moon, lat, lon, rows });
+    const el = win(), F = window.cassiniFeeds;
+    el.hidden = false; delete el.dataset.min;
+    if (window.cassiniWM) { cassiniWM.front(el); cassiniWM.syncMenu(); }
+    el.querySelector(".plhead").innerHTML = `${titleCase(moon)} · ${fmtLatLon(lat, lon)}<small>${rows.length ? `the ${rows.length === 1 ? "one observation" : rows.length + " sharpest observations"} of this place, sharpest first` : ""}</small>`;
+    const ul = el.querySelector("ul"); ul.innerHTML = "";
+    if (!rows.length) ul.innerHTML = `<li class="plnone">Cassini's cameras did not photograph this place in sunlight${index.years.length < 13 ? ` in ${index.years[0]} to ${index.years[index.years.length - 1]}, the years built so far` : ""}.</li>`;
+    for (const r of rows) {
+      const li = document.createElement("li"), d = new Date(etToMs(r.et)).toISOString();
+      const filt = [r.f1, r.f2].filter(f => f && !/^CL\d$/.test(f)).join(" + ") || "clear";
+      li.innerHTML = `<button title="${r.obs || ""} · ${r.id}">${F ? `<img alt="" loading="lazy" src="${F.frames}/frames/${r.id}.webp?size=128" onerror="this.style.visibility='hidden'">` : "<span></span>"}
+        <span class="d">${d.slice(0, 10)} <small>${d.slice(11, 16)} UTC</small></span><span class="r">${fmtRes(r.res_m)}</span>
+        <span class="s">${r.cam === "W" ? "Wide-angle" : "Narrow-angle"} · ${filt} · from ${Math.round(r.range_km).toLocaleString("en-US")} km</span></button>`;
+      li.querySelector("button").addEventListener("click", () => {
+        setPlaying(false); setTime(r.et);
+        if (state.focus !== moon && present(moon)) setFocus(moon);
+        ul.querySelectorAll("button.on").forEach(b => b.classList.remove("on")); li.querySelector("button").classList.add("on");
+        redraw();
+      });
+      ul.appendChild(li);
+    }
+    ring(moon, lat, lon);
+  }
+  // a click (not a drag) on a mapped moon
+  const gl = $("gl"), ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let down = null;
+  if (gl) {
+    gl.addEventListener("pointerdown", e => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
+    gl.addEventListener("pointerup", async e => {
+      const d = down; down = null;
+      if (!d || !placesOn || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 4) return;
+      const r = gl.getBoundingClientRect();
+      ndc.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
+      ray.setFromCamera(ndc, camera);
+      // (the first click asks for the table's index; the ray is the click's own, taken before the wait)
+      if (!await need() || !placesOn) return;
+      let best = null;
+      for (const moon in index.moons) {
+        const m = meshes[moon]; if (!m || !m.group.visible) continue;
+        const hit = ray.intersectObject(m.mesh, false)[0];
+        if (hit && (!best || hit.distance < best.hit.distance)) best = { moon, hit, m };
+      }
+      if (!best) return;
+      const p = best.m.mesh.worldToLocal(best.hit.point.clone()), l = p.length();
+      place.hit = l * 1.004;
+      show(best.moon, Math.asin(Math.max(-1, Math.min(1, p.z / l))) * 180 / Math.PI, Math.atan2(p.y, p.x) * 180 / Math.PI);
+    });
+  }
+  // the place's pictures, ticked along the bottom of the timeline
+  function ticks(g, w, h) {
+    if (!place.rows.length || !place.win || place.win.hidden) return;
+    const v0 = state.view[0], span = state.view[1] - v0;
+    g.fillStyle = "#8ab6ff";
+    for (const r of place.rows) { const x = (r.et - v0) / span * w; if (x >= 0 && x <= w) g.fillRect(Math.round(x) - 1, h - 5, 2, 5); }
+  }
+
+  // ---------- hooks ----------
+  const prevAtt = window.studyAttitude, prevHud = window.studyHud, prevTl = window.studyTimeline;
+  window.studyAttitude = (...a) => { if (prevAtt) prevAtt(...a); frame(); };
+  window.studyHud = ms => { if (prevHud) prevHud(ms); status(); };
+  window.studyTimeline = (g, w, h, xn) => { if (prevTl) prevTl(g, w, h, xn); ticks(g, w, h); };
+  S.on("view.seenSoFar", v => { seenOn = v; if (v) need(); else for (const moon in cov) drop(moon); redraw(); });
+  S.on("view.places", v => { placesOn = v; if (!v) closePlace(); });
+  window.cassiniCoverage = { index: () => index, need, seen, pick, show, close: closePlace, place: () => place, ready: moon => !!(cov[moon] && cov[moon].tex), patched: moon => !!(cov[moon] && cov[moon].patched),
+    held: () => Object.keys(cov).filter(m => cov[m].tex), covered };
+})();
+</script>

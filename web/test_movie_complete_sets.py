@@ -46,17 +46,37 @@ assert not om.empty({**placed})                                        # made be
 assert not om.empty({"floor": 30, "top": 40})                          # not placed: held as unplaced, not as empty
 assert om.patchy({**placed, "lost": 0.05}) and not om.patchy({**placed, "lost": 0.01})
 frames = fr(["CL1/CL2"] * 5)
-tiles = [dict(placed), dict(placed), {**placed, "floor": 25, "top": 31}, {**placed, "lost": 0.2}, dict(placed)]
+tiles = [dict(placed), dict(placed), {**placed, "floor": 25, "top": 31}, {**placed, "lost": 0.3}, dict(placed)]
 tile_of = lambda j: tiles[j]
 held = [om.held_of([f[2] for f in frames], n, lambda j: om.unfit(frames, j, tile_of),
                    lambda j: not om.unfit(frames, j, tile_of)) for n in range(5)]
 assert held == [0, 1, 1, 1, 4], held
+# a frame that lost a strip under MOVIE_HOLD_LOST plays, its lost lines left out (286RI FNTHPLE001: 6-22% lost);
+# a mosaic movie still draws it only where its place has no other copy (patchy)
+tiles[3] = {**placed, "lost": 0.2, "lost_inside": 0.006}
+assert not om.unfit(frames, 3, tile_of) and om.patchy(tiles[3])
+# ... but lines lost across the picture (265RF FMOVIE001: every few lines, the F ring a comb) hold it, and so does a
+# report that does not say where its lines went
+tiles[3] = {**placed, "lost": 0.1, "lost_inside": 0.17}
+assert om.unfit(frames, 3, tile_of)
+tiles[3] = {**placed, "lost": 0.2}
+assert om.unfit(frames, 3, tile_of)
+a = np.zeros((100, 100), np.uint8); a[10:90, 10:90] = 255
+strip, comb = a.copy(), a.copy()
+strip[70:90] = 0; comb[20:80:4] = 0
+assert om.lost_inside(strip) < 0.01 and om.lost_inside(comb) > 0.15, (om.lost_inside(strip), om.lost_inside(comb))
 # a grey square among frames of its filter that show the scene (141EN PLMHPHR001's frames 18-23: levels 23-75
 # against 0-160 either side) is blank; a pass dimming steadily is not
 span = lambda lo, hi: {**placed, "floor": lo, "top": hi}
 frames = fr(["GRN", "RED", "GRN", "RED", "GRN"])
 tiles = [span(0, 163), span(0, 160), span(23, 75), span(0, 150), span(0, 150)]
 assert [om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5)] == [False, False, True, False, False]
+# short exposures between long ones of the filter that clip (263RI HIPHASE001: rings 0-76 against clipped 0-255) are
+# not blank: a clipped frame is no measure, the filter's next unclipped one is
+clip = lambda: {**span(0, 255), "saturated": 0.03, "lit": 0.43}
+frames = fr(["BL1"] * 5)
+tiles = [span(0, 80), clip(), span(0, 76), clip(), span(0, 78)]
+assert not any(om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5))
 tiles = [span(0, 200), span(0, 160), span(0, 90), span(0, 150), span(0, 40)]
 assert not any(om.blank_frame(frames, n, lambda j: tiles[j]) for n in range(5))
 print("empty, blank and lost-line frames hold the frame before them; ok")
@@ -274,3 +294,22 @@ assert om.set_cover(here, old) < om.HELD_COVER                            # the 
 assert om.set_cover(here, [_turned(1, 1), _turned(2, 0), _turned(0, 2)]) > 0.9
 assert om.set_cover(here, [here]) > 0.999
 print("a colour set covers a frame's place only where all its frames do at once (%.2f); ok" % om.set_cover(here, old))
+
+# a colour set mixing a tile drawn on a long run's white with tiles on the pass's (263RI HIPHASE001: a 2 s RED on
+# white 0.086 with 0.1 s GRN and BL1 on 0.31) puts the long one on the pass's white; one white needs nothing
+longt, short = {**placed, "white": 0.086}, dict(placed)
+g = om.one_white([longt, short, dict(short)], {"white": 0.31})
+assert list(g.values()) == [0.086 / 0.31] and id(longt) in g, g
+assert om.one_white([short, dict(short)], {"white": 0.31}) == {} and om.one_white([longt, dict(longt)], {"white": 0.31}) == {}
+print("a colour set is drawn on one white; ok")
+
+# a set grouping a long exposure with short ones of the other filters takes its filter's nearest short frame instead
+# (263RI HIPHASE001: a 2 s RED with 0.1 s GRN and 0.18 s BL1, the clipped ring arc pure red)
+fs = fr(["RED", "GRN", "BL1", "RED"])
+u = {"frames": fs, "_exposures": {0: 0.18, 1: 0.1, 2: 0.18, 3: 2.0}}
+yes = lambda j: True
+assert om.matched_exposures(u, {"RED": 3, "GRN": 1, "BL1": 2}, lambda j: False, yes) == {"RED": 0, "GRN": 1, "BL1": 2}
+assert om.matched_exposures(u, {"RED": 3, "GRN": 1, "BL1": 2}, lambda j: j == 0, yes) == {"RED": 3, "GRN": 1, "BL1": 2}
+u["_exposures"] = {0: 0.18, 1: 1.0, 2: 1.0, 3: 2.0}
+assert om.matched_exposures(u, {"RED": 3, "GRN": 1, "BL1": 2}, lambda j: False, yes) == {"RED": 3, "GRN": 1, "BL1": 2}
+print("a set's long exposure among short ones gives way to its filter's short frame; ok")

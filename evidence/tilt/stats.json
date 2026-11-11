@@ -1,0 +1,35 @@
+{
+ "frames": 294150,
+ "passes": {
+  "centre": 16131,
+  "north": 5543,
+  "other": 3666,
+  "err": 0
+ },
+ "before_deg": {
+  "median": 85.99,
+  "p90": 173.87,
+  "mean": 86.15
+ },
+ "after_deg": {
+  "median": 0.02,
+  "p90": 0.69,
+  "mean": 0.53
+ },
+ "before_off_square_deg": {
+  "median": 6.86,
+  "p90": 29.11,
+  "mean": 12.2
+ },
+ "after_off_square_deg": {
+  "median": 0.02,
+  "p90": 0.69,
+  "mean": 0.5
+ },
+ "share_after_lt_1deg": 0.9221,
+ "share_before_lt_1deg": 0.0162,
+ "share_after_off_square_lt_1deg": 0.9221,
+ "share_before_off_square_lt_1deg": 0.071,
+ "share_after_lt_5deg": 0.9795,
+ "secs": 51
+}

@@ -35,7 +35,7 @@ farm/stop-<machine>    touch it: that machine finishes its unit and stops
 | geometry `geometry-usgs.sqlite` (the USGS-refilled one main needs, never `geometry.sqlite`) | `CASSINI_GEOMETRY_CACHE` | 54 MB | `archives/` | local copy (written to: never share one file) |
 | extracted SPICE cache (copy of `usgs_render_spice_cache`) | `CASSINI_SPICE_CACHE` | 16.4 GiB | `archives/spice_cache` | local copy |
 | CISSCAL calibration | `CASSINI_CISSCAL` | 1.4 GiB | `archives/cisscal` | local copy |
-| kernels `cassiniprojectJAN05.zip` | `CASSINI_KERNELS` | 131 GB | `archives/` | not copied; the rehearsal checks the build doesn't need it |
+| kernels `cassiniprojectJAN05.zip` | `CASSINI_KERNELS` | 131 GB | `archives/` | local copy, required: without it the laptop builds with only the kernels earlier renders unpacked (the 2017 test build's laptop months came out with other calibration numbers and failed movies). `run` refuses to start without it |
 | repo at the plan's commit + `.venv` | | 0.8 GB | worktree | clone, `pip install` the hub's `pip freeze` |
 
 `run` always sets `CASSINI_KEEP_SPICE_CACHE=1`.
@@ -74,7 +74,7 @@ packages' hash against the plan, and (for the laptop) that SSH to the hub works.
    (~91 GB: ~15-25 min at Wi-Fi's ~60-110 MB/s). Clone the repo at the commit; make the venv from the freeze.
 6. **Config**: write `farm/farm.json` from `web/frames/farm.example.json` (`procs`: Mini 9, laptop
    16 to start). `farm.py plan --shared farm` writes plan.json and prints the estimate.
-7. **Rehearsal (~1 h)**: both machines build the same short stretch into scratch caches:
+7. **Rehearsal (~1 h)**: both machines build the same short stretch, **from the years being built**, into scratch caches:
    `prebuild.py processed --from 2004-06-01 --until 2004-06-03 --cache <scratch> --procs N --balanced` and
    `movies` on the same stretch, then copy the laptop's scratch to the hub and `farm.py compare <mini scratch>
    <laptop scratch>`. Zero differences: go. Any: stop and report the files (the old plan found ≤0.0008 gray-level
@@ -116,3 +116,25 @@ years only: `plan`, then delete from plan.json the units you don't want (or `ver
 - macOS ships openrsync: `--remove-source-files` mis-handles folders, so the farm frees the laptop's disk itself,
   after a dry run shows every file is on the hub.
 - Never `pkill` by a pattern that also matches the tmux wrapper; kill the Python child.
+
+## Other render work on both machines: `farm.py exec`
+
+Sam's rule (2026-11-09): render work uses the laptop as well as the Mini. Any thread on the Mini can queue a command;
+each machine running an exec worker takes the next one it may run, in its own checkout with its own inputs (farm.json
+env), after the same preflight as `run` (inputs match, kernels load). What the command writes into `$FARM_OUT` is copied
+back to the hub's `exec_results` folder (farm.json). The laptop pulls jobs over SSH, so the Mini never has to reach it.
+
+```
+# on the Mini, from a checkout at the commit the job needs (a worker only runs jobs at its own commit)
+python web/frames/farm.py exec submit --shared ~/server/farm-2017h2 --name titan-posters --by "Titan posters" -- \
+    python my_render.py --out '$FARM_OUT'          # --only mbp to send it to the laptop, default: any machine
+python web/frames/farm.py exec status --shared ~/server/farm-2017h2
+
+# workers (one per machine, in tmux/screen)
+python web/frames/farm.py exec worker --shared ~/server/farm-2017h2 --machine mini
+python web/frames/farm.py exec worker --shared ssh://mini/Users/lazarus/server/farm-2017h2 --machine mbp
+```
+
+A job's command runs with `cwd` = the worker's checkout and gets `FARM_OUT` (its output folder) and `FARM_JOB` (its id)
+in the environment; quote `'$FARM_OUT'` so the submitting shell doesn't expand it. Each job shows on the dashboard as
+`exec-<machine>-<id>`. Touch `<shared>/stop-exec-<machine>` to stop a worker after its current job.
