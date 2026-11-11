@@ -124,6 +124,10 @@ if (%s) {
   // a file of the site
   window.cassiniPublic = true;
   window.cassiniPlanLocal = { plan: async () => (await fetch("/plan-local.json")).json() };
+  // movie frames' steps are the page's own on the public site at every film size (the server bakes in none): a
+  // stand-in cassiniSteadyLocal that notes which frames were asked about and leaves each to its published picture
+  store["movies.stabilizeLocal"] = true; window.slAsked = [];
+  window.cassiniSteadyLocal = { want(f, id) { slAsked.push(id); return null; }, async ready() { return null; } };
 }
 window.cassiniSettings = { define(d) { if (!(d.key in store)) store[d.key] = d.value; }, get: k => store[k], set(k, v) { store[k] = v; }, on() {} };
 window.cassiniLook = () => ""; window.cassiniMovieStyle = () => "&trail=0&laps=1";
@@ -181,11 +185,11 @@ const [page_, data_, out_, muxer_] = process.argv.slice(2), D = JSON.parse(fs.re
     // the same film from its key alone, as the Gallery makes a shared one (public site only)
     let film = null;
     if (window.cassiniPublic) { const f = await E.makeFilm(E.state.planKey); film = f.error ? { error: f.error } : { made: f.made, name: f.name, bytes: f.blob.size }; }
-    return { made: E.state.made, state: document.getElementById('exstate').textContent, mp4: btoa(s), film };
+    return { made: E.state.made, state: document.getElementById('exstate').textContent, mp4: btoa(s), film, slAsked: window.slAsked || [] };
   }, [D.plan.pictures[0].t - 1, D.plan.pictures[D.plan.pictures.length - 1].t + 1]);
   if (r.error) { console.error(r.error); process.exit(1); }
   fs.writeFileSync(out_, Buffer.from(r.mp4, 'base64'));
-  console.log(JSON.stringify({ made: r.made, state: r.state, asked, film: r.film }));
+  console.log(JSON.stringify({ made: r.made, state: r.state, asked, film: r.film, slAsked: r.slAsked }));
   await b.close();
 })();
 """
@@ -246,6 +250,9 @@ assert min(panes) > 34, panes
 assert kinds_here.get("held behind mosaic"), kinds_here
 if PUBLIC:
     assert not got["asked"].get("/export"), f"the public page asked the frame server's /export {got['asked'].get('/export')} times"
+    movies = {e["id"] for e in public["pictures"] if e.get("tries") and e["tries"][0][0] == "movie"}
+    assert movies and movies <= set(got["slAsked"]), (sorted(movies), sorted(set(got["slAsked"])))
+    print(f"public: the {SIZE} px film asked this computer to work out all {len(movies)} movie frames' steps")
     f = got["film"]
     assert f and not f.get("error"), f
     assert f["made"]["kinds"] == kinds_here and f["made"]["frames"] == got["made"]["frames"], (f["made"], got["made"])

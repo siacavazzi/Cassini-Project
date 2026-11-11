@@ -538,7 +538,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop, center = centreOn()) {
     const SL = window.cassiniSteadyLocal;
-    if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
+    // (the steps are worked out on the 1024 px planes; on the public site, where the server bakes in none of them, a
+    // smaller film takes the 1024 px picture too, and Film.put fits it to the pane)
+    if (!SL || (size !== 1024 && !PUB()) || !S.get("movies.stabilizeLocal")) return null;
     if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
@@ -553,7 +555,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   }
   // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
   async function rollingHere(id, size, stop, center = centreOn()) {
-    const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
+    const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
@@ -876,7 +878,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     let u = null;
     try { u = new URL(url, location.href); } catch (e) {}
     const m = u && /^\/frames\/movie\/([NW]\d{10}_\d+)\.webp$/.exec(u.pathname);
-    if (m && u.searchParams.get("size") === "1024") {
+    if (m && (u.searchParams.get("size") === "1024" || PUB())) {
       const center = u.searchParams.get("center") !== "0", rolling = u.searchParams.get("mode") === "rolling";
       const here = rolling ? (u.searchParams.get("whole") === "1" ? null : await rollingHere(m[1], 1024, { done: false }, center)) : u.searchParams.get("color") !== "0" ? await movieHere(m[1], 1024, { done: false }, center) : null;
       if (here) return here;

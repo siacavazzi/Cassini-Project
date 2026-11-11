@@ -8607,9 +8607,6 @@ function targetLabel(k) {
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
-    // the public site's frames host (site.json, WP6), when the switch carries one
-    const P = window.cassiniPublic;
-    if (P && typeof P === "object" && P.frames) return String(P.frames).replace(/\/$/, "");
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
@@ -8623,7 +8620,7 @@ function targetLabel(k) {
   const FULL_S_PER_MP = 0.5;
   // the export's choices live in the settings registry, so they are kept on this device and listed in Settings
   // (on the public site, PUBLIC below: sizes up to 1024 only, and no Full, HDR or server films to choose)
-  const PUBLIC_AT_START = !!window.cassiniPublic;
+  const PUBLIC_AT_START = !!window.cassiniPublic || document.documentElement.classList.contains("public");
   if (S) {
     const D = d => (PUBLIC_AT_START && ["export.full", "export.hdr", "export.local"].includes(d.key) ? null : S.define(Object.assign({ section: "Export" }, d)));
     D({ key: "export.adaptive", label: "Adaptive frame rate", type: "toggle", value: true,
@@ -8646,10 +8643,10 @@ function targetLabel(k) {
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const setOpt = (k, v) => { if (S) S.set(k, v); };
 
-  // ---------- the public site (window.cassiniPublic: D1, D7) ----------
+  // ---------- the public site (D1, D7): the public build marks the page with the class "public" (WP6), or window.cassiniPublic ----------
   // every film made here, from the page's own plan (window.cassiniPlanLocal) and the published pictures, up to
   // PUBLIC_MOST px a camera; the switch is read each time, so a page that sets it after this script still has it
-  const PUB = () => !!window.cassiniPublic;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
   const PUBLIC_MOST = 1024;
   const PL = () => window.cassiniPlanLocal;
   const NO_PLAN = "This page cannot plan films yet (its film planner is missing).";
@@ -9078,7 +9075,9 @@ function targetLabel(k) {
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop, center = centreOn()) {
     const SL = window.cassiniSteadyLocal;
-    if (!SL || size !== 1024 || !S.get("movies.stabilizeLocal")) return null;
+    // (the steps are worked out on the 1024 px planes; on the public site, where the server bakes in none of them, a
+    // smaller film takes the 1024 px picture too, and Film.put fits it to the pane)
+    if (!SL || (size !== 1024 && !PUB()) || !S.get("movies.stabilizeLocal")) return null;
     if (!SL.want(FRAMES, id, { center, color: true })) await SL.ready(FRAMES, id, center, true);
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
@@ -9093,7 +9092,7 @@ function targetLabel(k) {
   }
   // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
   async function rollingHere(id, size, stop, center = centreOn()) {
-    const FL = window.cassiniFadeLocal, fh = FL && size === 1024 ? FL.want(FRAMES, id) : null;
+    const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
@@ -9416,7 +9415,7 @@ function targetLabel(k) {
     let u = null;
     try { u = new URL(url, location.href); } catch (e) {}
     const m = u && /^\/frames\/movie\/([NW]\d{10}_\d+)\.webp$/.exec(u.pathname);
-    if (m && u.searchParams.get("size") === "1024") {
+    if (m && (u.searchParams.get("size") === "1024" || PUB())) {
       const center = u.searchParams.get("center") !== "0", rolling = u.searchParams.get("mode") === "rolling";
       const here = rolling ? (u.searchParams.get("whole") === "1" ? null : await rollingHere(m[1], 1024, { done: false }, center)) : u.searchParams.get("color") !== "0" ? await movieHere(m[1], 1024, { done: false }, center) : null;
       if (here) return here;
@@ -9513,8 +9512,6 @@ function targetLabel(k) {
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
-    const P = window.cassiniPublic;   // the public site's frames host (site.json), when the switch carries one
-    if (P && typeof P === "object" && P.frames) return String(P.frames).replace(/\/$/, "");
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
@@ -9524,7 +9521,7 @@ function targetLabel(k) {
   const MOST_NONE = 200000;                     // the top of Settings > Playback > Make ahead up to: no limit
   const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
   // (on the public site nothing is made ahead, so neither setting is offered: Pre-process, policy.json page_settings)
-  if (S && !window.cassiniPublic) {
+  if (S && !(window.cassiniPublic || document.documentElement.classList.contains("public"))) {
     // the most frames one stretch makes ahead (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
     S.define({ key: "segment.maxFrames", section: "Playback", label: "Make ahead up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
       format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
@@ -9622,7 +9619,7 @@ function targetLabel(k) {
   // in the cache: a tenth of a second), or after a moment with how far it is; the page then looks again after 0.1,
   // 0.2, 0.4 and 0.8 s and every second from there. Answers { stop() }.
   const BUSY = /^(queued|planning|making|waiting|finishing)$/;
-  const PUB = () => !!window.cassiniPublic;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
   function make(a, b, update) {
     if (J) J.stop();
     // the public site: every picture is published, nothing to make (and no frame server to ask)
@@ -9730,8 +9727,6 @@ function targetLabel(k) {
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
-    const P = window.cassiniPublic;   // the public site's frames host (site.json), when the switch carries one
-    if (P && typeof P === "object" && P.frames) return String(P.frames).replace(/\/$/, "");
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
@@ -9823,7 +9818,7 @@ function targetLabel(k) {
     } catch (e) { return null; }
   }
   // the public site (window.cassiniPublic): pictures as published (export.html's publicUrl), films made here
-  const PUB = () => !!window.cassiniPublic;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
   const pub = url => (window.cassiniExport && cassiniExport.publicUrl ? cassiniExport.publicUrl(url) : url);
   // a recipe as the public site has it: a pointing opened on its own is not published (D9), so frame.webp?ids= opens
   // as its frame (one id) or its color picture (two or three); a numbered pointing and a body reel picture (D2) have
@@ -10736,7 +10731,7 @@ function targetLabel(k) {
   const GAL = () => window.cassiniGallery;
   // the public site (window.cassiniPublic): no tile tuning (no frame server to make a mosaic again); a picture asked for
   // as published (export.html's publicUrl drops a carried-over tune= and hide=)
-  const PUB = () => !!window.cassiniPublic;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public");
   const pub = url => (window.cassiniExport && cassiniExport.publicUrl ? cassiniExport.publicUrl(url) : url);
   if (S) {
     S.define({ key: "studio.jpegQuality", section: "Studio", label: "Picture quality", type: "range", value: 92, min: 70, max: 100, step: 1, unit: "%",
@@ -11500,14 +11495,12 @@ void main() {
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
-    const P = window.cassiniPublic;   // the public site's frames host (site.json), when the switch carries one
-    if (P && typeof P === "object" && P.frames) return String(P.frames).replace(/\/$/, "");
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
     return "http://localhost:8765";
   })();
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   // the public site (window.cassiniPublic): plan and levels in the page, pictures as published (export.html's helpers)
-  const PUB = () => !!window.cassiniPublic, PL = () => window.cassiniPlanLocal;
+  const PUB = () => !!window.cassiniPublic || document.documentElement.classList.contains("public"), PL = () => window.cassiniPlanLocal;
   const pub = url => (EX.publicUrl ? EX.publicUrl(url) : url);
   // a picture as a bitmap: on the public site as the film makes it here (a movie frame's steps worked out on this
   // computer), else the frame server's
@@ -13825,7 +13818,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"9f5877610eb0";
+  const BUILD = /*BUILD*/"1433c66d29af";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
