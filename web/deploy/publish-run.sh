@@ -14,6 +14,8 @@
 #           in this Mac's ledger; years another host published are checked against R2 (md5 and ETag) instead, so a
 #           single host (the one with the cache) is the fastest split
 # --dry-run print the commands only
+# The final run (from this Mac) reads every year from --cache: the hosts must share one cache path (the Mini's T7,
+# reached as the same path) or each must hold every year; years only another host's cache holds would be missing.
 # Each host's processes come from its free cores (CASSINI_WORKERS, else the cores not busy now), per the project's
 # compute rule; BLAS threads are pinned to 1 because the parallelism is many processes.
 set -euo pipefail
@@ -61,16 +63,27 @@ python web/frames/publish.py --cache $cache --years $y --no-manifest --workers \
     && echo "year $y on $host: done" || { echo "year $y on $host: FAILED (see $LOGDIR/$y-$host.log)"; return 1; }
 }
 
-i=0; pids=()
-for y in $(expand "$YEARS"); do
-  host="${H[$((i % ${#H[@]}))]}"; i=$((i + 1))
-  # one year per host at a time; each year's job uses all that host's free cores
-  if [ "$DRY" = 1 ]; then job "$host" "$y"; continue; fi
-  while [ "$(jobs -rp | wc -l)" -ge "${#H[@]}" ]; do wait -n || true; done
-  job "$host" "$y" & pids+=($!)
-done
-fail=0; for p in "${pids[@]:-}"; do [ -n "$p" ] && { wait "$p" || fail=1; }; done
-[ "$fail" = 0 ] || { echo "some years failed: no manifest written; rerun them (the publisher skips what is up)" >&2; exit 1; }
+# one loop per host, each taking the next year from a shared queue as soon as it is free, so a fast host never waits
+# behind a slow one and no host runs two years at once. Plain bash 3.2 (macOS /bin/bash): no wait -n, no arrays of
+# jobs; the queue is a file and its lock a directory (mkdir is atomic).
+QUEUE="$LOGDIR/queue"; LOCK="$LOGDIR/queue.lock"; FAILED="$LOGDIR/failed"
+expand "$YEARS" >"$QUEUE"; : >"$FAILED"
+next_year() {
+  until mkdir "$LOCK" 2>/dev/null; do sleep 1; done
+  local y; y="$(head -n 1 "$QUEUE")"
+  [ -n "$y" ] && tail -n +2 "$QUEUE" >"$QUEUE.tmp" && mv "$QUEUE.tmp" "$QUEUE"
+  rmdir "$LOCK"
+  [ -n "$y" ] && echo "$y"
+}
+if [ "$DRY" = 1 ]; then
+  i=0; for y in $(expand "$YEARS"); do job "${H[$((i % ${#H[@]}))]}" "$y"; i=$((i + 1)); done
+else
+  for host in "${H[@]}"; do
+    ( while y="$(next_year)"; do job "$host" "$y" || echo "$y $host" >>"$FAILED"; done ) &
+  done
+  wait
+  [ ! -s "$FAILED" ] || { echo "years failed: $(tr '\n' ' ' <"$FAILED"); no manifest written; rerun them (the publisher skips what is up)" >&2; exit 1; }
+fi
 
 # every year is up: one run over the whole range, from this Mac. It skips every object already up (ledger in --state,
 # else md5 against the ETag) and is the one run whose published.json covers every year, so its manifest (uploaded last,

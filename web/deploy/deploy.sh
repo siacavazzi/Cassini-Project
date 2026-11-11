@@ -99,8 +99,21 @@ COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 
 # ---------- the switch history: R2 deploy/<env>/history.json (local: a file) ----------
 HIST="$STATE/history.json"
+# The shared copy in R2 is the history: a pull that fails for any reason but "no such key" (the first switch) stops
+# the command, so a Mac never pushes a history that lacks the other Mac's steps.
 hist_pull() { [ "$ENV" = local ] && return 0
-  "$WR" r2 object get "$R2_BUCKET_NAME/deploy/$ENV/history.json" --remote --file "$HIST" >/dev/null 2>&1 || : ; }
+  local out
+  rm -f "$HIST"
+  if ! out="$("$WR" r2 object get "$R2_BUCKET_NAME/deploy/$ENV/history.json" --remote --file "$HIST" 2>&1)" \
+     || grep -q "ERROR" <<<"$out"; then
+    rm -f "$HIST"
+    if grep -qiE "specified key does not exist|key not found|NoSuchKey" <<<"$out"; then
+      log "history: none in R2 yet (first switch on $ENV)"
+    else
+      echo "could not read deploy/$ENV/history.json from R2; nothing changed:" >&2; tail -5 <<<"$out" >&2; exit 1
+    fi
+  fi
+}
 hist_push() { [ "$ENV" = local ] && return 0
   "$WR" r2 object put "$R2_BUCKET_NAME/deploy/$ENV/history.json" --remote --file "$HIST" --content-type application/json >/dev/null; }
 
@@ -158,8 +171,9 @@ build() {
 
 pages() {
   [ -n "$SITE" ] || SITE="$(cat "$STATE/last-site" 2>/dev/null || :)"
-  [ -f "$SITE/.build.json" ] || { echo "--site must be a folder deploy.sh build made" >&2; exit 2; }
-  "$PY" -c 'import json,sys; b=json.load(open(sys.argv[1])); sys.exit(0 if b["env"]==sys.argv[2] else 1)' "$SITE/.build.json" "$ENV" \
+  SITE="${SITE%/}"
+  [ -f "$SITE.build.json" ] || { echo "--site must be a folder deploy.sh build made (no $SITE.build.json)" >&2; exit 2; }
+  "$PY" -c 'import json,sys; b=json.load(open(sys.argv[1])); sys.exit(0 if b["env"]==sys.argv[2] else 1)' "$SITE.build.json" "$ENV" \
     || { echo "$SITE was built for another environment" >&2; exit 2; }
   if [ "$ENV" = local ]; then
     [ -f "$STATE/pages.pid" ] && { kill "$(cat "$STATE/pages.pid")" 2>/dev/null || :; sleep 1; }
@@ -169,7 +183,7 @@ pages() {
     log "pages local: http://127.0.0.1:$LOCAL_PAGES_PORT/?frames=http://127.0.0.1:$LOCAL_WORKER_PORT"
     return
   fi
-  if ! "$WR" pages project list 2>/dev/null | grep -q " $PROJECT "; then
+  if ! "$WR" pages project list --json 2>/dev/null | "$PY" -c 'import json,sys; sys.exit(0 if any((p.get("Project Name") or p.get("name")) == sys.argv[1] for p in json.load(sys.stdin)) else 1)' "$PROJECT"; then
     log "pages: making project $PROJECT"
     "$WR" pages project create "$PROJECT" --production-branch main
   fi
@@ -217,7 +231,7 @@ switch() {
 rollback() {
   hist_pull
   local prev; prev="$(CF history "$HIST" previous)"
-  [ "$prev" != "{}" ] || { echo "nothing to roll back to (history $HIST)" >&2; exit 2; }
+  [ "$prev" != "{}" ] || { echo "nothing to roll back to: the first switch is live, or every switch since it was already rolled back (history $HIST)" >&2; exit 2; }
   local pm pv pp
   pm="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1]).get("manifest",""))' "$prev")"
   pv="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1]).get("worker_version",""))' "$prev")"

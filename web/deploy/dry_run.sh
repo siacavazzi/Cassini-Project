@@ -39,5 +39,8 @@ curl -fsS -o /dev/null -w "pages: index.html %{http_code} %{size_download}B\n" "
 $D switch --mirror "$MIRROR" --manifest "$A" | tail -1 | tee -a "$OUT"; probe "deploy A"
 $D switch --manifest "$B" | tail -1 | tee -a "$OUT"; probe "switch to B"
 $D rollback | tail -1 | tee -a "$OUT"; probe "rollback"
+if $D rollback >/dev/null 2>&1; then echo "second rollback: WENT SOMEWHERE (wrong)" | tee -a "$OUT"; exit 1
+else echo "second rollback: refused, nothing before A (never forward to B)" | tee -a "$OUT"; fi
+probe "after 2nd rollback"
 $D status | tee -a "$OUT"
 echo "log: $OUT"

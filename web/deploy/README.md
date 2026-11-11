@@ -42,9 +42,11 @@ those prefixes, and `cf.py build` refuses a build that would.
 web/deploy/deploy.sh --local|--env staging COMMAND
   preflight                      tools; credentials file mode 600; token works; bucket private (no r2.dev URL, no
                                  custom domain); staging's Access app
-  build --data DIR [--out DIR]   the site from a clean git worktree at HEAD with build.py --public (WP6), the replay
-                                 data from DIR, page files only (no src/, bench/, replay/, READMEs, tools, evidence),
-                                 measured against Pages' limits; staging and local get robots "Disallow: /" and noindex
+  build --data DIR [--out DIR]   the site from a clean git worktree at HEAD: the replay data from DIR put in the
+                                 worktree's web/replay/data, then WP6's `build.py --public --out DIR`, which writes the
+                                 whole static site; measured against Pages' limits; staging and local get robots
+                                 "Disallow: /" and noindex; no hidden file inside, the build record beside it
+                                 (DIR.build.json). Before WP6 merges, --local only: the private page and its files
   pages --site DIR               staging: make the Pages project if needed, put the Access app on, upload, attach
                                  the host and its DNS record, then check every name answers with the Access sign-in
   switch --manifest KEY          check KEY is in the bucket and valid (publishes upload the manifest last), deploy the
@@ -62,7 +64,8 @@ that changes something says what it does first; `cf.py` changes nothing without 
 ## Staging, step by step (once Sam has given access)
 
 1. Sam fills `~/.cassini-cloudflare.env` from `cloudflare.env.example` (token, account ID, R2 key pair, staging
-   viewers' emails) and sets it to mode 600. A thread copies it to the Mini over SSH if the Mini deploys.
+   viewers' emails) and sets it to mode 600. In Zero Trust, Settings > Authentication must list **One-time PIN** (it
+   is there on a new account): it is how the listed emails sign in. Without it staging stays locked, but to everyone. A thread copies it to the Mini over SSH if the Mini deploys.
 2. `deploy.sh --env staging preflight`.
 3. `deploy.sh --env staging build --data <replay data built at this commit>`; the measurement must say FITS.
 4. `deploy.sh --env staging pages`: the Access app goes on **before** the upload and before `staging.<domain>` has a

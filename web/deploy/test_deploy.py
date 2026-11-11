@@ -122,7 +122,8 @@ class Build(unittest.TestCase):
 
 class DataCheck(unittest.TestCase):
     def test_both_replay_layouts_pass_the_input_check(self):
-        for layout in (["mission.json", "catalog.json"], ["mission.json", "catalog/2004.json", "months/2004-07.json"]):
+        for layout in (["mission.json", "catalog.json", "coverage/index.json"],
+                       ["mission.json", "catalog/2004.json", "months/2004-07.json", "coverage/index.json"]):
             d, out = tempfile.mkdtemp(), tempfile.mkdtemp()
             try:
                 for f in layout:
@@ -133,8 +134,12 @@ class DataCheck(unittest.TestCase):
                     info = cf.build(d, out, "local")
                 self.assertTrue(os.path.exists(os.path.join(out, "data", layout[1])), layout)
                 self.assertEqual(info["env"], "local")
+                self.assertTrue(os.path.exists(out + ".build.json"))
+                self.assertFalse([f for f in cf._all_files(out) if f.startswith(".")])   # nothing hidden goes to Pages
             finally:
                 shutil.rmtree(d); shutil.rmtree(out, ignore_errors=True)
+                if os.path.exists(out + ".build.json"):
+                    os.remove(out + ".build.json")
         d = tempfile.mkdtemp()
         try:
             open(os.path.join(d, "mission.json"), "w").write("{}")
@@ -142,6 +147,57 @@ class DataCheck(unittest.TestCase):
                 cf.build(d, os.path.join(d, "out"), "local")
         finally:
             shutil.rmtree(d)
+
+
+FAKE_PUBLIC_BUILD = r'''
+import os, shutil, sys
+# a stand-in for WP6's build.py: --public needs --out, and the replay data must be at web/cassini-os/data first
+HERE = os.path.dirname(os.path.abspath(__file__)); root = os.path.dirname(HERE)
+a = sys.argv[1:]
+assert "--public" in a
+if "--out" not in a:
+    sys.exit("build.py: the public site is written to a folder of its own: --out DIR")
+out = a[a.index("--out") + 1]
+data = os.path.realpath(os.path.join(root, "data"))
+for need in ("mission.json", "coverage"):
+    assert os.path.exists(os.path.join(data, need)), need
+os.makedirs(out, exist_ok=True)
+open(os.path.join(out, "index.html"), "w").write("public")
+shutil.copytree(data, os.path.join(out, "data"))
+'''
+
+
+class PublicBuild(unittest.TestCase):
+    def test_build_with_a_public_switch(self):
+        repo, data, out = tempfile.mkdtemp(), tempfile.mkdtemp(), tempfile.mkdtemp()
+        old = cf.ROOT
+        try:
+            os.makedirs(os.path.join(repo, "web", "cassini-os", "src"))
+            os.makedirs(os.path.join(repo, "web", "replay", "data", "textures"))
+            open(os.path.join(repo, "web", "replay", "data", "textures", "t.webp"), "w").write("t")
+            open(os.path.join(repo, "web", "cassini-os", "src", "build.py"), "w").write("# --public\n" + FAKE_PUBLIC_BUILD)
+            os.symlink("../replay/data", os.path.join(repo, "web", "cassini-os", "data"))
+            g = lambda *a: subprocess.run(["git", "-C", repo, *a], check=True, capture_output=True)
+            g("init", "-q"); g("add", "-A")
+            g("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "fake")
+            for f in ("mission.json", "catalog/2004.json", "coverage/index.json"):
+                os.makedirs(os.path.dirname(os.path.join(data, f)), exist_ok=True)
+                open(os.path.join(data, f), "w").write("{}")
+            os.rmdir(out)
+            cf.ROOT = repo
+            with redirect_stdout(io.StringIO()):
+                info = cf.build(data, out, "staging")
+            self.assertTrue(info["public_switch"])
+            self.assertEqual(open(os.path.join(out, "index.html")).read(), "public")
+            for f in ("data/mission.json", "data/catalog/2004.json", "data/coverage/index.json", "data/textures/t.webp"):
+                self.assertTrue(os.path.exists(os.path.join(out, f)), f)
+            self.assertIn("Disallow: /", open(os.path.join(out, "robots.txt")).read())
+        finally:
+            cf.ROOT = old
+            for d in (repo, data, out):
+                shutil.rmtree(d, ignore_errors=True)
+            if os.path.exists(out + ".build.json"):
+                os.remove(out + ".build.json")
 
 
 class Manifest(unittest.TestCase):
@@ -165,15 +221,22 @@ class History(unittest.TestCase):
     def test_previous(self):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "h.json")
+        prev = lambda: cf.history(p, "previous", []).get("manifest")
         try:
-            self.assertEqual(cf.history(p, "previous", []), {})
+            self.assertIsNone(prev())
             cf.history(p, "add", ["manifest=A", "worker_version=1"])
-            self.assertEqual(cf.history(p, "previous", []), {})
+            self.assertIsNone(prev())
             cf.history(p, "add", ["manifest=B", "worker_version=2"])
             cf.history(p, "add", ["manifest=B", "worker_version=2"])          # a re-deploy is not a step back
-            self.assertEqual(cf.history(p, "previous", [])["manifest"], "A")
+            self.assertEqual(prev(), "A")
             cf.history(p, "add", ["manifest=A", "worker_version=1", "rollback=1"])
-            self.assertEqual(cf.history(p, "previous", [])["manifest"], "B")  # a second rollback undoes the first
+            self.assertEqual(cf.history(p, "last", [])["manifest"], "A")
+            self.assertIsNone(prev())                                       # a second rollback never goes forward to B
+            cf.history(p, "add", ["manifest=C", "worker_version=3"])
+            cf.history(p, "add", ["manifest=D", "worker_version=4"])
+            self.assertEqual(prev(), "C")
+            cf.history(p, "add", ["manifest=C", "worker_version=3", "rollback=1"])
+            self.assertEqual(prev(), "A")                                   # back two steps: D, then C, to A
         finally:
             shutil.rmtree(d)
 

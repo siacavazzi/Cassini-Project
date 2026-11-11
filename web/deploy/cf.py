@@ -144,8 +144,8 @@ SITE_TOP = ["index.html", "about", "how", "icons", "models", "vendor", "favicon.
 SKIP_NAME = re.compile(r"(^\.|^__pycache__$|^README|\.md$|\.py$|\.pyc$|\.cjs$|\.sh$|^make_|\.bak$|~$|\.tmp$|\.log$)")
 SKIP_DIR = {"src", "bench", "replay", "evidence", "flags", "prebuild", "cache", "out", "output", "node_modules"}
 # built replay data: mission.json, and the catalog either whole (the old one-year layout's catalog.json) or by year
-# (the whole-mission layout's catalog/<year>.json, build_data.py --years 1997-2017)
-DATA_NEEDS = ["mission.json", ("catalog.json", "catalog")]
+# (the whole-mission layout's catalog/<year>.json, build_data.py --years 1997-2017), and build_coverage.py's coverage/
+DATA_NEEDS = ["mission.json", ("catalog.json", "catalog"), "coverage"]
 
 
 def _copy_tree(src, dst, skipped):
@@ -172,7 +172,11 @@ def public_switch_supported(build_py):
 
 def build(data, out, env="local", commit="HEAD", allow_unswitched=False):
     """The public site in out/, built from a clean worktree at commit (nothing from this checkout's working tree),
-    with the replay data from data/ (web/replay/build_data.py and build_coverage.py output)."""
+    with the replay data from data/ (web/replay/build_data.py and build_coverage.py output) put in the worktree's
+    web/replay/data first. With WP6's switch, `build.py --public --out` writes the whole site (public_tree: page,
+    sub-pages, icons, models, vendored three.js and fonts with their licenses, replay data); without it (local only)
+    the private page and the same files are copied here. The build record goes beside out/ (out.build.json), never
+    inside it, since Pages would serve it."""
     data = os.path.abspath(os.path.expanduser(data))
     out = os.path.abspath(out)
     need = [f if isinstance(f, tuple) else (f,) for f in DATA_NEEDS]
@@ -182,34 +186,38 @@ def build(data, out, env="local", commit="HEAD", allow_unswitched=False):
                          "and build_coverage.py at this commit first")
     if os.path.exists(out) and os.listdir(out):
         raise SystemExit(f"{out} is not empty: the build writes only into a new folder")
-    os.makedirs(out, exist_ok=True)
     rev = subprocess.run(["git", "-C", ROOT, "rev-parse", commit], capture_output=True, text=True, check=True).stdout.strip()
     wt = tempfile.mkdtemp(prefix="cassini-pages-")
     skipped = []
     try:
         subprocess.run(["git", "-C", ROOT, "worktree", "add", "--detach", "--quiet", wt, rev], check=True)
+        # the replay data where the page's data/ link points, before build.py runs (WP6's public build checks it):
+        # the built files linked in beside the tracked models and textures, which stay as this commit has them
+        wdata = os.path.join(wt, "web", "replay", "data")
+        os.makedirs(wdata, exist_ok=True)
+        for name in os.listdir(data):
+            if not os.path.exists(os.path.join(wdata, name)) and not name.startswith("."):
+                os.symlink(os.path.join(data, name), os.path.join(wdata, name))
         build_py = os.path.join(wt, "web", "cassini-os", "src", "build.py")
-        cmd = [sys.executable, build_py]
         if public_switch_supported(build_py):
-            cmd.append("--public")
             switched = True
+            subprocess.run([sys.executable, build_py, "--public", "--out", out], cwd=wt, check=True, stdout=subprocess.DEVNULL)
         elif env == "local" or allow_unswitched:
             print("note: build.py has no --public yet (WP6); building the private page", file=sys.stderr)
             switched = False
+            subprocess.run([sys.executable, build_py], cwd=wt, check=True, stdout=subprocess.DEVNULL)
+            os.makedirs(out, exist_ok=True)
+            site = os.path.join(wt, "web", "cassini-os")
+            for name in SITE_TOP:
+                p = os.path.join(site, name)
+                if os.path.isdir(p):
+                    _copy_tree(p, os.path.join(out, name), skipped)
+                elif os.path.exists(p):
+                    shutil.copy2(p, os.path.join(out, name))
+            _copy_tree(wdata, os.path.join(out, "data"), skipped)
         else:
             raise SystemExit("build.py has no --public switch at this commit (WP6): refusing to deploy the private "
                              "page to " + env)
-        subprocess.run(cmd, cwd=wt, check=True, stdout=subprocess.DEVNULL)
-        site = os.path.join(wt, "web", "cassini-os")
-        for name in SITE_TOP:
-            p = os.path.join(site, name)
-            if os.path.isdir(p):
-                _copy_tree(p, os.path.join(out, name), skipped)
-            elif os.path.exists(p):
-                shutil.copy2(p, os.path.join(out, name))
-        # replay data: the tracked models and textures first, then the built data over them
-        _copy_tree(os.path.join(wt, "web", "replay", "data"), os.path.join(out, "data"), skipped)
-        _copy_tree(data, os.path.join(out, "data"), skipped)
     finally:
         subprocess.run(["git", "-C", ROOT, "worktree", "remove", "--force", wt], capture_output=True)
         shutil.rmtree(wt, ignore_errors=True)
@@ -220,8 +228,11 @@ def build(data, out, env="local", commit="HEAD", allow_unswitched=False):
     clash = [p for p in _all_files(out) if any(path_matches(r, "/" + p) for r in worker_paths())]
     if clash:
         raise SystemExit(f"files the Worker's routes would hide: {clash[:10]}")
-    info = {"commit": rev, "env": env, "public_switch": switched, "data": data, "skipped": sorted(set(skipped))}
-    json.dump(info, open(os.path.join(out, ".build.json"), "w"), indent=1)
+    dot = [p for p in _all_files(out) if any(part.startswith(".") for part in p.split("/"))]
+    if dot:
+        raise SystemExit(f"hidden files would be uploaded to Pages: {dot[:10]}")
+    info = {"commit": rev, "env": env, "public_switch": switched, "skipped": sorted(set(skipped))}
+    json.dump(info, open(out + ".build.json", "w"), indent=1)
     return info
 
 
@@ -232,7 +243,7 @@ def _all_files(d):
 
 
 def measure(d):
-    files = [(p, os.path.getsize(os.path.join(d, p))) for p in _all_files(d) if not p.startswith(".build")]
+    files = [(p, os.path.getsize(os.path.join(d, p))) for p in _all_files(d)]
     files.sort(key=lambda x: -x[1])
     by_top = {}
     for p, n in files:
@@ -298,23 +309,31 @@ def manifest_check(path):
 # A JSON list, oldest first, of {"when", "env", "manifest", "worker_version", "pages_deployment", "commit", "by"}.
 # deploy.sh keeps it in R2 at deploy/<env>/history.json (local: a file), so either Mac can roll back.
 
+def _live_stack(h):
+    """The switches still in effect, oldest first: each switch is pushed (a re-deploy of what is live is not a new
+    step), each rollback pops the switch it undid. The top is what is live; the one under it is what a rollback goes
+    back to, so two rollbacks in a row go back two steps and never forward to the publish the first one undid."""
+    stack = []
+    for e in h:
+        if e.get("rollback"):
+            if stack:
+                stack.pop()
+        elif not stack or (e.get("manifest"), e.get("worker_version")) != (stack[-1].get("manifest"), stack[-1].get("worker_version")):
+            stack.append(e)
+    return stack
+
+
 def history(path, op, fields):
     h = json.load(open(path)) if os.path.exists(path) and os.path.getsize(path) else []
     if op == "add":
         h.append(dict(f.split("=", 1) for f in fields))
         json.dump(h, open(path, "w"), indent=1)
         return h[-1]
+    stack = _live_stack(h)
     if op == "last":
-        return h[-1] if h else {}
+        return stack[-1] if stack else {}
     if op == "previous":
-        # the switch before the last one that differs from it (a re-deploy of the same manifest is not a step back)
-        if not h:
-            return {}
-        last = h[-1]
-        for e in reversed(h[:-1]):
-            if (e.get("manifest"), e.get("worker_version")) != (last.get("manifest"), last.get("worker_version")):
-                return e
-        return {}
+        return stack[-2] if len(stack) >= 2 else {}
     raise SystemExit(f"history: unknown op {op}")
 
 
