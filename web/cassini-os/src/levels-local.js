@@ -262,7 +262,7 @@
   // a decoded picture's RGBA as the server's Pillow reads it. A 2D canvas keeps its pixels premultiplied, so a partly
   // transparent pixel (a centred close-up placed where it is, a frame's soft edge) comes back with its colour rounded
   // twice; a WebGL texture keeps them as decoded. The 2D canvas only where WebGL is missing.
-  let gl = null;
+  let gl = null, how = "";
   function pixels(bmp) {
     const w = bmp.width, h = bmp.height;
     try {
@@ -282,7 +282,7 @@
           if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
             const data = new Uint8ClampedArray(w * h * 4);   // row 0 is the picture's top row (no flip on upload)
             gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, data);
-            if (!gl.getError()) return data;
+            if (!gl.getError()) { how = "webgl"; return data; }
           }
         } finally {
           gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -293,6 +293,7 @@
     } catch (err) { /* the 2D canvas below */ }
     const c = new OffscreenCanvas(w, h), g = c.getContext("2d", { colorSpace: "srgb" });
     g.drawImage(bmp, 0, 0);
+    how = "2d canvas";
     return g.getImageData(0, 0, w, h).data;
   }
   // the picture of plan entry e at size px as the frame server makes it for the film (opt: the parsed options), RGBA,
@@ -351,7 +352,7 @@
     }
   }
 
-  const API = { levels, _levels: { pictureUrl, picture, pixels, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, _levels: { pictureUrl, picture, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};

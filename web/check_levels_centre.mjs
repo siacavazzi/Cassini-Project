@@ -83,6 +83,7 @@ for (const ctr of ["0", "1"]) {
     for (const f of fetched.filter(f => f.includes(id))) console.log(`    ${f}`);
   }
 }
+console.log("the page read pixels through:", await page.evaluate(() => window.cassiniPlanLocal._levels && window.cassiniPlanLocal._levels.pixelsHow ? window.cassiniPlanLocal._levels.pixelsHow() || "nothing" : "unknown"));
 if (errors.length) console.log("page errors:", errors.slice(0, 5).join(" | "));
 await browser.close();
 process.exit(bad ? 1 : 0);
