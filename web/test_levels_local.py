@@ -84,11 +84,13 @@ const b64 = d => Buffer.from(d.buffer, d.byteOffset, d.byteLength).toString('bas
     ctx.cassiniMovieStyle = (o = {}) => (o.center === false ? '&center=0' : '') + '&trail=0';
     // a picture of job.busy answers 503 twice (being made) before it comes
     let asked = [];
-    const tries = {};
+    let tries = {};
     ctx.setTimeout = (f) => f();
     ctx.fetch = async url => { asked.push(url); const bad = /center=1/.test(url) && job.uncentred.some(id => url.includes(id));
       if (!bad && job.busy.some(id => url.includes(id)) && (tries[url] = (tries[url] || 0) + 1) <= 2) return { ok: false, status: 503 };
-      return { ok: !bad, status: bad ? 404 : 200, blob: async () => null }; };
+      // a mosaic still behind its frame (X-Reel behind) twice, then finished
+      const reel = /\/frames\/mosaic\//.test(url) && (tries[url] = (tries[url] || 0) + 1) <= 2 ? '{"behind": 3}' : '{}';
+      return { ok: !bad, status: bad ? 404 : 200, headers: { get: k => (k === 'X-Reel' ? reel : null) }, blob: async () => null }; };
     ctx.createImageBitmap = async () => ({ width: 1, height: 1 });
     ctx.OffscreenCanvas = class { getContext() { return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(4) }) }; } };
     P.source.allMonths = async () => job.parts.map(p => ({ start: p.start, end: p.end, key: p.file, catalog: () => JSON.parse(fs.readFileSync(p.file, 'utf8')) }));
@@ -96,7 +98,7 @@ const b64 = d => Buffer.from(d.buffer, d.byteOffset, d.byteLength).toString('bas
     out = [];
     for (const r of job.runs) {
       const plan = await P.plan(r.q), opt = P._.options(r.q), got = [];
-      for (const e of plan.pictures) { asked = []; await L.picture(e, 512, opt); got.push({ id: e.id, tries: e.tries.map(t => t[0]), asked }); }
+      for (const e of plan.pictures) { asked = []; tries = {}; await L.picture(e, 512, opt); got.push({ id: e.id, tries: e.tries.map(t => t[0]), asked }); }
       out.push(got);
     }
   }
@@ -322,7 +324,7 @@ some_id = next(e["id"] for g in pub[0] for e in g if e["tries"][0] in ("color", 
 busy_id = next(e["id"] for g in pub[0] for e in g if e["tries"][0] in ("color", "processed") and "center=1" in e["asked"][0]
                and e["id"] != some_id and some_id not in e["asked"][0])
 pub.append(node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": [some_id], "busy": [busy_id]}))
-counts = {"color": 0, "movie": 0, "fallback": 0, "busy": 0}
+counts = {"color": 0, "movie": 0, "fallback": 0, "busy": 0, "mosaic": 0}
 for k, got in enumerate(pub):
     for r, centre, g in zip(uruns, expect, got):
         for e in g:
@@ -340,13 +342,17 @@ for k, got in enumerate(pub):
                 if k == 1 and e["id"] == busy_id and centre:
                     assert len(e["asked"]) == 3 and all(u == e["asked"][0] and "center=1" in u for u in e["asked"]), f"no wait on a 503: {e['asked']}"
                     counts["busy"] += 1
+            elif first == "mosaic" and k == 0:
+                assert len(e["asked"]) == 3 and len(set(e["asked"])) == 1, f"a mosaic behind its frame not waited for: {e['asked']}"
+                counts["mosaic"] += 1
             elif first in ("movie", "rolling"):
                 assert ("center=0" not in url) == centre, f"{r['q']}: {url} (Auto center {centre})"
                 counts["movie"] += 1
             if route not in ("movie", "rolling"):
                 assert "trail=" not in url, f"movie style on {url}"
-assert counts["color"] and counts["fallback"] and counts["busy"], counts
+assert counts["color"] and counts["fallback"] and counts["busy"] and counts["mosaic"], counts
 print(f"addresses: {len(uruns)} films with Auto center on and off (ctr, center); {counts['color']:,} color and processed "
       f"pictures centred exactly when export.Pictures centres them, {counts['movie']:,} movie pictures likewise; "
-      f"a centred picture the server cannot make (404) falls back to the picture as it is, one being made (503) is waited for")
+      f"a centred picture the server cannot make (404) falls back to the picture as it is, one being made (503) is waited for, "
+      f"and {counts['mosaic']:,} mosaics still behind their frame (X-Reel behind) waited for until finished")
 print("ok")

@@ -244,14 +244,17 @@
     return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
   }
   // a picture as RGBA, waited for while the server makes it (503) or is busy (429), as export.html's fetchPicture
-  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST); null for any other refusal (404: not centred) or failure
+  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST), and while a mosaic is still behind its frame (X-Reel
+  // "behind": the tiles made so far; the film draws the finished one); null for any other refusal (404: not
+  // centred) or failure
   const WAIT_MOST = 600e3, sleep = ms => new Promise(r => setTimeout(r, ms));
+  const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
   async function fetchRGBA(url) {
     const t0 = Date.now();
-    for (let wait = 500; ; wait = Math.min(4000, wait * 1.5)) {
+    for (let wait = 500, again = false; ; wait = Math.min(4000, wait * 1.5), again = true) {
       let r;
-      try { r = await fetch(url); } catch (err) { r = null; }
-      if (r && (r.status === 503 || r.status === 429) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
+      try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (err) { r = null; }
+      if (r && (r.status === 503 || r.status === 429 || (r.ok && behind(r))) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
       if (!r || !r.ok) return null;
       try {
         const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
@@ -300,13 +303,18 @@
   // its tries in turn (null: none)
   async function picture(e, size, opt) {
     const P = root.cassiniPlanLocal, frames = (P && P.frames) || "", center = !!(opt && opt.movie && opt.movie.center);
+    let n = 0;
     for (const [kind, src] of e.tries || []) {
       const url = pictureUrl(kind, src, size, frames, center), plain = pictureUrl(kind, src, size, frames, center, true);
-      const im = await fetchRGBA(url) || (plain !== url ? await fetchRGBA(plain) : null);
-      if (im) return im;
+      let im = await fetchRGBA(url), got = url;
+      if (!im && plain !== url) { im = await fetchRGBA(plain); got = plain; }
+      if (im) { used.set(e.id, { n, kind, url: got }); return im; }
+      n++;
     }
+    used.set(e.id, null);
     return null;
   }
+  const used = new Map();   // frame id -> the try its picture came from last ({n: its place in tries, kind, url}) or null
 
   const measured = new Map();   // levels key -> {logs: {id: log or null}}
   async function levels(q, pictures, tell) {
@@ -352,7 +360,7 @@
     }
   }
 
-  const API = { levels, _levels: { pictureUrl, picture, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, _levels: { pictureUrl, picture, used, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};
