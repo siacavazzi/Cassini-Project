@@ -7,6 +7,8 @@
 //   - the share of Enceladus seen never falls as the clock runs, and the share seen in detail rises over the
 //     14 July 2005 flyby (the south pole, at 168 km)
 //   - with Seen so far on, Enceladus's shader is the patched one and is switched on; off, it is switched off
+//   - the share seen by the end as the page adds it up equals the builder's (index.json) for four moons, and no more
+//     than three moons' tables are held at once; outside the years a partial table was built for, the menu bar says so
 //   - the sharpest picture of 80 S, 150 E (the south polar terrain) is from 14 July 2005, at under 200 m per pixel
 //   - a click on the globe opens the window with rows; a row puts the clock on its picture, paused
 let pw; try { pw = require("playwright-core"); } catch (e) { pw = require("playwright"); }
@@ -20,7 +22,7 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) process
   if (env.SOFTWARE) args.push("--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader");
   const br = await pw.chromium.launch({ args });
   const page = await (await br.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
-  page.on("pageerror", e => { console.log("PAGEERROR", e.message); process.exitCode = 1; });
+  page.on("pageerror", e => { console.log("PAGEERROR", (e.stack || e.message).split("\n").slice(0, 4).join(" | ")); process.exitCode = 1; });
   page.on("console", m => { if (m.type() === "error" && /shader|WebGL|program/i.test(m.text())) { console.log("CONSOLE", m.text().slice(0, 400)); process.exitCode = 1; } });
   if (env.THREE_DIR) {
     await page.route("https://cdn.jsdelivr.net/npm/three@0.128.0/**", r =>
@@ -51,6 +53,33 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) process
     await page.evaluate(u => setTime(utcToEt(u)), utc); await page.waitForTimeout(1200); await look(); await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(out, name + ".png") });
   }
+  // the page's own sum of what has been seen against the builder's (index.json), moon by moon: the page must not
+  // drift from build_coverage.py's weighting. Four moons in turn also shows that no more than three tables are held.
+  const cmp = [];
+  for (const moon of ["ENCELADUS", "DIONE", "RHEA", "TETHYS"]) {
+    await page.evaluate(m => setFocus(m), moon);
+    const got = await page.waitForFunction(m => cassiniCoverage.seen(m, 1e12), moon, { timeout: 120000 }).then(h => h.jsonValue(), () => null);
+    cmp.push({ moon, got, want: await page.evaluate(m => { const ix = cassiniCoverage.index(); return [ix.moons[m].seen[0], ix.moons[m].seen[ix.tiers - 1]]; }, moon) });
+  }
+  ok(cmp.every(c => c.got && Math.abs(c.got[0] - c.want[0]) < 1.5e-4 && Math.abs(c.got[1] - c.want[1]) < 1.5e-4),
+    "seen by the end, page against builder: " + cmp.map(c => `${c.moon[0]}${c.moon.slice(1).toLowerCase()} ${c.got ? (c.got[0] * 100).toFixed(2) + "/" + (c.got[1] * 100).toFixed(2) : "none"} vs ${(c.want[0] * 100).toFixed(2)}/${(c.want[1] * 100).toFixed(2)}`).join(", "));
+  await page.waitForFunction("cassiniCoverage.ready('TETHYS')", null, { timeout: 120000 }).catch(() => {});
+  const held = await page.evaluate(() => cassiniCoverage.held());
+  ok(held.length <= 3 && held.includes("TETHYS"), `tables held after four moons in turn: ${held.join(", ")}`);
+  // a table built for some years only: outside them the moons are drawn whole and the menu bar says so
+  const yrs = await page.evaluate(() => cassiniCoverage.index().years);
+  if (yrs[0] > 2004 || yrs[yrs.length - 1] < 2017) {
+    const outside = yrs[yrs.length - 1] < 2017 ? `${yrs[yrs.length - 1] + 1}-02-01T00:00:00` : `${yrs[0] - 1}-12-01T00:00:00`;
+    await page.evaluate(u => setTime(utcToEt(u)), outside);
+    await page.waitForFunction("/worked out for/.test(document.getElementById('mcov').textContent) && meshes.TETHYS.mat.uniforms.covOn.value === 0", null, { timeout: 20000 }).catch(() => {});
+    const o = await page.evaluate(() => ({ text: document.getElementById("mcov").textContent, on: meshes.TETHYS.mat.uniforms.covOn.value, covered: cassiniCoverage.covered() }));
+    ok(/worked out for/.test(o.text) && o.on === 0 && !o.covered, `outside the years built (${outside.slice(0, 10)}): "${o.text}", the whole map drawn`);
+  } else console.log("PASS the table covers every year of the tour (no year outside it to try)");
+  // (back in 2005 first: a body can only take the view once its track for the time on the clock is loaded)
+  await page.evaluate(() => setTime(utcToEt("2005-07-15T06:00:00")));
+  await page.waitForFunction("(setFocus('ENCELADUS'), state.focus === 'ENCELADUS')", null, { timeout: 60000, polling: 500 }).catch(() => {});
+  await page.waitForFunction("cassiniCoverage.ready('ENCELADUS') && meshes.ENCELADUS.mat.uniforms.covOn.value === 1", null, { timeout: 120000 }).catch(() => {});
+  await look(); await page.waitForTimeout(1500);
   // (a paused page draws about once a second, slower in software: wait for the frame that takes the setting)
   await page.evaluate(() => cassiniSettings.set("view.seenSoFar", false));
   await page.waitForFunction("meshes.ENCELADUS.mat.uniforms.covOn.value === 0", null, { timeout: 20000 }).catch(() => {});

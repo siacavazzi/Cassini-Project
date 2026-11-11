@@ -14,6 +14,8 @@
 //     occultations of May to September on their days when their months are loaded
 //   - 1 Jun 00:00 (dish on Earth): Earth counts as on stage and its tag shows when the camera faces it, with the
 //     range in it; twelve hours later (pointed at the rings) and with the setting off it does not
+//   - the strip's legend keys survive the cameras rewriting the legend, and go with the setting; the strip's tooltip
+//     reads a span by its own time
 let pw; try { pw = require("playwright-core"); } catch (e) { pw = require("playwright"); }
 const fs = require("fs"), path = require("path");
 const [origin, out] = process.argv.slice(2);
@@ -77,7 +79,7 @@ const CASES = [
   await page.screenshot({ path: path.join(out, "strip_2005-05-03.png") });
   // Earth's marker: look back along the line from Earth through Cassini, a little off to the side
   const earth = async (utc, on) => {
-    await page.evaluate(([u, on]) => { cassiniSettings.set("view.earthMarker", on); setFocus("CASSINI"); setTime(utcToEt(u)); }, [utc, on]);
+    await page.evaluate(([u, on]) => { cassiniSettings.set("view.earthMarker", on); setFocus("CASSINI"); setTime(utcToEt(u)); setView(5 * 86400, state.et); document.getElementById("moments").hidden = true; }, [utc, on]);
     await page.waitForTimeout(1500);
     await page.evaluate(() => {
       const e = meshes.EARTH.group.position.clone().sub(cassini.position).normalize(), d = camera.position.distanceTo(cassini.position);
@@ -93,5 +95,21 @@ const CASES = [
   const e2 = await earth("2005-06-01T12:00:00", true), e3 = await earth("2005-06-01T00:00:00", false);
   ok(!e2.stage && !e2.tag, "twelve hours later, pointed at the rings: no Earth tag");
   ok(!e3.stage && !e3.tag, "with the setting off: no Earth tag");
+  // the strip's legend keys: still there after the cameras rewrite the legend for another month, gone with the setting
+  const keys = () => page.evaluate(() => document.querySelectorAll("#lkeys [data-activity]").length);
+  const keysAre = n => page.waitForFunction(n => document.querySelectorAll("#lkeys [data-activity]").length === n, n, { timeout: 30000 }).then(() => true, () => false);
+  await page.evaluate(() => { setTime(utcToEt("2005-08-20T17:30:00")); setView(2 * 86400, state.et); });
+  await page.waitForFunction("cassiniActivity.spans().att === att && cassiniActivity.spans().n > 0 && !cassiniActivity.busy()", null, { timeout: 120000 }).catch(() => {});
+  const k1 = await keysAre(5);
+  await page.evaluate(() => { document.getElementById("lkeys").innerHTML = "<span><i></i>NAC</span>"; setView(2 * 86400 + 60, state.et); });   // as the cameras do on a month load
+  const k2 = await keysAre(5);
+  await page.evaluate(() => { cassiniSettings.set("view.activity", false); setView(2 * 86400, state.et); });
+  const k3 = await keysAre(0);
+  await page.evaluate(() => { cassiniSettings.set("view.activity", true); setView(2 * 86400 + 60, state.et); });
+  const k4 = await keysAre(5);
+  ok(k1 && k2 && k3 && k4, `the strip's legend: there in another month (${k1}), back after the legend is rewritten (${k2}), gone with the setting off (${k3}), back with it on (${k4}); now ${await keys()} keys`);
+  // the strip's tooltip words are for the time under the pointer, not the clock's
+  const w = await page.evaluate(() => [cassiniActivity.words({ kind: cassiniActivity.KINDS.DISH, body: "TITAN" }, utcToEt("2005-01-14T10:00:00"))[0], cassiniActivity.words({ kind: cassiniActivity.KINDS.DISH, body: "TITAN" })[0]]);
+  ok(/receiving Huygens/.test(w[0]) && /radar or radio science/.test(w[1]), "a Titan dish span on 14 January 2005 reads as receiving Huygens whatever the clock says");
   await br.close();
 })();

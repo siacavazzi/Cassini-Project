@@ -1741,10 +1741,11 @@ function updateLabels() {
     vA.copy(p).project(camera);
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
-    // behind the camera? Asked of the depth in the camera's own frame: the projected z of a body a billion km away
-    // (Earth, seen from Saturn) rounds to just over 1 and would read as behind
-    const behind = vLbl.copy(p).applyMatrix4(camera.matrixWorldInverse).z > 0;
-    let hide = behind || !shown(name) || (small && d > 400 && name !== state.target);
+    // outside the camera's depth range (behind it, nearer than its near plane, past its far one)? Asked of the depth
+    // in the camera's own frame, which is the same test as the projected z being outside -1 to 1 except that it does
+    // not round: the projected z of a body a billion km away (Earth, seen from Saturn) comes out just over 1
+    const depth = -vLbl.copy(p).applyMatrix4(camera.matrixWorldInverse).z;
+    let hide = depth < camera.near || depth > camera.far || !shown(name) || (small && d > 400 && name !== state.target);
     const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + name.length * 8 + 10, y + 8];

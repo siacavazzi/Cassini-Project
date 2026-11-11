@@ -19,7 +19,7 @@ iauMatrix), and a place is on the ellipsoid of the moon's radii. No pictures are
 usage: python web/replay/build_coverage.py --data web/replay/data [--years 2004-2017] [--workers N]
 """
 import argparse, gzip, json, math, os, struct, sys
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 
 W, H = 720, 360                      # the coverage grid: half a degree
@@ -238,22 +238,32 @@ def main():
     mission = json.load(open(os.path.join(a.data, "mission.json")))
     t0 = utc_to_et(T0_UTC)
     tasks = [(a.data, y, m) for y in years for m in MOONS]
-    parts = {}
+    # each year's result for a moon is folded into that moon's running one as it arrives (a year's result is about
+    # 12 MB, and a whole mission of them at once was over a gigabyte): the earliest time per texel, and the K sharpest
+    # observations per place. Ties go to the earlier picture, so the result does not depend on the order of arrival.
+    acc = {}
     with ProcessPoolExecutor(min(a.workers, len(tasks))) as ex:
-        for y, m, got in ex.map(moon_pass, tasks):
-            if got:
-                parts[(y, m)] = got
+        for done in as_completed([ex.submit(moon_pass, t) for t in tasks]):
+            y, m, got = done.result()
+            if not got:
+                continue
+            if m not in acc:
+                acc[m] = [got[0], got[1], got[2], got[3], dict(got[4])]
+                continue
+            g = acc[m]
+            np.minimum(g[0], got[0], out=g[0])
+            res, ref = np.concatenate([g[1], got[1]], 1), np.concatenate([g[2], got[2]], 1)
+            order = np.lexsort((ref, res), axis=1)[:, :K]
+            g[1], g[2] = np.take_along_axis(res, order, 1), np.take_along_axis(ref, order, 1)
+            g[3] += got[3]
+            g[4].update(got[4])
     cats = {}
     index = {"t0": t0, "t0_utc": T0_UTC, "dt": DT, "grid": [W, H], "tiers": TIERS, "cell_deg": 360 / W * CELL, "k": K, "years": years, "moons": {}}
     for moon in MOONS:
-        got = [parts[(y, moon)] for y in years if (y, moon) in parts]
-        ranges = {r: v for g in got for r, v in g[4].items()}
-        if not got:
+        if moon not in acc:
             continue
-        first = np.minimum.reduce([g[0] for g in got])
-        res = np.concatenate([g[1] for g in got], 1)
-        ref = np.concatenate([g[2] for g in got], 1)
-        order = np.argsort(res, 1)[:, :K]
+        first, res, ref, pictures, ranges = acc.pop(moon)
+        order = np.lexsort((ref, res), axis=1)[:, :K]
         res, ref = np.take_along_axis(res, order, 1), np.take_along_axis(ref, order, 1)
         # the stacked tiers, 24-bit times
         ticks = np.where(np.isfinite(first), np.clip(np.floor((first - t0) / DT), 0, 0xFFFFFE), 0xFFFFFF).astype(np.uint32).reshape(TIERS * H, W)
@@ -280,7 +290,7 @@ def main():
         area = np.repeat(np.cos(np.pi / 2 - (np.arange(H) + 0.5) / H * np.pi), W)
         seen = [float((area * np.isfinite(first[t])).sum() / area.sum()) for t in range(TIERS)]
         index["moons"][moon] = {"cov": moon.lower() + ".cov", "places": moon.lower() + ".places.json", "tier_km": [round(x, 4) for x in tiers_km(mission["bodies"][moon]["radii"])],
-                                "pictures": sum(g[3] for g in got), "seen": [round(s, 4) for s in seen]}
+                                "pictures": pictures, "seen": [round(s, 4) for s in seen]}
         print(f"{moon:10s} {index['moons'][moon]['pictures']:6d} pictures  seen by the end, coarse to fine: " + " ".join(f"{s * 100:5.1f}%" for s in seen)
               + f"  {os.path.getsize(os.path.join(out, moon.lower() + '.cov')) // 1024} KB + {os.path.getsize(os.path.join(out, moon.lower() + '.places.json')) // 1024} KB")
     json.dump(index, open(os.path.join(out, "index.json"), "w"), indent=1)

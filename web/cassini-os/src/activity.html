@@ -37,9 +37,8 @@ body.cutscene #mact, body.ambient #mact { display: none; }
   let earthOn = S.define({ key: "view.earthMarker", section: "View", label: "Earth's marker while the dish is on it", type: "toggle", value: true,
     hint: "Earth is too far away to be on stage at Saturn. While Cassini's dish points at it, Earth gets its marker and tag like any other body, so you can see where the beam is going." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
-  S.on("view.activity", v => { on = v; if (!v) status(null); redraw(); });
-  S.on("view.radioBeam", v => { beamOn = v; redraw(); });
-  S.on("view.earthMarker", v => { earthOn = v; redraw(); });
+  // (the settings' handlers are at the end of this script: cassiniSettings.on() calls a handler at once with the saved
+  // value, and a handler must not run before the variables it reaches exist)
 
   const KINDS = { NONE: 0, DOWN: 1, OCC: 2, DISH: 3, ROLL: 4, LOOK: 5, LIMB: 6 };
   //             strip and dot colors, and the legend's names
@@ -176,10 +175,13 @@ body.cutscene #mact, body.ambient #mact { display: none; }
   function tick() {
     if (typeof att === "undefined" || !att || !att.count) { job = null; return; }
     if (job && job.att !== att) job = null;
-    if (!job && spans.att !== att) { start(); setTimeout(pump, 0); }
+    if (!job && spans.att !== att) start();
+    if (job && !pumping) { pumping = true; setTimeout(pump, 0); }
   }
-  // (on its own timer, not the frame's: a paused page draws once a second)
-  function pump() { if (!job) return; work(6); if (job) setTimeout(pump, 10); }
+  // (on its own timer, not the frame's: a paused page draws once a second. One chain of timers at a time: when the
+  // pointing changes mid-job, as it does while scrubbing across months, the chain that is running takes the new job)
+  let pumping = false;
+  function pump() { pumping = false; if (!job) return; work(6); if (job) { pumping = true; setTimeout(pump, 10); } }
   // the span at et in the months worked out, as { kind, body, start, end }, or null
   function at(et) {
     let lo = 0, hi = spans.n - 1;
@@ -203,15 +205,16 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     return { kind: c & 15, body: c >> 4 ? names[(c >> 4) - 1] : null };
   }
   // one line for the menu bar (and a longer one for its tooltip)
-  function words(a) {
+  function words(a, et) {
     if (!a || !a.kind) return null;
+    if (et === undefined) et = state.et;
     const lt = pos.EARTH && pos.CASSINI ? Math.hypot(pos.EARTH[0] - pos.CASSINI[0], pos.EARTH[1] - pos.CASSINI[1], pos.EARTH[2] - pos.CASSINI[2]) / C_KM_S : 0;
     const B = a.body ? name(a.body) : "";
     switch (a.kind) {
       case KINDS.DOWN: return [`<b>Dish on Earth</b> · data takes ${fmtDur(lt)} to arrive`, "Cassini's high-gain dish points at Earth: it is sending what it recorded to the Deep Space Network."];
       case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish is on Earth with the rings in between: the radio signal crosses them, and how it fades maps the rings (a radio occultation)."]
         : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish is on Earth with ${B} in between: the radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
-      case KINDS.DISH: return a.body === "TITAN" && state.et > HUYGENS[0] && state.et < HUYGENS[1]
+      case KINDS.DISH: return a.body === "TITAN" && et > HUYGENS[0] && et < HUYGENS[1]
         ? [`<b>Dish on Titan</b> · receiving Huygens`, "Cassini's dish points at Titan to record everything the Huygens probe sends on its way down."]
         : [`<b>Dish on ${B}</b> · radar or radio science`, `Cassini's dish points at ${B}: the radar and the radio science experiments use it as their antenna, so the cameras look elsewhere.`];
       case KINDS.LIMB: return [`<b>Radio through ${B}'s atmosphere</b> · dish follows the bent signal`, `Earth is behind ${B}. The dish holds on ${B}'s limb, where the atmosphere bends the radio signal around toward Earth; how the signal bends and fades measures the atmosphere (a radio occultation).`];
@@ -275,10 +278,20 @@ body.cutscene #mact, body.ambient #mact { display: none; }
 
   // ---------- the strip along the top of the timeline ----------
   const STRIP_H = 3, STRIP_SPAN = 120 * 86400;   // wider than this the daily rhythm is finer than a pixel: no strip
-  let cols = new Float32Array(0), keyed = false;
+  let cols = new Float32Array(0);
+  // the strip's keys sit with the timeline's own (#lkeys, which the cameras rewrite whenever a month loads): there
+  // while the strip is drawn, gone when it is not
+  function legend(showing) {
+    const keys = $("lkeys"); if (!keys) return;
+    const mine = keys.querySelector("[data-activity]");
+    if (showing && !mine && keys.children.length) keys.insertAdjacentHTML("beforeend", LOOKS.slice(1, 6).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join(""));
+    else if (!showing && mine) keys.querySelectorAll("[data-activity]").forEach(k => k.remove());
+  }
   function strip(g, w) {
     const v0 = state.view[0], v1 = state.view[1], span = v1 - v0;
-    if (!on || !spans.n || span > STRIP_SPAN) return;
+    const showing = on && spans.n > 0 && span <= STRIP_SPAN;
+    legend(showing);
+    if (!showing) return;
     // each pixel column shows the kind that fills most of it
     const W = Math.ceil(w), NK = 7;
     if (cols.length !== W * NK) cols = new Float32Array(W * NK); else cols.fill(0);
@@ -296,17 +309,13 @@ body.cutscene #mact, body.ambient #mact { display: none; }
       if (best !== runK) { flush(x); run = x; runK = best; }
     }
     flush(W);
-    if (!keyed) {
-      const keys = $("lkeys");
-      if (keys && keys.children.length) { keyed = true; keys.insertAdjacentHTML("beforeend", LOOKS.slice(1, 6).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join("")); }
-    }
   }
   // the strip's own tooltip: what Cassini was doing at the time under the pointer
   const tl = $("tl");
   if (tl) tl.addEventListener("pointermove", e => {
     let tip = "";
     if (on && e.offsetY <= STRIP_H + 3 && spans.n) {
-      const a = at(xToEt(e.offsetX, tl.clientWidth)), t = a && words(a);
+      const et = xToEt(e.offsetX, tl.clientWidth), a = at(et), t = a && words(a, et);
       if (t) tip = t[0].replace(/<[^>]+>/g, "").replace(/ · (data takes|\d).*$/, "");
     }
     if (tl.title !== tip) tl.title = tip;
@@ -320,6 +329,9 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     drawBeam(); };
   window.studyHud = ms => { if (prevHud) prevHud(ms); if (on) tick(); status(live); };
   window.studyTimeline = (g, w, h, xn) => { strip(g, w); if (prevTl) prevTl(g, w, h, xn); };
+  S.on("view.activity", v => { on = v; if (!v) { live = { kind: 0, body: null }; status(null); legend(false); } redraw(); });
+  S.on("view.radioBeam", v => { beamOn = v; redraw(); });
+  S.on("view.earthMarker", v => { earthOn = v; redraw(); });
   window.cassiniActivity = { KINDS, now: () => live, at, spans: () => spans, words, toEarth, busy: () => job ? job.k / job.att.count : 0 };
 })();
 </script>

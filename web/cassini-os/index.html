@@ -13341,7 +13341,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"ccf7738ac81b";
+  const BUILD = /*BUILD*/"9f98cf29c306";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -15496,10 +15496,11 @@ function updateLabels() {
     vA.copy(p).project(camera);
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
-    // behind the camera? Asked of the depth in the camera's own frame: the projected z of a body a billion km away
-    // (Earth, seen from Saturn) rounds to just over 1 and would read as behind
-    const behind = vLbl.copy(p).applyMatrix4(camera.matrixWorldInverse).z > 0;
-    let hide = behind || !shown(name) || (small && d > 400 && name !== state.target);
+    // outside the camera's depth range (behind it, nearer than its near plane, past its far one)? Asked of the depth
+    // in the camera's own frame, which is the same test as the projected z being outside -1 to 1 except that it does
+    // not round: the projected z of a body a billion km away (Earth, seen from Saturn) comes out just over 1
+    const depth = -vLbl.copy(p).applyMatrix4(camera.matrixWorldInverse).z;
+    let hide = depth < camera.near || depth > camera.far || !shown(name) || (small && d > 400 && name !== state.target);
     const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + (el.firstChild ? el.firstChild.textContent : name).length * 8 + 10, y + 8];
@@ -19149,9 +19150,8 @@ window.huygensModels = (() => {
   let earthOn = S.define({ key: "view.earthMarker", section: "View", label: "Earth's marker while the dish is on it", type: "toggle", value: true,
     hint: "Earth is too far away to be on stage at Saturn. While Cassini's dish points at it, Earth gets its marker and tag like any other body, so you can see where the beam is going." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
-  S.on("view.activity", v => { on = v; if (!v) status(null); redraw(); });
-  S.on("view.radioBeam", v => { beamOn = v; redraw(); });
-  S.on("view.earthMarker", v => { earthOn = v; redraw(); });
+  // (the settings' handlers are at the end of this script: cassiniSettings.on() calls a handler at once with the saved
+  // value, and a handler must not run before the variables it reaches exist)
 
   const KINDS = { NONE: 0, DOWN: 1, OCC: 2, DISH: 3, ROLL: 4, LOOK: 5, LIMB: 6 };
   //             strip and dot colors, and the legend's names
@@ -19288,10 +19288,13 @@ window.huygensModels = (() => {
   function tick() {
     if (typeof att === "undefined" || !att || !att.count) { job = null; return; }
     if (job && job.att !== att) job = null;
-    if (!job && spans.att !== att) { start(); setTimeout(pump, 0); }
+    if (!job && spans.att !== att) start();
+    if (job && !pumping) { pumping = true; setTimeout(pump, 0); }
   }
-  // (on its own timer, not the frame's: a paused page draws once a second)
-  function pump() { if (!job) return; work(6); if (job) setTimeout(pump, 10); }
+  // (on its own timer, not the frame's: a paused page draws once a second. One chain of timers at a time: when the
+  // pointing changes mid-job, as it does while scrubbing across months, the chain that is running takes the new job)
+  let pumping = false;
+  function pump() { pumping = false; if (!job) return; work(6); if (job) { pumping = true; setTimeout(pump, 10); } }
   // the span at et in the months worked out, as { kind, body, start, end }, or null
   function at(et) {
     let lo = 0, hi = spans.n - 1;
@@ -19315,15 +19318,16 @@ window.huygensModels = (() => {
     return { kind: c & 15, body: c >> 4 ? names[(c >> 4) - 1] : null };
   }
   // one line for the menu bar (and a longer one for its tooltip)
-  function words(a) {
+  function words(a, et) {
     if (!a || !a.kind) return null;
+    if (et === undefined) et = state.et;
     const lt = pos.EARTH && pos.CASSINI ? Math.hypot(pos.EARTH[0] - pos.CASSINI[0], pos.EARTH[1] - pos.CASSINI[1], pos.EARTH[2] - pos.CASSINI[2]) / C_KM_S : 0;
     const B = a.body ? name(a.body) : "";
     switch (a.kind) {
       case KINDS.DOWN: return [`<b>Dish on Earth</b> · data takes ${fmtDur(lt)} to arrive`, "Cassini's high-gain dish points at Earth: it is sending what it recorded to the Deep Space Network."];
       case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish is on Earth with the rings in between: the radio signal crosses them, and how it fades maps the rings (a radio occultation)."]
         : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish is on Earth with ${B} in between: the radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
-      case KINDS.DISH: return a.body === "TITAN" && state.et > HUYGENS[0] && state.et < HUYGENS[1]
+      case KINDS.DISH: return a.body === "TITAN" && et > HUYGENS[0] && et < HUYGENS[1]
         ? [`<b>Dish on Titan</b> · receiving Huygens`, "Cassini's dish points at Titan to record everything the Huygens probe sends on its way down."]
         : [`<b>Dish on ${B}</b> · radar or radio science`, `Cassini's dish points at ${B}: the radar and the radio science experiments use it as their antenna, so the cameras look elsewhere.`];
       case KINDS.LIMB: return [`<b>Radio through ${B}'s atmosphere</b> · dish follows the bent signal`, `Earth is behind ${B}. The dish holds on ${B}'s limb, where the atmosphere bends the radio signal around toward Earth; how the signal bends and fades measures the atmosphere (a radio occultation).`];
@@ -19387,10 +19391,20 @@ window.huygensModels = (() => {
 
   // ---------- the strip along the top of the timeline ----------
   const STRIP_H = 3, STRIP_SPAN = 120 * 86400;   // wider than this the daily rhythm is finer than a pixel: no strip
-  let cols = new Float32Array(0), keyed = false;
+  let cols = new Float32Array(0);
+  // the strip's keys sit with the timeline's own (#lkeys, which the cameras rewrite whenever a month loads): there
+  // while the strip is drawn, gone when it is not
+  function legend(showing) {
+    const keys = $("lkeys"); if (!keys) return;
+    const mine = keys.querySelector("[data-activity]");
+    if (showing && !mine && keys.children.length) keys.insertAdjacentHTML("beforeend", LOOKS.slice(1, 6).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join(""));
+    else if (!showing && mine) keys.querySelectorAll("[data-activity]").forEach(k => k.remove());
+  }
   function strip(g, w) {
     const v0 = state.view[0], v1 = state.view[1], span = v1 - v0;
-    if (!on || !spans.n || span > STRIP_SPAN) return;
+    const showing = on && spans.n > 0 && span <= STRIP_SPAN;
+    legend(showing);
+    if (!showing) return;
     // each pixel column shows the kind that fills most of it
     const W = Math.ceil(w), NK = 7;
     if (cols.length !== W * NK) cols = new Float32Array(W * NK); else cols.fill(0);
@@ -19408,17 +19422,13 @@ window.huygensModels = (() => {
       if (best !== runK) { flush(x); run = x; runK = best; }
     }
     flush(W);
-    if (!keyed) {
-      const keys = $("lkeys");
-      if (keys && keys.children.length) { keyed = true; keys.insertAdjacentHTML("beforeend", LOOKS.slice(1, 6).map(([c, n]) => `<span data-activity><i style="background:${c}"></i>${n}</span>`).join("")); }
-    }
   }
   // the strip's own tooltip: what Cassini was doing at the time under the pointer
   const tl = $("tl");
   if (tl) tl.addEventListener("pointermove", e => {
     let tip = "";
     if (on && e.offsetY <= STRIP_H + 3 && spans.n) {
-      const a = at(xToEt(e.offsetX, tl.clientWidth)), t = a && words(a);
+      const et = xToEt(e.offsetX, tl.clientWidth), a = at(et), t = a && words(a, et);
       if (t) tip = t[0].replace(/<[^>]+>/g, "").replace(/ · (data takes|\d).*$/, "");
     }
     if (tl.title !== tip) tl.title = tip;
@@ -19432,6 +19442,9 @@ window.huygensModels = (() => {
     drawBeam(); };
   window.studyHud = ms => { if (prevHud) prevHud(ms); if (on) tick(); status(live); };
   window.studyTimeline = (g, w, h, xn) => { strip(g, w); if (prevTl) prevTl(g, w, h, xn); };
+  S.on("view.activity", v => { on = v; if (!v) { live = { kind: 0, body: null }; status(null); legend(false); } redraw(); });
+  S.on("view.radioBeam", v => { beamOn = v; redraw(); });
+  S.on("view.earthMarker", v => { earthOn = v; redraw(); });
   window.cassiniActivity = { KINDS, now: () => live, at, spans: () => spans, words, toEarth, busy: () => job ? job.k / job.att.count : 0 };
 })();
 </script>
@@ -19444,48 +19457,95 @@ window.huygensModels = (() => {
   let placesOn = S.define({ key: "view.places", section: "View", label: "Pictures of a place", type: "toggle", value: true,
     hint: "Click a place on a mapped moon to list the sharpest pictures Cassini took of it." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
-  S.on("view.seenSoFar", v => { seenOn = v; if (v) need(); redraw(); });
-  S.on("view.places", v => { placesOn = v; if (!v) closePlace(); });
+  // (the settings' handlers are at the end of this script: cassiniSettings.on() calls a handler at once with the saved
+  // value, and a handler must not run before the variables it reaches exist)
 
   const DIR = "data/coverage/";
   const NO_SURFACE = { TITAN: 1 };   // drawn as its haze: nothing to bring into focus
-  let index = null, asked = false;
-  const cov = {};                    // moon -> { tex, seen: [coarse, fine] cumulative tables, places, asking }
+  // after a request fails (the table is not built on this site, or the network dropped): how long before the next try,
+  // longer each time. Nothing is asked for on a visit that uses neither feature.
+  const RETRY_MS = [15e3, 60e3, 300e3, 1800e3];
+  const again = (fails, at) => !fails || performance.now() - at >= RETRY_MS[Math.min(fails, RETRY_MS.length) - 1];
+  let index = null, asking = null, fails = 0, failedAt = 0;
+  let built = [-Infinity, Infinity];  // the mission times the table speaks for (a table can be built for some years only)
+  const cov = {};                    // moon -> { tex, seen: [coarse, fine] cumulative tables, places, asking, fails, failedAt, used, patched }
 
-  // the table's index, once; then each moon's first-seen maps as it is needed
+  // the table's index, the first time either feature needs it: resolves to it, or to null when it cannot be had now
   function need() {
-    if (asked) return; asked = true;
-    fetch(DIR + "index.json").then(r => r.ok ? r.json() : null).then(j => { index = j; if (j) redraw(); }).catch(() => {});
+    if (index) return Promise.resolve(index);
+    if (asking) return asking;
+    if (!again(fails, failedAt)) return Promise.resolve(null);
+    return asking = fetch(DIR + "index.json").then(r => r.ok ? r.json() : null).catch(() => null).then(j => {
+      asking = null;
+      if (!j || !j.moons || !j.grid || !j.years || !j.years.length) { fails++; failedAt = performance.now(); return null; }
+      const year = y => utcToEt(`${y}-01-01T00:00:00`), first = +String(j.t0_utc || "2004").slice(0, 4);
+      built = [j.years[0] <= first ? -Infinity : year(j.years[0]), year(j.years[j.years.length - 1] + 1)];
+      index = j; fails = 0; redraw();
+      return j;
+    });
   }
   async function gunzip(resp) {
     return new Uint8Array(await new Response(resp.body.pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
   }
+  // The file stacks its tiers one under the other (720 x 2160 for six). The texture lays them two across instead
+  // (1440 x 1080), which every GPU the page runs on can hold.
+  const ACROSS = 2;
+  // how much of the globe had been seen by each time something new was seen, for one tier: the times in order and the
+  // share of the globe's area seen up to each (build_coverage.py's own weighting: a texel counts by the cosine of its
+  // latitude; bench/coverage.cjs checks the last value against the builder's)
+  function curve(px, W, H, t) {
+    const w = new Float64Array(H); let all = 0;
+    for (let y = 0; y < H; y++) { w[y] = Math.cos(Math.PI / 2 - (y + 0.5) / H * Math.PI); all += W * w[y]; }
+    const sum = new Map();
+    for (let y = 0; y < H; y++) {
+      let run = -1, acc = 0;
+      for (let x = 0, o = 4 * (t * H + y) * W; x < W; x++, o += 4) {
+        const tick = px[o] * 65536 + px[o + 1] * 256 + px[o + 2];
+        if (tick !== run) { if (acc) sum.set(run, (sum.get(run) || 0) + acc); run = tick; acc = 0; }
+        if (tick !== 0xFFFFFF) acc += w[y] / all;
+      }
+      if (acc) sum.set(run, (sum.get(run) || 0) + acc);
+    }
+    const ticks = Float64Array.from(sum.keys()).sort(), share = new Float64Array(ticks.length);
+    let s = 0; for (let i = 0; i < ticks.length; i++) share[i] = s += sum.get(ticks[i]);
+    return { ticks, share };
+  }
   function load(moon) {
     const c = cov[moon] || (cov[moon] = {});
-    if (c.asking || !index || !index.moons[moon] || typeof DecompressionStream === "undefined") return c;
+    if (c.asking || c.tex || !index || !index.moons[moon] || typeof DecompressionStream === "undefined" || !again(c.fails, c.failedAt)) return c;
     c.asking = true;
-    fetch(DIR + index.moons[moon].cov).then(r => r.ok ? gunzip(r) : null).then(px => {
-      const [W, H] = index.grid, T = index.tiers;
-      if (!px || px.length !== W * H * T * 4) return;
-      c.tex = new THREE.DataTexture(px, W, H * T, THREE.RGBAFormat);
+    fetch(DIR + index.moons[moon].cov).then(r => r.ok ? gunzip(r) : null).catch(() => null).then(px => {
+      c.asking = false;
+      const [W, H] = index.grid, T = index.tiers, DOWN = Math.ceil(T / ACROSS);
+      if (!px || px.length !== W * H * T * 4) { c.fails = (c.fails || 0) + 1; c.failedAt = performance.now(); return; }
+      c.fails = 0;
+      if (!seenOn) return;           // switched off while it was on its way
+      const at = new Uint8Array(W * ACROSS * H * DOWN * 4).fill(255);
+      for (let t = 0; t < T; t++) for (let y = 0; y < H; y++)
+        at.set(px.subarray(4 * (t * H + y) * W, 4 * (t * H + y + 1) * W), 4 * ((Math.floor(t / ACROSS) * H + y) * W * ACROSS + (t % ACROSS) * W));
+      c.tex = new THREE.DataTexture(at, W * ACROSS, H * DOWN, THREE.RGBAFormat);
       c.tex.magFilter = c.tex.minFilter = THREE.NearestFilter; c.tex.generateMipmaps = false; c.tex.needsUpdate = true;
-      // how much of the globe had been seen by a given time, at the coarsest and the finest tier: times in order, with
-      // the share of the globe's area seen up to each
-      c.seen = [0, T - 1].map(t => {
-        const key = new Float64Array(W * H); let n = 0;
-        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-          const o = 4 * ((t * H + y) * W + x), tick = px[o] * 65536 + px[o + 1] * 256 + px[o + 2];
-          if (tick !== 0xFFFFFF) key[n++] = tick * 512 + y;
-        }
-        const k = key.subarray(0, n).sort(), ticks = new Float64Array(n), share = new Float64Array(n);
-        let all = 0, sum = 0;
-        for (let y = 0; y < H; y++) all += W * Math.cos(Math.PI / 2 - (y + 0.5) / H * Math.PI);
-        for (let i = 0; i < n; i++) { const y = k[i] % 512; ticks[i] = (k[i] - y) / 512; sum += Math.cos(Math.PI / 2 - (y + 0.5) / H * Math.PI) / all; share[i] = sum; }
-        return { ticks, share };
-      });
+      if (!c.seen) c.seen = [curve(px, W, H, 0), curve(px, W, H, T - 1)];   // the coarsest and the finest tier
       redraw();
-    }).catch(() => {});
+    });
     return c;
+  }
+  // a moon's table off the graphics card again (its shader goes back to drawing the whole map)
+  let blank = null;
+  function drop(moon) {
+    const c = cov[moon]; if (!c || !c.tex) return;
+    if (c.patched) { const u = meshes[moon].mat.uniforms; u.cov.value = blank || (blank = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat)); u.covOn.value = 0; }
+    c.tex.dispose(); c.tex = null;
+  }
+  // The moons whose tables are worth holding: the one in view, the one the cameras are on, and any other drawn large.
+  // A table is 6 MB on the graphics card, so only a few are held at once and the longest unused goes first; a moon
+  // without its table is drawn as the whole map, which at a few pixels across looks the same.
+  const HELD = 3, LARGE_PX = 40;
+  function wanted(moon) {
+    if (!present(moon)) return false;
+    if (moon === state.focus || moon === state.target) return true;
+    const d = camera.position.distanceTo(meshes[moon].group.position);
+    return (bodyRadius(moon) / KM) * enlargeOf(moon) / Math.max(d, 1e-12) * renderer.domElement.clientHeight / 2 / Math.tan(camera.fov * Math.PI / 360) >= LARGE_PX;
   }
   // the share of a moon's globe seen by the time on the clock: [at all, at the surface map's own scale], or null
   function seen(moon, et) {
@@ -19495,10 +19555,11 @@ window.huygensModels = (() => {
   }
 
   // ---------- Seen so far: the moon's shader blurs its map to what had been seen ----------
-  const HEAD = `uniform sampler2D cov; uniform float covOn; uniform vec2 covNow; uniform float covFade; uniform vec2 covMap; uniform vec3 covGrid;
+  const HEAD = `uniform sampler2D cov; uniform float covOn; uniform vec2 covNow; uniform float covFade; uniform vec2 covMap; uniform vec3 covGrid; uniform vec2 covAcross;
       // how far tier k has come in at texel ij: 0 before the place was seen that sharply, 1 once it has been
       float covSeen(vec2 ij, float k) {
-        vec2 uv = vec2((mod(ij.x, covGrid.x) + 0.5) / covGrid.x, (clamp(ij.y, 0.0, covGrid.y - 1.0) + 0.5 + k * covGrid.y) / (covGrid.y * covGrid.z));
+        float col = mod(k, covAcross.x), row = floor(k / covAcross.x);   // tier k's place in the texture
+        vec2 uv = vec2((mod(ij.x, covGrid.x) + 0.5 + col * covGrid.x) / (covGrid.x * covAcross.x), (clamp(ij.y, 0.0, covGrid.y - 1.0) + 0.5 + row * covGrid.y) / (covGrid.y * covAcross.y));
         vec3 c = floor(texture2D(cov, uv).rgb * 255.0 + 0.5);
         float d = (c.r * 65536.0 + c.g * 256.0 + c.b) - covNow.x;   // whole ticks from now (exact: both are under 2^24)
         return clamp((covNow.y - d) / covFade, 0.0, 1.0);
@@ -19536,27 +19597,39 @@ window.huygensModels = (() => {
     if (!c.patched) { console.warn("Seen so far: the moon shader has changed, " + moon + " is left as it is"); return; }
     u.cov = { value: c.tex }; u.covOn = { value: 0 }; u.covNow = { value: new THREE.Vector2() }; u.covFade = { value: 1 };
     u.covMap = { value: new THREE.Vector2(2048, 1024) }; u.covGrid = { value: new THREE.Vector3(index.grid[0], index.grid[1], index.tiers) };
+    u.covAcross = { value: new THREE.Vector2(ACROSS, Math.ceil(index.tiers / ACROSS)) };
     m.mat.fragmentShader = f.replace("uniform sampler2D map;", HEAD).replace(WAS, NOW);
     m.mat.extensions = Object.assign(m.mat.extensions || {}, { derivatives: true });
     m.mat.needsUpdate = true;
   }
+  const covered = () => state.et >= built[0] && state.et < built[1];
   function frame() {
-    if (!index) return;
-    const on = seenOn && !document.body.classList.contains("cutscene");
-    const tick = (state.et - index.t0) / index.dt, whole = Math.floor(tick);
+    if (!index) { if (seenOn) need(); return; }
+    // (past the years the table was built for it has nothing to say: the moons are drawn as the whole map)
+    const on = seenOn && covered() && !document.body.classList.contains("cutscene");
+    const tick = (state.et - index.t0) / index.dt, whole = Math.floor(tick), t = performance.now();
+    let held = 0;
     for (const moon in index.moons) {
       if (NO_SURFACE[moon] || !meshes[moon]) continue;
-      const c = cov[moon];
-      if (on && present(moon) && (!c || !c.tex)) load(moon);
-      if (!c || !c.tex) continue;
+      const c = cov[moon] || (cov[moon] = {});
+      if (on && wanted(moon)) { c.used = t; if (!c.tex) load(moon); }
+      if (!c.tex) continue;
+      held++;
       if (on) sharpen(moon);
       if (!c.patched) continue;
       const u = meshes[moon].mat.uniforms, map = u.map.value;
+      u.cov.value = c.tex;
       u.covOn.value = on && u.hasMap.value > 0.5 ? 1 : 0;
       u.covNow.value.set(whole, tick - whole);
       // a place comes into focus over about a second of screen time, whatever the speed
       u.covFade.value = Math.max(1, Math.min(6 * 3600, Math.abs(state.speed) * 0.9) / index.dt);
       if (map && map.image && map.image.width) u.covMap.value.set(map.image.width, map.image.height);
+    }
+    while (held > HELD) {
+      let old = null;
+      for (const moon in cov) if (cov[moon].tex && cov[moon].used !== t && (!old || cov[moon].used < cov[old].used)) old = moon;
+      if (!old) break;               // every table held is in use this frame
+      drop(old); held--;
     }
   }
   // the menu bar: how much of the moon in view Cassini has seen so far
@@ -19568,14 +19641,20 @@ window.huygensModels = (() => {
       before.parentNode.insertBefore(host, before);
     }
     let html = "";
-    const moon = state.focus, s = seenOn && index && index.moons[moon] && !NO_SURFACE[moon] ? seen(moon) : null;
+    const moon = state.focus, mine = seenOn && index && index.moons[moon] && !NO_SURFACE[moon], s = mine && covered() ? seen(moon) : null;
+    let tip = "";
     if (s) {
       const pct = v => v > 0 && v < 0.005 ? "under 1%" : Math.round(v * 100) + "%";
       html = s[0] <= 0 ? `<b>${titleCase(moon)}</b> · not yet seen by Cassini` : `<b>${titleCase(moon)}</b> · ${pct(s[0])} seen so far · ${pct(s[1])} in detail`;
+    } else if (mine && !covered()) {
+      // a table built for some years only says nothing about the others
+      const y = index.years, span = y.length > 1 ? `${y[0]} to ${y[y.length - 1]}` : `${y[0]}`;
+      html = `<b>${titleCase(moon)}</b> · seen so far is worked out for ${span} only`;
+      tip = `This site's table of what Cassini had photographed was built for ${span}. Outside those years the moons are drawn as the whole map.`;
     }
     if (html !== shown) {
       host.innerHTML = shown = html;
-      host.title = html ? `The share of ${titleCase(moon)}'s surface Cassini's cameras have photographed in sunlight by now: at all (${index.moons[moon].tier_km[0].toFixed(0)} km per pixel or better), and in detail (${index.moons[moon].tier_km[index.tiers - 1].toFixed(1)} km per pixel or better, the scale of the surface map).` : "";
+      host.title = tip ? tip : html ? `The share of ${titleCase(moon)}'s surface Cassini's cameras have photographed in sunlight by now: at all (${index.moons[moon].tier_km[0].toFixed(0)} km per pixel or better), and in detail (${index.moons[moon].tier_km[index.tiers - 1].toFixed(1)} km per pixel or better, the scale of the surface map).` : "";
     }
   }
 
@@ -19585,12 +19664,16 @@ window.huygensModels = (() => {
   const fmtRes = m => m >= 10000 ? (m / 1000).toFixed(0) + " km/px" : m >= 1000 ? (m / 1000).toFixed(1) + " km/px" : m.toFixed(0) + " m/px";
   async function places(moon) {
     const c = cov[moon] || (cov[moon] = {});
-    if (!c.places) c.places = fetch(DIR + index.moons[moon].places).then(r => r.ok ? r.json() : null).catch(() => null);
-    return c.places;
+    if (!c.places && again(c.pfails, c.pfailedAt)) c.places = fetch(DIR + index.moons[moon].places).then(r => r.ok ? r.json() : null).catch(() => null).then(j => {
+      if (!j || !j.cells) { c.places = null; c.pfails = (c.pfails || 0) + 1; c.pfailedAt = performance.now(); return null; }
+      c.pfails = 0; return j;
+    });
+    return c.places || null;
   }
   // the sharpest pictures of the place at lat, lonE (degrees) on a moon: [{ id, et, cam, f1, f2, obs, range_km, res_m }]
   async function pick(moon, lat, lon) {
-    if (!index || !index.moons[moon]) return [];
+    const ix = await need();
+    if (!ix || !ix.moons[moon]) return [];
     const P = await places(moon); if (!P) return [];
     const col = Math.min(P.cols - 1, Math.floor(((lon + 540) % 360) / 360 * P.cols)), row = Math.min(P.rows - 1, Math.max(0, Math.floor((90 - lat) / 180 * P.rows)));
     const e = P.cells[row * P.cols + col] || [], out = [];
@@ -19656,14 +19739,14 @@ window.huygensModels = (() => {
   let down = null;
   if (gl) {
     gl.addEventListener("pointerdown", e => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
-    gl.addEventListener("pointerup", e => {
+    gl.addEventListener("pointerup", async e => {
       const d = down; down = null;
       if (!d || !placesOn || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 4) return;
-      need();
-      if (!index) return;
       const r = gl.getBoundingClientRect();
       ndc.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
       ray.setFromCamera(ndc, camera);
+      // (the first click asks for the table's index; the ray is the click's own, taken before the wait)
+      if (!await need() || !placesOn) return;
       let best = null;
       for (const moon in index.moons) {
         const m = meshes[moon]; if (!m || !m.group.visible) continue;
@@ -19689,8 +19772,10 @@ window.huygensModels = (() => {
   window.studyAttitude = (...a) => { if (prevAtt) prevAtt(...a); frame(); };
   window.studyHud = ms => { if (prevHud) prevHud(ms); status(); };
   window.studyTimeline = (g, w, h, xn) => { if (prevTl) prevTl(g, w, h, xn); ticks(g, w, h); };
-  need();
-  window.cassiniCoverage = { index: () => index, need, seen, pick, show, close: closePlace, place: () => place, ready: moon => !!(cov[moon] && cov[moon].tex), patched: moon => !!(cov[moon] && cov[moon].patched) };
+  S.on("view.seenSoFar", v => { seenOn = v; if (v) need(); else for (const moon in cov) drop(moon); redraw(); });
+  S.on("view.places", v => { placesOn = v; if (!v) closePlace(); });
+  window.cassiniCoverage = { index: () => index, need, seen, pick, show, close: closePlace, place: () => place, ready: moon => !!(cov[moon] && cov[moon].tex), patched: moon => !!(cov[moon] && cov[moon].patched),
+    held: () => Object.keys(cov).filter(m => cov[m].tex), covered };
 })();
 </script>
 <script>
