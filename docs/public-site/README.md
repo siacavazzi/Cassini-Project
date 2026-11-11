@@ -1,7 +1,7 @@
 # The public site: contracts, packages and gates
 
 This folder is the working copy of the plan [Public site build plan for parallel agents](https://claude.ai/artifact/HsnpHVbnS1kQEqFd9v6HjD)
-(Nov 5), brought up to date with regression-2017 at `8c121d5` (Nov 11) by its contracts package, WP0. The goal is the
+(Nov 5), brought up to date with the code at regression-2017 `8c121d5`, now merged into main (`e56c1f4`, Nov 11), by its contracts package, WP0. The goal is the
 one Sam set: the site carries on the order of 1,000 viewers because a viewer's browser talks only to Cloudflare. Pages
 serves the viewer and its replay data, a Worker answers every picture and table from R2 (or answers 404), and nothing
 reaches an origin. The Mini builds the cache, then publishes it.
@@ -12,14 +12,14 @@ agents that never talk to each other.
 
 ## What changed since the Nov 5 plan
 
-The plan was written against `main` at 5609624. Since then regression-2017 took 107 merges, nine of them today. Most
+The plan was written against `main` at 5609624. Since then regression-2017 took 107 merges (nine on Nov 11) and was merged into main on Nov 11. Most
 change pictures, not routes, but a few change what the public site has to answer. Each item says which package or brief
 it changed.
 
 | # | What changed | Effect on the plan |
 |---|---|---|
-| 1 | Work merges to **regression-2017**, not main. | Every branch is cut from regression-2017 and every PR targets it (Rules). |
-| 2 | Picture versions bump almost daily (obs-v107, reel-v84, export-v85... today, more tomorrow). | The plan's single version prefix is replaced by **per-family tags** computed from `frame_server.picture_versions()` at publish time, recorded in a publish **manifest** (`keys.json` families, `manifest.schema.json`). No contract names a version, and a test enforces that. A bump of the mosaic maker re-publishes the pass pictures and tables, not every frame. WP3, WP4, WP8 changed. |
+| 1 | regression-2017 was merged into **main** on Nov 11 (main `e56c1f4`). | Every branch is cut from main and every PR targets it (Rules). |
+| 2 | Picture versions bump almost daily (several times on Nov 11 alone). | The plan's single version prefix is replaced by **per-family tags** computed from `frame_server.picture_versions()` at publish time, recorded in a publish **manifest** (`keys.json` families, `manifest.schema.json`). No contract names a version, and a test enforces that. A bump of the mosaic maker re-publishes the pass pictures and tables, not every frame. WP3, WP4, WP8 changed. |
 | 3 | **HDR highlights** (#361 to #364): on an HDR screen the page asks `hdr=1` and the server makes an AVIF on demand. Prebuild makes none. | New decision **D8**: HDR is off on the public site by default, `hdr` is dropped from keys, and the setting is hidden. WP6 changed. |
 | 4 | **Pointings opened on their own** (`/frames/mosaic/<ID>/p/<n>.webp`) are made on demand at full size; prebuild makes none. | New decision **D9**: not published; the drill-down opens the pointing's frame or colour picture instead. WP5 changed. |
 | 5 | Page features from #399: "What Cassini is doing" (`activity.html`), "Seen so far" and "Pictures of a place" (`coverage.html`, data from `web/replay/build_coverage.py`), plus `orbit.html` and `surface-sites.html`. | They read static replay data (Pages) and frame thumbnails at `size=128`, which the frames phase builds. No new package; WP6's static build must include `data/coverage/`, and WP8 must re-measure the Pages upload (the plan's 572 MB and 1,721 files predate coverage data). |
@@ -29,7 +29,7 @@ it changed.
 | 9 | Tile maps are kept per layout (`MAPS_DIR/<layout>.json`), steady and fade tables are per pass, and pass_info's only per-frame field is `n`. | One alias per frame is replaced by **alias shards** (one JSON per camera per 100,000 s of spacecraft clock), each frame naming its pass, index and tile map. Several hundred thousand fewer R2 objects. WP2, WP4 changed (`tables.schema.json`). |
 | 10 | `resolve()` needs the cache folder. | Signature is `resolve(path, query, cache) -> Answer` (`web/frames/resolve.py`). WP1, WP3 changed. |
 | 11 | Sam's rule of Nov 9: use every free core on both Macs, no cap on parallel renders. | Rules updated; the plan's one-LaCie-job rule stays for disk, not CPU. |
-| 12 | The test baseline the plan quotes (8 failing scripts on main, Nov 5) is stale. | Each package records the failing scripts on regression-2017 at its branch point and adds none (Rules). WP0 could not run the suite in the cloud (no archive data there). |
+| 12 | The test baseline the plan quotes (8 failing scripts on main, Nov 5) is stale. | Each package records the failing scripts on main at its branch point and adds none (Rules). WP0 could not run the suite in the cloud (no archive data there). |
 | 13 | three.js and the fonts load from jsDelivr and Google Fonts. | The harness counts them apart (`cdn`). WP6 decides whether to bring them onto Pages; the gate counts them only if Sam wants zero third-party hosts. |
 
 The plan's design, packages, waves and gates otherwise stand.
@@ -122,8 +122,8 @@ and the bucket stays private.
 
 These come from the project's standing rules and from what went wrong on the Mini; a brief never overrides them.
 
-- **One package, one branch, one PR.** Branch `claude/public-<wp>` off `regression-2017` (off this WP0 branch until
-  WP0 merges, then rebase). The PR targets regression-2017, starts with the attribution block and carries before and
+- **One package, one branch, one PR.** Branch `claude/public-<wp>` off `main` (off this WP0 branch until
+  WP0 merges, then merge main in). The PR targets main, starts with the attribution block and carries before and
   after evidence: screenshots, recordings or harness request logs. Nothing merges until Sam says "merge", and every PR
   goes through the review thread first.
 - **Own only your files**, as the table lists them. A change you need in someone else's file goes to the lead thread
@@ -133,7 +133,7 @@ These come from the project's standing rules and from what went wrong on the Min
 - **No versions in code you write.** Keys come from `keys.py` / `keys.mjs` with tags from the manifest.
 - **The built index.html.** Rebuild it with `python web/cassini-os/src/build.py`; on a conflict take the base's copy and
   rebuild. Never edit it by hand.
-- **Tests.** Run the full suite at your branch point on regression-2017 and record which scripts already fail; your PR
+- **Tests.** Run the full suite at your branch point on main and record which scripts already fail; your PR
   adds no failure. `python web/public/test_contracts.py` and `node web/public/test_keys.mjs` always pass.
 - **Ports.** This effort uses 8910 to 8919: WP1 8910, WP4 8911, WP5 8912, WP6 8913, WP7b 8914, WP9 8915 and 8916. Check
   a port is free with `lsof -nP -iTCP:<port> -sTCP:LISTEN` and confirm your listener's working folder before trusting

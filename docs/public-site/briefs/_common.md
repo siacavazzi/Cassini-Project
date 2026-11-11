@@ -1,7 +1,7 @@
 Every brief in this folder starts from the same ground:
 
-- **Repo** `siacavazzi/Cassini-Project`. Branch `claude/public-<wp>` off `regression-2017` (off `claude/project-thread-daouww`,
-  the WP0 branch, until WP0 merges; then rebase). The PR targets `regression-2017`.
+- **Repo** `siacavazzi/Cassini-Project`. Branch `claude/public-<wp>` off `main` (off `claude/project-thread-daouww`,
+  the WP0 branch, until WP0 merges; then merge main in). The PR targets `main`.
 - **Read first** `docs/public-site/README.md` (what changed, decisions D1 to D9, rules, gates), the contracts in
   `web/public/` (`policy.json`, `keys.json`, `headers.json`, `tables.schema.json`, `manifest.schema.json`) and
   `docs/compute-on-viewer.md`.

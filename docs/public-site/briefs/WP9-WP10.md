@@ -2,7 +2,7 @@
 
 Read `_common.md` first. Not Wave 1: these start when WP1 to WP8 have merged.
 
-**WP9.** Build the rehearsal slice on regression-2017 plus Wave 1 (the sampler cache, or 2004-06-01 to 07-15 as the
+**WP9.** Build the rehearsal slice on main plus Wave 1 (the sampler cache, or 2004-06-01 to 07-15 as the
 logistics plan had it), run WP2's tables and fullview phases, publish to the mirror and to staging R2 once WP8 is live,
 serve it through the Worker, and run every harness session. Fixes go as small PRs to the owning package. Done at gate G2.
 
