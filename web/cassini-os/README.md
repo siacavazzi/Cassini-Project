@@ -80,6 +80,24 @@ More in Studio… follow it. Frames left out of the movie (removed by hand, or a
 leave the strip; Show left-out frames (in the side panel, and Settings > Movie, `movieEdit.showOut`, off by default)
 brings them back dimmed, so they can be put back.
 
+## Moments
+
+The Moments window (`src/moments.html`) lists the mission's moments by type: milestones, special moments (hand-picked),
+closest views, finds (from the poster threads and the whole-mission geometry sweep), transits (moon transits, mutual
+events, eclipses) and flybys. A bar over the list sorts them by date, type, body, length or photo score (click the
+active sort again to turn it around; each sort heads its groups), shows or hides each type, keeps only the entries
+that last at least as long as the At least slider, and searches titles, bodies and descriptions. A moment's type is
+the `type` column of `web/replay/moments.csv` (special, find, transit or closest); milestones and flybys go by their kind.
+
+Potential moments, found by searches but not picked, stay out of sight until asked for: **Potential movies** shows
+every sequence in the movie catalog (10 or more steps of one camera, view and target, and the sky stares; clicking one
+plays it in movie mode, its camera's pictures only), and **Potential finds and transits too** adds the strong transit
+scan results and the sweep's other candidates. They come from `web/replay/candidates.csv`, written by
+`web/replay/make_candidates.py` from the three searches' outputs, which `build_data.py` turns into `data/candidates.json`;
+the page loads it only when one of the two is switched on. The sort, the types and the slider are remembered in the
+browser; the potential switches start off on every visit. Previous and next moment step through the shown entries in
+time order, whatever the sort. In a short window (the body view's) the type rows fold behind a Filters button.
+
 ## Cache slices (one year at a time)
 
 To try a change to the pictures on one year before rebuilding the whole mission, pre-build only that year into a
@@ -417,6 +435,10 @@ Run the server from the repo folder so it finds the zip index (`zip_index/`). Th
 
 The Cassini model (`web/replay/data/models/cassini.glb.b64.txt`, NASA 3D Resources "Cassini-Huygens",
 Draco-decoded) and the planet textures are committed; everything else under `web/replay/data` is generated.
+A fresh checkout or worktree therefore has no replay data: run `build_data.py` (with `--groups`) and
+`build_coverage.py` in it, at its own commit, before serving it. The server refuses to start a `--site` whose `data`
+has neither `mission.json` nor `bodies.json` (the page would stop at "trajectory data could not be loaded" after a
+404 on `data/bodies.json`); `--allow-no-replay-data` starts it anyway.
 
 ## Change it
 

@@ -20,6 +20,10 @@ Both layouts add the moments in web/replay/moments.csv to encounters.json: notab
 observations; the time window, frame count and colour sets are measured from the catalog, so a row
 the archive has no pictures for stops the build instead of pointing the viewer at nothing.
 
+Both also write data/candidates.json from web/replay/candidates.csv (make_candidates.py): potential moments other
+searches found that nobody has picked yet, the whole movie catalog among them. The Moments window keeps them out of
+sight until the viewer asks for them.
+
 The whole-mission layout also writes data/highlights.json from web/replay/highlights.csv: the short
 highlight reel, a dozen or so moments that matter most and have the richest camera data. A row
 borrows a moment's or milestone's observations and text (its "from" column) or names its own
@@ -70,6 +74,11 @@ MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv"
 # targets in the catalog that are not bodies (the sky, calibration stars, unknown), left out of the body views
 NOT_BODIES = {"SKY", "DARKSKY", "UNK", "NONE", "SPICA", "FOMALHAUT"}
 HIGHLIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlights.csv")
+CANDIDATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "candidates.csv")
+# what a moments.csv row is (its "type" column), so the Moments window can group, sort and filter by it: a hand-picked
+# special moment, a find from the poster and geometry sweeps, a transit, eclipse or mutual event, or a body's closest view
+MOMENT_TYPES = ("special", "find", "transit", "closest")
+CANDIDATE_TYPES = ("movie", "transit", "find", "closest")
 TRUE_BLUES = ("BL1", "BL2", "VIO")   # the blue of a true colour set (reel.TRUE_BLUES)
 SET_GAP = 300        # seconds between the frames of one filter set (reel.SET_GAP)
 
@@ -83,6 +92,8 @@ def main():
     ap.add_argument("--attitude", help="folder with attitude/<year>.bin from export_attitude.py (same catalog export)")
     ap.add_argument("--huygens", help="Huygens replay folder (tracks/huygens, manifest_huygens.json, huygens_descent.json)")
     ap.add_argument("--moments", default=MOMENTS, help="curated imaging sessions for the Moments list (default: %(default)s)")
+    ap.add_argument("--candidates", default=CANDIDATES, help="potential moments nobody picked yet, hidden in the Moments "
+                    "window until asked for (make_candidates.py; default: %(default)s)")
     ap.add_argument("--scores", help="observations_scored.csv from the highlight scoring, for each moment's photo score")
     ap.add_argument("--highlights", default=HIGHLIGHTS, help="the highlight reel, whole mission only (default: %(default)s)")
     ap.add_argument("--groups", action="store_true", help="add each frame's filter set and pass (web/frames/sets_passes.py) "
@@ -111,6 +122,7 @@ def main():
     enc = [e for e in json.load(open(os.path.join(args.data, "encounters.json"))) if e["utc"].startswith(str(args.year))]
     enc = sorted(enc + moments(args, [args.year]), key=lambda e: e["et"])
     json.dump(enc, open(os.path.join(args.out, "encounters.json"), "w"))
+    write_candidates(args, [args.year])
 
     slim = slim_catalog(args.data, args.year, load_groups() if args.groups else None)
     json.dump(slim, open(os.path.join(args.out, "catalog.json"), "w"), separators=(",", ":"))
@@ -203,8 +215,9 @@ def read_scores(args):
 def moments(args, years):
     """
     The rows of the moments file that fall in these years, as encounters.json entries:
-      {"kind": "observation", "label", "body", "obs": [OBSERVATION_ID, ...], "et", "utc", "start", "end",
+      {"kind": "observation", "type", "label", "body", "obs": [OBSERVATION_ID, ...], "et", "utc", "start", "end",
        "end_et", "frames", "rgb_sets", "why", "source", "photo_score" (with --scores)}
+    type is the row's type column (MOMENT_TYPES), special when it is empty.
     et/utc is the first picture of the listed observations and end the last, both from the catalog.
     A row in these years with no pictures in the catalog is an error.
     """
@@ -224,12 +237,53 @@ def moments(args, years):
             raise SystemExit(f"{args.moments}: no pictures in the catalog for {r['label']!r} ({' '.join(obs)})")
         for problem in moment_problems(r, pics, labels):
             print(f"{args.moments}: {problem}", file=sys.stderr)
-        e = {"kind": "observation", "label": r["label"], "body": r["body"], "obs": obs, **measure(pics),
+        typ = (r.get("type") or "special").strip()
+        if typ not in MOMENT_TYPES:
+            raise SystemExit(f"{args.moments}: {r['label']!r} has type {typ!r}, not one of {', '.join(MOMENT_TYPES)}")
+        e = {"kind": "observation", "type": typ, "label": r["label"], "body": r["body"], "obs": obs, **measure(pics),
              "why": r["why"], "source": r["source"]}
         if any(o in scores for o in obs):
             e["photo_score"] = round(max(scores.get(o, 0) for o in obs), 1)
         out.append(e)
     return out
+
+
+def et_of(utc):
+    """ET of a UTC label, the inverse of utc_of (so off by the same few leap seconds)."""
+    d = datetime.datetime.fromisoformat(utc[:19]) - datetime.datetime(2000, 1, 1, 12)
+    return round(d.total_seconds() + 64.184, 2)
+
+
+def candidates(args, years):
+    """
+    The rows of the candidates file (make_candidates.py) in these years, as data/candidates.json entries, in time order:
+      {"kind": "movie" | "transit" | "find" | "closest", "label", "body", "et", "end_et", "utc", "cam", "frames",
+       "steps" (movies), "color" (movies, true when in color), "why", "obs", "ref"}
+    These are potential moments that nobody has picked: the Moments window keeps them out of sight until asked.
+    """
+    if not args.candidates or not os.path.exists(args.candidates):
+        return []
+    out = []
+    for r in csv.DictReader(open(args.candidates, newline="")):
+        if int(r["start_utc"][:4]) not in years:
+            continue
+        if r["type"] not in CANDIDATE_TYPES:
+            raise SystemExit(f"{args.candidates}: {r['label']!r} has type {r['type']!r}, not one of {', '.join(CANDIDATE_TYPES)}")
+        e = {"kind": r["type"], "label": r["label"], "body": r["body"], "et": et_of(r["start_utc"]),
+             "end_et": et_of(r["end_utc"] or r["start_utc"]), "utc": r["start_utc"][:19], "cam": r["cam"],
+             "frames": int(r["frames"] or 0), "why": r["why"], "obs": r["obs"].split(), "ref": r["ref"]}
+        if r["steps"]:
+            e["steps"] = int(r["steps"])
+        if r["color"]:
+            e["color"] = r["color"] == "yes"
+        out.append(e)
+    return sorted(out, key=lambda e: e["et"])
+
+
+def write_candidates(args, years):
+    cands = candidates(args, years)
+    json.dump(cands, open(os.path.join(args.out, "candidates.json"), "w"), separators=(",", ":"))
+    return cands
 
 
 PLANNED = {"RI": "SATURN", "SA": "SATURN"}   # an UNK frame of a rings or Saturn observation is Saturn's view
@@ -400,6 +454,7 @@ def build_mission(args):
     enc = [e for e in json.load(open(os.path.join(args.data, "encounters.json"))) if int(e["utc"][:4]) in years]
     enc = sorted(enc + moments(args, years), key=lambda e: e["et"])
     json.dump(enc, open(os.path.join(out, "encounters.json"), "w"))
+    write_candidates(args, years)
 
     # frames per day over the whole span, so the timeline can show years that are not loaded
     day0 = start - start % 86400
