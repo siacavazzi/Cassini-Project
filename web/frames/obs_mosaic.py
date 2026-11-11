@@ -66,8 +66,8 @@ import label_handler  # noqa: E402
 # bumped whenever the way observation mosaics are made changes, so older ones are not served again; one per
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
-# obs-v101/v84/v71 (numbered past #400): global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v101", "raw": "obs-v84", "eye": "obs-v101-eye", "false": "obs-v101-false", "classic": "obs-v71-classic"}
+# obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
+VERSIONS = {"balanced": "obs-v102", "raw": "obs-v85", "eye": "obs-v102-eye", "false": "obs-v102-false", "classic": "obs-v72-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -6450,6 +6450,137 @@ def _chain(made, pic, there, believed, step, guide=None):
     return places, hows
 
 
+STEADY_LINKS = int(os.environ.get("CASSINI_STEADY_LINKS", "4"))   # frames back each frame is matched to (1: the chain alone)
+STEADY_AGREE = 2.0        # px: a link further than this from the solve is left out (_chain_links)
+STEADY_WINDOW = 32        # tiles whose links are measured with their pictures read at once (_chain_links)
+STEADY_LINK_NOISE = 0.3   # px: a frame-to-frame match's spread (_chain_links)
+STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SPICE's place), so the solve is held; the
+#                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
+
+
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
+    """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
+    each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
+    "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
+    by more than STEADY_AGREE left out, the worst first, several a round), as the global mosaic solve does. The chain
+    adds each frame's match to the one before, so a fraction of a pixel off in each adds up like a random walk over a
+    movie (steady_places pulls it back to SPICE only over STEADY_SMOOTH frames); linked several frames back, the places
+    are held by several paths. As _chain, no place ends further than the guide's reach from the tile's own SPICE place:
+    a tile the solve put past it (a run of frames another moon pulled along together) keeps SPICE's place and its links
+    are left out. The pictures are read a window at a time (STEADY_WINDOW tiles and the links before them), so a movie
+    of hundreds of tiles never holds them all. ({n: [x, y]}, how)."""
+    import scipy.sparse as sps
+    import scipy.sparse.linalg as spla
+    tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
+    if not tiles:
+        return {}, {}
+    order = [t["n"] for t in tiles]
+    at = {n: i for i, n in enumerate(order)}
+    by = {t["n"]: t for t in tiles}
+    spice = {n: list(by[n]["offset"]) for n in order}
+    pairs = []
+    newest = {}
+    for i, n in enumerate(order):
+        cands = order[max(0, i - links):i]
+        if newest.get(by[n]["filter"]) is not None:
+            cands = cands + [newest[by[n]["filter"]]]
+        for j in dict.fromkeys(cands):
+            pairs.append((j, n))
+        newest[by[n]["filter"]] = n
+    reach = None
+
+    def measure(pr, own):
+        nonlocal reach
+        j, n = pr
+        t = by[n]
+        rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
+        g = guide(spice, j, n, None) if guide else {}
+        reach = g.get("reach", reach)
+        shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
+                                 around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
+        if shift is None or math.hypot(*shift) > believed:
+            return pr, None, how
+        d = (rel[0] - shift[0], rel[1] - shift[1])
+        if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
+            return pr, None, "past reach"
+        return pr, d, how
+    got = []
+    with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
+        for k in range(0, len(order), STEADY_WINDOW):
+            chunk = set(order[k:k + STEADY_WINDOW])
+            todo = [pr for pr in pairs if pr[1] in chunk]
+            # (this window's pictures and those its links reach back to, read here before the threads: _every_tile's
+            # pic keeps only the last few, and side by side one thread's picture was let go while another wanted it)
+            own = {m: pic(m) for m in sorted({m for pr in todo for m in pr})}
+            got += [g for g in ex.map(lambda pr: measure(pr, own), todo) if g[1] is not None]
+            del own
+    N = len(order)
+    keep = list(range(len(got)))
+    robust = np.ones(len(got))
+    x0 = np.array([spice[n] for n in order], float)
+    held = set()   # tiles past the reach: placed by SPICE's step from the tile before them, as _chain holds one
+    px, py = x0[:, 0].copy(), x0[:, 1].copy()
+    for rnd in range(len(got) + 10):
+        rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []
+        r = 0
+        for k in keep:
+            (j, n), d, _ = got[k]
+            w = math.sqrt(robust[k]) / STEADY_LINK_NOISE
+            rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
+            rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
+            r += 1
+        # (a held tile: linked to the tile before it by SPICE's step alone, so the movie goes on from there as SPICE moved,
+        # where held at SPICE's own place it jumped there and back on a badly placed body: Hyperion 153HY)
+        for n in held:
+            i = at[n]
+            if i == 0:
+                continue
+            j = order[i - 1]
+            w = 1.0 / STEADY_LINK_NOISE
+            rows += [r, r]; cols += [i, i - 1]; vals += [w, -w]
+            rhs_x.append(w * (x0[i, 0] - x0[i - 1, 0])); rhs_y.append(w * (x0[i, 1] - x0[i - 1, 1]))
+            r += 1
+        pw = [1.0 / STEADY_LINK_PRIOR] * N
+        rows += list(range(r, r + N)); cols += list(range(N)); vals += pw
+        rhs_x += list(np.array(pw) * x0[:, 0]); rhs_y += list(np.array(pw) * x0[:, 1])
+        A = sps.csr_matrix((vals, (rows, cols)), shape=(r + N, N))
+        px = spla.lsqr(A, np.array(rhs_x), atol=1e-10, btol=1e-10)[0]
+        py = spla.lsqr(A, np.array(rhs_y), atol=1e-10, btol=1e-10)[0]
+        res = {}
+        for k in keep:
+            (j, n), d, _ = got[k]
+            res[k] = math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1])
+        new = {k: 1.0 if res[k] <= GLOBAL_HUBER else GLOBAL_HUBER / res[k] for k in keep}
+        changed = any(abs(new[k] - robust[k]) > 1e-3 for k in keep)
+        for k in keep:
+            robust[k] = new[k]
+        out_ = sorted((k for k in keep if res[k] > STEADY_AGREE), key=lambda k: -res[k])
+        if out_:
+            # (the worst left out, and with it up to a twentieth of the links that disagree by more than half as much)
+            for k in [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]:
+                keep.remove(k)
+            continue
+        if reach is not None:
+            # (past the guide's reach, as _chain holds each frame: a run of frames another moon pulled along together)
+            dev = np.hypot(px - x0[:, 0], py - x0[:, 1])
+            far = [order[i] for i in range(N) if order[i] not in held and dev[i] > reach]
+            if far:
+                # (past the reach: its links out, SPICE's step from the tile before it in, and the rest solved again)
+                held |= set(far)
+                keep = [k for k in keep if got[k][0][0] not in held and got[k][0][1] not in held]
+                continue
+        if not changed:
+            break
+    places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
+    linked = {}
+    for k in keep:
+        (j, n), _, how = got[k]
+        linked.setdefault(n, []).append(j)
+    hows = {n: ("held from the tile before (past reach)" if n in held else f"linked to {sorted(linked[n])}" if n in linked
+                else "first" if n == order[0] else "SPICE (no link)") for n in order}
+    return places, hows
+
+
 def _chained(u, cache, p, name, key, work):
     """A pass's chain kept with it (in the file name and its record's key): {n: [x, y]}, made by work() once."""
     rec = _kept_tiles(u, cache, p["display_scale"])
@@ -6509,6 +6640,10 @@ STEADY_MOST = 60      # frames: the most smoothing asked for
 # a movie's stabilization chain (steady_chain), kept with the pass; renamed (with the movie frames drawn on it,
 # movie_webp) whenever the rule changes
 STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_guide); steady3: seen_places;
+if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
+    # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
+    # the chain alone keeps steady4's name
+    STEADY_FILE = f"steady5k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -6551,7 +6686,10 @@ def steady_chain(u, cache, p=None):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-        places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
+        if STEADY_LINKS > 1:
+            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS)
+        else:
+            places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 

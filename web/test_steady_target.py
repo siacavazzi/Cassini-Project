@@ -76,7 +76,7 @@ table = {fr[n][1]: [("JANUS", other[n][0] - spice[n][0], other[n][1] - spice[n][
 om.reel.north_angles = lambda ids: {i: 0.0 for i in ids}
 
 
-def run(name, guide):
+def run(name, guide, links=1):
     """The chain made with a guide (steady_guide(u) or none), fresh, and how far each place is from the truth (px)."""
     for f in os.listdir(d):
         if f.startswith("steady"):
@@ -87,7 +87,11 @@ def run(name, guide):
     def step(places, j, n):
         return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                 places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
-    places, hows = om._chain(made, pic, there, om.STEADY_MAX * om.FRAME, step, guide)
+    if links > 1:
+        # (the default since #398: links several frames back, solved together)
+        places, hows = om._chain_links(made, pic, there, om.STEADY_MAX * om.FRAME, guide, links)
+    else:
+        places, hows = om._chain(made, pic, there, om.STEADY_MAX * om.FRAME, step, guide)
     chain = [places[n] for n in range(N)]
     held = om.held_to_spice(spice, chain, 12)
     err = np.hypot(*np.subtract(held, truth).T)
@@ -116,3 +120,16 @@ with calibration.looking("balanced"):
     big = dict(u, key=("SATURN",) + u["key"][1:])
     assert om.steady_guide(big)({0: [0.0, 0.0]}, 0, 1, [0.0, 0.0])["around"] is None
 print("ok")
+
+# the same with links four frames back, solved together (STEADY_LINKS, the default): held on the target the other moon
+# cannot pull a run of frames off it either, and the reach holds what is left to SPICE's few px
+with calibration.looking("balanced"):
+    ba.bodies_of = lambda ids: {i: table.get(i, []) for i in ids}
+    masked4, _ = run("links, held on the target, bodies table", om.steady_guide(u), 4)
+    ba.bodies_of = lambda ids: {}
+    alone4, _ = run("links, held on the target, no bodies table", om.steady_guide(u), 4)
+    assert masked4.max() < 6, masked4.max()
+    # (without the bodies table the other moon pulls links further than the chain (the reach alone holds them, and a
+    # run of frames moves together): still well inside what the unguided chain did, and the pre-build has the table)
+    assert alone4.max() < before.max() * 0.75, (alone4.max(), before.max())
+print("steady target, links: ok")
