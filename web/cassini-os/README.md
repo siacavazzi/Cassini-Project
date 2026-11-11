@@ -417,6 +417,10 @@ Run the server from the repo folder so it finds the zip index (`zip_index/`). Th
 
 The Cassini model (`web/replay/data/models/cassini.glb.b64.txt`, NASA 3D Resources "Cassini-Huygens",
 Draco-decoded) and the planet textures are committed; everything else under `web/replay/data` is generated.
+A fresh checkout or worktree therefore has no replay data: run `build_data.py` (with `--groups`) and
+`build_coverage.py` in it, at its own commit, before serving it. The server refuses to start a `--site` whose `data`
+has neither `mission.json` nor `bodies.json` (the page would stop at "trajectory data could not be loaded" after a
+404 on `data/bodies.json`); `--allow-no-replay-data` starts it anyway.
 
 ## Change it
 
