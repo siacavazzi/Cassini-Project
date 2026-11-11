@@ -1730,6 +1730,7 @@ function updateOrbits() {
 
 // Labels are placed in priority order and skipped when they would overlap one already placed.
 const LABEL_PRIORITY = n => n === state.focus ? 0 : n === "CASSINI" || n === "HUYGENS" ? 1 : PLANETS.includes(n) ? 2 : n === "TITAN" ? 3 : MAJOR.includes(n) || GALILEAN.includes(n) || n === "MOON" ? 4 : 5;
+const vLbl = new THREE.Vector3();
 function updateLabels() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const placed = [];
@@ -1740,7 +1741,11 @@ function updateLabels() {
     vA.copy(p).project(camera);
     const d = camera.position.distanceTo(p);
     const small = LABEL_PRIORITY(name) === 5;
-    let hide = vA.z > 1 || vA.z < -1 || !shown(name) || (small && d > 400 && name !== state.target);
+    // outside the camera's depth range (behind it, nearer than its near plane, past its far one)? Asked of the depth
+    // in the camera's own frame, which is the same test as the projected z being outside -1 to 1 except that it does
+    // not round: the projected z of a body a billion km away (Earth, seen from Saturn) comes out just over 1
+    const depth = -vLbl.copy(p).applyMatrix4(camera.matrixWorldInverse).z;
+    let hide = depth < camera.near || depth > camera.far || !shown(name) || (small && d > 400 && name !== state.target);
     const pr = (bodyRadius(name) / KM) * enlargeOf(name) / d / Math.tan(rad(camera.fov / 2)) * h / 2;
     const x = (vA.x + 1) / 2 * w + Math.min(pr, 140) + 6, y = (1 - vA.y) / 2 * h;
     const box = [x, y - 8, x + name.length * 8 + 10, y + 8];
