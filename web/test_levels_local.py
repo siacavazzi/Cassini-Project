@@ -82,9 +82,13 @@ const b64 = d => Buffer.from(d.buffer, d.byteOffset, d.byteLength).toString('bas
     // 404 for a centred one of the frames in job.uncentred (the server cannot centre it), else a 1 px picture
     ctx.cassiniLook = (o = {}) => '&look=x' + (o.center ? '&center=1' : '');
     ctx.cassiniMovieStyle = (o = {}) => (o.center === false ? '&center=0' : '') + '&trail=0';
+    // a picture of job.busy answers 503 twice (being made) before it comes
     let asked = [];
+    const tries = {};
+    ctx.setTimeout = (f) => f();
     ctx.fetch = async url => { asked.push(url); const bad = /center=1/.test(url) && job.uncentred.some(id => url.includes(id));
-      return { ok: !bad, blob: async () => null }; };
+      if (!bad && job.busy.some(id => url.includes(id)) && (tries[url] = (tries[url] || 0) + 1) <= 2) return { ok: false, status: 503 };
+      return { ok: !bad, status: bad ? 404 : 200, blob: async () => null }; };
     ctx.createImageBitmap = async () => ({ width: 1, height: 1 });
     ctx.OffscreenCanvas = class { getContext() { return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(4) }) }; } };
     P.source.allMonths = async () => job.parts.map(p => ({ start: p.start, end: p.end, key: p.file, catalog: () => JSON.parse(fs.readFileSync(p.file, 'utf8')) }));
@@ -313,10 +317,12 @@ for name, (a, b) in T.STRETCHES.items():
         q = {"from": T.iso(a), "until": T.iso(b), "cams": "NW", "list": "1", "size": "1024", **extra}
         uruns.append({"q": q})
         expect.append(export.options({k: [v] for k, v in q.items()})["movie"]["center"])
-pub = [node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": []})]
+pub = [node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": [], "busy": []})]
 some_id = next(e["id"] for g in pub[0] for e in g if e["tries"][0] in ("color", "processed") and "center=1" in e["asked"][0])
-pub.append(node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": [some_id]}))
-counts = {"color": 0, "movie": 0, "fallback": 0}
+busy_id = next(e["id"] for g in pub[0] for e in g if e["tries"][0] in ("color", "processed") and "center=1" in e["asked"][0]
+               and e["id"] != some_id and some_id not in e["asked"][0])
+pub.append(node({"cmd": "urls", "runs": uruns, "parts": T.parts, "kinds": T.kinds, "uncentred": [some_id], "busy": [busy_id]}))
+counts = {"color": 0, "movie": 0, "fallback": 0, "busy": 0}
 for k, got in enumerate(pub):
     for r, centre, g in zip(uruns, expect, got):
         for e in g:
@@ -331,13 +337,16 @@ for k, got in enumerate(pub):
                 if k == 1 and e["id"] == some_id and centre:
                     assert len(e["asked"]) == 2 and "center=1" not in e["asked"][1], f"no stand-in after a 404: {e['asked']}"
                     counts["fallback"] += 1
+                if k == 1 and e["id"] == busy_id and centre:
+                    assert len(e["asked"]) == 3 and all(u == e["asked"][0] and "center=1" in u for u in e["asked"]), f"no wait on a 503: {e['asked']}"
+                    counts["busy"] += 1
             elif first in ("movie", "rolling"):
                 assert ("center=0" not in url) == centre, f"{r['q']}: {url} (Auto center {centre})"
                 counts["movie"] += 1
             if route not in ("movie", "rolling"):
                 assert "trail=" not in url, f"movie style on {url}"
-assert counts["color"] and counts["fallback"], counts
+assert counts["color"] and counts["fallback"] and counts["busy"], counts
 print(f"addresses: {len(uruns)} films with Auto center on and off (ctr, center); {counts['color']:,} color and processed "
       f"pictures centred exactly when export.Pictures centres them, {counts['movie']:,} movie pictures likewise; "
-      f"a centred picture the server cannot make falls back to the picture as it is")
+      f"a centred picture the server cannot make (404) falls back to the picture as it is, one being made (503) is waited for")
 print("ok")

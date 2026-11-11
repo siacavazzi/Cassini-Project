@@ -243,15 +243,23 @@
     const url = kind === "movie" ? `${base}&color=1${style}${look}` : kind === "rolling" ? `${base}${style}${look}` : kind === "frame" ? base : `${base}${look}`;
     return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
   }
+  // a picture as RGBA, waited for while the server makes it (503) or is busy (429), as export.html's fetchPicture
+  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST); null for any other refusal (404: not centred) or failure
+  const WAIT_MOST = 600e3, sleep = ms => new Promise(r => setTimeout(r, ms));
   async function fetchRGBA(url) {
-    try {
-      const r = await fetch(url);
-      if (!r.ok) return null;
-      const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-      const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext("2d", { colorSpace: "srgb" });
-      g.drawImage(bmp, 0, 0);
-      return { data: g.getImageData(0, 0, bmp.width, bmp.height).data, width: bmp.width, height: bmp.height };
-    } catch (err) { return null; }
+    const t0 = Date.now();
+    for (let wait = 500; ; wait = Math.min(4000, wait * 1.5)) {
+      let r;
+      try { r = await fetch(url); } catch (err) { r = null; }
+      if (r && (r.status === 503 || r.status === 429) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
+      if (!r || !r.ok) return null;
+      try {
+        const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+        const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext("2d", { colorSpace: "srgb" });
+        g.drawImage(bmp, 0, 0);
+        return { data: g.getImageData(0, 0, bmp.width, bmp.height).data, width: bmp.width, height: bmp.height };
+      } catch (err) { return null; }
+    }
   }
   // the picture of plan entry e at size px as the frame server makes it for the film (opt: the parsed options), RGBA,
   // its tries in turn (null: none)

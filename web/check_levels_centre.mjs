@@ -26,6 +26,10 @@ const browser = await pw.chromium.launch(argv.includes("--chrome") ? { channel: 
 const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", e => errors.push(String(e)));
+// every picture the page asks for, with the answer's status (for a picture that differs)
+let fetched = [];
+page.on("response", r => { if (/\/frames\//.test(r.url())) fetched.push(`${r.status()} ${r.url().replace(server, "")}`); });
+page.on("requestfailed", r => { if (/\/frames\//.test(r.url())) fetched.push(`failed ${r.url().replace(server, "")}`); });
 await page.goto(`${server}/?t=${from}&view=titan&play=0`, { waitUntil: "load" });
 await page.waitForFunction(() => window.cassiniSteadyMath && window.cassiniLook, null, { timeout: 120000 });
 const src = f => fs.readFileSync(path.join(HERE, "cassini-os", "src", f), "utf8");
@@ -49,6 +53,7 @@ for (const ctr of ["0", "1"]) {
     if (Date.now() - t0 > 3600e3) throw new Error(`server: ${want.done} of ${want.total} after an hour`);
     await new Promise(r => setTimeout(r, 3000));
   }
+  fetched = [];
   const got = await page.evaluate(async q => {
     const P = window.cassiniPlanLocal;
     P.levels = P.levels || window.cassiniPlanLocal.levels;
@@ -59,18 +64,24 @@ for (const ctr of ["0", "1"]) {
   if (got.error) throw new Error(`page: ${got.error}`);
   const ids = new Set([...Object.keys(want.level), ...Object.keys(got.level)]);
   let differ = 0, most = 0, missing = 0;
+  const shown = [];
   for (const id of ids) {
     const a = want.level[id], b = got.level[id];
     if (!(id in want.level) || !(id in got.level)) { missing++; continue; }
     if (a === b) continue;
     const d = a === null || b === null ? Infinity : Math.abs(a - b);
     most = Math.max(most, d);
-    if (d > ev) differ++;
+    if (d > ev) { differ++; shown.push(id); }
   }
+  for (const id of ids) if (!(id in want.level) || !(id in got.level)) shown.push(id);
   const ok = !differ && !missing;
   bad += !ok;
   console.log(`ctr=${ctr}: ${ok ? "match" : "differ"} (${ids.size} pictures; ${differ} levels differ, the most by ` +
     `${most === Infinity ? "lit vs too little lit" : most.toFixed(4) + " EV"}; ${missing} measured on one side only)`);
+  for (const id of shown.slice(0, 10)) {
+    console.log(`  ${id}: server ${want.level[id]} EV, page ${got.level[id]} EV; the page fetched:`);
+    for (const f of fetched.filter(f => f.includes(id))) console.log(`    ${f}`);
+  }
 }
 if (errors.length) console.log("page errors:", errors.slice(0, 5).join(" | "));
 await browser.close();
