@@ -47,7 +47,11 @@ assert om.on_disk(u, (None, None, "CB3", 0, 938, 100.0, 50.0, 200000.0))       #
 assert not om.on_disk(u, (None, None, "CB3", 0, 938, 3000.0, 0.0, 200000.0))
 # a ring pass (codes=False: Saturn its target, a ring code in its name) keeps the pass's black on a frame lit all over:
 # that is the rings, real light, not a glow (124RI RDHRCOMP001: the jets frame's rule put black over the rings' median)
-assert "black_of" not in om.tile_scale(scale, "RED", True, codes=False), "a ring pass's frame keeps the pass's black"
+ring_of = om.tile_scale(scale, "RED", True, codes=False)["black_of"]
+rings = (0.016 + 0.002 * np.sin(xx / 9) + rng.normal(0, 2e-4, (N, N))).astype(np.float32)
+assert ring_of(rings) is None, "a ring pass's frame filled by sunlit rings keeps the pass's black"
+# ... but a dim ring frame's veil (051RG G20PHASE002: the G ring over a 3e-5 I/F glow) keeps the glow's black
+assert ring_of(jets) is not None, "a dim ring frame lit all over by a glow still gets a black of its own"
 assert om.tile_scale(scale, "RED", True)["black_of"](jets) is not None, "the jets' glow rule is unchanged off ring passes"
 print("ok")
 
