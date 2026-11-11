@@ -255,11 +255,45 @@
       if (!r || !r.ok) return null;
       try {
         const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-        const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext("2d", { colorSpace: "srgb" });
-        g.drawImage(bmp, 0, 0);
-        return { data: g.getImageData(0, 0, bmp.width, bmp.height).data, width: bmp.width, height: bmp.height };
+        return { data: pixels(bmp), width: bmp.width, height: bmp.height };
       } catch (err) { return null; }
     }
+  }
+  // a decoded picture's RGBA as the server's Pillow reads it. A 2D canvas keeps its pixels premultiplied, so a partly
+  // transparent pixel (a centred close-up placed where it is, a frame's soft edge) comes back with its colour rounded
+  // twice; a WebGL texture keeps them as decoded. The 2D canvas only where WebGL is missing.
+  let gl = null;
+  function pixels(bmp) {
+    const w = bmp.width, h = bmp.height;
+    try {
+      if (!gl) gl = new OffscreenCanvas(1, 1).getContext("webgl", { premultipliedAlpha: false, antialias: false }) || false;
+      if (gl && !gl.isContextLost()) {
+        const t = gl.createTexture(), fb = gl.createFramebuffer();
+        try {
+          gl.bindTexture(gl.TEXTURE_2D, t);
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+          gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+          if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+            const data = new Uint8ClampedArray(w * h * 4);   // row 0 is the picture's top row (no flip on upload)
+            gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, data);
+            if (!gl.getError()) return data;
+          }
+        } finally {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.deleteFramebuffer(fb);
+          gl.deleteTexture(t);
+        }
+      }
+    } catch (err) { /* the 2D canvas below */ }
+    const c = new OffscreenCanvas(w, h), g = c.getContext("2d", { colorSpace: "srgb" });
+    g.drawImage(bmp, 0, 0);
+    return g.getImageData(0, 0, w, h).data;
   }
   // the picture of plan entry e at size px as the frame server makes it for the film (opt: the parsed options), RGBA,
   // its tries in turn (null: none)
@@ -317,7 +351,7 @@
     }
   }
 
-  const API = { levels, _levels: { pictureUrl, picture, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, _levels: { pictureUrl, picture, pixels, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};
