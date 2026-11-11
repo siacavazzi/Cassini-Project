@@ -48,12 +48,7 @@ body.phone #hllist { grid-template-columns: 1fr; }
 // ---------- highlight reel ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const card = $("hlcard"), list = $("hllist"), menu = $("hlmenu");
   const CAMS = { N: "imgcard", W: "wacard" };
   // H: the reel. list: the highlights; i: the one playing (-1: none); auto: Play all is moving through them;

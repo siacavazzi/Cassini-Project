@@ -32,12 +32,7 @@ body.phone #linktoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
   const KEYS = ["t", "view", "speed", "play", "movie", "cam"];
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
   // the frame server, chosen as the camera window chooses it; it keeps the usage counts
-  const FRAMES = (() => {
-    const q = new URLSearchParams(location.search).get("frames");
-    if (q) return q.replace(/\/$/, "");
-    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
-    return "http://localhost:8765";
-  })();
+  const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const tell = word => { try { navigator.sendBeacon(`${FRAMES}/usage`, word); } catch (e) {} };
   // opened on a shared moment: arrived with a time in the link, not a reload of a page that wrote its own, nor a
   // landing moment the settings put there (settings.html)

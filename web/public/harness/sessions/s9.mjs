@@ -11,6 +11,8 @@ export default {
     const defs = await page.evaluate(() => (window.cassiniSettings ? window.cassiniSettings.defined : [])
       .filter(d => d.type !== "action" && !d.hidden).map(d => ({ key: d.key, type: d.type, value: d.value, min: d.min, max: d.max, options: (d.options || []).map(o => o[0]) })));
     if (!defs.length) { h.skip("no settings (window.cassiniSettings)", "WP6"); return; }
+    const hidden = await page.evaluate(() => window.cassiniSettings.defined.filter(d => d.hidden).length);
+    h.step(`public switch ${await page.evaluate(() => window.cassiniPublic === true) ? "on" : "off"}: ${hidden} settings hidden`);
     for (const d of defs) {
       const values = d.type === "toggle" ? [!d.value] : d.type === "choice" ? d.options.filter(o => o !== d.value)
         : d.type === "range" ? [d.value === d.max ? d.min : d.max] : [];
