@@ -31,3 +31,12 @@ assert om.astray([dict(sweep[0], registered={"to": "x", "how": "phase"})] + swee
 # a tile overlapping no other colour filter: nothing to mismatch, kept
 assert om.astray([tile(1, "RED", 0, 0, NA), tile(2, "GRN", 5000, 0, NA)], colour) == set()
 print("a set at one pointing, a registered tile and a lone tile keep their colour; ok")
+
+# the gray base always goes under a tile left out, on any body (not only clouded or kept-as-taken passes): Iapetus
+# frames all redrawn, no as_taken tile, its CL1 frames the base
+u = {"key": ("IAPETUS", "ISS_TEST", "N", 0), "frames": []}
+p = {"display_scale": {}, "grey": "CL1/CL2", "luminance": {"filters": ["CL1/CL2"], "gains": {}}}
+base = [tile(12, "CL1/CL2", 25392, 4753), tile(13, "CL1/CL2", 25845, 4978), tile(14, "CL1/CL2", 25985, 5054)]
+assert om.lum_base(u, p, sweep + base, colour, base=base)
+assert not om.lum_base(u, p, still + [tile(12, "CL1/CL2", 0, 0)], colour, base=[tile(12, "CL1/CL2", 0, 0)])
+print("the gray base goes under a colour tile left out, on a moon whose frames were redrawn; ok")

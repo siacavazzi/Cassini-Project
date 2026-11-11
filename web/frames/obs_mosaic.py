@@ -2005,7 +2005,9 @@ def lum_base(u, p, tiles, used, base=None):
         base = [t for t in tiles if "offset" in t and t["n"] in frames] + blown_tiles(tiles)
     if len(used) == 1:
         return any(t["filter"] != used[0] for t in base)
-    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t] for f in used}
+    # (a colour tile left out of the colour, astray, covers nothing: its place takes the base, whatever the body)
+    stray = astray(tiles, used)
+    by = {f: [t["offset"] for t in tiles if t["filter"] == f and "offset" in t and t["n"] not in stray] for f in used}
     near = lambda o, os_: any(math.hypot(o[0] - q[0], o[1] - q[1]) <= SAME_PLACE * FRAME for q in os_)
     # (or a colour tile with lines lost in downlink: the colour is only where all its filters are, so its lost lines were
     # a black strip, Dione ISS_016DI_TARGFLYBY001's GRN N1507742100_3; or a frame filling in under a lossy grey one)
