@@ -6,7 +6,7 @@
 //   node web/check_levels_centre.mjs http://127.0.0.1:8765 [--from 2005-04-16T15:00:00 --until 2005-04-16T23:00:00]
 //     [--pictures color] [--chrome] [--python ~/venv/bin/python]
 //
-// For a picture that differs, the picture the page used is measured again by the server's own Python
+// For a picture that differs, both plans' tries are shown, and the picture the page used is measured again by the server's own Python
 // (export.brightness on export.Pictures._on_black of the served WebP; --python PATH or PYTHON, default python3: the
 // frame server's interpreter, with numpy and Pillow): "the page measured the served picture right" means the server's /export/levels.json measured some
 // other picture (a server-side defect, cold-levels-finding.md), not the page port.
@@ -45,7 +45,9 @@ const src = f => fs.readFileSync(path.join(HERE, "cassini-os", "src", f), "utf8"
 await page.addScriptTag({ content: src("plan-local.js") });
 await page.addScriptTag({ content: src("levels-local.js") });
 
-const ev = 1.5e-4;   // one step of the float32 log, after rounding to 4 places
+const ev = 1.5e-4;
+// the kind of picture an address is (/frames/color.webp, /frames/mosaic/ID.webp ...; /frames/ID.webp is a frame)
+const usedKind = f => { const m = /\/frames\/([a-z]+)[/.]/.exec(f); return m ? m[1] : "frame"; };   // one step of the float32 log, after rounding to 4 places
 let bad = 0, serverSide = 0;   // films with a page differ; films whose every differ is the server's
 for (const ctr of ["0", "1"]) {
   // the film's query, with the page's look and movie style as the Movie Editor sends them to the server
@@ -67,8 +69,13 @@ for (const ctr of ["0", "1"]) {
     P.levels = P.levels || window.cassiniPlanLocal.levels;
     const plan = await P.plan(Object.assign({}, q, { list: "1" }));
     if (plan.error) return { error: plan.error };
-    return P.levels(q, plan.pictures);
+    const out = await P.levels(q, plan.pictures);
+    out.tries = Object.fromEntries(plan.pictures.map(e => [e.id, e.tries.map(t => t[0])]));
+    return out;
   }, q);
+  // the server's plan for the same film: which tries each picture has, best first
+  const splan = await (await fetch(`${server}/export/plan.json?${query}&list=1`)).json();
+  const stries = Object.fromEntries((splan.pictures || []).map(e => [e.id, (e.tries || []).map(t => t[0])]));
   if (got.error) throw new Error(`page: ${got.error}`);
   const ids = new Set([...Object.keys(want.level), ...Object.keys(got.level)]);
   let differ = 0, most = 0, missing = 0;
@@ -87,7 +94,8 @@ for (const ctr of ["0", "1"]) {
   console.log(`ctr=${ctr}: ${ok ? "match" : "differ"} (${ids.size} pictures; ${differ} levels differ, the most by ` +
     `${most === Infinity ? "lit vs too little lit" : most.toFixed(4) + " EV"}; ${missing} measured on one side only)`);
   for (const id of shown) {
-    console.log(`  ${id}: server ${want.level[id]} EV, page ${got.level[id]} EV; the page fetched:`);
+    const sameTries = JSON.stringify(stries[id]) === JSON.stringify(got.tries[id]);
+    console.log(`  ${id}: server ${want.level[id]} EV, page ${got.level[id]} EV; tries: server's plan ${JSON.stringify(stries[id])}, page's plan ${JSON.stringify(got.tries[id])}${sameTries ? "" : " (DIFFERENT PLANS)"}; the page fetched:`);
     const mine = fetched.filter(f => f.includes(id));
     for (const f of mine) console.log(`    ${f}`);
     const used = mine.find(f => f.startsWith("200 "));
@@ -99,9 +107,9 @@ print("null" if lv is None else round(round(lv, 5) / math.log(2), 4))`;
       try {
         const v = execFileSync(arg("--python", process.env.PYTHON || "python3"), ["-c", py, HERE, server + used.slice(4).replace(/&amp;/g, "&")], { encoding: "utf8" }).trim();
         const served = v === "null" ? null : +v;
-        const right = served === got.level[id];
+        const right = served === got.level[id] && sameTries && usedKind(used) === (got.tries[id] || [""])[0];
         explained += right;
-        console.log(`    the server's Python on that picture: ${served} EV: ` + (right ? "SERVER-SIDE: the page measured the served picture right; the server's levels measured another picture" : "the page differs from it"));
+        console.log(`    the server's Python on that picture: ${served} EV: ` + (right ? "SERVER-SIDE: both plans give the same tries, the page measured its first try's served picture right, and the server's levels measured another picture" : served === got.level[id] ? "the page measured what it was served right, but not the picture the plan puts first (or the plans differ): a page or data defect" : "the page differs from it"));
       } catch (e) { console.log(`    (the server's Python could not measure it: ${String(e.message).split("\n")[0]})`); }
     }
   }
