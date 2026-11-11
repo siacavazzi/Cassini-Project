@@ -196,6 +196,32 @@ frame's -X, lines toward -Y; `bootleg_autonav.project`). `?footprints=1` and `&f
 visit. `bench/footprints.cjs` checks them (each footprint's middle on its frame's boresight, the cone's axis through
 the newest one, the count slider).
 
+## What Cassini is doing
+
+`src/activity.html`. The pointing the page already loads says what the spacecraft was doing in the hours when the
+cameras took nothing: dish on Earth (sending data; the menu bar says how long the signal takes), the radio signal
+crossing the rings or bent around Saturn's or Titan's limb (radio occultations), dish on a body (radar or radio
+science; on 14 January 2005, receiving Huygens), a long roll (fields and particles), or the instruments on a body.
+It shows as a line in the menu bar, a thin strip along the top of the timeline (windows up to 120 days) and a faint
+beam from the dish. Settings > View: "What Cassini is doing", "Radio beam". Nothing is fetched or pre-built.
+`bench/activity.cjs` checks it against ten things known to have happened in 2005.
+
+## Seen so far, and pictures of a place
+
+`src/coverage.html`, from a small table made once by `python web/replay/build_coverage.py --data web/replay/data`
+(needs the pointing for the years it covers; about 50 KB a moon plus a list of pictures per place, in
+`data/coverage/`; two years take three minutes on four cores). Without the table both stay silent.
+
+- **Seen so far** (Settings > View, off unless turned on): each mapped moon is drawn only as sharply as Cassini had
+  photographed it by the moment on the clock. A place not yet seen in sunlight is plain grey; each place comes into
+  focus as its pictures are taken. The menu bar says how much of the moon in view has been seen. The moon's shader
+  picks the surface map's mip level from the table; no picture is changed.
+- **Pictures of a place** (Settings > View, on): a click on a mapped moon lists the sharpest pictures Cassini took of
+  that place, one per observation; a row puts the clock on its picture. The place is ringed on the globe and its
+  pictures are ticked on the timeline.
+
+`bench/coverage.cjs` checks both against Enceladus in 2005.
+
 ## Shareable links
 
 The address bar always holds the moment on screen (`src/link.html`), so a copied link opens on it again:

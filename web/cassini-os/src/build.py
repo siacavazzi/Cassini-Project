@@ -752,13 +752,15 @@ for name in CUTSCENES:
         assert os.path.exists(cdata), cdata
         cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
     script += cscript + "\n"
-# what Cassini is doing (activity.html): its style joins the head's and its script runs after the viewer's and the
-# cutscenes' (it reads the viewer's pointing and tracks, and wraps the attitude, read-out and timeline hooks)
-act = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "activity.html")).read()
-apart = lambda tag: act[act.index(f"<{tag}"):act.index(f"</{tag}>") + len(tag) + 3]
-assert study.count("</style>\n</head>") == 1
-study = study.replace("</style>\n</head>", apart("style")[len("<style>"):] + "\n</head>")
-script += apart("script") + "\n"
+# what Cassini is doing (activity.html) and what it had seen of each moon (coverage.html): each one's style joins the
+# head's and its script runs after the viewer's and the cutscenes' (they read the viewer's pointing, tracks and moons,
+# and wrap the attitude, read-out and timeline hooks)
+for part in ("activity.html", "coverage.html"):
+    act = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), part)).read()
+    apart = lambda tag: act[act.index(f"<{tag}"):act.index(f"</{tag}>") + len(tag) + 3]
+    assert study.count("</style>\n</head>") == 1
+    study = study.replace("</style>\n</head>", apart("style")[len("<style>"):] + "\n</head>")
+    script += apart("script") + "\n"
 # ambient mode (ambient.html): its style joins the head's, its overlay goes into #app, and its script runs last (it
 # chains the cutscenes' studyFrame hook and restyles the camera windows as its picture panels)
 amb = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "ambient.html")).read()
