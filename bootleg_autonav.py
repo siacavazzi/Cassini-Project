@@ -503,32 +503,6 @@ def shown_place(label, target_loc):
     label.info["TARGET_NAME"] = found[0]
     label.geometry["target"] = found[0]
     return [-found[1], -found[2], found[4], target_loc[3]]
-    if load_year:
-        load_year()
-    try:
-        target_loc = find_target(label, False, "graphs")
-    except Exception as e:
-        if GEOMETRY_CACHE:
-            _store_rows([_row(frame_id(label), error=f"{type(e).__name__}: {e}")])
-        raise
-    if GEOMETRY_CACHE:
-        _store_rows([_row(frame_id(label), target_loc, label.geometry)])
-    else:
-        # no cache (the batch pipeline): the body the frame shows worked out here, as shown_targets reads it from the
-        # cache's tables (kernels for the frame are loaded)
-        target = label.geometry["target"]
-        try:
-            km = _radius_km(target)
-            found = shown_body(km / target_loc[2] * label.geometry["scale"] if km else None,
-                               bodies_in_frame(label.geometry["et"], label.geometry["camera"], target))
-        except Exception:   # noqa: BLE001  (no other body worked out: the frame keeps its target)
-            found = None
-        if found:
-            label.info.setdefault("ARCHIVE_TARGET_NAME", label.info.get("TARGET_NAME"))
-            label.info["TARGET_NAME"] = found[0]
-            label.geometry["target"] = found[0]
-            target_loc = [-found[1], -found[2], found[4], target_loc[3]]
-    return linearized(label, target_loc)
 
 
 """
