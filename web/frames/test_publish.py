@@ -265,6 +265,8 @@ def prepare():
 def resolve(path, query, cache):
     if "N1500000001" in path:          # slow: answers only with a work budget of 30 s or more
         return Answer("file", 200, os.path.join(cache, "slow.webp"), "image/webp") if BUDGET >= 30 else Answer("busy", 503)
+    if "N1500000003" in path:          # busy, then none once the budget lets it finish (a fit that ends at a refused write)
+        return NONE if BUDGET >= 30 else Answer("busy", 503)
     if "N1500000002" in path:          # never within any budget
         return Answer("busy", 503)
     return Answer("file", 200, os.path.join(cache, "fast.webp"), "image/webp")
@@ -297,7 +299,7 @@ def test_busy_retry(tmp):
     sys.path.insert(0, fake)   # (spawned workers start with the parent's sys.path)
     try:
         tags = {f: "t000000000000" for f in publish.FAMILIES}
-        work = [{"family": "frame", "year": 2009, "urls": [f"/frames/N150000000{n}_1.webp?size=1024"]} for n in (0, 1, 2)]
+        work = [{"family": "frame", "year": 2009, "urls": [f"/frames/N150000000{n}_1.webp?size=1024"]} for n in (0, 1, 2, 3)]
         args = argparse.Namespace(jobs=2, verify=False, dry_run=False)
         spec = "dir:" + os.path.join(tmp, "busy-mirror")
         state = os.path.join(tmp, "busy-state")
@@ -310,9 +312,15 @@ def test_busy_retry(tmp):
             recs = [r for r in recs if r["outcome"] != "busy"] + publish.run_units(again, args, cache, spec, state, tags,
                                                                                   "p", budget, recs)
         out = {r["url"].split("/")[2][:11]: r["outcome"] for r in recs}
-        check(first == ["busy", "busy", "published"] and out == {"N1500000000": "published", "N1500000001": "published",
-                                                                  "N1500000002": "busy"},
-              "a URL answered busy is asked again with a larger work budget and published; one still busy is reported busy")
+        check(first == ["busy", "busy", "busy", "published"]
+              and out == {"N1500000000": "published", "N1500000001": "published", "N1500000002": "busy",
+                          "N1500000003": "missing"},
+              "a URL answered busy is asked again with a larger work budget: published when it resolves, counted none "
+              "(missing) when it then answers none, and reported busy when it stays busy")
+        mirror = publish.Mirror(spec[4:])
+        keys_held = [r["key"] for r in recs if mirror.held(r["key"])]
+        check(sorted(k.split("/")[-1][:11] for k in keys_held) == ["N1500000000", "N1500000001"],
+              "nothing is uploaded for a URL that ends busy or none (no fallback in its place)")
     finally:
         sys.path.remove(fake)
         for k, v in old.items():
