@@ -68,7 +68,10 @@ figcaption { margin-top: 8px; font-size: 12px; color: var(--dim); }
 .flow .spice .panel b { color: var(--text); font-weight: normal; }
 .flow svg { display: block; width: 100%; height: auto; }
 .scrub { display: flex; gap: 14px; align-items: center; margin-top: 18px; }
-.scrub .count { font: 12px/1 var(--mono); color: var(--dim); white-space: nowrap; min-width: 112px; }
+.scrub > * { flex: none; min-width: 0; }
+.scrub input[type=range] { flex: 1 1 auto; width: auto; }
+.scrub .count { font: 12px/1.4 var(--mono); color: var(--dim); white-space: nowrap; }
+#ctr-count { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
 
 /* where the pictures come from */
 .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
@@ -132,7 +135,7 @@ figcaption { margin-top: 8px; font-size: 12px; color: var(--dim); }
 .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .trio figure { position: relative; }
 .trio figcaption { margin-top: 6px; }
-.flip { position: relative; aspect-ratio: 1; }
+.flip { position: relative; aspect-ratio: 1; overflow: hidden; }
 .flip img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
 .flip .placed { position: absolute; inset: 0; overflow: hidden; }
 .flip .cross::before, .flip .cross::after { content: ""; position: absolute; background: rgba(255,196,120,.45); }
@@ -171,7 +174,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
         <div class="tag"><b>1</b> · Raw frames, turned north up</div>
         <figure class="frame"><img data-flow="raw-CB2" alt="Raw frame, CB2 filter (750 nm)" width="240" height="240"><span>CB2 · 750 nm</span></figure>
         <figure class="frame"><img data-flow="raw-GRN" alt="Raw frame, green filter" width="240" height="240"><span>GRN · 569 nm</span></figure>
-        <figure class="frame"><img data-flow="raw-BL1" alt="Raw frame, blue filter" width="240" height="240"><span>BL1 · 457 nm</span></figure>
+        <figure class="frame"><img data-flow="raw-BL1" alt="Raw frame, blue filter" width="240" height="240"><span>BL1 · 455 nm</span></figure>
       </div>
       <div class="arrow" style="grid-row:1;grid-column:2">→</div>
       <div class="color">
@@ -358,9 +361,9 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
     </div>
     <div class="chips" id="color-targets"></div>
     <div class="trio" style="margin-top:6px">
-      <figure class="frame"><img id="ch-red" alt="Through the red filter" width="420" height="420"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#e5554a"></span>RED · 649 nm</figcaption></figure>
-      <figure class="frame"><img id="ch-green" alt="Through the green filter" width="420" height="420"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#58c46a"></span>GRN · 568 nm</figcaption></figure>
-      <figure class="frame"><img id="ch-blue" alt="Through the blue filter" width="420" height="420"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#5a8cff"></span>BL1 · 455 nm</figcaption></figure>
+      <figure class="frame"><img id="ch-red" alt="Through the red filter" width="420" height="420"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#e5554a"></span><span id="nm-red">RED · 649 nm</span></figcaption></figure>
+      <figure class="frame"><img id="ch-green" alt="Through the green filter" width="420" height="420"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#58c46a"></span><span id="nm-green">GRN · 569 nm</span></figcaption></figure>
+      <figure class="frame"><img id="ch-blue" alt="Through the blue filter" width="420" height="420"><figcaption style="padding:0 10px 8px"><span class="swatch" style="background:#5a8cff"></span><span id="nm-blue">BL1 · 455 nm</span></figcaption></figure>
     </div>
     <div class="cols" style="margin-top:28px">
       <div>

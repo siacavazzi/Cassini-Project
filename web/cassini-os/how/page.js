@@ -41,7 +41,10 @@
     el.onpointerup = () => (el.onpointermove = null);
     el.onkeydown = (e) => { if (e.key === "ArrowLeft") set(at - 0.05); if (e.key === "ArrowRight") set(at + 0.05); };
     function move(e) { const r = el.getBoundingClientRect(); set((e.clientX - r.left) / r.width); }
-    window.addEventListener("resize", () => set(at));
+    // one resize listener per slider, however often its pictures change
+    if (el._resize) window.removeEventListener("resize", el._resize);
+    el._resize = () => set(at);
+    window.addEventListener("resize", el._resize);
   }
 
   // ---- the flow (raw frames + SPICE -> color, body location -> mosaic), the poster GIF -------------------------
@@ -229,9 +232,9 @@
 
   // ---- color: lined up or not, natural color or filters straight, calibrated or not ----------------------------
   const TARGETS = [
-    { key: "titan", name: "Titan · 25 Jan 2009", note: "Titan from the narrow-angle camera: its orange haze, blue at the rim where the thin upper haze scatters blue light." },
-    { key: "saturn", name: "Saturn · 15 Oct 2004", note: "Saturn and its rings from the wide-angle camera, three months after Cassini arrived." },
-    { key: "jupiter", name: "Jupiter · 10 Feb 2001", note: "A crescent Jupiter as Cassini left it behind. Its channels were far apart, so turning the lining up off splits it into colored crescents." },
+    { key: "titan", nm: [649, 569, 455], name: "Titan · 25 Jan 2009", note: "Titan from the narrow-angle camera: its orange haze, blue at the rim where the thin upper haze scatters blue light." },
+    { key: "saturn", nm: [647, 568, 463], name: "Saturn · 15 Oct 2004", note: "Saturn and its rings from the wide-angle camera, three months after Cassini arrived." },
+    { key: "jupiter", nm: [649, 569, 455], name: "Jupiter · 10 Feb 2001", note: "A crescent Jupiter as Cassini left it behind. Its channels were far apart, so turning the lining up off splits it into colored crescents." },
   ];
   const COLOR = [
     { name: "Lining up", a: "noalign", al: "not lined up", note: "Off: the channels as the camera took them." },
@@ -256,7 +259,11 @@
     function show() {
       $$("button", tchips).forEach((b, j) => b.setAttribute("aria-pressed", TARGETS[j] === target));
       $$("button", chips).forEach((b, j) => b.setAttribute("aria-pressed", j === cmp));
-      for (const k of ["red", "green", "blue"]) $(`#ch-${k}`).src = `img/color-${target.key}-${k}.jpg`;
+      ["red", "green", "blue"].forEach((k, i) => {
+        $(`#ch-${k}`).src = `img/color-${target.key}-${k}.jpg`;
+        // each camera's own effective wavelength for the filter (the wide-angle camera's differ a little)
+        $(`#nm-${k}`).textContent = `${["RED", "GRN", "BL1"][i]} · ${target.nm[i]} nm`;
+      });
       const c = COLOR[cmp];
       compare($("#color-compare"), `img/color-${target.key}-${c.a}.jpg`, `img/color-${target.key}.jpg`, c.al, "pipeline");
       $("#color-note").textContent = target.note + " " + c.note;

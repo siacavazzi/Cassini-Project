@@ -33,6 +33,13 @@
     spk(sp);
     ck(pics);
     pck(sp);
+  }).catch(() => {
+    document.querySelectorAll(".kcanvas").forEach((c) => {
+      const p = document.createElement("p");
+      p.className = "small";
+      p.textContent = "This drawing could not load its data.";
+      c.replaceWith(p);
+    });
   });
 
   // ---- SPK: where things are ---------------------------------------------------------------------------------------
@@ -45,7 +52,8 @@
       const [g, w, h] = fit(canvas), s = (Math.min(w, h) / 2 - 14) / ext, cx = w / 2, cy = h / 2;
       const P = ([x, y]) => [cx + x * s, cy - y * s];
       // the moment loops through the three weeks, resting on the Dione frame
-      const cyc = 10, u = (t % cyc) / cyc, k = Math.min(n - 1, Math.floor(u * n));
+      const sweep = 10, hold = 2.5, fi = sp.frame_index, tf = sweep * fi / n, m = t % (sweep + hold);
+      const k = m < tf ? Math.floor(m / sweep * n) : m < tf + hold ? fi : Math.min(n - 1, Math.floor((m - hold) / sweep * n));
       // orbits (the moons' whole tracks) and Cassini's path so far
       Object.entries(sp.moons).forEach(([name, tr]) => {
         g.strokeStyle = "rgba(232,236,242,.14)";
@@ -82,7 +90,7 @@
       g.fillText("Cassini", c[0] + 7, c[1] + 12);
       const day = new Date(Date.parse(sp.start + "Z") + k * sp.step_h * 3600e3);
       g.fillStyle = "rgba(232,236,242,.6)";
-      g.fillText(day.toISOString().slice(0, 10), 10, h - 10);
+      g.fillText(day.toISOString().slice(0, 10) + (k === sp.frame_index ? " · the Dione frame" : ""), 10, h - 10);
     });
   }
 
@@ -149,7 +157,7 @@
           // body frame: tip the pole towards the viewer, then spin about it
           const by = y * ct - z * st, bz = y * st + z * ct; // bz along the viewer's line after the tilt
           const lat = Math.asin(Math.max(-1, Math.min(1, by)));
-          const lon = Math.atan2(x, -bz) + lon0;
+          const lon = Math.atan2(x, -bz) - lon0;
           let a = 170;
           if (tex) {
             const u = Math.floor(((0.5 + lon / (2 * Math.PI)) % 1 + 1) % 1 * tex.w), v = Math.min(tex.h - 1, Math.floor((0.5 - lat / Math.PI) * tex.h));
