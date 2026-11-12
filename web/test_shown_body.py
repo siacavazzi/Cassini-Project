@@ -51,6 +51,10 @@ if ba.GEOMETRY_CACHE and os.path.exists(ba.GEOMETRY_CACHE) and FRAME in ba.shown
     # the other bodies on it: Enceladus (the archive's target) among them, Saturn not
     others = [b[0] for b in ba.bodies_of([FRAME])[FRAME]]
     assert "ENCELADUS" in others and "SATURN" not in others, others
+    # a pass is relabelled whole or not at all: ISS_137TL_MUTUALEVE001's Telesto frames show Rhea whole on 21 of 22
+    # frames, so none is relabelled (the pass and its colour sets are not split)
+    if "N1662349983_1" in stacking.places(["N1662349983_1"]):
+        assert "N1662349983_1" not in ba.shown_targets()
     view = om.centre_view(FRAME)
     assert view["centre"] and view["pass"][0] == "SATURN", view
     print("N1455663489_1 centred on Saturn:", view["pass"])

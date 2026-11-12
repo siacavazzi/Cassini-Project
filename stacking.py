@@ -97,6 +97,12 @@ def load_index():
         with _index_lock:
             if index is None:
                 idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
+                # a frame that shows another body than the archive's target is grouped with that body's frames, as its
+                # label and places have it (ba.shown_targets)
+                shown = ba.shown_targets()
+                if shown:
+                    ids = [frame_id(p) if isinstance(p, str) else None for p in idx["path"].tolist()]
+                    idx["TARGET_NAME"] = [shown[i][0] if i in shown else t for i, t in zip(ids, idx["TARGET_NAME"].tolist())]
                 # row positions of every camera/target/observation/filter combination, for fast lookup
                 groups = idx.groupby(keys, sort=False).indices
                 columns = {k: idx[k].to_numpy() for k in keys + ["path", "seconds_1970"]}

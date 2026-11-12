@@ -242,7 +242,9 @@ output = target output directory
 def find_target(label,plot,output):
     et = image_et(label)
     frame = camera_frame(label)
-    target = label.info["TARGET_NAME"]
+    # SPICE's own answer for the archive's target (the geometry cache keeps it; the body a frame shows instead is worked
+    # out from it, shown_targets)
+    target = label.info.get("ARCHIVE_TARGET_NAME", label.info["TARGET_NAME"])
     try:
         sp.bodn2c(target) # make sure spice knows the target
     except:
@@ -385,11 +387,6 @@ def cached_target(label):
             return None
         raise ValueError(row[8])
     label.geometry = {"et": row[4], "camera": row[5], "target": row[6], "center": CCD_CENTER, "scale": row[7]}
-    hit = shown_targets().get(frame_id(label))
-    if hit:
-        # a frame that shows another body than its target (shown_targets): that body's place
-        label.geometry["target"] = hit[0]
-        return [hit[1], hit[2], hit[3], row[3]]
     return list(row[:4])
 
 
@@ -467,8 +464,45 @@ as the pipeline draws it (linearized)
 """
 def find_target_cached(label, load_year=None):
     target_loc = cached_target(label)
-    if target_loc is not None:
-        return linearized(label, target_loc)
+    if target_loc is None:
+        if load_year:
+            load_year()
+        try:
+            target_loc = find_target(label, False, "graphs")
+        except Exception as e:
+            if GEOMETRY_CACHE:
+                _store_rows([_row(frame_id(label), error=f"{type(e).__name__}: {e}")])
+            raise
+        if GEOMETRY_CACHE:
+            _store_rows([_row(frame_id(label), target_loc, label.geometry)])
+    return linearized(label, shown_place(label, target_loc))
+
+
+"""
+find_target's answer target_loc for label (the archive's target) made the place of the body the frame shows instead
+(shown_targets; with no cache, worked out here with the frame's kernels loaded, shown_body over bodies_in_frame), with
+label.geometry's target and the label's TARGET_NAME that body. target_loc as it is for a frame that shows its target.
+"""
+def shown_place(label, target_loc):
+    target = label.geometry["target"]
+    if GEOMETRY_CACHE:
+        hit = shown_targets().get(frame_id(label))
+        found = (hit[0], -hit[1], -hit[2], None, hit[3]) if hit else None
+    else:
+        km = _radius_km(target)
+        radius = km / target_loc[2] * label.geometry["scale"] if km and target_loc[2] else None
+        found = None
+        if radius is not None and radius <= SEEN_RADIUS:
+            try:
+                found = shown_body(radius, bodies_in_frame(label.geometry["et"], label.geometry["camera"], target))
+            except Exception:   # noqa: BLE001  (no other body worked out: the frame keeps its target)
+                found = None
+    if not found:
+        return target_loc
+    label.info.setdefault("ARCHIVE_TARGET_NAME", label.info.get("TARGET_NAME"))
+    label.info["TARGET_NAME"] = found[0]
+    label.geometry["target"] = found[0]
+    return [-found[1], -found[2], found[4], target_loc[3]]
     if load_year:
         load_year()
     try:
@@ -684,15 +718,16 @@ def bodies_of(ids):
                 k_ = linear_ratio(camera, scale)
                 got.append((body, x * k_, y * k_, r * k_, km))
     shown = shown_targets()
-    for frame in [f for f in out if f in shown]:
+    moved = [f for f in out if f in shown]
+    if moved:
         # a frame that shows another body than its target (shown_targets) is drawn round that body: the archive's
         # target is one of the others
-        row = db.execute("SELECT target, x, y, z, camera, scale FROM target WHERE frame = ? AND version = ?",
-                         (frame, GEOMETRY_VERSION)).fetchone()
-        target, x, y, z, camera, scale = row
-        k_, km = linear_ratio(camera, scale), _radius_km(target)
-        out[frame] = [b for b in out[frame] if b[0] != shown[frame][0]] + \
-                     [(target, -x * k_, -y * k_, (km / z * scale if km else 0.0) * k_, z)]
+        for frame, target, x, y, z, camera, scale in db.execute(
+                f"SELECT frame, target, x, y, z, camera, scale FROM target WHERE version = ? "
+                f"AND frame IN ({','.join('?' * len(moved))})", (GEOMETRY_VERSION, *moved)):
+            k_, km = linear_ratio(camera, scale), _radius_km(target)
+            out[frame] = [b for b in out[frame] if b[0] != shown[frame][0]] + \
+                         [(target, -x * k_, -y * k_, (km / z * scale if km else 0.0) * k_, z)]
     return out
 
 
@@ -709,7 +744,7 @@ WAC frame, its centre at the edge; Saturn filling the frame behind a moon) keeps
 of the view would be empty, and a smaller body is not what the frame shows. The archive's target is kept as the label's
 ARCHIVE_TARGET_NAME. Read from the geometry cache's target and bodies tables (find_target's and bodies_in_frame's
 answers, which stay SPICE's own for the archive's target), so it needs the bodies table filled. Over the mission
-(2026-11-12) 717 of 407,795 placed frames: 461 on Saturn, the rest on Rhea, Dione, Enceladus, Mimas, Tethys and Titan.
+(2026-11-12) 665 of 407,795 placed frames: most on Saturn, the rest on Rhea, Dione, Enceladus, Mimas, Tethys and Titan.
 """
 SEEN_RADIUS = 2.0     # px: a disk this small is a dot (a cosmic ray hit or a star is as big); nothing to centre on
 SHOWN_RADIUS = 12.0   # px: a disk at least this big (24 px across) is a body the picture shows (an 8 px moon in a
@@ -731,49 +766,88 @@ def shown_body(radius, others):
 
 
 def _radius_km(target):
-    """The target's mean radius (km): the frame server's table (obs_mosaic.RADIUS), else SPICE's, else None."""
+    """The target's mean radius (km): the frame server's table (obs_mosaic.RADIUS) where it has the target, else
+    SPICE's (kernels loaded), else None, the same in the frame server and the batch pipeline."""
     try:
         import obs_mosaic
-        return obs_mosaic.RADIUS.get(target)
+        km = obs_mosaic.RADIUS.get(target)
     except ImportError:
-        try:
-            return _mean_radius(sp.bodn2c(target))
-        except Exception:   # noqa: BLE001  (no kernels loaded, or a target SPICE does not know: no size)
-            return None
+        km = None
+    if km:
+        return km
+    try:
+        return _mean_radius(sp.bodn2c(target))
+    except Exception:   # noqa: BLE001  (no kernels loaded, or a target SPICE does not know: no size)
+        return None
 
 
-_shown = None
+_shown = None          # (bodies table's size, answer)
+_shown_checked = 0.0
 _shown_lock = threading.Lock()
+SHOWN_RECHECK = 60     # s between looks at whether the bodies table grew (a cache filled while a server runs)
+
+
+def _index_groups():
+    """{frame: (archive target, observation, camera)} from Image_index.csv."""
+    import pandas as pd
+    index = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "Image_index.csv"),
+                        usecols=["path", "TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], low_memory=False)
+    index = index[index["path"].notna()]
+    ids = [p.rsplit("/", 1)[-1].split(".")[0] for p in index["path"].tolist()]
+    return dict(zip(ids, zip(index["TARGET_NAME"].tolist(), index["OBSERVATION_ID"].tolist(),
+                             index["INSTRUMENT_ID"].tolist())))
 
 
 def shown_targets():
     """{frame: (body, x, y, z)} for every frame of the geometry cache that shows another body than its target
     (shown_body): the body, the shift that centres it (find_target's x, y, SPICE's own pixels) and its distance (km).
-    Read once (the bodies table is filled ahead, a frame's answer never changes)."""
-    global _shown
-    if _shown is not None:
-        return _shown
+    Decided for each observation's frames of one archive target and camera together (a pass): all of them that SPICE
+    places show the same body, or none is relabelled, so a sweep that cuts Saturn on some frames is never split into
+    two passes nor its colour sets broken (15 such groups, 52 frames, over the mission). Read again when the bodies
+    table has grown (looked at every SHOWN_RECHECK s), so a server started before it was filled agrees with a later
+    pre-build."""
+    global _shown, _shown_checked
+    import time
+    if _shown is not None and time.monotonic() - _shown_checked < SHOWN_RECHECK:
+        return _shown[1]
     with _shown_lock:
-        if _shown is None:
-            out = {}
-            if GEOMETRY_CACHE and os.path.exists(GEOMETRY_CACHE):
-                db = _bodies_db()
-                rows = {}
-                for frame, target, z, scale, body, x, y, r, km in db.execute(
-                        "SELECT t.frame, t.target, t.z, t.scale, b.body, b.x, b.y, b.r, b.km FROM bodies b JOIN target t "
-                        "ON t.frame = b.frame AND t.version = ? WHERE b.version = ? AND t.error IS NULL AND b.r >= ?",
-                        (GEOMETRY_VERSION, BODIES_VERSION, SHOWN_RADIUS)):
-                    rows.setdefault(frame, [target, z, scale, []])[3].append((body, x, y, r, km))
-                sizes = {}
-                for frame, (target, z, scale, others) in rows.items():
-                    if target not in sizes:
-                        sizes[target] = _radius_km(target)
-                    km = sizes[target]
-                    found = shown_body(km / z * scale if km and z and scale else None, others)
-                    if found:
-                        out[frame] = (found[0], -found[1], -found[2], found[4])
-            _shown = out
-    return _shown
+        if _shown is not None and time.monotonic() - _shown_checked < SHOWN_RECHECK:
+            return _shown[1]
+        if not GEOMETRY_CACHE or not os.path.exists(GEOMETRY_CACHE):
+            return {}
+        db = _bodies_db()
+        size = db.execute("SELECT max(rowid) FROM bodies").fetchone()[0] or 0
+        _shown_checked = time.monotonic()
+        if _shown is not None and _shown[0] == size:
+            return _shown[1]
+        rows = {}
+        for frame, target, z, scale, body, x, y, r, km in db.execute(
+                "SELECT t.frame, t.target, t.z, t.scale, b.body, b.x, b.y, b.r, b.km FROM bodies b JOIN target t "
+                "ON t.frame = b.frame AND t.version = ? WHERE b.version = ? AND t.error IS NULL AND b.r >= ?",
+                (GEOMETRY_VERSION, BODIES_VERSION, SHOWN_RADIUS)):
+            rows.setdefault(frame, [target, z, scale, []])[3].append((body, x, y, r, km))
+        found, sizes = {}, {}
+        for frame, (target, z, scale, others) in rows.items():
+            if target not in sizes:
+                sizes[target] = _radius_km(target)
+            km = sizes[target]
+            hit = shown_body(km / z * scale if km and z and scale else None, others)
+            if hit:
+                found[frame] = (hit[0], -hit[1], -hit[2], hit[4])
+        out = {}
+        if found:
+            group = _index_groups()
+            placed = {f for f, in db.execute("SELECT frame FROM target WHERE version = ? AND error IS NULL",
+                                             (GEOMETRY_VERSION,))}
+            members = {}
+            for f, g in group.items():
+                members.setdefault(g, []).append(f)
+            for g in {group.get(f) for f in found}:
+                frames = [f for f in members.get(g, ()) if f in placed]
+                if frames and all(f in found for f in frames) and len({found[f][0] for f in frames}) == 1:
+                    out.update((f, found[f]) for f in frames)
+        _shown = (size, out)
+        return out
 
 
 def relabel(label):
