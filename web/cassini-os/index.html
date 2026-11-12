@@ -9286,12 +9286,24 @@ function targetLabel(k) {
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
+  // a mosaic still behind its frame (X-Reel "behind": the tiles made so far, the rest still being made) is asked for
+  // again until it is finished, as the server's film waits (export.Pictures.finished_mosaic), for up to MOSAIC_WAIT;
+  // then the next try stands in, as there
+  const MOSAIC_WAIT = 900e3;
+  const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
   async function fetchPicture(url, stop) {
-    for (let wait = 500; !stop.done; wait = Math.min(4000, wait * 1.5)) {
+    const t0 = Date.now();
+    for (let wait = 500, again = false; !stop.done; wait = Math.min(4000, wait * 1.5)) {
       let r;
-      try { r = await fetch(url); } catch (e) { await sleep(wait); continue; }
+      try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (e) { await sleep(wait); continue; }
       if (r.status === 503 || r.status === 429) { await sleep(wait); continue; }
       if (!r.ok) return null;
+      if (behind(r)) {
+        if (Date.now() - t0 >= MOSAIC_WAIT) return null;
+        again = true;
+        await sleep(wait);
+        continue;
+      }
       try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
     }
     return null;
@@ -14052,7 +14064,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b07d58e24846";
+  const BUILD = /*BUILD*/"9f69c3aa50fa";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
