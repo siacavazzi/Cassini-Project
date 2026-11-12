@@ -3875,7 +3875,9 @@ onmessage = async e => {
         // no exposure= frames of it (prebuild.make_evened made them only for the passes it does not); a table the
         // public site does not have says nothing either way
         if (!t.missing) evened.set(k, !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets)));
-        if (!t.local) { byId.set(k, null); drawn.add(k); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
+        // (public: no table published means the frame is in no movie pass, policy.json steady_table, so it has no movie
+        // picture either; {"local": false} is a pass the server drew whole)
+        if (!t.local) { byId.set(k, null); if (!t.missing) drawn.add(k); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
         const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
         work().postMessage({ key, table: t });
         t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
@@ -3895,8 +3897,8 @@ onmessage = async e => {
     // window asks the frame as drawn (exposure 0), which every pass has, never an exposure= variant
     // with the public switch on: whether frame id has a movie picture, as far as its pass's colour table says: true (a
     // frame the table places, or a pass the server draws, whose table lists no frames), false (a frame of a local pass
-    // SPICE could not place: prebuild.make_pass made no movie picture of it) or undefined (the table is not here yet,
-    // asked for now)
+    // SPICE could not place, prebuild.make_pass made no movie picture of it, or a frame in no movie pass: no table) or
+    // undefined (the table is not here yet, asked for now)
     placed(frames, id, center = true) {
       const k = `${tag(center, true)}:${id}`;
       if (byId.has(k)) return byId.get(k) ? true : drawn.has(k);
@@ -14073,7 +14075,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e22f4db04882";
+  const BUILD = /*BUILD*/"febcc3682fea";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
