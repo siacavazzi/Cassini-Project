@@ -63,6 +63,8 @@ function classify(r) {
     if (ans.refused) out.verdict = "refused";
     else if (r.status === 404 && r.headers["x-center"]) out.verdict = "marker";
     else if (r.status === 404 && ans.route && PROBE.has(ans.route)) out.verdict = "probe";
+    // the page cancelled it itself (an AbortController, an <img> whose src moved on): nothing was missing
+    else if (r.failed === "net::ERR_ABORTED") out.verdict = "aborted";
     else if (r.failed || r.status >= 400 || r.status === 0) out.verdict = "miss";
     else out.verdict = "ok";
     return out;
@@ -73,7 +75,7 @@ function classify(r) {
 }
 
 function summarize(reqs) {
-  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, probe: 0, cdn: 0, other_hosts: 0, bytes: 0 };
+  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, aborted: 0, marker: 0, probe: 0, cdn: 0, other_hosts: 0, bytes: 0 };
   const byRoute = {}, refusedWhy = {}, missRoutes = {}, otherHosts = {};
   for (const r of reqs) {
     const k = r.k;
@@ -89,6 +91,7 @@ function summarize(reqs) {
       if (k.verdict === "miss") { c.miss++; missRoutes[k.route || "(no route)"] = (missRoutes[k.route || "(no route)"] || 0) + 1; }
       if (k.verdict === "marker") c.marker++;
       if (k.verdict === "probe") c.probe++;
+      if (k.verdict === "aborted") c.aborted++;
     }
   }
   return { counts: c, by_route: byRoute, refused_why: refusedWhy, miss_routes: missRoutes, other_hosts: otherHosts };
@@ -110,6 +113,9 @@ for (const s of sessions) {
     r.headers = Object.fromEntries(Object.entries(r.headers || {}).filter(([k]) => /^x-|^content-type$/.test(k)));
     reqs.push(r);
   });
+  // an answer whose body the page never reads (a 404 it only checks .ok of) has no requestfinished: its status and
+  // headers are kept when they come, so the request is counted, and idle() does not wait on it
+  page.on("response", async res => { const r = live.get(res.request()); if (!r) return; r.status = res.status(); r.answered = true; try { r.headers = await res.allHeaders(); } catch (e) {} });
   page.on("requestfailed", q => { const r = live.get(q); if (!r) return; live.delete(q); r.failed = q.failure() ? q.failure().errorText : "failed"; r.status = 0; reqs.push(r); });
   const h = {
     site, frames, minutes, page, ctx, browser,
@@ -125,6 +131,13 @@ for (const s of sessions) {
       h.step(`opened ${new URLSearchParams(q).toString()}`);
     },
     wait: ms => page.waitForTimeout(ms),
+    // until no request has been in flight for `quiet` ms (at most `cap` ms): a step's pictures asked and answered
+    async idle(quiet = 400, cap = 8000) {
+      const end = Date.now() + cap; let since = Date.now();
+      while (Date.now() < end) { await page.waitForTimeout(100); if ([...live.values()].some(r => !r.answered)) since = Date.now(); else if (Date.now() - since >= quiet) return true; }
+      if (process.env.HARNESS_DEBUG_IDLE) console.log("still live:", [...live.values()].filter(r => !r.answered).map(r => `${Math.round((Date.now() - r.t) / 1000)}s ${r.type} ${r.url.slice(0, 140)}`).join("\n  "));
+      return false;
+    },
     step: text => steps.push({ t: Date.now(), text }),
     skip: (text, owner) => steps.push({ t: Date.now(), skipped: true, text, owner }),
     // the first of these moments inside what the cache holds (/frames/slices.json spans; null: the whole mission)
@@ -141,6 +154,8 @@ for (const s of sessions) {
   // a blank page first, on the site's origin, so moment() can ask the frames host before the session opens a moment
   try { await page.goto(`${site}/robots.txt`).catch(() => {}); await s.run(h); } catch (e) { error = String(e && e.stack || e).slice(0, 2000); }
   await page.waitForTimeout(1500);
+  for (const r of live.values()) if (r.answered) { r.headers = Object.fromEntries(Object.entries(r.headers || {}).filter(([k]) => /^x-|^content-type$/.test(k))); r.unread = true; reqs.push(r); }
+  live.clear();
   for (const r of reqs) r.k = classify(r);
   const sum = summarize(reqs);
   const out = { session: s.id, title: s.title, proves: s.proves, mode, site, frames, seconds: Math.round((Date.now() - t0) / 1000), error, steps, ...sum };
@@ -150,7 +165,7 @@ for (const s of sessions) {
     fs.writeFileSync(path.join(args.out, `${s.id}.json`), JSON.stringify({ ...out, requests: reqs }, null, 1));
   }
   const c = sum.counts;
-  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
+  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  aborted ${String(c.aborted).padStart(3)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
   await ctx.close();
 }
 await browser.close();
