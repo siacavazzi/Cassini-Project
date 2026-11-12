@@ -62,6 +62,8 @@ def test_guard():
                            capture_output=True, text=True)
     check("entered" in first.stdout, f"cache_only works before anything imported frame_server ({first.stderr[-300:]})")
     import resolve
+    check(resolve.resolve("/frames/N1500060789_2.webp", {}, tempfile.mkdtemp()).kind == "none",
+          "resolve() answers none on an empty cache")
     d = tempfile.mkdtemp()
     stopped = []
     for name, act in [
