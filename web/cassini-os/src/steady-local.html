@@ -522,17 +522,29 @@ onmessage = async e => {
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
   }
-  const blob = await out.convertToBlob({ type: "image/png" });
+  // (WebP for a picture kept ahead, Pre-process in the Movie Editor: a tenth of the PNG's size, so a long stretch's
+  // pictures fit in memory; PNG for a picture shown at once)
+  const blob = await out.convertToBlob(m.webp ? { type: "image/webp", quality: 0.95 } : { type: "image/png" });
   postMessage({ id: m.id, blob, moves, gain, ms: [t1 - t0, performance.now() - t1] });
 };`;
-  let worker = null, seq = 0;
+  // the workers: one per core but one (up to 12), each frame to the least busy, so a Pre-process (the Movie Editor's,
+  // made in this browser) works out a stretch's frames side by side instead of one at a time; a pass's table goes
+  // to a worker the first time it is given one of its frames
+  const POOL = Math.max(1, Math.min(12, (navigator.hardwareConcurrency || 4) - 1));
+  const workers = [], tablesOf = new Map();   // pass key -> its table
+  let seq = 0;
   const waiting = new Map();
-  const work = () => {
-    if (!worker) {
-      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
-      worker.onmessage = e => { const w = waiting.get(e.data.id); waiting.delete(e.data.id); if (w) w(e.data); };
+  const work = key => {
+    if (workers.length < POOL && (!workers.length || workers.every(w => w.busy))) {
+      const w = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      Object.assign(w, { busy: 0, keys: new Set() });
+      w.onmessage = e => { w.busy--; const f = waiting.get(e.data.id); waiting.delete(e.data.id); if (f) f(e.data); };
+      workers.push(w);
     }
-    return worker;
+    const w = workers.reduce((a, b) => (b.busy < a.busy ? b : a));
+    if (key && !w.keys.has(key)) { w.keys.add(key); w.postMessage({ key, table: tablesOf.get(key) }); }
+    w.busy++;
+    return w;
   };
   const S = () => window.cassiniSettings;
   // whether this computer can blur on the GPU (the detail filter of filled passes), asked once
@@ -564,7 +576,8 @@ onmessage = async e => {
         // picture either; {"local": false} is a pass the server drew whole)
         if (!t.local) { byId.set(k, null); if (!t.missing) drawn.add(k); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
         const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
-        work().postMessage({ key, table: t });
+        tablesOf.set(key, t);
+        for (const w of workers) w.keys.delete(key);   // (a table asked again: each worker is given the new one)
         t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
         if (!byId.has(k)) byId.set(k, null);   // a frame SPICE could not place: the server shows it
         // the camera windows ask again (a paused clock would keep the server's picture otherwise)
@@ -656,8 +669,10 @@ onmessage = async e => {
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
+      const r = await new Promise(res => { waiting.set(mid, res); work(e.key).postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, webp: !!o.blob, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
+      // o.blob: the picture itself (WebP), to keep (the Movie Editor's Pre-process)
+      if (o.blob) return r.blob;
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
@@ -710,6 +725,8 @@ onmessage = async e => {
       const c = document.createElement("canvas"); c.width = W; c.height = H;
       const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
       const d = g.getImageData(0, 0, W, H); M.applyLight(d.data, L); g.putImageData(d, 0, 0);
+      stats.fades = (stats.fades || 0) + (o.blob ? 1 : 0);
+      if (o.blob) return await new Promise(r => c.toBlob(r, "image/webp", 0.95));   // (to keep: the Movie Editor's Pre-process)
       const out = new Image(), blob = await new Promise(r => c.toBlob(r, "image/png")), url = URL.createObjectURL(blob);
       urls.push(url);
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());

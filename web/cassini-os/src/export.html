@@ -524,13 +524,13 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     return publicUrl(`${onHost(src)}${sep}size=${size}${look}`);
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
+  // a picture's file, waited for while the server makes it (503), as the server's own export waits; null when there is none
   // a mosaic still behind its frame (X-Reel "behind": the tiles made so far, the rest still being made) is asked for
   // again until it is finished, as the server's film waits (export.Pictures.finished_mosaic), for up to MOSAIC_WAIT;
   // then the next try stands in, as there
   const MOSAIC_WAIT = 900e3;
   const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
-  async function fetchPicture(url, stop) {
+  async function fetchBlob(url, stop) {
     const t0 = Date.now();
     for (let wait = 500, again = false; !stop.done; wait = Math.min(4000, wait * 1.5)) {
       let r;
@@ -543,12 +543,17 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         await sleep(wait);
         continue;
       }
-      try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
+      try { return await r.blob(); } catch (e) { return null; }
     }
     return null;
   }
+  async function fetchPicture(url, stop) {
+    const b = await fetchBlob(url, stop);
+    try { return b ? await createImageBitmap(b) : null; } catch (e) { return null; }
+  }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
-  async function movieHere(id, size, stop, center = centreOn()) {
+  // asBlob: the picture's file (WebP), to keep (pictures kept ahead, below), instead of a bitmap
+  async function movieHere(id, size, stop, center = centreOn(), asBlob = false) {
     const SL = window.cassiniSteadyLocal;
     // (the steps are worked out on the 1024 px planes; on the public site, where the server bakes in none of them, a
     // smaller film takes the 1024 px picture too, and Film.put fits it to the pane)
@@ -561,24 +566,56 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
-    const out = await SL.apply(FRAMES, id, im, Object.assign({ center, color: true, planeUrl: base }, w)).catch(() => null);
+    const out = await SL.apply(FRAMES, id, im, Object.assign({ center, color: true, planeUrl: base, blob: !!asBlob }, w)).catch(() => null);
     URL.revokeObjectURL(u);
-    return out ? createImageBitmap(out) : null;
+    return out ? (asBlob ? out : createImageBitmap(out)) : null;
   }
   // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
-  async function rollingHere(id, size, stop, center = centreOn()) {
+  async function rollingHere(id, size, stop, center = centreOn(), asBlob = false) {
     const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
-    const out = await FL.apply(FRAMES, id, im, fh).catch(() => null);
+    const out = await FL.apply(FRAMES, id, im, Object.assign({ blob: !!asBlob }, fh)).catch(() => null);
     URL.revokeObjectURL(u);
-    return out ? createImageBitmap(out) : null;
+    return out ? (asBlob ? out : createImageBitmap(out)) : null;
   }
+  // ---------- pictures kept ahead in this browser: the Movie Editor's Pre-process (movieedit.html) makes every
+  // picture of a stretch here before it plays, as the film made here would (the movie steps worked out here, the
+  // rest fetched from the frame server's cache), and keeps each as its file; the editor shows them and a film made
+  // here takes them. Named by every address the entry's pictures would have (look, movie style, centering, size), so
+  // a setting changed since is a new picture. Up to KEEP_BYTES, the oldest let go past it.
+  const KEEP_BYTES = 1.2e9, keptFiles = new Map();
+  let keptBytes = 0;
+  const keyOf = (e, size, cut) => `${size}|${e.id}|${(e.tries || [["frame", e.src]]).map(([k, s]) => pictureUrl(k, s, size, false, cut)).join(" ")}`;
+  function keep(k, v) {
+    if (keptFiles.has(k)) return;
+    keptFiles.set(k, v); keptBytes += v.blob.size;
+    for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; }
+  }
+  // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null
+  async function fileOf(e, size, stop) {
+    const k = keyOf(e, size);
+    if (keptFiles.has(k)) return keptFiles.get(k);
+    for (const [kind, src] of e.tries || []) {
+      let here = true, blob = kind === "movie" ? await movieHere(e.id, size, stop, centreOn(), true) : kind === "rolling" ? await rollingHere(e.id, size, stop, centreOn(), true) : null;
+      if (!blob) {
+        here = false;
+        blob = await fetchBlob(pictureUrl(kind, src, size), stop)
+          || (pictureUrl(kind, src, size, true) !== pictureUrl(kind, src, size) ? await fetchBlob(pictureUrl(kind, src, size, true), stop) : null);
+      }
+      if (blob) { const v = { blob, what: WHAT[kind], here }; keep(k, v); return v; }
+    }
+    return null;
+  }
+  window.cassiniPicturesHere = { fileOf, kept: (e, size) => keptFiles.get(keyOf(e, size)) || null, forget: () => { keptFiles.clear(); keptBytes = 0; },
+    get bytes() { return keptBytes; }, get count() { return keptFiles.size; } };
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop, cut) {
+    const kp = keptFiles.get(keyOf(e, size, cut));
+    if (kp) { try { return { bmp: await createImageBitmap(kp.blob), what: kp.what }; } catch (err) {} }
     for (const [kind, src] of e.tries) {
       const center = centreOn(cut);
       const bmp = (kind === "movie" ? await movieHere(e.id, size, stop, center) : kind === "rolling" ? await rollingHere(e.id, size, stop, center) : null) || await fetchPicture(pictureUrl(kind, src, size, false, cut), stop)

@@ -3840,17 +3840,29 @@ onmessage = async e => {
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
   }
-  const blob = await out.convertToBlob({ type: "image/png" });
+  // (WebP for a picture kept ahead, Pre-process in the Movie Editor: a tenth of the PNG's size, so a long stretch's
+  // pictures fit in memory; PNG for a picture shown at once)
+  const blob = await out.convertToBlob(m.webp ? { type: "image/webp", quality: 0.95 } : { type: "image/png" });
   postMessage({ id: m.id, blob, moves, gain, ms: [t1 - t0, performance.now() - t1] });
 };`;
-  let worker = null, seq = 0;
+  // the workers: one per core but one (up to 12), each frame to the least busy, so a Pre-process (the Movie Editor's,
+  // made in this browser) works out a stretch's frames side by side instead of one at a time; a pass's table goes
+  // to a worker the first time it is given one of its frames
+  const POOL = Math.max(1, Math.min(12, (navigator.hardwareConcurrency || 4) - 1));
+  const workers = [], tablesOf = new Map();   // pass key -> its table
+  let seq = 0;
   const waiting = new Map();
-  const work = () => {
-    if (!worker) {
-      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
-      worker.onmessage = e => { const w = waiting.get(e.data.id); waiting.delete(e.data.id); if (w) w(e.data); };
+  const work = key => {
+    if (workers.length < POOL && (!workers.length || workers.every(w => w.busy))) {
+      const w = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      Object.assign(w, { busy: 0, keys: new Set() });
+      w.onmessage = e => { w.busy--; const f = waiting.get(e.data.id); waiting.delete(e.data.id); if (f) f(e.data); };
+      workers.push(w);
     }
-    return worker;
+    const w = workers.reduce((a, b) => (b.busy < a.busy ? b : a));
+    if (key && !w.keys.has(key)) { w.keys.add(key); w.postMessage({ key, table: tablesOf.get(key) }); }
+    w.busy++;
+    return w;
   };
   const S = () => window.cassiniSettings;
   // whether this computer can blur on the GPU (the detail filter of filled passes), asked once
@@ -3882,7 +3894,8 @@ onmessage = async e => {
         // picture either; {"local": false} is a pass the server drew whole)
         if (!t.local) { byId.set(k, null); if (!t.missing) drawn.add(k); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
         const key = `${tag(center, color)}:${t.ids[t.n[0]]}`;
-        work().postMessage({ key, table: t });
+        tablesOf.set(key, t);
+        for (const w of workers) w.keys.delete(key);   // (a table asked again: each worker is given the new one)
         t.n.forEach((n, a) => byId.set(`${tag(center, color)}:${t.ids[n]}`, { key, table: t, a, n }));
         if (!byId.has(k)) byId.set(k, null);   // a frame SPICE could not place: the server shows it
         // the camera windows ask again (a paused clock would keep the server's picture otherwise)
@@ -3974,8 +3987,10 @@ onmessage = async e => {
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
+      const r = await new Promise(res => { waiting.set(mid, res); work(e.key).postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, webp: !!o.blob, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
+      // o.blob: the picture itself (WebP), to keep (the Movie Editor's Pre-process)
+      if (o.blob) return r.blob;
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
@@ -4028,6 +4043,8 @@ onmessage = async e => {
       const c = document.createElement("canvas"); c.width = W; c.height = H;
       const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(im, 0, 0);
       const d = g.getImageData(0, 0, W, H); M.applyLight(d.data, L); g.putImageData(d, 0, 0);
+      stats.fades = (stats.fades || 0) + (o.blob ? 1 : 0);
+      if (o.blob) return await new Promise(r => c.toBlob(r, "image/webp", 0.95));   // (to keep: the Movie Editor's Pre-process)
       const out = new Image(), blob = await new Promise(r => c.toBlob(r, "image/png")), url = URL.createObjectURL(blob);
       urls.push(url);
       if (urls.length > 8) URL.revokeObjectURL(urls.shift());
@@ -10215,13 +10232,13 @@ function targetLabel(k) {
     return publicUrl(`${onHost(src)}${sep}size=${size}${look}`);
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
+  // a picture's file, waited for while the server makes it (503), as the server's own export waits; null when there is none
   // a mosaic still behind its frame (X-Reel "behind": the tiles made so far, the rest still being made) is asked for
   // again until it is finished, as the server's film waits (export.Pictures.finished_mosaic), for up to MOSAIC_WAIT;
   // then the next try stands in, as there
   const MOSAIC_WAIT = 900e3;
   const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
-  async function fetchPicture(url, stop) {
+  async function fetchBlob(url, stop) {
     const t0 = Date.now();
     for (let wait = 500, again = false; !stop.done; wait = Math.min(4000, wait * 1.5)) {
       let r;
@@ -10234,12 +10251,17 @@ function targetLabel(k) {
         await sleep(wait);
         continue;
       }
-      try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
+      try { return await r.blob(); } catch (e) { return null; }
     }
     return null;
   }
+  async function fetchPicture(url, stop) {
+    const b = await fetchBlob(url, stop);
+    try { return b ? await createImageBitmap(b) : null; } catch (e) { return null; }
+  }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
-  async function movieHere(id, size, stop, center = centreOn()) {
+  // asBlob: the picture's file (WebP), to keep (pictures kept ahead, below), instead of a bitmap
+  async function movieHere(id, size, stop, center = centreOn(), asBlob = false) {
     const SL = window.cassiniSteadyLocal;
     // (the steps are worked out on the 1024 px planes; on the public site, where the server bakes in none of them, a
     // smaller film takes the 1024 px picture too, and Film.put fits it to the pane)
@@ -10252,24 +10274,56 @@ function targetLabel(k) {
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
-    const out = await SL.apply(FRAMES, id, im, Object.assign({ center, color: true, planeUrl: base }, w)).catch(() => null);
+    const out = await SL.apply(FRAMES, id, im, Object.assign({ center, color: true, planeUrl: base, blob: !!asBlob }, w)).catch(() => null);
     URL.revokeObjectURL(u);
-    return out ? createImageBitmap(out) : null;
+    return out ? (asBlob ? out : createImageBitmap(out)) : null;
   }
   // a mosaic movie frame whose fade this computer works out (steady-local.html): the time-lapse picture, dimmed
-  async function rollingHere(id, size, stop, center = centreOn()) {
+  async function rollingHere(id, size, stop, center = centreOn(), asBlob = false) {
     const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
     const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
-    const out = await FL.apply(FRAMES, id, im, fh).catch(() => null);
+    const out = await FL.apply(FRAMES, id, im, Object.assign({ blob: !!asBlob }, fh)).catch(() => null);
     URL.revokeObjectURL(u);
-    return out ? createImageBitmap(out) : null;
+    return out ? (asBlob ? out : createImageBitmap(out)) : null;
   }
+  // ---------- pictures kept ahead in this browser: the Movie Editor's Pre-process (movieedit.html) makes every
+  // picture of a stretch here before it plays, as the film made here would (the movie steps worked out here, the
+  // rest fetched from the frame server's cache), and keeps each as its file; the editor shows them and a film made
+  // here takes them. Named by every address the entry's pictures would have (look, movie style, centering, size), so
+  // a setting changed since is a new picture. Up to KEEP_BYTES, the oldest let go past it.
+  const KEEP_BYTES = 1.2e9, keptFiles = new Map();
+  let keptBytes = 0;
+  const keyOf = (e, size, cut) => `${size}|${e.id}|${(e.tries || [["frame", e.src]]).map(([k, s]) => pictureUrl(k, s, size, false, cut)).join(" ")}`;
+  function keep(k, v) {
+    if (keptFiles.has(k)) return;
+    keptFiles.set(k, v); keptBytes += v.blob.size;
+    for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; }
+  }
+  // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null
+  async function fileOf(e, size, stop) {
+    const k = keyOf(e, size);
+    if (keptFiles.has(k)) return keptFiles.get(k);
+    for (const [kind, src] of e.tries || []) {
+      let here = true, blob = kind === "movie" ? await movieHere(e.id, size, stop, centreOn(), true) : kind === "rolling" ? await rollingHere(e.id, size, stop, centreOn(), true) : null;
+      if (!blob) {
+        here = false;
+        blob = await fetchBlob(pictureUrl(kind, src, size), stop)
+          || (pictureUrl(kind, src, size, true) !== pictureUrl(kind, src, size) ? await fetchBlob(pictureUrl(kind, src, size, true), stop) : null);
+      }
+      if (blob) { const v = { blob, what: WHAT[kind], here }; keep(k, v); return v; }
+    }
+    return null;
+  }
+  window.cassiniPicturesHere = { fileOf, kept: (e, size) => keptFiles.get(keyOf(e, size)) || null, forget: () => { keptFiles.clear(); keptBytes = 0; },
+    get bytes() { return keptBytes; }, get count() { return keptFiles.size; } };
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop, cut) {
+    const kp = keptFiles.get(keyOf(e, size, cut));
+    if (kp) { try { return { bmp: await createImageBitmap(kp.blob), what: kp.what }; } catch (err) {} }
     for (const [kind, src] of e.tries) {
       const center = centreOn(cut);
       const bmp = (kind === "movie" ? await movieHere(e.id, size, stop, center) : kind === "rolling" ? await rollingHere(e.id, size, stop, center) : null) || await fetchPicture(pictureUrl(kind, src, size, false, cut), stop)
@@ -13015,6 +13069,10 @@ void main() {
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
   const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
   function thumb(img, e) {
+    // (a picture made in this browser: itself)
+    const PH = here(), f = PH && e.tries ? PH.kept(e, 1024) : null;
+    if (img.dataset.kept && (!f || img.dataset.keptOf !== e.id)) { URL.revokeObjectURL(img.dataset.kept); delete img.dataset.kept; }
+    if (f) { if (!img.dataset.kept) { img.onerror = null; img.dataset.kept = URL.createObjectURL(f.blob); img.dataset.keptOf = e.id; img.src = img.dataset.kept; } return; }
     const urls = thumbTries(e).map(pub); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
     if (img.getAttribute("src") !== urls[0]) img.src = urls[0];
@@ -13175,7 +13233,16 @@ void main() {
     // the picture the film shows; one that cannot be centered as it is, and one that cannot be made the raw frame, as in the film
     shown = null;
     const urls = tries(e, 1024); let got = -1;
-    for (const url of urls) {
+    // made in this browser (the Pre-process here, or now): the picture the film made here shows
+    const PH = here();
+    if (PH && e.tries) {
+      try {
+        const f = PH.kept(e, 1024) || await PH.fileOf(e, 1024, { done: false });
+        if (n !== drawn) return;
+        if (f) { shown = await createImageBitmap(f.blob); got = 0; }
+      } catch (err) { if (n !== drawn) return; }
+    }
+    if (!shown) for (const url of urls) {
       try { shown = await bitmap(url); got = urls.indexOf(url); break; } catch (err) { if (n !== drawn) return; }
     }
     if (n !== drawn) return;
@@ -13312,7 +13379,11 @@ void main() {
     ME.sel = next; ME.picked = new Set(); ME.none = false; stripState();
     const el = $("mestrip").querySelector(`.meth[data-i="${next}"]`); if (el) el.scrollIntoView({ block: "nearest" });
     // the next few, asked for ahead
-    let ahead = next; for (let n = 0; n < 4; n++) { ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break; bitmap(picUrl(ME.frames[ahead], 1024)); }
+    let ahead = next; for (let n = 0; n < 4; n++) {
+      ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break;
+      const PH = here(), e = ME.frames[ahead];
+      if (PH && e.tries) { if (!PH.kept(e, 1024)) PH.fileOf(e, 1024, { done: false }).catch(() => {}); } else bitmap(picUrl(e, 1024));
+    }
     await show();
     playT = setTimeout(tick, Math.max(0, 1000 / fps - (performance.now() - at)));
   }
@@ -13804,8 +13875,55 @@ void main() {
     // (the words tick on while the frame server is busy: how long it has been at each step)
     clearInterval(begin.tick); begin.tick = setInterval(() => { if (L !== me || !card.classList.contains("loading")) clearInterval(begin.tick); else loadUi(); }, 1000);
     load().then(() => { if (L !== me) return; me.plan = true; me.planTook = (performance.now() - me.planAt) / 1000; me.makeAt = performance.now(); loadUi(); ready(); });
-    if (window.cassiniSegment && cassiniSegment.make) me.maker = cassiniSegment.make(ME.a, ME.b, j => { if (L !== me) return; me.job = j; loadUi(); prepUi(); ready(); });
+    const tell = j => { if (L !== me) return; me.job = j; loadUi(); prepUi(); ready(); };
+    if (here()) me.maker = prepHere(me, tell);
+    else if (window.cassiniSegment && cassiniSegment.make) me.maker = cassiniSegment.make(ME.a, ME.b, tell);
     else me.job = { state: "failed", unsupported: true };
+  }
+  // ---------- Pre-process in this browser: every picture of the stretch made here before it plays ----------
+  // The film made on this computer's pictures (export.html cassiniPicturesHere: the movie steps worked out here, on
+  // the frames the frame server keeps; every other picture fetched from its cache), made PREP_AT_ONCE at a time in
+  // time order and kept, so the editor and the film play them at once. The frame server draws nothing for it (on a
+  // home server a picture its cache lacks is still made when fetched); before, the server made the stretch's
+  // pictures itself, a pass's frames one at a time, and its bar spent most of its time on the last 10 to 15%
+  // (2026-11-12). Answers { stop() }; update(job) hears { state, done, total, frames, eta, took, errors, here }.
+  const here = () => (window.cassiniPicturesHere && ME.src !== "raw" ? window.cassiniPicturesHere : null);
+  const PREP_AT_ONCE = Math.max(4, Math.min(24, 2 * (navigator.hardwareConcurrency || 4)));
+  function prepHere(me, update) {
+    const stop = { done: false }, job = { state: "planning", done: 0, total: 0, frames: 0, errors: 0, took: null, here: true };
+    const t0 = performance.now(), recent = [];
+    let told = 0;
+    const tell = force => {
+      const now = performance.now();
+      if (!force && now - told < 250) return;
+      told = now;
+      // the time left from the pace of the last 20 s (once 4 s of it are in)
+      while (recent.length > 1 && recent[0][0] < now - 20000) recent.shift();
+      const r0 = recent[0], r1 = recent[recent.length - 1];
+      job.eta = job.state === "making" && r0 && r1[0] - r0[0] > 4000 && r1[1] > r0[1] ? (job.total - job.done) / ((r1[1] - r0[1]) / ((r1[0] - r0[0]) / 1000)) : null;
+      update({ ...job });
+    };
+    (async () => {
+      tell(true);
+      while (!me.plan && !stop.done) await new Promise(r => setTimeout(r, 100));
+      if (stop.done) return;
+      const PH = here(), todo = PH ? ME.frames.filter(e => kept(e) && e.tries) : [];
+      Object.assign(job, { state: "making", total: todo.length, frames: todo.length });
+      recent.push([performance.now(), 0]); tell(true);
+      let i = 0;
+      const one = async () => {
+        while (i < todo.length && !stop.done) {
+          const e = todo[i++];
+          try { if (!await PH.fileOf(e, 1024, stop)) job.errors++; } catch (err) { job.errors++; }
+          job.done++; recent.push([performance.now(), job.done]); tell();
+        }
+      };
+      await Promise.all(Array.from({ length: PREP_AT_ONCE }, one));
+      if (stop.done) return;
+      Object.assign(job, { state: "done", took: (performance.now() - t0) / 1000, eta: null }); tell(true);
+      thumbs();
+    })();
+    return { stop() { if (stop.done) return; stop.done = true; Object.assign(job, { state: "stopped", eta: null }); update({ ...job }); } };
   }
   const BUSY = /^(queued|planning|making|waiting|finishing)$/;
   const making = () => !!(L && L.job && BUSY.test(L.job.state));
@@ -14994,7 +15112,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b766d91d391a";
+  const BUILD = /*BUILD*/"d67fde603870";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
