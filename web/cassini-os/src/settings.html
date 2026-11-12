@@ -103,10 +103,13 @@ body.phone .srow input[type=range] { width: 96px; }
   // it be; options: values a choice does not offer. These carry out policy.json page_settings (the flag settings and
   // a forced setting are hidden too); web/test_public_switch.cjs checks them line by line against it.
   const PUBLIC = {
+    // Mosaic passes stays Auto (every pass is published as the kind the prebuild made it, so no forced kind has its
+    // pictures) and Only years with pictures built stays on (the public site has only the years published)
     hidden: [/^processing\./, "cameras.balancedColor", "cameras.autoCenter", "cameras.hdr", "cameras.hdrGlow", "movies.laps",
-             "movies.stabilizeLocal", /^interface\.flag/],
-    forced: { "cameras.autoCenter": true, "cameras.hdr": "off", "movies.stabilizeLocal": true, "movies.laps": 1 },
-    options: { "cameras.colors": ["raw", "false"], "cameras.passes": ["mosaic"] }
+             "movies.stabilizeLocal", /^interface\.flag/, "cameras.passes", "playback.builtOnly"],
+    forced: { "cameras.autoCenter": true, "cameras.hdr": "off", "movies.stabilizeLocal": true, "movies.laps": 1,
+              "cameras.passes": "auto", "playback.builtOnly": true },
+    options: { "cameras.colors": ["raw", "false"] }
   };
   const isPublic = window.cassiniPublic === true;
   const publicHidden = key => isPublic && PUBLIC.hidden.some(h => typeof h === "string" ? h === key : h.test(key));
