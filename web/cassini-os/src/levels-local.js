@@ -244,10 +244,10 @@
     return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
   }
   // a picture as RGBA, waited for while the server makes it (503) or is busy (429), as export.html's fetchPicture
-  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST), and while a mosaic is still behind its frame (X-Reel
+  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST, export.MOSAIC_WAIT as the server waits), and while a mosaic is still behind its frame (X-Reel
   // "behind": the tiles made so far; the film draws the finished one); null for any other refusal (404: not
   // centred) or failure
-  const WAIT_MOST = 600e3, sleep = ms => new Promise(r => setTimeout(r, ms));
+  const WAIT_MOST = 900e3, sleep = ms => new Promise(r => setTimeout(r, ms));
   const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
   async function fetchRGBA(url) {
     const t0 = Date.now();
