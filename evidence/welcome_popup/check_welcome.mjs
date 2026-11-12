@@ -67,6 +67,17 @@ const vp = { viewport: { width: 1600, height: 1000 } };
   ok("Shift+Tab to Just explore, Enter: closes with no tour", f === "Just explore" && !(await p.evaluate(() => cassiniWelcome.on || cassiniTutorial.active)));
   await ctx.close(); }
 
+// 5c. the mission clock stops while the welcome is up and plays again after "Just explore" if it was playing
+{ const ctx = await browser.newContext(vp);
+  await ctx.addInitScript(() => { window.__pl = []; setInterval(() => { try { window.__pl.push(state.playing); } catch (e) {} }, 400); });
+  const p = await ctx.newPage(); await p.goto(url); await opened(p);
+  const was = await p.evaluate(() => window.__pl.slice(-3, -1).some(Boolean));
+  const t1 = await p.evaluate(() => state.et); await p.waitForTimeout(2500); const t2 = await p.evaluate(() => state.et);
+  ok("clock paused while the welcome is open", !(await p.evaluate(() => state.playing)) && t1 === t2);
+  await p.click("#welcome [data-w=explore]:not(.wx)"); await p.waitForTimeout(800);
+  ok("…and playing again after Just explore", (await p.evaluate(() => state.playing)) === was && was);
+  await ctx.close(); }
+
 // 6. a tour started from the menu before the welcome is due is not stopped by it
 { const ctx = await browser.newContext(vp); const p = await ctx.newPage();
   await p.goto(url); await p.waitForFunction(() => window.cassiniTutorial, null, { timeout: 60000 });

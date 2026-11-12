@@ -1711,23 +1711,20 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 #welcome.on { opacity: 1; }
 #welcome[hidden] { display: none; }
 #welcome .wcard { position: relative; box-sizing: border-box; width: min(600px, 100%); max-height: calc(100dvh - 48px); overflow-y: auto;
-  padding: 34px 40px 26px; border-radius: 14px; background: rgba(16,17,20,.80); color: var(--q-text);
+  padding: 36px 40px 26px; border-radius: 14px; background: rgba(16,17,20,.80); color: var(--q-text);
   -webkit-backdrop-filter: blur(22px) saturate(1.2); backdrop-filter: blur(22px) saturate(1.2);
   border: 1px solid var(--q-line); box-shadow: 0 24px 70px rgba(0,0,0,.6); font: 13.5px/1.6 var(--ui);
   transform: translateY(8px); transition: transform .45s ease; }
 #welcome.on .wcard { transform: none; }
-#welcome .wkick { margin: 0 0 10px; font: 10.5px var(--hudf, monospace); letter-spacing: .14em; text-transform: uppercase; color: var(--q-dim); }
 #welcome h2 { margin: 0 0 12px; font-size: 26px; line-height: 1.2; font-weight: 300; color: #fff; letter-spacing: -.005em; }
 #welcome .wlead { margin: 0 0 18px; color: var(--q-text); }
-#welcome .wpts { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 10px; }
+#welcome .wpts { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 10px; }
 #welcome .wpts li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: baseline; }
 #welcome .wpts li::before { content: ""; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--q-accent); transform: translateY(-1px); }
 #welcome .wpts b, #welcome .wlead b { font-weight: normal; color: #fff; }
-#welcome .wstats { display: flex; gap: 0; margin: 0 0 24px; border-top: 1px solid var(--q-line); border-bottom: 1px solid var(--q-line); }
-#welcome .wstats div { flex: 1; padding: 10px 0 9px; text-align: center; }
-#welcome .wstats div + div { border-left: 1px solid var(--q-line); }
-#welcome .wstats b { display: block; font: 300 19px/1.2 var(--ui); color: #fff; font-variant-numeric: tabular-nums; }
-#welcome .wstats span { font-size: 10.5px; color: var(--q-dim); letter-spacing: .02em; }
+#welcome .wpts a { color: var(--q-accent); text-decoration: none; }
+#welcome .wpts a:hover { text-decoration: underline; }
+#welcome .wpts a:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 1px; border-radius: 2px; }
 #welcome .wfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 #welcome .wfoot .wnote { flex: 1 1 180px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
 #welcome button { all: unset; box-sizing: border-box; cursor: default; padding: 8px 16px; border-radius: 7px; font-size: 13px; color: var(--q-text);
@@ -1741,7 +1738,6 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 body.phone #welcome { padding: calc(env(safe-area-inset-top, 0px) + 12px) 10px calc(env(safe-area-inset-bottom, 0px) + 12px); }
 body.phone #welcome .wcard { padding: 26px 20px 18px; font-size: 14px; max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 body.phone #welcome h2 { font-size: 23px; }
-body.phone #welcome .wstats b { font-size: 17px; }
 body.phone #welcome .wfoot { flex-direction: column-reverse; align-items: stretch; }
 body.phone #welcome .wfoot .wnote { flex: none; text-align: center; margin-top: 4px; }
 body.phone #welcome button:not(.wx) { padding: 11px 16px; font-size: 14.5px; }
@@ -13655,7 +13651,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d90fe98f1c08";
+  const BUILD = /*BUILD*/"fc134dae7fec";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13701,32 +13697,36 @@ void main() {
     try { localStorage.setItem(KEY, "1"); } catch (e) {}
   }
 
-  // the words (one place, so they are easy to change)
-  const phone = () => document.body.classList.contains("phone");
+  // the words (one place, so they are easy to change). {pictures} is how many pictures this site has, counted from
+  // the mission data (mission.json's catalog), so it stays true as the data grows
   const COPY = {
-    kicker: "NASA · ESA · ASI  ·  1997 – 2017",
     title: "This is the real Cassini mission",
     lead: "Cassini spent 13 years orbiting Saturn, studying its rings and moons, until it plunged into the planet in 2017. You can follow the whole journey here.",
     points: [
-      "<b>Every picture is real.</b> They are the frames Cassini's cameras took, cleaned up and aligned, but nothing is invented.",
-      "<b>So is the flight.</b> The spacecraft moves and turns the way NASA's tracking data says it did, as closely as we can rebuild it."
+      "<b>Every picture is real.</b> Cassini's cameras took about 453,000 pictures, and {pictures} of them are here: the original frames, cleaned up and aligned (<a href=\"how/\" target=\"_blank\" rel=\"noopener\">see how</a>), with nothing invented.",
+      "<b>The flight telemetry is real.</b> The spacecraft moves and turns the way NASA's navigation and pointing records say it did.",
+      "<b>Everything else is as close to the truth as we can make it,</b> built only from NASA's public data. Anyone can look at it: <a href=\"https://pds-imaging.jpl.nasa.gov/\" target=\"_blank\" rel=\"noopener\">the Planetary Data System</a> keeps the archive, and <a href=\"#\" data-w=\"sources\">every source</a> is listed in About."
     ],
-    stats: [["1997", "launched"], ["13 years", "at Saturn"], ["453,048", "pictures taken"]],
-    note: "An independent project, not affiliated with NASA, ESA or JPL."
+    note: "Pictures NASA/JPL-Caltech/SSI. An independent project, not affiliated with NASA, ESA or JPL."
   };
+  function pictures() {
+    try {
+      const n = Object.values(mission.catalog).reduce((a, y) => a + (y.images || 0), 0);
+      if (n > 1000) return n.toLocaleString("en-US");
+    } catch (e) {}
+    return "nearly all";
+  }
 
   const el = document.createElement("div");
   el.id = "welcome"; el.hidden = true;
   el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "wtitle");
   function render() {
-    const c = COPY;
+    const c = COPY, n = pictures();
     el.innerHTML = `<div class="wcard">
       <button class="wx" data-w="explore" aria-label="Close" title="Close">×</button>
-      <p class="wkick">${c.kicker}</p>
       <h2 id="wtitle">${c.title}</h2>
-      ${c.lead ? `<p class="wlead">${c.lead}</p>` : ""}
-      ${c.points && c.points.length ? `<ul class="wpts">${c.points.map(p => `<li><span>${p}</span></li>`).join("")}</ul>` : ""}
-      ${c.stats ? `<div class="wstats">${c.stats.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}</div>` : ""}
+      <p class="wlead">${c.lead}</p>
+      <ul class="wpts">${c.points.map(p => `<li><span>${p.replace("{pictures}", n)}</span></li>`).join("")}</ul>
       <div class="wfoot"><span class="wnote">${c.note}</span>
         <button data-w="explore">Just explore</button><button class="wtour" data-w="tour">Take the tour</button></div>
     </div>`;
@@ -13736,11 +13736,15 @@ void main() {
   // clicks and keys on the welcome stay its own (the 3D view under it does not turn)
   for (const t of ["pointerdown", "mousedown", "dblclick", "wheel", "touchstart"]) el.addEventListener(t, e => e.stopPropagation(), { passive: true });
 
-  let on = false, lastFocus = null;
+  // the mission clock stops while the welcome is up, and goes on again after if it was playing
+  let on = false, lastFocus = null, wasPlaying = false;
+  const playing = () => typeof state !== "undefined" && !!state.playing;
+  const play = v => { if (typeof setPlaying === "function") setPlaying(v); };
   function open() {
     if (on) return;
     render();
     on = true; lastFocus = document.activeElement;
+    wasPlaying = playing(); if (wasPlaying) play(false);
     document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
     if (window.cassiniTutorial && cassiniTutorial.active) cassiniTutorial.stop();
     el.hidden = false; el.offsetWidth; el.classList.add("on");
@@ -13751,6 +13755,8 @@ void main() {
   function close(then) {
     if (!on) return;
     on = false; markSeen();
+    if (wasPlaying && !playing()) play(true);
+    wasPlaying = false;
     if (window.cassiniTutorial && cassiniTutorial.markSeen) cassiniTutorial.markSeen();
     el.classList.remove("on");
     setTimeout(() => { if (!on) el.hidden = true; }, 460);
@@ -13761,7 +13767,7 @@ void main() {
     if (!on) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); close(); return; }
     if (e.key === "Tab") {                       // focus stays in the card
-      const bs = [...el.querySelectorAll("button")].filter(b => b.offsetParent);
+      const bs = [...el.querySelectorAll("button, a")].filter(b => b.offsetParent);
       const i = bs.indexOf(document.activeElement);
       e.preventDefault(); e.stopImmediatePropagation(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus();
       return;
@@ -13770,7 +13776,7 @@ void main() {
     // Enter and Space press the focused button here (the browser's own press does not get through reliably)
     // (Enter with nothing in the card focused yet is the card's main button)
     if ((e.key !== "Enter" && e.key !== " ") || e.repeat) return;
-    const f = document.activeElement && document.activeElement.closest && document.activeElement.closest("#welcome button");
+    const f = document.activeElement && document.activeElement.closest && document.activeElement.closest("#welcome button, #welcome a");
     const b = f || (e.key === "Enter" && el.querySelector(".wtour"));
     if (b) { e.preventDefault(); b.click(); }
   }
@@ -13779,7 +13785,13 @@ void main() {
   el.addEventListener("click", e => {
     e.stopPropagation();
     const b = e.target.closest("[data-w]");
+    if (b && b.dataset.w === "sources") {        // the sources: About's Credits, over the page once the welcome has gone
+      e.preventDefault(); close();
+      if (window.cassiniAbout) setTimeout(() => cassiniAbout.open("Credits"), 200);
+      return;
+    }
     if (b) return close(b.dataset.w);
+    if (e.target.closest("a")) return;           // the archive link opens in a new tab and the welcome stays
     if (!e.target.closest(".wcard")) close();     // a click outside the card: explore
   });
 
