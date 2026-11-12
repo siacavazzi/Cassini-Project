@@ -135,6 +135,63 @@ def offline():
                     ok(tables.validate_part(rel, json.load(fh)) is None, f"{rel} validates")
                 ok(not f.endswith(".part"), f"no part file left: {rel}")
 
+    # a mosaic pass is made again when its count of built tiles changed (a cache extended to more years), and a
+    # work file from before the count was kept is made again too
+    with tempfile.TemporaryDirectory() as tmp:
+        out, tiles = os.path.join(tmp, "out"), os.path.join(tmp, "tiles")
+        os.makedirs(tiles)
+        fake.unit_of = lambda f: (u, n_of[f]) if f in n_of else None
+        fake.pass_info = lambda f, c: {"observation": u["key"][1], "target": "SATURN", "camera": "W", "pass": 1,
+                                       "n": n_of[f], "movie": False, "mosaic": True, "cadence": 10.0,
+                                       "frames": [[fr[1], fr[3], fr[2]] for fr in u["frames"]]}
+        fake._plan_path = lambda u_, c: os.path.join(tmp, "plan.json")
+        fake._tiles = lambda u_, c, scale: tiles
+        ok(tables.built(u, tmp) == 0, "no plan kept: no tile built")
+        ok(tables.built(m, tmp) is None, "a pass that is no mosaic has no tile count")
+        with open(os.path.join(tmp, "plan.json"), "w") as fh:
+            fh.write("{}")
+
+        def tile(j):
+            with open(os.path.join(tiles, f"{j}.json"), "w") as fh:
+                fh.write("{}")
+        tile(0)
+        tile(1)
+        calls = []
+        fake.kind_of = lambda f, c: calls.append(f) or {"mosaic": True, "movie": False, "kind": "mosaic_movie",
+                                                         "repeats": 1, "lap_ends": [ids[3]]}
+        tables.make_pass(u, tmp, out, versions={"v": 1})
+        work = os.path.join(out, "work", tables.pass_id(u) + ".json")
+        with open(work) as fh:
+            ok(json.load(fh).get("built") == 2, "the work file keeps the count of built tiles")
+        made = len(calls)
+        tables.make_pass(u, tmp, out, versions={"v": 1})
+        ok(len(calls) == made, "same versions, same tiles built: found, not made")
+        tile(2)
+        tables.make_pass(u, tmp, out, versions={"v": 1})
+        ok(len(calls) > made, "a tile built since (more of the pass built): made again")
+        with open(work) as fh:
+            w = json.load(fh)
+        ok(w.get("built") == 3, f"the new count kept: {w.get('built')}")
+        w.pop("built")
+        with open(work, "w") as fh:
+            json.dump(w, fh)
+        made = len(calls)
+        tables.make_pass(u, tmp, out, versions={"v": 1})
+        ok(len(calls) > made, "a work file without a tile count (an earlier run) is made again")
+
+        # finish keeps exactly the parts each pass's work file lists: a map an older run named is deleted
+        top = os.path.join(out, "table", "pass", tables.pass_id(u))
+        stale = os.path.join(top, "maps", "CL19_0_0_100_80.json")
+        with open(stale, "w") as fh:
+            fh.write("{}")
+        listed = sorted(os.path.relpath(os.path.join(r, f), top) for r, _, fs in os.walk(top) for f in fs)
+        tables.finish(out)
+        left = sorted(os.path.relpath(os.path.join(r, f), top) for r, _, fs in os.walk(top) for f in fs)
+        with open(work) as fh:
+            parts = sorted(json.load(fh)["parts"])
+        ok("maps/CL19_0_0_100_80.json" in listed and left == parts and "maps/CL19_0_0_100_80.json" not in left,
+           f"finish deletes a part not in the pass's work file and keeps the rest: {left}")
+
 
 # ---------- against a server and a phase's output ----------
 
