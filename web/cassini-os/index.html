@@ -1726,7 +1726,8 @@ body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px
 #welcome .wpts a:hover { text-decoration: underline; }
 #welcome .wpts a:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 1px; border-radius: 2px; }
 #welcome .wfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-#welcome .wfoot .wnote { flex: 1 1 180px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+#welcome .wfoot { justify-content: flex-end; }
+#welcome .wcredit { margin: 20px 0 0; padding-top: 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; line-height: 1.55; color: var(--q-dim); }
 #welcome button { all: unset; box-sizing: border-box; cursor: default; padding: 8px 16px; border-radius: 7px; font-size: 13px; color: var(--q-text);
   border: 1px solid var(--q-line); background: rgba(255,255,255,.05); white-space: nowrap; text-align: center; }
 #welcome button:hover { color: #fff; background: rgba(255,255,255,.10); }
@@ -1739,7 +1740,7 @@ body.phone #welcome { padding: calc(env(safe-area-inset-top, 0px) + 12px) 10px c
 body.phone #welcome .wcard { padding: 26px 20px 18px; font-size: 14px; max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 body.phone #welcome h2 { font-size: 23px; }
 body.phone #welcome .wfoot { flex-direction: column-reverse; align-items: stretch; }
-body.phone #welcome .wfoot .wnote { flex: none; text-align: center; margin-top: 4px; }
+body.phone #welcome .wcredit { text-align: center; margin-top: 16px; }
 body.phone #welcome button:not(.wx) { padding: 11px 16px; font-size: 14.5px; }
 
 #tourhint { position: fixed; z-index: 1500; left: 0; top: 0; width: min(290px, calc(100vw - 24px)); box-sizing: border-box;
@@ -13651,7 +13652,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"fc134dae7fec";
+  const BUILD = /*BUILD*/"b17d158345f7";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13707,7 +13708,7 @@ void main() {
       "<b>The flight telemetry is real.</b> The spacecraft moves and turns the way NASA's navigation and pointing records say it did.",
       "<b>Everything else is as close to the truth as we can make it,</b> built only from NASA's public data. Anyone can look at it: <a href=\"https://pds-imaging.jpl.nasa.gov/\" target=\"_blank\" rel=\"noopener\">the Planetary Data System</a> keeps the archive, and <a href=\"#\" data-w=\"sources\">every source</a> is listed in About."
     ],
-    note: "Pictures NASA/JPL-Caltech/SSI. An independent project, not affiliated with NASA, ESA or JPL."
+    credit: "The pictures and flight data are courtesy of NASA, ESA and JPL (images NASA/JPL-Caltech/Space Science Institute).<br>An independent project by Sam Iacavazzi, not affiliated with NASA, ESA or JPL."
   };
   function pictures() {
     try {
@@ -13727,8 +13728,8 @@ void main() {
       <h2 id="wtitle">${c.title}</h2>
       <p class="wlead">${c.lead}</p>
       <ul class="wpts">${c.points.map(p => `<li><span>${p.replace("{pictures}", n)}</span></li>`).join("")}</ul>
-      <div class="wfoot"><span class="wnote">${c.note}</span>
-        <button data-w="explore">Just explore</button><button class="wtour" data-w="tour">Take the tour</button></div>
+      <div class="wfoot"><button data-w="explore">Just explore</button><button class="wtour" data-w="tour">Take the tour</button></div>
+      <p class="wcredit">${c.credit}</p>
     </div>`;
   }
   ($("app") || document.body).append(el);
