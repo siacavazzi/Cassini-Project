@@ -603,6 +603,8 @@ onmessage = async e => {
   }
   window.cassiniSteadyLocal = {
     stats,
+    // the passes' tables the pool's workers are given (their keys: a check reads them)
+    tableKeys: () => [...tablesOf.keys()],
     // with the public switch on: whether this computer evens frame id's pass itself (true), the server's evened frames
     // are published for it (false), or its colour table is not here yet (undefined, asked for now): until then a
     // window asks the frame as drawn (exposure 0), which every pass has, never an exposure= variant

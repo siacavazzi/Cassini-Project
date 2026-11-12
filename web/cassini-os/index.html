@@ -3921,6 +3921,8 @@ onmessage = async e => {
   }
   window.cassiniSteadyLocal = {
     stats,
+    // the passes' tables the pool's workers are given (their keys: a check reads them)
+    tableKeys: () => [...tablesOf.keys()],
     // with the public switch on: whether this computer evens frame id's pass itself (true), the server's evened frames
     // are published for it (false), or its colour table is not here yet (undefined, asked for now): until then a
     // window asks the frame as drawn (exposure 0), which every pass has, never an exposure= variant
@@ -15151,7 +15153,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"172bc8451405";
+  const BUILD = /*BUILD*/"1c7711c57ed7";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
