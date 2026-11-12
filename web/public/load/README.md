@@ -57,7 +57,9 @@ replayed (the page's `POST /usage` has no body in the logs), and static requests
 From the Worker's code (`web/worker/src/index.mjs`), per frames request: one Worker request, its CPU (`--cpu-ms`,
 default 1) and one Analytics Engine data point; a picture is one R2 Class B read unless the Cache API answers it
 (`--edge-hit`, default 0.5, the capacity report's pessimistic share), a 404 reads every fallback key, a marker one; a
-table answer is two reads (alias shard and pass part, which the Cache API does not hold), one for a 404; the manifest is
+table answer is two reads (alias shard and pass part) unless the Cache API holds it (`--table-hit`, default 0 as the
+Worker is today; #440 caches tables), one for a 404; Analytics Engine points can be sampled (`--ae-sample N`, #440 writes
+1 in 10 and every refusal and miss); the manifest is
 read once per isolate a minute. Static requests go to Pages and R2 egress is free: both are counted and shown at $0.
 
 It prints rates per viewer-minute for each session and for the mix, the cost of 1,000 viewers for one hour (no

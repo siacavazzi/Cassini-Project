@@ -159,21 +159,25 @@ test("the cost model's arithmetic, by hand", async () => {
     ...Array.from({ length: 4 }, () => ({ cls: "static", method: "GET", path: "/x.js", status: 200, bytes: 1e6 })),
   ] };
   const c = await countSession(s);
-  assert.deepEqual([c.worker, c.picture, c.table, c.static, c.reads_cacheable, c.reads_fixed], [14, 10, 2, 4, 10, 4]);
+  assert.deepEqual([c.worker, c.picture, c.table, c.static, c.reads_cacheable, c.reads_table, c.reads_fixed], [14, 10, 2, 4, 10, 4, 0]);
   const { rate } = mixRates([c]);
-  assert.equal(rate.worker, 7); assert.equal(rate.reads_cacheable, 5); assert.equal(rate.reads_fixed, 2);
+  assert.equal(rate.worker, 7); assert.equal(rate.reads_cacheable, 5); assert.equal(rate.reads_table, 2); assert.equal(rate.refused, 0.5);
   const p = price(rate, 1, { edgeHit: 0.5, cpuMs: 1, isolates: 0 });
   assert.equal(p.quantities.worker_requests, 420);
   assert.equal(p.quantities.class_b, (5 * 0.5 + 2) * 60);
   const want = 420 * 0.30e-6 + 420 * 0.02e-6 + 270 * 0.36e-6 + 420 * 0.25e-6;
   assert.ok(Math.abs(p.usd.total - want) < 1e-12);
   assert.equal(p.usd.pages, 0); assert.equal(p.usd.egress, 0);
+  // #440: tables through the Cache API, Analytics points 1 in 10 with every refusal and miss written
+  const p440 = price(rate, 1, { edgeHit: 0.5, tableHit: 0.5, aeSample: 10, cpuMs: 1, isolates: 0 });
+  assert.equal(p440.quantities.class_b, (5 * 0.5 + 2 * 0.5) * 60);
+  assert.ok(Math.abs(p440.quantities.data_points - ((7 - 0.5) / 10 + 0.5) * 60) < 1e-9);
   // a month inside every allowance costs the plan and the storage over 10 GB
   const mo = price(rate, 100, { included: true, storageGb: 250, isolates: 0 });
   assert.ok(Math.abs(mo.usd.total - (5 + 240 * 0.015)) < 1e-9);
   // a 404 picture reads its fallbacks too; a mix weighs session ids
   const c2 = await countSession({ id: "S2", seconds: 60, requests: [{ cls: "picture", method: "GET", path: PIC, status: 404, bytes: 0 }] });
-  assert.equal(c2.reads_fixed, 1); assert.equal(c2.reads_cacheable, 0);
+  assert.equal(c2.reads_fixed, 1); assert.equal(c2.reads_cacheable, 0); assert.equal(c2.misses, 1);
   const m = mixRates([c, c2], { S1: 3, S2: 1 });
   assert.equal(m.rate.worker, 0.75 * 7 + 0.25 * 1);
   const M = model([c, c2], { isolates: 0 });
