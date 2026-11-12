@@ -23,7 +23,9 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   tables      the public site's per-frame JSON (tables.py), once per pass, into --tables-out (<cache>/public-tables):
               each table route's answer (pass_info, kind_of, steady_table, fade_table, tile_map) for every pass, and
               the alias shards naming each frame's pass, then coverage.json. Run on a finished cache (after mosaics,
-              movies and chains): it makes no picture, only the chains a steady table still waits for
+              movies and chains): it draws no picture, but can write into the cache the chains a steady table still
+              waits for, and the tile maps and global solves tile_map and layout keep when first asked (tables.py).
+              A pass is made again when its picture versions or its count of built tiles changed (tables.built)
   fullview    the full view of every mosaic pass (decision D3): its mosaic at its last frame at size=full (CANVAS up to
               FULL_MAX, 2048 px), as the mosaic route makes it. Run after mosaics
 
@@ -390,7 +392,8 @@ def tables_out(cache):
 def make_tables(u, cache, movie):
     """The pass's public tables (tables.make_pass): every part the table routes answer for its frames, and its alias
     entries. movie: a movie pass (its steady tables); Auto center's decision for it (centred) says whether the
-    center=0 steady tables are asked too. Found, not made, when written under the same picture versions. Its frames."""
+    center=0 steady tables are asked too. Found, not made, when written under the same picture versions and count of
+    built tiles (tables.built). Its frames."""
     return tables.make_pass(u, cache, tables_out(cache), movie, uncentred=centred(u["frames"][0][1]) is None,
                             versions=frame_server.picture_versions())
 
