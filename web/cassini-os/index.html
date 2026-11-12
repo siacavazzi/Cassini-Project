@@ -4811,7 +4811,7 @@ onmessage = async e => {
       let r;
       try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (err) { r = null; }
       if (r && (r.status === 503 || r.status === 429 || (r.ok && behind(r))) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
-      if (!r || !r.ok) return null;
+      if (!r || !r.ok || behind(r)) return null;   // (still behind after WAIT_MOST: the next try, as the server's film)
       try {
         const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
         return { data: pixels(bmp), width: bmp.width, height: bmp.height };
@@ -14956,7 +14956,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"097e49f83f4d";
+  const BUILD = /*BUILD*/"d49bec692dd4";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {

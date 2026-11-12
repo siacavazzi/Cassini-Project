@@ -255,7 +255,7 @@
       let r;
       try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (err) { r = null; }
       if (r && (r.status === 503 || r.status === 429 || (r.ok && behind(r))) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
-      if (!r || !r.ok) return null;
+      if (!r || !r.ok || behind(r)) return null;   // (still behind after WAIT_MOST: the next try, as the server's film)
       try {
         const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
         return { data: pixels(bmp), width: bmp.width, height: bmp.height };
