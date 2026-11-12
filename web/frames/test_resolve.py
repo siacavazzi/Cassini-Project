@@ -6,6 +6,11 @@ Tests of the cache-only resolver (resolve.py) and the frame server's --public mo
       the guard alone (no archive needed): inside resolve.cache_only() no file is written, no folder made or removed,
       no thread started, and code outside it is untouched
 
+  python web/frames/test_resolve.py --cache DIR --fast '/frames/mosaic/W1628774938_1.webp?size=512&force=1'
+      resolve() answers each --fast URL within --fast-seconds (its budget, 5 s, and 3 more) and makes nothing: a pass whose ring fits, panel
+      registration, solve or surface reprojection the cache does not keep answers "none" at once (the 2009-08 ring
+      pass ISS_116RI_EQXMOSAIC001_PRIME took two minutes of fitting before it)
+
   python web/frames/test_resolve.py --normal http://127.0.0.1:8960 --public http://127.0.0.1:8910 --cache DIR \\
          --urls OUT_DIR [--urls OUT_DIR ...] [--public-pid PID] [--requests 1000]
       against a cache the normal server (--normal, on that --cache) made while the zero-origin harness played sessions
@@ -59,13 +64,42 @@ def test_guard():
         ("os.open create", lambda: os.close(os.open(os.path.join(d, "b"), os.O_WRONLY | os.O_CREAT))),
         ("mkdir", lambda: os.makedirs(os.path.join(d, "x", "y"))),
         ("thread", lambda: threading.Thread(target=lambda: None).start()),
+        ("child process", lambda: subprocess.run(["true"])),
+        ("database in the cache", lambda: __import__("sqlite3").connect(os.path.join(d, "x.sqlite"))),
+        ("a tile not kept", lambda: resolve._fs().obs_mosaic._not_kept("tile 0", budgeted=False)),
     ]:
         try:
             with resolve.cache_only(d):
                 act()
-        except resolve.NotMade:
+        except (resolve.NotMade, resolve._fs().obs_mosaic.NotKept):
             stopped.append(name)
-    check(len(stopped) == 5, f"cache_only stops writes, folders and threads (stopped {stopped})")
+    check(len(stopped) == 8, f"cache_only stops writes, folders, threads, child processes, databases opened for writing "
+                             f"and a pass's work the cache does not keep (stopped {stopped})")
+    # fits the cache does not keep run while the budget lasts, then stop
+    om = resolve._fs().obs_mosaic
+    with om.kept_only(0.2):
+        om._not_kept("ring fits")
+        time.sleep(0.3)
+        try:
+            om._not_kept("ring fits")
+            check(False, "kept_only stops budgeted work once its budget is spent")
+        except om.NotKept:
+            pass
+    om._not_kept("ring fits", budgeted=False)   # (outside kept_only: nothing)
+    # outside the cache: files are written (SPICE's kernel cache, for one), and a database in the cache opens read-only
+    outside = tempfile.mkdtemp()
+    with resolve.cache_only(d):
+        with open(os.path.join(outside, "k"), "w") as fh:
+            fh.write("kernel")
+        import sqlite3
+        sqlite3.connect(os.path.join(outside, "g.sqlite")).close()
+    check(os.path.exists(os.path.join(outside, "k")), "cache_only lets files outside the cache be written")
+    db = os.path.join(outside, "ro.sqlite")
+    sqlite3.connect(db).close()
+    os.replace(db, os.path.join(d, "ro.sqlite"))
+    with resolve.cache_only(d):
+        sqlite3.connect(f"file:{os.path.join(d, 'ro.sqlite')}?mode=ro", uri=True).close()
+    os.remove(os.path.join(d, "ro.sqlite"))
     check(not os.listdir(d), "nothing was made in the folder")
     # a maker's broad except cannot swallow it
     try:
@@ -285,6 +319,24 @@ def test_servers(args):
                                     f"({len(made)} new, {len(changed)} changed: {(made + changed)[:5]})")
 
 
+def test_fast(args):
+    """resolve() of each --fast URL answers within --fast-seconds and makes nothing (a pass whose fits or solves the
+    cache does not keep answers "none" at once, not after working them out)."""
+    import resolve
+    resolve.prepare()
+    if args.fast_seconds is None:
+        args.fast_seconds = resolve.BUDGET + 3
+    before = snapshot(args.cache)
+    for u in args.fast:
+        sp = urlsplit(u)
+        t0 = time.time()
+        a = resolve.resolve(sp.path, parse_qs(sp.query), args.cache)
+        took = time.time() - t0
+        print(f"fast: {u} -> {a.kind} in {took:.2f} s", flush=True)
+        check(took <= args.fast_seconds, f"{u}: resolve() answered in {took:.1f} s (at most {args.fast_seconds})")
+    check(snapshot(args.cache) == before, "the --fast resolves made nothing in the cache")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--normal")
@@ -293,8 +345,13 @@ def main():
     ap.add_argument("--urls", action="append", default=[])
     ap.add_argument("--public-pid", type=int)
     ap.add_argument("--requests", type=int, default=1000)
+    ap.add_argument("--fast", action="append", default=[],
+                    help="a URL resolve() must answer within --fast-seconds on --cache (repeatable)")
+    ap.add_argument("--fast-seconds", type=float, default=None, help="default: resolve.BUDGET + 3")
     args = ap.parse_args()
     test_guard()
+    if args.fast and args.cache:
+        test_fast(args)
     if args.normal and args.public and args.cache:
         test_servers(args)
     print("ok" if not failures else f"{len(failures)} FAILED", flush=True)

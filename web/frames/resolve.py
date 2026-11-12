@@ -70,9 +70,16 @@ class NotMade(BaseException):
 
 
 # ---------- cache only: nothing written, nothing started ----------
+# seconds a resolve may spend working out again what a layout works out on every request because nothing of it is kept
+# (obs_mosaic.kept_only): a ring pass whose fits find too little to keep takes about a second, and is answered; one
+# whose fits the cache lacks would take minutes, and is answered "none" when this is spent
+BUDGET = float(os.environ.get("CASSINI_RESOLVE_BUDGET", "5"))
 _cache_only = contextvars.ContextVar("cache_only", default=None)   # the picture cache being read (its real path)
 _WRITE_EVENTS = {"os.mkdir", "os.rename", "os.remove", "os.rmdir", "os.link", "os.symlink", "os.truncate",
                  "os.chmod", "os.utime", "shutil.copyfile", "shutil.move", "shutil.rmtree", "shutil.make_archive"}
+# a child process could write anywhere, the cache included: none is started under cache_only
+_CHILD_EVENTS = {"subprocess.Popen", "os.posix_spawn", "os.spawn", "os.system", "os.exec", "os.fork", "os.forkpty",
+                 "pty.spawn", "os.startfile"}
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
 _installed = []
 _install_lock = threading.Lock()
@@ -98,12 +105,29 @@ def _audit(event, args):
             raise NotMade(f"would write {args[0]}")
     elif event in _WRITE_EVENTS and args and _inside(args[0], cache):
         raise NotMade(f"would {event} {args[0]}")
+    elif event in _CHILD_EVENTS:
+        raise NotMade(f"would start a child process ({event})")
+    elif event == "sqlite3.connect" and args:
+        # a database in the cache is opened read-only (a URI with mode=ro) or not at all: sqlite writes through its own
+        # file calls, which the open hook never sees
+        db = args[0]
+        db = os.fsdecode(db) if isinstance(db, bytes) else str(db)
+        if db.startswith("file:"):
+            name, _, opts = db[5:].partition("?")
+            if "mode=ro" in opts.split("&") or not _inside(name, cache):
+                return
+            raise NotMade(f"would open {name} for writing")
+        if db != ":memory:" and _inside(db, cache):
+            raise NotMade(f"would open {db} for writing")
 
 
 def _install():
     """The guards cache_only relies on, installed once per process: an audit hook that stops any file of the picture cache
-    written (or folder made, moved, removed in it) and a check in Thread.start that stops any thread started, while
-    cache_only is on in the calling context. Both do nothing anywhere else (the server's own requests, its warmers).
+    written (or folder made, moved, removed in it, or a database in it opened other than read-only), and any child
+    process started, and a check in Thread.start that stops any thread started, while cache_only is on in the calling
+    context. obs_mosaic.kept_only(BUDGET) goes with it: the mosaic code never makes a plan or a tile, and stops working
+    out fits and registrations the cache does not keep once BUDGET is spent, checked tile by tile, rather than at the
+    write after minutes of it. Both do nothing anywhere else (the server's own requests, its warmers).
     Files outside the cache are not pictures: SPICE's kernels extracted to its own cache, for one, stay allowed."""
     if _installed:
         return
@@ -123,11 +147,13 @@ def _install():
 
 @contextlib.contextmanager
 def cache_only(cache):
-    """Code run inside this writes nothing into the picture cache and starts nothing (NotMade where it would)."""
+    """Code run inside this writes nothing into the picture cache, starts nothing and works out nothing the cache does
+    not keep (NotMade, or obs_mosaic.NotKept, where it would)."""
     _install()
     token = _cache_only.set(os.path.realpath(cache))
     try:
-        yield
+        with _fs().obs_mosaic.kept_only(BUDGET):
+            yield
     finally:
         _cache_only.reset(token)
 
@@ -190,7 +216,7 @@ def resolve(path: str, query: Dict[str, List[str]], cache: str) -> Answer:
                 fs.calibration.coloring(_first(query, "colors", fs.calibration.COLORS[0])), \
                 fs.calibration.stepping(_first(query, "off", "")):
             return _route(fs, path, query, cache) or NONE
-    except (NotMade, FileNotFoundError, LookupError, ValueError):
+    except (NotMade, fs.obs_mosaic.NotKept, FileNotFoundError, LookupError, ValueError):
         return NONE
 
 
@@ -429,7 +455,7 @@ def table(path: str, query: Dict[str, List[str]], cache: str):
             m = re.match(r"^/frames/movie/([^/]+)\.json$", path)
             if m and fs.FRAME_ID.match(m.group(1)):
                 return _kept(om.pass_info(m.group(1), cache))
-    except (NotMade, FileNotFoundError, LookupError, ValueError, KeyError):
+    except (NotMade, om.NotKept, FileNotFoundError, LookupError, ValueError, KeyError):
         return None
     return None
 

@@ -1431,6 +1431,41 @@ def drawn(u, cache):
     return os.path.join(folder(u, cache), name) if name else folder(u, cache)
 
 
+# ---------- kept only (resolve.py): answer from what the cache keeps, never work it out ----------
+# The cache-only resolver (web/frames/resolve.py) reads a pass's plan, tiles, fits and solves from the cache through the
+# functions below, which work out and keep whatever the cache does not hold yet. Under kept_only(budget) a plan or a
+# tile is never made, and the fits and registrations a layout works out again on every request when they keep nothing
+# (a ring pass whose ring fits find too little to keep: 028RI, about a second) run only while the budget lasts, checked
+# tile by tile: past it they stop (NotKept), so a request the cache cannot answer is answered "none" within the budget
+# rather than after minutes of fitting (ISS_116RI_EQXMOSAIC001_PRIME's ring fits: one to two minutes a frame).
+_kept_only = contextvars.ContextVar("kept_only", default=None)   # None, or (deadline, monotonic) for the budget
+
+
+class NotKept(BaseException):
+    """Raised under kept_only() where the cache does not keep what is asked for and it would be worked out. A
+    BaseException, so an `except Exception` on the way cannot swallow it."""
+
+
+@contextlib.contextmanager
+def kept_only(budget=0.0):
+    """Code run inside this makes no plan or tile, and works out fits and registrations the cache does not keep for at
+    most budget seconds in all (0: none at all); NotKept where it would go past."""
+    token = _kept_only.set(time.monotonic() + budget)
+    try:
+        yield
+    finally:
+        _kept_only.reset(token)
+
+
+def _not_kept(what, budgeted=True):
+    """Called where work starts (and then again as it goes, a tile at a time) on something the cache does not keep:
+    under kept_only(), NotKept once its budget is spent, or at once when the work is not budgeted (making a plan or a
+    tile); elsewhere nothing."""
+    deadline = _kept_only.get()
+    if deadline is not None and (not budgeted or time.monotonic() > deadline):
+        raise NotKept(what)
+
+
 def _ulock(u):
     with _lock:
         return _unit_locks.setdefault(u["key"], threading.RLock())
@@ -1682,6 +1717,7 @@ def plan(u, cache):
                 p = json.load(fh)
             _kept_reports(_keep_plan(u, cache, p, stamp))
             return p
+        _not_kept("the pass's plan", budgeted=False)
         frames = u["frames"]
         count, nms, aside, colour = _filters(u)
         # a long movie's scale from frames spread evenly over it, each filter's on its own (a step in time could
@@ -2923,6 +2959,7 @@ def _tile_made(u, n, cache, scale, base):
             except (OSError, IndexError, ValueError):
                 pass
         return out
+    _not_kept(f"tile {n}", budgeted=False)
     path, fid, f, t, nm, x, y, z = u["frames"][n]
     k = z / u["z"] if z else 1.0
     seen = {}
@@ -3663,6 +3700,7 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
     for t in tiles:
         if "offset" not in t or ref is not None and t["n"] in fixed:
             continue
+        _not_kept("ring fits")
         im = picture(t["n"])
         got = _tile_ring_samples(u, t, im, rings, reach) if im is not None else None
         if got is not None:
@@ -3691,6 +3729,7 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
         for n in data:
             if n in fixed:
                 continue
+            _not_kept("ring fits")
             v, radius, on, sy, sx = data[n]
             score = lambda d: _profile_ncc(*prof(n, d), ref)
             before = score((0, 0))
@@ -3741,6 +3780,7 @@ def ring_moves(u, cache, p, tiles):
             ref = np.array([np.nan if v is None else v for v in rec["ref"]]) if rec.get("ref") else None
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
         if todo:
+            _not_kept("ring fits")
             there = _tiles(u, cache, p["display_scale"])
 
             def picture(j):
@@ -4307,6 +4347,7 @@ def surface_pictures(u, cache, p, tiles):
             todo.append(t)
     if not todo:
         return out
+    _not_kept("surface reprojection")
     fr = u["frames"]
     mid = fr[len(fr) // 2]
     by_id = {t["id"]: t for t in tiles}
@@ -4516,6 +4557,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
         if not todo:
             return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0]}
+        _not_kept("panel registration")
         there = _tiles(u, cache, p["display_scale"])
         pics = {}
 
@@ -4535,6 +4577,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if "offset" in t:
                 roots[t["n"]] = _pointing_root(u, t["n"], roots)
         for t in sorted(todo, key=lambda t: t["n"]):
+            _not_kept("panel registration")
             n = t["n"]
             if roots[n] != n:
                 kept[n] = list(kept.get(roots[n], [0, 0, "root"])[:2]) + [f"with {roots[n]}"]
@@ -4729,6 +4772,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                     rec[name] = kept
         if kept and set(by_n) <= set(kept.get("tiles", ())):
             return {int(n): v for n, v in kept["moves"].items() if int(n) in by_n and v != [0, 0]}
+        _not_kept("the global panel solve")
         there = _tiles(u, cache, p["display_scale"])
         pics = {}
 
