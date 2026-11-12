@@ -325,6 +325,14 @@ ascript = part("script")
 assert ascript.count('/*CREDITS*/{"groups":[]}') == 1
 study += ascript.replace('/*CREDITS*/{"groups":[]}', json.dumps({"groups": credits["groups"]}, ensure_ascii=False, separators=(",", ":"))) + "\n"
 
+# the welcome (welcome.html): its style joins the head's and its script runs just ahead of the tour's (the tour decides
+# when it shows, in place of the tour on a first visit)
+we = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "welcome.html")).read()
+part = lambda tag: we[we.index(f"<{tag}"):we.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>")
+study += part("script") + "\n"
+
 # the tour (tutorial.html): its style joins the head's and its script runs after every other part's (its hints point at
 # their controls; the hint itself is made by the script)
 tu = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "tutorial.html")).read()

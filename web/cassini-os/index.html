@@ -1705,6 +1705,47 @@ body.phone #about { left: 8px !important; top: calc(env(safe-area-inset-top, 0px
 body.phone #about .abody { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
 body.phone #about nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--q-line); overflow-x: auto; }
 
+#welcome { position: fixed; inset: 0; z-index: 1600; display: grid; place-items: center; padding: 24px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(6,7,10,.38), rgba(6,7,10,.72));
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); opacity: 0; transition: opacity .45s ease; }
+#welcome.on { opacity: 1; }
+#welcome[hidden] { display: none; }
+#welcome .wcard { position: relative; box-sizing: border-box; width: min(600px, 100%); max-height: calc(100dvh - 48px); overflow-y: auto;
+  padding: 34px 40px 26px; border-radius: 14px; background: rgba(16,17,20,.80); color: var(--q-text);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2); backdrop-filter: blur(22px) saturate(1.2);
+  border: 1px solid var(--q-line); box-shadow: 0 24px 70px rgba(0,0,0,.6); font: 13.5px/1.6 var(--ui);
+  transform: translateY(8px); transition: transform .45s ease; }
+#welcome.on .wcard { transform: none; }
+#welcome .wkick { margin: 0 0 10px; font: 10.5px var(--hudf, monospace); letter-spacing: .14em; text-transform: uppercase; color: var(--q-dim); }
+#welcome h2 { margin: 0 0 12px; font-size: 26px; line-height: 1.2; font-weight: 300; color: #fff; letter-spacing: -.005em; }
+#welcome .wlead { margin: 0 0 18px; color: var(--q-text); }
+#welcome .wpts { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 10px; }
+#welcome .wpts li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+#welcome .wpts li::before { content: ""; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--q-accent); transform: translateY(-1px); }
+#welcome .wpts b, #welcome .wlead b { font-weight: normal; color: #fff; }
+#welcome .wstats { display: flex; gap: 0; margin: 0 0 24px; border-top: 1px solid var(--q-line); border-bottom: 1px solid var(--q-line); }
+#welcome .wstats div { flex: 1; padding: 10px 0 9px; text-align: center; }
+#welcome .wstats div + div { border-left: 1px solid var(--q-line); }
+#welcome .wstats b { display: block; font: 300 19px/1.2 var(--ui); color: #fff; font-variant-numeric: tabular-nums; }
+#welcome .wstats span { font-size: 10.5px; color: var(--q-dim); letter-spacing: .02em; }
+#welcome .wfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#welcome .wfoot .wnote { flex: 1 1 180px; font-size: 10.5px; line-height: 1.45; color: var(--q-dim); }
+#welcome button { all: unset; box-sizing: border-box; cursor: default; padding: 8px 16px; border-radius: 7px; font-size: 13px; color: var(--q-text);
+  border: 1px solid var(--q-line); background: rgba(255,255,255,.05); white-space: nowrap; text-align: center; }
+#welcome button:hover { color: #fff; background: rgba(255,255,255,.10); }
+#welcome button:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; }
+#welcome .wtour { color: #fff; background: rgba(138,182,255,.24); border-color: rgba(138,182,255,.45); }
+#welcome .wtour:hover { background: rgba(138,182,255,.36); }
+#welcome .wx { position: absolute; top: 10px; right: 12px; padding: 2px 8px; border: 0; background: none; font-size: 17px; line-height: 1.2; color: var(--q-dim); }
+@media (prefers-reduced-motion: reduce) { #welcome, #welcome .wcard { transition: opacity .2s ease; transform: none; } }
+body.phone #welcome { padding: calc(env(safe-area-inset-top, 0px) + 12px) 10px calc(env(safe-area-inset-bottom, 0px) + 12px); }
+body.phone #welcome .wcard { padding: 26px 20px 18px; font-size: 14px; max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+body.phone #welcome h2 { font-size: 23px; }
+body.phone #welcome .wstats b { font-size: 17px; }
+body.phone #welcome .wfoot { flex-direction: column-reverse; align-items: stretch; }
+body.phone #welcome .wfoot .wnote { flex: none; text-align: center; margin-top: 4px; }
+body.phone #welcome button:not(.wx) { padding: 11px 16px; font-size: 14.5px; }
+
 #tourhint { position: fixed; z-index: 1500; left: 0; top: 0; width: min(290px, calc(100vw - 24px)); box-sizing: border-box;
   padding: 11px 13px 9px; border-radius: 9px; background: var(--q-panel, rgba(16,17,20,.82)); color: var(--q-text);
   -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
@@ -1991,7 +2032,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
 
   <nav id="menubar" aria-label="Menu bar">
     <div class="menu app"><button aria-haspopup="true"><svg viewBox="0 0 40 28" aria-hidden="true"><circle cx="20" cy="14" r="8" fill="#222"/><ellipse cx="20" cy="14" rx="18" ry="5" fill="none" stroke="#222" stroke-width="2.4" transform="rotate(-16 20 14)"/></svg>Cassini OS</button>
-      <ul><li><button data-act="about">About Cassini OS</button></li><li><button data-act="tour">Tour of Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
+      <ul><li><button data-act="about">About Cassini OS</button></li><li><button data-act="welcome">Welcome</button></li><li><button data-act="tour">Tour of Cassini OS</button></li><li class="sep"></li><li><button data-act="settings">Settings…<span class="kbd">⌘,</span></button></li><li class="sep"></li><li><button data-act="hud" role="menuitemcheckbox" aria-checked="true">Neon HUD</button></li><li><button data-act="autohide" role="menuitemcheckbox" aria-checked="true">Hide Interface When Idle</button></li></ul></div>
     <div class="menu"><button aria-haspopup="true">View</button>
       <ul>
         <li><button data-act="orbits" role="menuitemcheckbox" aria-checked="false">All Moons<span class="kbd">⌘M</span></button></li>
@@ -13575,11 +13616,11 @@ void main() {
     "Cassini OS": () => `<h2>Cassini OS</h2>
       <p>A replay of NASA and ESA's Cassini-Huygens mission, from launch in 1997 to the plunge into Saturn in 2017. The spacecraft flies its real path and turns the way it really turned, and the camera windows show the pictures it took at that moment, each one calibrated, stacked and aligned from the raw frames.</p>
       <p>Made by Sam Iacavazzi · <a href="https://github.com/siacavazzi" target="_blank" rel="noopener">github.com/siacavazzi</a></p>
-      <p class="note"><a href="about/" target="_blank" rel="noopener">More about the project</a> · <a href="how/" target="_blank" rel="noopener">How the pictures are made</a></p>
+      <p class="note"><a href="#" data-act="welcome">Show the welcome again</a> · <a href="about/" target="_blank" rel="noopener">More about the project</a> · <a href="how/" target="_blank" rel="noopener">How the pictures are made</a></p>
       <h3>Credits</h3>
       <p>The pictures are NASA/JPL-Caltech/Space Science Institute, the probe's are ESA/NASA/JPL/University of Arizona, and the flight data is from NASA/JPL's SPICE archive. The maps, models, sound, software and fonts have their own authors. <a href="#" data-tab="Credits">See all credits</a>.</p>
       <h3>Privacy</h3>
-      <p>Cassini OS uses no cookies and no outside trackers. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
+      <p>Cassini OS uses no outside trackers, and only one cookie, which remembers that you have seen the welcome. Its server keeps daily totals only: how many people visited and from which country, and which pictures were looked at and saved. Nothing is kept that could tell one visitor from another.</p>`,
     Credits: () => CREDITS.groups.map(g => `<h3>${esc(g.title)}</h3>` + (g.note ? `<p class="note">${esc(g.note)}</p>` : "")
       + g.entries.map(e => `<div class="cr" id="cr-${esc(e.id)}"><b>${esc(e.title)}</b><div class="by">${esc(e.credit)}</div>`
         + (e.detail ? `<div class="what">${esc(e.detail)}</div>` : "")
@@ -13614,7 +13655,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"62a421c40428";
+  const BUILD = /*BUILD*/"3a57fbba7a0b";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13644,6 +13685,117 @@ void main() {
 })();
 </script>
 <script>
+// ---------- the welcome: what this is, once, for a first-time visitor ----------
+(function () {
+  const S = window.cassiniSettings;
+  const KEY = "cassini-welcome";
+  const params = new URLSearchParams(location.search);
+  const q = params.get("welcome");
+  const readSeen = () => {
+    if (document.cookie.split(/;\s*/).some(c => c === KEY + "=1")) return true;
+    try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; }
+  };
+  function markSeen() {
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${KEY}=1; Max-Age=${60 * 60 * 24 * 365}; Path=/; SameSite=Lax${secure}`;
+    try { localStorage.setItem(KEY, "1"); } catch (e) {}
+  }
+
+  // the words (one place, so they are easy to change)
+  const phone = () => document.body.classList.contains("phone");
+  const COPY = {
+    kicker: "NASA · ESA · ASI  ·  1997 – 2017",
+    title: "This is the real Cassini mission",
+    lead: "Cassini spent 13 years orbiting Saturn, studying its rings and moons, until it plunged into the planet in 2017. You can follow the whole journey here.",
+    points: [
+      "<b>Every picture is real.</b> They are the frames Cassini's cameras took, cleaned up and aligned, but nothing is invented.",
+      "<b>So is the flight.</b> The spacecraft moves and turns the way NASA's tracking data says it did, as closely as we can rebuild it."
+    ],
+    stats: [["1997", "launched"], ["13 years", "at Saturn"], ["453,048", "pictures taken"]],
+    note: "An independent project, not affiliated with NASA, ESA or JPL."
+  };
+
+  const el = document.createElement("div");
+  el.id = "welcome"; el.hidden = true;
+  el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "wtitle");
+  function render() {
+    const c = COPY;
+    el.innerHTML = `<div class="wcard">
+      <button class="wx" data-w="explore" aria-label="Close" title="Close">×</button>
+      <p class="wkick">${c.kicker}</p>
+      <h2 id="wtitle">${c.title}</h2>
+      ${c.lead ? `<p class="wlead">${c.lead}</p>` : ""}
+      ${c.points && c.points.length ? `<ul class="wpts">${c.points.map(p => `<li><span>${p}</span></li>`).join("")}</ul>` : ""}
+      ${c.stats ? `<div class="wstats">${c.stats.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}</div>` : ""}
+      <div class="wfoot"><span class="wnote">${c.note}</span>
+        <button data-w="explore">Just explore</button><button class="wtour" data-w="tour">Take the tour</button></div>
+    </div>`;
+  }
+  ($("app") || document.body).append(el);
+  function $(id) { return document.getElementById(id); }
+  // clicks and keys on the welcome stay its own (the 3D view under it does not turn)
+  for (const t of ["pointerdown", "mousedown", "dblclick", "wheel", "touchstart"]) el.addEventListener(t, e => e.stopPropagation(), { passive: true });
+
+  let on = false, lastFocus = null;
+  function open() {
+    if (on) return;
+    render();
+    on = true; lastFocus = document.activeElement;
+    document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    if (window.cassiniTutorial && cassiniTutorial.active) cassiniTutorial.stop();
+    el.hidden = false; el.offsetWidth; el.classList.add("on");
+    document.body.classList.remove("idle");
+    setTimeout(() => { const b = el.querySelector(".wtour"); if (b && on) b.focus({ preventScroll: true }); }, 60);
+    document.addEventListener("keydown", keys, true);
+  }
+  function close(then) {
+    if (!on) return;
+    on = false; markSeen();
+    if (window.cassiniTutorial && cassiniTutorial.markSeen) cassiniTutorial.markSeen();
+    el.classList.remove("on");
+    document.removeEventListener("keydown", keys, true);
+    setTimeout(() => { if (!on) el.hidden = true; }, 460);
+    if (lastFocus && lastFocus.focus && then !== "tour") try { lastFocus.focus({ preventScroll: true }); } catch (e) {}
+    if (then === "tour" && window.cassiniTutorial) setTimeout(() => cassiniTutorial.start(), 350);
+  }
+  function keys(e) {
+    if (!on) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); close(); return; }
+    if (e.key === "Tab") {                       // focus stays in the card
+      const bs = [...el.querySelectorAll("button")].filter(b => b.offsetParent);
+      const i = bs.indexOf(document.activeElement);
+      e.preventDefault(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus();
+      return;
+    }
+    if (!e.target.closest || !e.target.closest("#welcome")) e.stopImmediatePropagation();   // the page's shortcuts wait
+  }
+  el.addEventListener("click", e => {
+    e.stopPropagation();
+    const b = e.target.closest("[data-w]");
+    if (b) return close(b.dataset.w);
+    if (!e.target.closest(".wcard")) close();     // a click outside the card: explore
+  });
+
+  // reopened from Settings > Interface, the Cassini OS menu and the About window
+  if (S) S.define({ key: "interface.welcome", section: "Interface", label: "Welcome", type: "action", button: "Show the welcome",
+    hint: "What Cassini OS is, in a few lines, as a first-time visitor sees it.", run: () => { S.close(); open(); } });
+  document.addEventListener("click", e => {
+    const b = e.target.closest('[data-act="welcome"]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    if (window.cassiniAbout) cassiniAbout.close();
+    open();
+  }, true);
+
+  window.cassiniWelcome = {
+    open, close,
+    get on() { return on; },
+    // shown on its own on this visit: not seen before (or ?welcome=1), and not kept away by a link
+    get due() { return q === "1" || (q !== "0" && params.get("tour") !== "0" && !readSeen()); },
+    get seen() { return readSeen(); }
+  };
+})();
+</script>
+<script>
 // ---------- the tour: quiet hints for a first visit, and one-time tips for new features ----------
 (function () {
   const $ = id => document.getElementById(id);
@@ -13666,8 +13818,8 @@ void main() {
 
   // ---- the steps of the tour (other features add theirs with cassiniTutorial.add) ----
   const STEPS = [
-    { id: "welcome", at: null, title: "Welcome aboard Cassini",
-      text: p => `This is NASA and ESA's Cassini mission, 1997 to 2017, replayed along its real path. ${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
+    { id: "welcome", at: null, title: "Look around",
+      text: p => `${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
     { id: "play", at: ["#speedtool", "#play"], title: "Play and speed",
       text: "Play or pause the mission here. The speed slider sets how much mission time passes each second, from real time up to days a second." },
     { id: "timeline", at: ["#tl"], title: "The timeline",
@@ -13700,6 +13852,7 @@ void main() {
     const b = document.body.classList;
     return b.contains("cutscene") || b.contains("cutscene-out") || (window.cassiniAmbient && cassiniAmbient.on) || (window.cassiniMovie && cassiniMovie.on)
       || ($("loading") && !$("loading").hidden) || ($("loadscreen") && $("loadscreen").classList.contains("on"))
+      || (window.cassiniWelcome && cassiniWelcome.on)
       || ["cassiniFinale", "cassiniLaunch", "cassiniSOI", "cassiniHuygensRelease", "cassiniHuygensLanding"].some(k => window[k] && window[k].running);
   }
 
@@ -13832,12 +13985,17 @@ void main() {
   }
   setInterval(() => { if (tips.length) nextTip(); }, 3000);
 
-  // ---- the first visit: once the page has loaded and is quiet, after a few seconds of the view on its own ----
-  if (q !== "0" && (q === "1" || (!saved.tour && tipsAllowed()))) {
+  // ---- the first visit: once the page has loaded and is quiet, after a few seconds of the view on its own, the
+  // welcome (welcome.html), which offers the tour; a visitor who has seen the welcome but not the tour gets the tour ----
+  const welcomeDue = () => q !== "1" && window.cassiniWelcome && cassiniWelcome.due;
+  if (q !== "0" && (q === "1" || welcomeDue() || (!saved.tour && tipsAllowed()))) {
     let calm = 0;
     const wait = setInterval(() => {
       calm = busy() || document.querySelector(".menu.open") ? 0 : calm + 1;
-      if (calm >= 4) { clearInterval(wait); if (!T.active && (q === "1" || !saved.tour)) start(); }
+      if (calm < 4) return;
+      clearInterval(wait);
+      if (welcomeDue()) cassiniWelcome.open();
+      else if (!T.active && (q === "1" || !saved.tour)) start();
     }, 1000);
   }
 
@@ -13850,7 +14008,8 @@ void main() {
   addEventListener("resize", place);
 
   window.cassiniTutorial = { add, tip, start, stop, get active() { return T.active; }, get step() { return T.cur && T.cur.id; },
-    seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS };
+    seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS,
+    markSeen: () => { saved.tour = 1; store(); setTimeout(nextTip, 1500); } };
 })();
 </script>
 <script>
