@@ -11,7 +11,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
-import { loadMirror } from "./mirror.mjs";
+import { loadMirror, LOADER_SCRIPT } from "./mirror.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, "..");
@@ -35,11 +35,11 @@ if (args.fresh) for (const d of ["r2", "cache"]) fs.rmSync(path.join(state, "v3"
 
 // wrangler dev keeps local R2 under <persist-to>/v3/r2, one namespace per bucket_name
 const mf = new Miniflare({
-  modules: true, script: "export default { fetch() { return new Response(null, { status: 204 }); } }",
+  modules: true, script: LOADER_SCRIPT,
   r2Buckets: { BUCKET: bucketName }, r2Persist: path.join(state, "v3", "r2"),
 });
 const t0 = Date.now();
-const loaded = await loadMirror(dir, await mf.getR2Bucket("BUCKET"), { log: m => process.stdout.write(`\r${m}`) });
+const loaded = await loadMirror(dir, mf, { log: m => process.stdout.write(m.startsWith("retry") ? `\n${m}\n` : `\r${m}`) });
 await mf.dispose();
 const manifest = args.manifest || loaded.manifest;
 console.log(`\rloaded ${loaded.objects} objects, ${(loaded.bytes / 1e6).toFixed(1)} MB from ${dir} in ${((Date.now() - t0) / 1000).toFixed(1)} s; manifest ${manifest}`);
