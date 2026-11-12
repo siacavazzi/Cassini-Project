@@ -2530,10 +2530,13 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // it be; options: values a choice does not offer. These carry out policy.json page_settings (the flag settings and
   // a forced setting are hidden too); web/test_public_switch.cjs checks them line by line against it.
   const PUBLIC = {
+    // Mosaic passes stays Auto (every pass is published as the kind the prebuild made it, so no forced kind has its
+    // pictures) and Only years with pictures built stays on (the public site has only the years published)
     hidden: [/^processing\./, "cameras.balancedColor", "cameras.autoCenter", "cameras.hdr", "cameras.hdrGlow", "movies.laps",
-             "movies.stabilizeLocal", /^interface\.flag/],
-    forced: { "cameras.autoCenter": true, "cameras.hdr": "off", "movies.stabilizeLocal": true, "movies.laps": 1 },
-    options: { "cameras.colors": ["raw", "false"], "cameras.passes": ["mosaic"] }
+             "movies.stabilizeLocal", /^interface\.flag/, "cameras.passes", "playback.builtOnly"],
+    forced: { "cameras.autoCenter": true, "cameras.hdr": "off", "movies.stabilizeLocal": true, "movies.laps": 1,
+              "cameras.passes": "auto", "playback.builtOnly": true },
+    options: { "cameras.colors": ["raw", "false"] }
   };
   const isPublic = window.cassiniPublic === true;
   const publicHidden = key => isPublic && PUBLIC.hidden.some(h => typeof h === "string" ? h === key : h.test(key));
@@ -14991,7 +14994,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"f3b39990cb08";
+  const BUILD = /*BUILD*/"b766d91d391a";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
