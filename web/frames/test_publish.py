@@ -331,6 +331,33 @@ def test_busy_retry(tmp):
                 os.environ[k] = v
 
 
+def test_retry_as_is():
+    """retry_busy on a unit whose busy URL turns negative: its as-is pictures recorded in the first round are not asked
+    again (they would be recorded twice and counted twice in the manifest), and the ones not yet recorded are."""
+    import argparse
+    busy, held, fresh = ("/frames/mosaic/X/0.webp?size=1024", "/frames/processed/N1500000000_1.webp?size=512",
+                         "/frames/processed/N1500000001_1.webp?size=512")
+    work = [{"family": "mosaic", "year": 2009, "urls": [busy], "as_is": [held, fresh]}]
+    recs = [{"url": busy, "outcome": "busy", "year": 2009}, {"url": held, "outcome": "published", "year": 2009}]
+    asked = []
+
+    def run_units(again, *a, **k):
+        asked.append([dict(u) for u in again])
+        return [{"url": x, "outcome": "missing" if x == busy else "published", "year": 2009}
+                for u in again for x in u["urls"] + (u.get("as_is") or [])]
+
+    real, publish.run_units = publish.run_units, run_units
+    try:
+        out = publish.retry_busy(work, recs, argparse.Namespace(jobs=1), "c", "dir:m", "s", {}, "p", log=lambda m: None)
+    finally:
+        publish.run_units = real
+    urls = sorted(r["url"] for r in out)
+    check(len(asked) == 1 and asked[0][0]["urls"] == [busy] and asked[0][0]["as_is"] == [fresh],
+          "a retried unit asks its busy URL again and only the as-is pictures not yet recorded")
+    check(urls == sorted([busy, held, fresh]) and len(out) == 3,
+          "each URL is recorded once after the retry (an as-is picture already published is not counted twice)")
+
+
 class FakeOM:
     """obs_mosaic as pass_units reads it: a plan's scale, whether it sharpens, whether the page evens the pass."""
     class NotKept(Exception):
@@ -522,6 +549,7 @@ def main():
         test_r2(tmp)
         test_one()
         test_busy_retry(tmp)
+        test_retry_as_is()
         test_pass_units(tmp)
         test_manifest()
         cache, mirror = os.environ.get("CASSINI_PUBLISH_CACHE"), os.environ.get("CASSINI_PUBLISH_MIRROR")

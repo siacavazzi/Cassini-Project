@@ -13,11 +13,14 @@
 //
 //   node web/public/harness/zero_origin.mjs --site http://127.0.0.1:8955 [--frames URL] [--mode before|public]
 //        [--sessions S1,S3] [--minutes 3] [--out DIR] [--channel chrome] [--three DIR] [--headed]
+//        [--moment 2005-02-17T05:46:09 [--speed 600] [--label NAME]]
 //
 // --site      the page (a frame server with --site, a static copy, or Pages); --frames the frames host when it is not
 //             the site (passed to the page as ?frames=); --minutes how long the playing sessions play (S1, S2, S8: the
 //             plan says three minutes; shorter for a smoke run); --out writes <out>/<session>.json with every request
 //             and summary.json; --channel chrome uses Google Chrome (the Mini's page bench), else Playwright's Chromium.
+// --moment    the moment every session opens instead of its own list (gate G3's ten stretches, load/stretches.json);
+//             --speed the playback speed the sessions open at instead of their own
 // Exit status 0 when every session ran; the counts are the result (a "before" run is expected to count origins).
 import fs from "node:fs";
 import path from "node:path";
@@ -114,6 +117,9 @@ for (const s of sessions) {
     r.headers = Object.fromEntries(Object.entries(r.headers || {}).filter(([k]) => /^x-|^content-type$/.test(k)));
     reqs.push(r);
   });
+  // an answer whose body the page never reads (a 404 it only checks .ok of) has no requestfinished: its status and
+  // headers are kept when they come, so the request is counted, and idle() does not wait on it
+  page.on("response", async res => { const r = live.get(res.request()); if (!r) return; r.status = res.status(); r.answered = true; try { r.headers = await res.allHeaders(); } catch (e) {} });
   page.on("requestfailed", q => { const r = live.get(q); if (!r) return; live.delete(q); r.failed = q.failure() ? q.failure().errorText : "failed"; r.status = 0; reqs.push(r); });
   const h = {
     site, frames, minutes, page, ctx, browser,
@@ -124,15 +130,24 @@ for (const s of sessions) {
       return `${site}/?${p.toString()}`;
     },
     async open(q, timeout = 240000) {
+      if (args.speed) q = { ...q, speed: args.speed };
       await page.goto(h.url(q));
       await page.waitForFunction(() => document.getElementById("loading") && document.getElementById("loading").hidden && typeof state !== "undefined", null, { timeout });
       h.step(`opened ${new URLSearchParams(q).toString()}`);
     },
     wait: ms => page.waitForTimeout(ms),
+    // until no request has been in flight for `quiet` ms (at most `cap` ms): a step's pictures asked and answered
+    async idle(quiet = 400, cap = 8000) {
+      const end = Date.now() + cap; let since = Date.now();
+      while (Date.now() < end) { await page.waitForTimeout(100); if ([...live.values()].some(r => !r.answered)) since = Date.now(); else if (Date.now() - since >= quiet) return true; }
+      if (process.env.HARNESS_DEBUG_IDLE) console.log("still live:", [...live.values()].filter(r => !r.answered).map(r => `${Math.round((Date.now() - r.t) / 1000)}s ${r.type} ${r.url.slice(0, 140)}`).join("\n  "));
+      return false;
+    },
     step: text => steps.push({ t: Date.now(), text }),
     skip: (text, owner) => steps.push({ t: Date.now(), skipped: true, text, owner }),
     // the first of these moments inside what the cache holds (/frames/slices.json spans; null: the whole mission)
     async moment(list) {
+      if (args.moment) return { t: args.moment, label: args.label || args.moment };
       const sl = await page.evaluate(async f => { try { const r = await fetch(`${f}/frames/slices.json`, { cache: "no-store" }); return r.ok ? r.json() : null; } catch (e) { return null; } }, frames).catch(() => null);
       const spans = sl && sl.spans;
       if (!spans) return list[0];
@@ -145,6 +160,8 @@ for (const s of sessions) {
   // a blank page first, on the site's origin, so moment() can ask the frames host before the session opens a moment
   try { await page.goto(`${site}/robots.txt`).catch(() => {}); await s.run(h); } catch (e) { error = String(e && e.stack || e).slice(0, 2000); }
   await page.waitForTimeout(1500);
+  for (const r of live.values()) if (r.answered) { r.headers = Object.fromEntries(Object.entries(r.headers || {}).filter(([k]) => /^x-|^content-type$/.test(k))); r.unread = true; reqs.push(r); }
+  live.clear();
   for (const r of reqs) r.k = classify(r);
   const sum = summarize(reqs);
   const out = { session: s.id, title: s.title, proves: s.proves, mode, site, frames, seconds: Math.round((Date.now() - t0) / 1000), error, steps, ...sum };
