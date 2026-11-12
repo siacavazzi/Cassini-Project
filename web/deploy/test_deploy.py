@@ -270,6 +270,10 @@ class Cost(unittest.TestCase):
         self.assertAlmostEqual(c["r2_reads"], 0)                   # 10 M misses, all inside the free 10 M
         self.assertAlmostEqual(c["storage"], 0)
         self.assertIn("Cost sheet", cost.sheet(pm, 200, 0.5, 2, "test"))
+        # Analytics Engine: one point per 10 answers (the Worker's USAGE_SAMPLE on staging and production)
+        self.assertAlmostEqual(cost.month_cost(200e6, 0, 0.5, 2)["analytics"], (20e6 - 10e6) / 1e6 * 0.25)
+        self.assertAlmostEqual(cost.month_cost(200e6, 0, 0.5, 2, ae_sample=1)["analytics"], (200e6 - 10e6) / 1e6 * 0.25)
+        self.assertIn("double3", cost.AE_SQL)
 
 
 if __name__ == "__main__":

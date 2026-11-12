@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { handle, forgetManifest } from "../src/index.mjs";
+import { handle, forgetManifest, forgetShards, sampleWith } from "../src/index.mjs";
 import { MANIFEST, FAMILIES } from "./fixture_mirror.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -25,9 +25,10 @@ function bucket(objects) {
   };
 }
 
-function env(objects) {
-  const points = [];
-  return { points, BUCKET: bucket(objects), MANIFEST_KEY: "manifest/m.json", SITE_ENV: "local", USAGE: { writeDataPoint: p => points.push(p) } };
+function env(objects, extra = {}) {
+  const points = [], gets = [];
+  const b = bucket(objects), BUCKET = { get: key => { gets.push(key); return b.get(key); } };
+  return { points, gets, BUCKET, MANIFEST_KEY: "manifest/m.json", SITE_ENV: "local", USAGE: { writeDataPoint: p => points.push(p) }, ...extra };
 }
 
 const FRAME_KEY = `frame/${FAMILIES.frame}/frames/N1500060789_2.webp`;
@@ -85,4 +86,111 @@ test("D1: the Worker's source makes no outbound request", () => {
   }
   assert.deepEqual(bad, []);
   assert.match(fs.readFileSync(files[0], "utf8"), /export default \{ fetch: handle \}/);   // the handler itself, not a call
+});
+
+// ---- the two costs WP10a found (PR #438): table answers read R2 every time; one data point per request ----
+
+// the Cache API as far as the Worker uses it: one colo's cache, by request URL
+function colo() {
+  const kept = new Map();
+  return { kept, default: {
+    async match(req) { const r = kept.get(req.url); return r ? r.clone() : undefined; },
+    async put(req, res) { kept.set(req.url, res.clone()); },
+  } };
+}
+const TABLE = `table/${FAMILIES.table}`;
+const TABLES = {
+  "manifest/m.json": { body: JSON.stringify(MANIFEST) },
+  [`${TABLE}/alias/N15000.json`]: { body: JSON.stringify({ shard: "N15000", frames: {
+    N1500060789_2: { p: "PASS1", n: 3 }, N1500060800_2: { p: "PASS1", n: 4 }, N1500060812_2: { p: "PASS1", n: 5 } } }) },
+  [`${TABLE}/pass/PASS1/steady/c1k0.json`]: { body: '{"steady": [1, 2, 3]}' },
+  [`${TABLE}/pass/PASS1/info.json`]: { body: '{"pass": "PASS1"}' },
+};
+const tableGet = async (e, url) => { const waits = []; const r = await handle(new Request("https://frames.test" + url), e, { waitUntil: p => waits.push(p) }); await Promise.all(waits); return r; };
+
+test("table answers: the alias shard and the pass part are read from R2 once, then from the Cache API and the isolate", async () => {
+  forgetManifest(); forgetShards();
+  const c = colo(); globalThis.caches = c;
+  try {
+    const e = env(TABLES);
+    const asks = ["N1500060789_2", "N1500060800_2", "N1500060812_2"].map(id => `/frames/movie/${id}.steady.json?center=1&color=0`);
+    const bodies = [];
+    for (const u of asks) { const r = await tableGet(e, u); assert.equal(r.status, 200); bodies.push(await r.text()); }
+    assert.deepEqual(bodies, Array(3).fill('{"steady": [1, 2, 3]}'));
+    const reads = e.points.map(p => p.doubles[1]);
+    assert.deepEqual(reads, [3, 0, 0]);                      // the manifest, the shard, the part; then nothing from R2
+    assert.deepEqual(e.points.map(p => p.blobs[2]), ["miss", "hit", "hit"]);
+    // a fresh isolate in the same colo: the shard and the part come from the Cache API
+    forgetShards();
+    const info = await tableGet(e, "/frames/movie/N1500060812_2.json");
+    assert.deepEqual(await info.json(), { pass: "PASS1", n: 5 });
+    assert.deepEqual(e.points.map(p => p.doubles[1]), [3, 0, 0, 1]);   // only info.json, which no one had asked
+    forgetShards();
+    await tableGet(e, "/frames/movie/N1500060789_2.steady.json?center=1&color=0");
+    assert.equal(e.points.at(-1).doubles[1], 0);
+    assert.equal(e.gets.filter(k => k.startsWith(TABLE + "/alias/")).length, 1);
+    // a frame in no pass and a pass with no table published are not kept, and answer as before
+    const none = await tableGet(e, "/frames/movie/N1500099999_2.steady.json?center=1&color=0");
+    assert.equal(none.status, 404);
+  } finally { delete globalThis.caches; forgetShards(); }
+});
+
+test("a new publish under the same tags answers its own tables, not the copies the colo and the isolate kept", async () => {
+  forgetManifest(); forgetShards();
+  const c = colo(); globalThis.caches = c;
+  try {
+    const objects = { ...TABLES };
+    const e = env(objects);
+    const ask = "/frames/movie/N1500070000_2.steady.json?center=1&color=0";
+    const before = await tableGet(e, ask);
+    assert.equal(before.status, 404);                                  // publish A: the frame is in no pass yet
+    await tableGet(e, "/frames/movie/N1500060789_2.steady.json?center=1&color=0");
+    // publish B, same picture versions (same tags): the shard gains the frame, a part changes
+    const B = { ...MANIFEST, publish_id: "20261112T030000Z-1234567" };
+    objects["manifest/b.json"] = { body: JSON.stringify(B) };
+    objects[`${TABLE}/alias/N15000.json`] = { body: JSON.stringify({ shard: "N15000", frames: {
+      ...JSON.parse(TABLES[`${TABLE}/alias/N15000.json`].body).frames, N1500070000_2: { p: "PASS1", n: 6 } } }) };
+    objects[`${TABLE}/pass/PASS1/steady/c1k0.json`] = { body: '{"steady": [4, 5, 6]}' };
+    e.MANIFEST_KEY = "manifest/b.json"; forgetManifest();
+    const after = await tableGet(e, ask);
+    assert.equal(after.status, 200);
+    assert.equal(await after.text(), '{"steady": [4, 5, 6]}');
+    const old = await tableGet(e, "/frames/movie/N1500060789_2.steady.json?center=1&color=0");
+    assert.equal(await old.text(), '{"steady": [4, 5, 6]}');
+    assert.equal(e.points.at(-1).doubles[1], 0);                       // B's copies, kept: no R2 read
+  } finally { delete globalThis.caches; forgetShards(); }
+});
+
+test("data points: ordinary answers sampled 1 in USAGE_SAMPLE at random, weighing that many; every refusal and miss written", async () => {
+  forgetManifest(); forgetShards();
+  // draws 0.05, 0.15, ..., 0.95 in turn: those under 1/4 (two in ten) write a point with USAGE_SAMPLE 4
+  let i = 0; sampleWith(() => ((i++ % 10) + 0.5) / 10);
+  try {
+    const e = env(OBJECTS, { USAGE_SAMPLE: "4" });
+    for (let k = 0; k < 20; k++) await (await get(e, "/frames/N1500060789_2.webp")).arrayBuffer();
+    await get(e, "/frames/N1500060800_1.webp");                       // a miss
+    await get(e, "/flags/");                                           // refused
+    await get(e, "/usage", { method: "POST", body: "visit" });         // a counted word
+    const p = e.points.map(x => ({ outcome: x.blobs[4], status: x.blobs[1], weight: x.doubles[2] }));
+    assert.deepEqual(p.filter(x => x.outcome === "ok" && x.status === "200"), Array(4).fill({ outcome: "ok", status: "200", weight: 4 }));
+    assert.deepEqual(p.filter(x => x.status !== "200").map(x => [x.outcome, x.status, x.weight]), [["miss", "404", 1], ["refused", "404", 1], ["ok", "visit", 1]]);
+    // unbiased: with draws spread evenly over [0, 1), 100 answers of USAGE_SAMPLE 10 make exactly 10 points of 10
+    sampleWith(() => ((i++ % 10) + 0.5) / 10); i = 0;
+    const ten = env(OBJECTS, { USAGE_SAMPLE: "10" });
+    for (let k = 0; k < 100; k++) await get(ten, "/frames/N1500060789_2.webp");
+    assert.equal(ten.points.reduce((t, x) => t + x.doubles[2], 0), 100);
+    // with Math.random, a short-lived isolate's few answers are not rounded up: 3 answers count 0 or 10, 3 on average
+    sampleWith();
+    let total = 0;
+    for (let run = 0; run < 2000; run++) {
+      const one = env(OBJECTS, { USAGE_SAMPLE: "10" });
+      for (let k = 0; k < 3; k++) await get(one, "/frames/N1500060789_2.webp");
+      total += one.points.reduce((t, x) => t + x.doubles[2], 0);
+    }
+    assert.ok(Math.abs(total / 2000 - 3) < 0.6, `mean ${total / 2000}`);
+  } finally { sampleWith(); }
+  // without USAGE_SAMPLE (local), one point per answer, weighing 1
+  const all = env(OBJECTS);
+  for (let k = 0; k < 3; k++) await get(all, "/frames/N1500060789_2.webp");
+  assert.deepEqual(all.points.map(x => x.doubles[2]), [1, 1, 1]);
 });

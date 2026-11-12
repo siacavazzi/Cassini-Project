@@ -2,9 +2,13 @@
 """A film made in the page (export.html) waits for a finished mosaic, as the server's film does
 (export.Pictures.finished_mosaic): the frame server answers a mosaic still being made with the tiles so far (200,
 X-Reel "behind" > 0), and export.html's fetchPicture asks again until "behind" is 0, then decodes that one; past
-MOSAIC_WAIT it gives up (null: the next try stands in). A picture without X-Reel, a 503 and a 404 are as before.
+MOSAIC_WAIT it gives up (null: the next try stands in). A picture without X-Reel and a 404 are as before; a 503 that
+never ends and a request that keeps failing give up at the same limit, as the server's film does on its TimeoutError.
+The wait rule is one function, levels-local.js's fetchFinished (cassiniPlanLocal.fetchFinished), which the exposure
+graph measures with too.
 
-fetchPicture is taken from src/export.html as it is and run in node with a stand-in fetch, clock and decoder.
+fetchPicture is taken from src/export.html and fetchFinished from src/levels-local.js as they are, and run in node with
+a stand-in fetch, clock and decoder.
 
   python web/test_export_mosaic_wait.py
 """
@@ -16,20 +20,25 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 src = open(os.path.join(HERE, "cassini-os", "src", "export.html"), encoding="utf8").read()
-a = src.index("  // a mosaic still behind its frame (X-Reel")
-b = src.index("\n  }\n", src.index("async function fetchPicture")) + 4
-code = src[a:b]
-assert "MOSAIC_WAIT = 900e3" in code, "MOSAIC_WAIT is not the server's 900 s (export.MOSAIC_WAIT)"
+a = src.index("  async function fetchPicture")
+code = src[a:src.index("\n  }\n", a) + 4]
+lev = open(os.path.join(HERE, "cassini-os", "src", "levels-local.js"), encoding="utf8").read()
+a = lev.index("  const WAIT_MOST = ")
+wait = lev[a:lev.index("\n  }\n", lev.index("async function fetchFinished")) + 4]
+assert "WAIT_MOST = 900e3" in wait, "WAIT_MOST is not the server's 900 s (export.MOSAIC_WAIT)"
 
 JS = r"""
 let now = 0;
 const realNow = Date.now; Date.now = () => now;
-const sleep = ms => { now += ms; return Promise.resolve(); };
+const setTimeout = (f, ms) => { now += ms; f(); };
 let answers, asked;
-const fetch = async (url, init) => { asked.push([url, init && init.cache || ""]); return answers.length > 1 ? answers.shift() : answers[0]; };
+const fetch = async (url, init) => { asked.push([url, init && init.cache || ""]); const a = answers.length > 1 ? answers.shift() : answers[0];
+  if (a === 'fail') throw new TypeError('Failed to fetch'); return a; };
 const createImageBitmap = async blob => ({ picture: blob });
 const reply = (status, reel) => ({ status, ok: status >= 200 && status < 300, headers: { get: k => (k === 'X-Reel' && reel ? JSON.stringify(reel) : null) },
   blob: async () => (reel ? 'behind ' + reel.behind : 'plain') });
+""" + wait + r"""
+const window = { cassiniPlanLocal: { fetchFinished } };
 """ + code + r"""
 (async () => {
   const out = {};
@@ -40,6 +49,9 @@ const reply = (status, reel) => ({ status, ok: status >= 200 && status < 300, he
   await run('no X-Reel', [reply(200, null)]);
   await run('404', [reply(404, null)]);
   await run('never finished', [reply(200, { behind: 3 })]);
+  await run('503 for ever', [reply(503)]);
+  await run('fails, then comes', ['fail', 'fail', reply(200, null)]);
+  await run('fails for ever', ['fail']);
   process.stdout.write(JSON.stringify(out));
 })();
 """
@@ -54,7 +66,12 @@ assert got["no X-Reel"]["got"] == "plain" and got["no X-Reel"]["asked"] == 1, go
 assert got["404"]["got"] is None and got["404"]["asked"] == 1, got["404"]
 n = got["never finished"]
 assert n["got"] is None and 900e3 <= n["waited"] < 905e3, n
+for k in ("503 for ever", "fails for ever"):
+    assert got[k]["got"] is None and 900e3 <= got[k]["waited"] < 905e3, (k, got[k])
+f = got["fails, then comes"]
+assert f["got"] == "plain" and f["asked"] == 3 and f["nostore"], f
 print(f"a finished mosaic at once: 1 ask; behind twice (and a 503) then finished: {w['asked']} asks, the finished one, "
       f"asked again past the browser's cache; no X-Reel and a 404 as before; never finished: given up after "
-      f"{n['waited'] / 1000:.0f} s ({n['asked']} asks), the next try stands in")
+      f"{n['waited'] / 1000:.0f} s ({n['asked']} asks), the next try stands in; a 503 or a failing request for ever: "
+      f"given up at the same limit; two failed requests then a picture: the picture")
 print("ok")

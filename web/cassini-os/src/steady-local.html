@@ -559,7 +559,15 @@ onmessage = async e => {
         // whether the page evens the pass itself (obs_mosaic.page_evens, on the colour table): the public site then has
         // no exposure= frames of it (prebuild.make_evened made them only for the passes it does not); a table the
         // public site does not have says nothing either way
-        if (!t.missing) evened.set(k, !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets)));
+        // (and draws no frame in its set's colour, the table's "tint": want() leaves such a frame to the server's evened
+        // picture, which the pre-build now makes, obs_mosaic.page_evens; asked plain, the pass played without it)
+        // (for every frame of the pass, not only the one whose lookup fetched the table: the others find byId filled
+        // and never come here, so their evens() stayed undefined and they were asked plain)
+        if (!t.missing) {
+          const ev = !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets) && !(color && t.tint && t.tint.length));
+          evened.set(k, ev);
+          for (const fid of t.ids || []) evened.set(`${tag(center, color)}:${fid}`, ev);
+        }
         // (public: no table published means the frame is in no movie pass, policy.json steady_table, so it has no movie
         // picture either; {"local": false} is a pass the server drew whole)
         if (!t.local) { byId.set(k, null); if (!t.missing) drawn.add(k); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }

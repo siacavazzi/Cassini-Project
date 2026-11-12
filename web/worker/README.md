@@ -33,19 +33,27 @@ contracts in `web/public/` (brief: `docs/public-site/briefs/WP4.md`). It never f
   words (`visit`, `visit-link`, `copy-link`).
 - **refused**: 404, or 405 with `Allow` when the path is a route of another method.
 
-Caching: pictures and table answers fixed in keys.json `public, max-age=31536000, immutable` (their keys change with
-their tags); table answers read from a publish `public, max-age=300` (their addresses are the same in every publish, and
-a new publish under the same picture versions can change them: an alias shard gains the frames of years added); manifest
+Caching in the viewer's browser: pictures and table answers fixed in keys.json `public, max-age=31536000, immutable`
+(their keys change with their tags); table answers read from a publish `public, max-age=300` (their addresses are the
+same in every publish, and a new publish under the same picture versions can change them: an alias shard gains the
+frames of years added). The Cache API sits in front of R2 for pictures and for the alias shards and pass-table parts a
+table answer reads, so a colo reads each from R2 once a publish; the isolate keeps its last 16 alias shards parsed.
+Table copies are kept under the manifest's publish_id as well as their key, for the same reason. Manifest
 answers and `no_alias_answer`s `public, max-age=60`, refusals, misses and markers `no-store`. No manifest: 503.
 
-Bindings: `BUCKET` (R2), `MANIFEST_KEY`, `SITE_ENV` (local, staging, production), `USAGE` (Analytics Engine, optional).
+Bindings: `BUCKET` (R2), `MANIFEST_KEY`, `SITE_ENV` (local, staging, production), `USAGE` (Analytics Engine, optional),
+`USAGE_SAMPLE` (optional; staging and production set 10).
 
 ## Counting
 
-One Analytics Engine data point per answer (WP8's cost sheet and the gates): `index1` the policy route id (`none` when
+Analytics Engine data points (WP8's cost sheet and the gates). A point costs about as much as the Worker request, so
+with `USAGE_SAMPLE` = N an answer that came back whole (below 400, outcome `ok` or `fallback`) is written with chance
+1 in N, weighing N (an unbiased total), and the rest of those not at all; every refusal, miss, marker, `none`, error and POST /usage word
+is written, weighing 1, so the gates count them exactly. Without `USAGE_SAMPLE`, one point per answer. Sum `double3`
+(times `_sample_interval`) for answers. One point: `index1` the policy route id (`none` when
 no route fits); `blob1` the store (`usage` for a counted word), `blob2` the status (the word for usage), `blob3` the
 Cache API `hit` or `miss`, `blob4` the colo, `blob5` the outcome (`ok`, `fallback`, `marker`, `miss`, `none`,
-`refused`, `error`); `double1` the response bytes, `double2` the R2 reads made.
+`refused`, `error`); `double1` the response bytes, `double2` the R2 reads made, `double3` the answers it stands for.
 
 ## The mirror format
 

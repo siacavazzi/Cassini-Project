@@ -11,8 +11,9 @@ The cost sheet (WP8): requests and bytes per viewer-minute, measured, and what 1
   ... [--storage-gb 200] [--cache-hit 0.5] [--cpu-ms 2] [--md OUT.md]
 
 Only the frames host costs money: Pages serves the page and the replay data free, and Cloudflare charges nothing for
-bytes out, so bytes are reported but priced at zero. Each frames request is one Worker request and one Analytics
-Engine point; an edge-cache miss adds one R2 read (Class B), --cache-hit the share that are hits.
+bytes out, so bytes are reported but priced at zero. Each frames request is one Worker request; the Worker writes one
+Analytics Engine point per --ae-sample ordinary answers (USAGE_SAMPLE, 10 on staging and production; every refusal and
+miss besides); an edge-cache miss adds one R2 read (Class B), --cache-hit the share that are hits.
 """
 import argparse
 import glob
@@ -39,14 +40,14 @@ def from_harness(dirs):
     return rows
 
 
-AE_SQL = """SELECT blob1 AS store, blob5 AS outcome, blob3 AS cache, SUM(_sample_interval) AS requests,
-SUM(_sample_interval * double1) AS bytes, SUM(_sample_interval * double2) AS r2_reads
+AE_SQL = """SELECT blob1 AS store, blob5 AS outcome, blob3 AS cache, SUM(_sample_interval * double3) AS requests,
+SUM(_sample_interval * double3 * double1) AS bytes, SUM(_sample_interval * double3 * double2) AS r2_reads
 FROM {dataset} WHERE timestamp > toDateTime('{since}') GROUP BY store, outcome, cache FORMAT JSON"""
 
 
 def from_ae(since, env):
     """The live Worker's points (WP4's layout: blob1 store, blob3 cache, blob5 outcome, double1 bytes, double2 R2
-    reads; POST /usage words as blob1 'usage', blob2 the word)."""
+    reads, double3 the answers a point stands for; POST /usage words as blob1 'usage', blob2 the word)."""
     sys.path.insert(0, HERE)
     import cf
     conf = cf.site_env()
@@ -68,12 +69,12 @@ def per_minute(rows, only_playing=True):
             "static_mb_per_visit": tot("static_bytes") / len(use) / 1e6}
 
 
-def month_cost(req, storage_gb, cache_hit, cpu_ms):
+def month_cost(req, storage_gb, cache_hit, cpu_ms, ae_sample=10):
     P = PRICE
     over = lambda n, inc: max(0.0, n - inc) / 1e6
     worker = P["workers_paid_monthly"] + over(req, P["workers_requests_included"]) * P["workers_per_million_requests"]
     cpu = over(req * cpu_ms, P["workers_cpu_ms_included"]) * P["workers_per_million_cpu_ms"]
-    ae = over(req, P["analytics_engine_points_included"]) * P["analytics_engine_per_million_points"]
+    ae = over(req / max(1, ae_sample), P["analytics_engine_points_included"]) * P["analytics_engine_per_million_points"]
     r2_reads = req * (1 - cache_hit)
     r2 = over(r2_reads, P["r2_class_b_included"]) * P["r2_per_million_class_b"]
     store = max(0.0, storage_gb - P["r2_storage_gb_free"]) * P["r2_storage_per_gb_month"]
@@ -88,22 +89,22 @@ SCENARIOS = [
 ]
 
 
-def sheet(pm, storage_gb, cache_hit, cpu_ms, source):
+def sheet(pm, storage_gb, cache_hit, cpu_ms, source, ae_sample=10):
     rpm = pm["frames_requests_per_min"]
     lines = [f"# Cost sheet", "", f"Source: {source}. Sessions {', '.join(pm['sessions'])}, {pm['minutes']} viewer-minutes.", "",
              f"- **{rpm:.1f} frames requests per viewer-minute** ({rpm * 60:,.0f} an hour), "
              f"{pm['frames_mb_per_min']:.2f} MB of pictures a minute (bytes out cost nothing on Cloudflare)",
              f"- page and replay data per visit from Pages: {pm['static_mb_per_visit']:.1f} MB (free)",
              f"- assumed: edge-cache hit share {cache_hit:.0%} (each miss is one R2 read), {cpu_ms} ms of Worker CPU a request, "
-             f"{storage_gb} GB in R2; prices from pricing.json ({PRICE['checked']})", "",
+             f"{storage_gb} GB in R2, one Analytics Engine point per {ae_sample} answers; prices from pricing.json ({PRICE['checked']})", "",
              "| scenario | viewer-minutes | Worker requests | Workers | CPU | Analytics | R2 reads | R2 storage | **month** |",
              "|---|---|---|---|---|---|---|---|---|"]
     for name, vmin in SCENARIOS:
-        c = month_cost(vmin * rpm, storage_gb, cache_hit, cpu_ms)
+        c = month_cost(vmin * rpm, storage_gb, cache_hit, cpu_ms, ae_sample)
         lines.append(f"| {name} | {vmin:,} | {c['requests']:,.0f} | ${c['workers']:.2f} | ${c['cpu']:.2f} | ${c['analytics']:.2f} | "
                      f"${c['r2_reads']:.2f} | ${c['storage']:.2f} | **${c['total']:.2f}** |")
-    hour = month_cost(60 * rpm, 0, cache_hit, cpu_ms)
-    marginal = (hour["requests"] / 1e6) * (PRICE["workers_per_million_requests"] + PRICE["analytics_engine_per_million_points"]
+    hour = month_cost(60 * rpm, 0, cache_hit, cpu_ms, ae_sample)
+    marginal = (hour["requests"] / 1e6) * (PRICE["workers_per_million_requests"] + PRICE["analytics_engine_per_million_points"] / max(1, ae_sample)
                                            + (1 - cache_hit) * PRICE["r2_per_million_class_b"] + cpu_ms * PRICE["workers_per_million_cpu_ms"])
     lines += ["", f"Past the included amounts, one viewer-hour costs about **${marginal:.4f}** "
                   f"(so 1,000 viewer-hours about ${marginal * 1000:.2f})."]
@@ -116,6 +117,7 @@ def main(argv):
     ap.add_argument("--since"); ap.add_argument("--env", default="staging")
     ap.add_argument("--storage-gb", type=float, default=200); ap.add_argument("--cache-hit", type=float, default=0.5)
     ap.add_argument("--cpu-ms", type=float, default=2); ap.add_argument("--md")
+    ap.add_argument("--ae-sample", type=int, default=10, help="the Worker's USAGE_SAMPLE (1: a point per answer)")
     a = ap.parse_args(argv)
     if a.ae:
         print(json.dumps(from_ae(a.since, a.env), indent=1))
@@ -126,7 +128,7 @@ def main(argv):
         rows, src = json.load(open(a.counts))["sessions"], a.counts
     else:
         ap.error("--harness, --counts or --ae")
-    text = sheet(per_minute(rows), a.storage_gb, a.cache_hit, a.cpu_ms, src)
+    text = sheet(per_minute(rows), a.storage_gb, a.cache_hit, a.cpu_ms, src, a.ae_sample)
     if a.md:
         open(a.md, "w").write(text + "\n")
     print(text)
