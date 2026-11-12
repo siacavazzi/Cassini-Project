@@ -1,4 +1,129 @@
 {
+ "center-1": {
+  "id": "N1859559558_1",
+  "km": 310496,
+  "line": 230.4,
+  "north": -85.35,
+  "sample": 536.6
+ },
+ "center-2": {
+  "id": "N1859559604_1",
+  "km": 310424,
+  "line": 276.1,
+  "north": -85.33,
+  "sample": 535.6
+ },
+ "center-3": {
+  "id": "N1859559804_1",
+  "km": 310110,
+  "line": 475.8,
+  "north": -85.25,
+  "sample": 528.0
+ },
+ "center-4": {
+  "id": "N1859559854_1",
+  "km": 310032,
+  "line": 525.2,
+  "north": -85.23,
+  "sample": 527.0
+ },
+ "center-5": {
+  "id": "N1859560054_1",
+  "km": 309722,
+  "line": 671.8,
+  "north": -85.15,
+  "sample": 371.0
+ },
+ "center-6": {
+  "id": "N1859560104_2",
+  "km": 309645,
+  "line": 621.9,
+  "north": -85.12,
+  "sample": 377.9
+ },
+ "center-7": {
+  "id": "N1859560304_1",
+  "km": 309341,
+  "line": 422.4,
+  "north": -85.04,
+  "sample": 377.1
+ },
+ "center-8": {
+  "id": "N1859560354_1",
+  "km": 309265,
+  "line": 372.8,
+  "north": -85.02,
+  "sample": 377.8
+ },
+ "center-9": {
+  "id": "N1859560554_1",
+  "km": 308966,
+  "line": 172.1,
+  "north": -84.93,
+  "sample": 379.1
+ },
+ "color-jupiter": {
+  "aligned": [
+   "phase +2.4,-22.4",
+   "reference",
+   "phase -0.8,+47.3"
+  ],
+  "calibrated": true,
+  "ids": [
+   "N1360507132_1",
+   "N1360507098_2",
+   "N1360507028_1"
+  ],
+  "lost_px": [
+   4096,
+   4096
+  ],
+  "stacked": [
+   1,
+   1,
+   1
+  ]
+ },
+ "color-saturn": {
+  "aligned": [
+   "phase +2.0,+1.3",
+   "reference",
+   "phase +2.2,-1.4"
+  ],
+  "calibrated": true,
+  "ids": [
+   "W1476557029_1",
+   "W1476557102_1",
+   "W1476557207_1"
+  ],
+  "lost_px": [
+   19463,
+   19463
+  ],
+  "stacked": [
+   1,
+   1,
+   1
+  ]
+ },
+ "color-titan": {
+  "aligned": [
+   "edges near SPICE +4.6,-1.7",
+   "reference",
+   "phase near SPICE -1.2,+0.3"
+  ],
+  "calibrated": true,
+  "ids": [
+   "N1611563684_1",
+   "N1611563651_1",
+   "N1611563618_1"
+  ],
+  "stacked": [
+   1,
+   1,
+   1
+  ]
+ },
  "jup-1-color": {
   "aligned": [
    "phase -1.5,+1.3",
@@ -597,58 +722,5 @@
   "line": 1310.8,
   "north": -75.2,
   "sample": -272.4
- },
- "rhea-color": {
-  "aligned": [
-   "phase +2.8,-0.8",
-   "reference",
-   "phase -0.8,+0.3"
-  ],
-  "calibrated": true,
-  "ids": [
-   "N1484528640_1",
-   "N1484528657_1",
-   "N1484528674_1"
-  ],
-  "stacked": [
-   1,
-   1,
-   1
-  ]
- },
- "rhea-color-centered": {
-  "aligned": [
-   "phase +2.8,-0.8",
-   "reference",
-   "phase -0.8,+0.3"
-  ],
-  "calibrated": true,
-  "centred": true,
-  "centred_view": {
-   "centre": true,
-   "pass": [
-    "RHEA",
-    "ISS_00CRH_REGGEODA001_PRIME",
-    "N",
-    "0"
-   ],
-   "side": 1024
-  },
-  "frame_offset": [
-   -9.8,
-   6.7
-  ],
-  "ids": [
-   "N1484528640_1",
-   "N1484528657_1",
-   "N1484528674_1"
-  ],
-  "offset_px": 11.9,
-  "stacked": [
-   1,
-   1,
-   1
-  ],
-  "turn": -5.4
  }
 }
