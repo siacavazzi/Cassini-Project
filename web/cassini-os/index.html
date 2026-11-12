@@ -3860,7 +3860,7 @@ onmessage = async e => {
     return gpuOk;
   };
   const evened = new Map();   // the same key -> whether the page evens the frame's pass itself, once its table is here
-  const drawn = new Set();    // the same keys, of frames whose pass the server draws ({"local": false}, or no table published)
+  const drawn = new Set();    // the same keys, of frames whose pass the server draws ({"local": false}; not a table never published)
   const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
   const asked = new Set();
   const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
@@ -15008,7 +15008,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"eb4b34ecfb75";
+  const BUILD = /*BUILD*/"ba7999c788c0";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {

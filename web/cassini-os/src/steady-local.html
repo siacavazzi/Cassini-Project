@@ -542,7 +542,7 @@ onmessage = async e => {
     return gpuOk;
   };
   const evened = new Map();   // the same key -> whether the page evens the frame's pass itself, once its table is here
-  const drawn = new Set();    // the same keys, of frames whose pass the server draws ({"local": false}, or no table published)
+  const drawn = new Set();    // the same keys, of frames whose pass the server draws ({"local": false}; not a table never published)
   const byId = new Map();     // `${center}${color}:${frame id}` -> {key, table, a: its tile's index, n: its frame} once its pass's table is here
   const asked = new Set();
   const stats = { frames: 0, placeMs: 0, drawMs: 0, last: null };
