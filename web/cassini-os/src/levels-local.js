@@ -243,24 +243,37 @@
     const url = kind === "movie" ? `${base}&color=1${style}${look}` : kind === "rolling" ? `${base}${style}${look}` : kind === "frame" ? base : `${base}${look}`;
     return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
   }
-  // a picture as RGBA, waited for while the server makes it (503) or is busy (429), as export.html's fetchPicture
-  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST, export.MOSAIC_WAIT as the server waits), and while a mosaic is still behind its frame (X-Reel
-  // "behind": the tiles made so far; the film draws the finished one); null for any other refusal (404: not
-  // centred) or failure
+  // a picture's answer, waited for as the server's film waits for one (export.Pictures): while it is being made (503)
+  // or the server is busy (429), while the request fails, and while a mosaic is still behind its frame (X-Reel
+  // "behind": the tiles made so far; the film draws the finished one, export.Pictures.finished_mosaic). The wait grows
+  // from 0.5 s to 4 s; asked again, it is asked past the browser's cache. After WAIT_MOST (export.MOSAIC_WAIT) of
+  // waiting, or once stop.done, it answers null, so the next try stands in, as the server's film does on its
+  // TimeoutError; null too for any other refusal (404: not centred). The one wait rule for every picture a film or
+  // its exposure graph asks for: export.html's fetchPicture uses it as cassiniPlanLocal.fetchFinished.
   const WAIT_MOST = 900e3, sleep = ms => new Promise(r => setTimeout(r, ms));
   const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
-  async function fetchRGBA(url) {
+  async function fetchFinished(url, stop) {
     const t0 = Date.now();
-    for (let wait = 500, again = false; ; wait = Math.min(4000, wait * 1.5), again = true) {
+    for (let wait = 500, again = false; !(stop && stop.done); wait = Math.min(4000, wait * 1.5), again = true) {
       let r;
       try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (err) { r = null; }
-      if (r && (r.status === 503 || r.status === 429 || (r.ok && behind(r))) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
-      if (!r || !r.ok || behind(r)) return null;   // (still behind after WAIT_MOST: the next try, as the server's film)
-      try {
-        const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-        return { data: pixels(bmp), width: bmp.width, height: bmp.height };
-      } catch (err) { return null; }
+      if (!r || r.status === 503 || r.status === 429 || (r.ok && behind(r))) {
+        if (Date.now() - t0 >= WAIT_MOST) return null;
+        await sleep(wait);
+        continue;
+      }
+      return r.ok ? r : null;
     }
+    return null;
+  }
+  // a picture as RGBA (fetchFinished's answer, decoded), or null
+  async function fetchRGBA(url) {
+    const r = await fetchFinished(url);
+    if (!r) return null;
+    try {
+      const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+      return { data: pixels(bmp), width: bmp.width, height: bmp.height };
+    } catch (err) { return null; }
   }
   // a decoded picture's RGBA as the server's Pillow reads it. A 2D canvas keeps its pixels premultiplied, so a partly
   // transparent pixel (a centred close-up placed where it is, a frame's soft edge) comes back with its colour rounded
@@ -360,11 +373,11 @@
     }
   }
 
-  const API = { levels, _levels: { pictureUrl, picture, used, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, fetchFinished, _levels: { pictureUrl, picture, used, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};
-    P.levels = levels; P._levels = API._levels;
+    P.levels = levels; P.fetchFinished = fetchFinished; P._levels = API._levels;
     P.source = P.source || {};
     if (!P.source.picture) P.source.picture = picture;
   }
