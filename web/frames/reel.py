@@ -113,6 +113,12 @@ def load_index():
     # the string steps of .str.rsplit("/", n=1).str[-1].str.replace(".png", "") on each path, without pandas' per
     # element machinery (a sixth of the time; the paths are all strings)
     idx["id"] = [p.rsplit("/", 1)[-1].replace(".png", "") for p in idx["path"].tolist()]
+    # a frame that shows another body than the archive's target is a picture of that body (its passes, reel and
+    # centring: bootleg_autonav.shown_targets, as the frame's label has it)
+    import bootleg_autonav as ba
+    shown = ba.shown_targets()
+    if shown:
+        idx["TARGET_NAME"] = [shown[i][0] if i in shown else t for i, t in zip(idx["id"].tolist(), idx["TARGET_NAME"].tolist())]
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
     # the filter sets, by the one rule (sets_passes: the camera windows', the pre-build's and the data's)

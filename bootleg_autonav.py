@@ -385,6 +385,11 @@ def cached_target(label):
             return None
         raise ValueError(row[8])
     label.geometry = {"et": row[4], "camera": row[5], "target": row[6], "center": CCD_CENTER, "scale": row[7]}
+    hit = shown_targets().get(frame_id(label))
+    if hit:
+        # a frame that shows another body than its target (shown_targets): that body's place
+        label.geometry["target"] = hit[0]
+        return [hit[1], hit[2], hit[3], row[3]]
     return list(row[:4])
 
 
@@ -474,6 +479,21 @@ def find_target_cached(label, load_year=None):
         raise
     if GEOMETRY_CACHE:
         _store_rows([_row(frame_id(label), target_loc, label.geometry)])
+    else:
+        # no cache (the batch pipeline): the body the frame shows worked out here, as shown_targets reads it from the
+        # cache's tables (kernels for the frame are loaded)
+        target = label.geometry["target"]
+        try:
+            km = _radius_km(target)
+            found = shown_body(km / target_loc[2] * label.geometry["scale"] if km else None,
+                               bodies_in_frame(label.geometry["et"], label.geometry["camera"], target))
+        except Exception:   # noqa: BLE001  (no other body worked out: the frame keeps its target)
+            found = None
+        if found:
+            label.info.setdefault("ARCHIVE_TARGET_NAME", label.info.get("TARGET_NAME"))
+            label.info["TARGET_NAME"] = found[0]
+            label.geometry["target"] = found[0]
+            target_loc = [-found[1], -found[2], found[4], target_loc[3]]
     return linearized(label, target_loc)
 
 
@@ -647,7 +667,8 @@ def bodies_in_frame(et, frame, target):
 
 def bodies_of(ids):
     """{frame id: [(body, x, y, r, km)]} from the bodies table, for the frames ids that were worked out ([] for one
-    with no other body in it); a frame not worked out is left out. On the frame as it is drawn, as stacking.places
+    with no other body in it): every body but the one the frame shows (its target, or shown_targets'); a frame not
+    worked out is left out. On the frame as it is drawn, as stacking.places
     reads the target's shift: a WAC frame's x, y and r grown by its geometric correction (linear_ratio)."""
     if not GEOMETRY_CACHE or not os.path.exists(GEOMETRY_CACHE):
         return {}
@@ -662,7 +683,108 @@ def bodies_of(ids):
             if body:
                 k_ = linear_ratio(camera, scale)
                 got.append((body, x * k_, y * k_, r * k_, km))
+    shown = shown_targets()
+    for frame in [f for f in out if f in shown]:
+        # a frame that shows another body than its target (shown_targets) is drawn round that body: the archive's
+        # target is one of the others
+        row = db.execute("SELECT target, x, y, z, camera, scale FROM target WHERE frame = ? AND version = ?",
+                         (frame, GEOMETRY_VERSION)).fetchone()
+        target, x, y, z, camera, scale = row
+        k_, km = linear_ratio(camera, scale), _radius_km(target)
+        out[frame] = [b for b in out[frame] if b[0] != shown[frame][0]] + \
+                     [(target, -x * k_, -y * k_, (km / z * scale if km else 0.0) * k_, z)]
     return out
+
+
+"""
+The body a frame shows, when it is not the archive's target (Sam 2026-11-12: a few clear filter frames of the Saturn
+approach looked unprocessed, as if nothing centred them). A frame whose target's disk is SEEN_RADIUS px or less in
+radius (a moon a pixel or two across: the satellite searches ISS_C42OT_SATELLORB001/002, the storm watches' RIDER frames
+on a small moon, a mutual event's far moon) is a picture of the biggest body SPICE puts on it, when that body's disk is
+SHOWN_RADIUS px or more and the frame has it whole (Saturn, a third of the frame wide). It is centred, turned, grouped
+into passes and calibrated as one (label.TARGET_NAME, reel's index, stacking.places, cached_target, bodies_of), where
+centring on the dot moved the picture a few pixels and left Saturn cut at its edge, and a storm watch's frame of Saturn
+was not centred at all (its moon too small to centre on). A frame that cuts its biggest disk (Saturn's limb filling a
+WAC frame, its centre at the edge; Saturn filling the frame behind a moon) keeps its target: centred on that body, most
+of the view would be empty, and a smaller body is not what the frame shows. The archive's target is kept as the label's
+ARCHIVE_TARGET_NAME. Read from the geometry cache's target and bodies tables (find_target's and bodies_in_frame's
+answers, which stay SPICE's own for the archive's target), so it needs the bodies table filled. Over the mission
+(2026-11-12) 717 of 407,795 placed frames: 461 on Saturn, the rest on Rhea, Dione, Enceladus, Mimas, Tethys and Titan.
+"""
+SEEN_RADIUS = 2.0     # px: a disk this small is a dot (a cosmic ray hit or a star is as big); nothing to centre on
+SHOWN_RADIUS = 12.0   # px: a disk at least this big (24 px across) is a body the picture shows (an 8 px moon in a
+                      # corner of a frame full of rings, N1480613061_1, is not what it shows)
+
+
+def shown_body(radius, others):
+    """The body (one of others, bodies_in_frame's (body, x, y, r, km)) a frame shows instead of its target, whose disk
+    is radius px in radius (None: of no known size), or None when the frame shows its target."""
+    if radius is None or radius > SEEN_RADIUS:
+        return None
+    seen = [b for b in others if b[0] and b[3] is not None and b[3] >= SHOWN_RADIUS]
+    if not seen:
+        return None
+    biggest = max(seen, key=lambda b: b[3])
+    # the biggest disk on the frame, when the frame has it whole (one it cuts, Saturn filling the frame behind a moon,
+    # is what the frame shows, and no centring helps)
+    return biggest if max(abs(biggest[1]), abs(biggest[2])) + biggest[3] <= FULL_FRAME / 2 else None
+
+
+def _radius_km(target):
+    """The target's mean radius (km): the frame server's table (obs_mosaic.RADIUS), else SPICE's, else None."""
+    try:
+        import obs_mosaic
+        return obs_mosaic.RADIUS.get(target)
+    except ImportError:
+        try:
+            return _mean_radius(sp.bodn2c(target))
+        except Exception:   # noqa: BLE001  (no kernels loaded, or a target SPICE does not know: no size)
+            return None
+
+
+_shown = None
+_shown_lock = threading.Lock()
+
+
+def shown_targets():
+    """{frame: (body, x, y, z)} for every frame of the geometry cache that shows another body than its target
+    (shown_body): the body, the shift that centres it (find_target's x, y, SPICE's own pixels) and its distance (km).
+    Read once (the bodies table is filled ahead, a frame's answer never changes)."""
+    global _shown
+    if _shown is not None:
+        return _shown
+    with _shown_lock:
+        if _shown is None:
+            out = {}
+            if GEOMETRY_CACHE and os.path.exists(GEOMETRY_CACHE):
+                db = _bodies_db()
+                rows = {}
+                for frame, target, z, scale, body, x, y, r, km in db.execute(
+                        "SELECT t.frame, t.target, t.z, t.scale, b.body, b.x, b.y, b.r, b.km FROM bodies b JOIN target t "
+                        "ON t.frame = b.frame AND t.version = ? WHERE b.version = ? AND t.error IS NULL AND b.r >= ?",
+                        (GEOMETRY_VERSION, BODIES_VERSION, SHOWN_RADIUS)):
+                    rows.setdefault(frame, [target, z, scale, []])[3].append((body, x, y, r, km))
+                sizes = {}
+                for frame, (target, z, scale, others) in rows.items():
+                    if target not in sizes:
+                        sizes[target] = _radius_km(target)
+                    km = sizes[target]
+                    found = shown_body(km / z * scale if km and z and scale else None, others)
+                    if found:
+                        out[frame] = (found[0], -found[1], -found[2], found[4])
+            _shown = out
+    return _shown
+
+
+def relabel(label):
+    """Makes label a picture of the body its frame shows (shown_targets): TARGET_NAME that body, the archive's
+    target kept as ARCHIVE_TARGET_NAME. Nothing for a frame that shows its target."""
+    if not GEOMETRY_CACHE or "TARGET_NAME" not in label.info:
+        return
+    hit = shown_targets().get(frame_id(label))
+    if hit and label.info["TARGET_NAME"] != hit[0]:
+        label.info.setdefault("ARCHIVE_TARGET_NAME", label.info["TARGET_NAME"])
+        label.info["TARGET_NAME"] = hit[0]
 
 
 def build_bodies_cache(years=None, observations=None):

@@ -315,6 +315,8 @@ class label:
                 
                     values = values.split("=")
                     self.info[values[0]] = values[1]
+        # a frame that shows another body than the archive's target is a picture of that body (ba.shown_targets)
+        ba.relabel(self)
                     
                         
 

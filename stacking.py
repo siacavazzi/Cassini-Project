@@ -44,8 +44,8 @@ def frame_id(path):
 
 
 """
-Where SPICE puts the body in each of the frames ids, from the geometry cache (bootleg_autonav,
-CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
+Where SPICE puts the body in each of the frames ids (its target, or the body it shows instead, ba.shown_targets),
+from the geometry cache (bootleg_autonav, CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
 the distance in km. Frames that are not cached, or that SPICE could not place, are left out.
 """
 def places(ids):
@@ -59,6 +59,8 @@ def places(ids):
                 f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
             # on the frame as it is drawn: a WAC frame's shift grown by its geometric correction (ba.linear_ratio)
             r = ba.linear_ratio(camera, scale)
+            # a frame that shows another body than its target: that body's place (ba.shown_targets)
+            x, y, z = ba.shown_targets().get(frame, (None, x, y, z))[1:]
             out[frame] = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
     return out
 
