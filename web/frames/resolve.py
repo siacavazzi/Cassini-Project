@@ -158,9 +158,10 @@ def cache_only(cache):
     """Code run inside this writes nothing into the picture cache, starts nothing and works out nothing the cache does
     not keep (NotMade, or obs_mosaic.NotKept, where it would)."""
     _install()
+    om = _fs().obs_mosaic   # (imported before the guard is on: importing frame_server starts a process, bootleg_autonav)
     token = _cache_only.set(os.path.realpath(cache))
     try:
-        with _fs().obs_mosaic.kept_only(BUDGET):
+        with om.kept_only(BUDGET):
             yield
     finally:
         _cache_only.reset(token)

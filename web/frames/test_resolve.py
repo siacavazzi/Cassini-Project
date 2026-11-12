@@ -55,6 +55,12 @@ def check(ok, what):
 
 # ---------- the guard (no archive needed) ----------
 def test_guard():
+    # cache_only as the first thing a process does (nothing has imported frame_server yet): entering it must not trip
+    # its own guard (importing frame_server starts a process)
+    first = subprocess.run([sys.executable, "-c", "import sys, tempfile; sys.path.insert(0, sys.argv[1]); import resolve\n"
+                            "with resolve.cache_only(tempfile.mkdtemp()):\n    pass\nprint('entered')", HERE],
+                           capture_output=True, text=True)
+    check("entered" in first.stdout, f"cache_only works before anything imported frame_server ({first.stderr[-300:]})")
     import resolve
     d = tempfile.mkdtemp()
     stopped = []
