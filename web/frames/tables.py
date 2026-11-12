@@ -265,6 +265,14 @@ def finish(out, expected=None):
         passes[w["pass"]] = w
         for f, entry in w["alias"].items():
             shards.setdefault(shard_of(f), {})[f] = entry
+    # a part a pass's last run did not write (a layout an earlier run named) is left out of the publish: the folder
+    # holds exactly the parts the work files list, which this phase alone writes
+    for pid, w in passes.items():
+        top = os.path.join(out, "table", "pass", pid)
+        for root, _, files in os.walk(top):
+            for f in files:
+                if os.path.relpath(os.path.join(root, f), top) not in w["parts"]:
+                    os.remove(os.path.join(root, f))
     for shard, frames in shards.items():
         doc = {"shard": shard, "frames": dict(sorted(frames.items()))}
         bad = validate_part("alias", doc)
