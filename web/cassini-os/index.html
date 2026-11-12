@@ -13655,7 +13655,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3a57fbba7a0b";
+  const BUILD = /*BUILD*/"bcf44d553006";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13746,14 +13746,12 @@ void main() {
     el.hidden = false; el.offsetWidth; el.classList.add("on");
     document.body.classList.remove("idle");
     setTimeout(() => { const b = el.querySelector(".wtour"); if (b && on) b.focus({ preventScroll: true }); }, 60);
-    document.addEventListener("keydown", keys, true);
   }
   function close(then) {
     if (!on) return;
     on = false; markSeen();
     if (window.cassiniTutorial && cassiniTutorial.markSeen) cassiniTutorial.markSeen();
     el.classList.remove("on");
-    document.removeEventListener("keydown", keys, true);
     setTimeout(() => { if (!on) el.hidden = true; }, 460);
     if (lastFocus && lastFocus.focus && then !== "tour") try { lastFocus.focus({ preventScroll: true }); } catch (e) {}
     if (then === "tour" && window.cassiniTutorial) setTimeout(() => cassiniTutorial.start(), 350);
@@ -13767,8 +13765,10 @@ void main() {
       e.preventDefault(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus();
       return;
     }
-    if (!e.target.closest || !e.target.closest("#welcome")) e.stopImmediatePropagation();   // the page's shortcuts wait
+    e.stopImmediatePropagation();                // the page's shortcuts wait (Enter and Space still press a button)
   }
+  // on the window, in the capture phase, ahead of the page's own shortcuts (they listen on the window too)
+  window.addEventListener("keydown", keys, true);
   el.addEventListener("click", e => {
     e.stopPropagation();
     const b = e.target.closest("[data-w]");
@@ -13994,7 +13994,7 @@ void main() {
       calm = busy() || document.querySelector(".menu.open") ? 0 : calm + 1;
       if (calm < 4) return;
       clearInterval(wait);
-      if (welcomeDue()) cassiniWelcome.open();
+      if (welcomeDue() && !T.active) cassiniWelcome.open();   // not over a tour the visitor already started
       else if (!T.active && (q === "1" || !saved.tour)) start();
     }, 1000);
   }

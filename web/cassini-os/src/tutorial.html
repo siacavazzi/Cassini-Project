@@ -258,7 +258,7 @@ body.phone #tourhint button { padding: 6px 11px; }
       calm = busy() || document.querySelector(".menu.open") ? 0 : calm + 1;
       if (calm < 4) return;
       clearInterval(wait);
-      if (welcomeDue()) cassiniWelcome.open();
+      if (welcomeDue() && !T.active) cassiniWelcome.open();   // not over a tour the visitor already started
       else if (!T.active && (q === "1" || !saved.tour)) start();
     }, 1000);
   }

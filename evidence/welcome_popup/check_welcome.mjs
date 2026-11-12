@@ -1,5 +1,5 @@
-// checks the welcome's first-visit logic: node flow.mjs <url> <outdir>
-import { chromium } from "/Users/samiacavazzi/Development/wt-public-wp0/node_modules/playwright/index.mjs";
+// checks the welcome's first-visit logic: node check_welcome.mjs <page url with ?query> <outdir>  (needs playwright installed)
+import { chromium } from "playwright";
 const [url, out] = process.argv.slice(2);
 const browser = await chromium.launch();
 const results = [];
@@ -47,6 +47,22 @@ const vp = { viewport: { width: 1600, height: 1000 } };
   ok("old tour-seen visitor sees the welcome once", await opened(p));
   await p.click("#welcome .wx"); await p.reload();
   ok("…and not again after closing it", !(await opened(p)));
+  await ctx.close(); }
+
+// 5. keys while the welcome is open do not reach the page; Enter presses the focused button
+{ const ctx = await browser.newContext(vp); const p = await ctx.newPage();
+  await p.goto(url); await opened(p); await p.waitForTimeout(300);
+  await p.evaluate(() => { window.__k = 0; window.addEventListener("keydown", () => window.__k++); });
+  for (const k of ["f", "m", "Meta+]", "Control+[", "ArrowRight", "ArrowLeft"]) await p.keyboard.press(k);
+  ok("page shortcuts get no keys while the welcome is open", (await p.evaluate(() => window.__k)) === 0 && await p.evaluate(() => cassiniWelcome.on));
+  await p.keyboard.press("Enter"); ok("Enter on the focused Take the tour starts the tour", await tourOn(p));
+  await ctx.close(); }
+
+// 6. a tour started from the menu before the welcome is due is not stopped by it
+{ const ctx = await browser.newContext(vp); const p = await ctx.newPage();
+  await p.goto(url); await p.waitForFunction(() => window.cassiniTutorial, null, { timeout: 60000 });
+  await p.evaluate(() => cassiniTutorial.start()); await p.waitForTimeout(9000);
+  ok("menu-started tour keeps running, no welcome over it", await p.evaluate(() => cassiniTutorial.active && !cassiniWelcome.on));
   await ctx.close(); }
 
 // 4. ?tour=0 and ?welcome=0 keep it away; ?welcome=1 forces it

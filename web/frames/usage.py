@@ -3,7 +3,8 @@
 Usage counts for Cassini OS: how many people use it, roughly from where, and which pictures they look at,
 save and share. Only daily totals are kept, never a record per person or per request:
 
-  - no cookies, no browser storage, nothing sent to anyone else; the page sends one word when it opens
+  - no tracking cookies or browser storage (the page's one cookie, cassini-welcome, only remembers that the
+    welcome was seen and is never read here), nothing sent to anyone else; the page sends one word when it opens
     (POST /usage "visit", or "visit-link" when it opened on a shared moment) and one when a link is copied
   - a visitor is counted once a day by a hash of their address and browser, salted with a random value
     that lives only in memory and is replaced at midnight UTC (Plausible's method); the hashes are never
