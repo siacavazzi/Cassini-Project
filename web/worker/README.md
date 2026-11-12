@@ -33,7 +33,9 @@ contracts in `web/public/` (brief: `docs/public-site/briefs/WP4.md`). It never f
   words (`visit`, `visit-link`, `copy-link`).
 - **refused**: 404, or 405 with `Allow` when the path is a route of another method.
 
-Caching: pictures and table parts `public, max-age=31536000, immutable` (their keys change with their tags), manifest
+Caching: pictures and table answers fixed in keys.json `public, max-age=31536000, immutable` (their keys change with
+their tags); table answers read from a publish `public, max-age=300` (their addresses are the same in every publish, and
+a new publish under the same picture versions can change them: an alias shard gains the frames of years added); manifest
 answers and `no_alias_answer`s `public, max-age=60`, refusals, misses and markers `no-store`. No manifest: 503.
 
 Bindings: `BUCKET` (R2), `MANIFEST_KEY`, `SITE_ENV` (local, staging, production), `USAGE` (Analytics Engine, optional).

@@ -56,8 +56,11 @@ test("every key fixture is answered per its store", async () => {
     for (const [h, v] of Object.entries(want.headers || {})) if (res.headers.get(h) !== v) fail(`${h} ${res.headers.get(h)}, want ${v}`);
     if (res.headers.get("access-control-allow-origin") !== "*") fail("no CORS");
     const cc = res.headers.get("cache-control");
-    if (want.status === 200 && ["r2", "table"].includes(c.expect.store) && cc !== "public, max-age=31536000, immutable"
-        && !(c.expect.no_alias_answer)) fail(`cache-control ${cc}`);
+    // a picture, and a table answer fixed in keys.json, for ever; a table read from a publish five minutes (a new
+    // publish can change it at the same address); a frame in no pass a minute
+    const keep = c.expect.store === "r2" || c.expect.answer !== undefined ? "public, max-age=31536000, immutable"
+      : c.expect.no_alias_answer !== undefined ? null : "public, max-age=300";
+    if (want.status === 200 && ["r2", "table"].includes(c.expect.store) && keep && cc !== keep) fail(`cache-control ${cc}, want ${keep}`);
     if (c.expect.store === "refused" && cc !== "no-store") fail(`refusal cache-control ${cc}`);
   }
   assert.deepEqual(bad, [], bad.join("\n"));

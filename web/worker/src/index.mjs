@@ -34,6 +34,11 @@ const ADDS = HEADERS.worker_adds;
 const NAMES = HEADERS.download_names;
 const FOREVER = "public, max-age=31536000, immutable";
 const MINUTE = "public, max-age=60";
+// a table answer in the viewer's browser: its address (/frames/movie/<id>.steady.json ...) is the same in every
+// publish, and a new publish under the same picture versions can change what it answers (an alias shard gains the
+// frames of years added; a pass's maps follow its built tiles), so a browser keeps it five minutes, not for ever
+// (a picture's answer for an address does not change between publishes; a table's can)
+const TABLE_TIME = "public, max-age=300";
 const NO_STORE = "no-store";
 const MANIFEST_SECONDS = 60;
 // the page's one word for POST /usage (web/frames/usage.py BEACONS); anything else is ignored, as the server does
@@ -169,8 +174,8 @@ async function answerTable(env, ans, note) {
   const partKey = ans.part_key.replace("{pass}", entry.p).replace("{m}", entry.m || "");
   const part = await readText(env, partKey, note);
   if (part === null) { note.outcome = "miss"; return json(404, { error: "no table published for this pass" }, NO_STORE); }
-  if (ans.route === "pass_info") return json(200, { ...JSON.parse(part), n: entry.n }, FOREVER);
-  return json(200, part, FOREVER);
+  if (ans.route === "pass_info") return json(200, { ...JSON.parse(part), n: entry.n }, TABLE_TIME);
+  return json(200, part, TABLE_TIME);
 }
 
 // ---- counting (Workers Analytics Engine) ----------------------------------------------------------------------------
