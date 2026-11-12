@@ -13655,7 +13655,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"bcf44d553006";
+  const BUILD = /*BUILD*/"d90fe98f1c08";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13745,7 +13745,8 @@ void main() {
     if (window.cassiniTutorial && cassiniTutorial.active) cassiniTutorial.stop();
     el.hidden = false; el.offsetWidth; el.classList.add("on");
     document.body.classList.remove("idle");
-    setTimeout(() => { const b = el.querySelector(".wtour"); if (b && on) b.focus({ preventScroll: true }); }, 60);
+    const focusTour = () => { const b = el.querySelector(".wtour"); if (b && on && !el.contains(document.activeElement)) b.focus({ preventScroll: true }); };
+    focusTour(); setTimeout(focusTour, 60); setTimeout(focusTour, 600);
   }
   function close(then) {
     if (!on) return;
@@ -13762,10 +13763,16 @@ void main() {
     if (e.key === "Tab") {                       // focus stays in the card
       const bs = [...el.querySelectorAll("button")].filter(b => b.offsetParent);
       const i = bs.indexOf(document.activeElement);
-      e.preventDefault(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus();
+      e.preventDefault(); e.stopImmediatePropagation(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus();
       return;
     }
-    e.stopImmediatePropagation();                // the page's shortcuts wait (Enter and Space still press a button)
+    e.stopImmediatePropagation();                // the page's shortcuts wait
+    // Enter and Space press the focused button here (the browser's own press does not get through reliably)
+    // (Enter with nothing in the card focused yet is the card's main button)
+    if ((e.key !== "Enter" && e.key !== " ") || e.repeat) return;
+    const f = document.activeElement && document.activeElement.closest && document.activeElement.closest("#welcome button");
+    const b = f || (e.key === "Enter" && el.querySelector(".wtour"));
+    if (b) { e.preventDefault(); b.click(); }
   }
   // on the window, in the capture phase, ahead of the page's own shortcuts (they listen on the window too)
   window.addEventListener("keydown", keys, true);

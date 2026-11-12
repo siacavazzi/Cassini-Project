@@ -54,8 +54,17 @@ const vp = { viewport: { width: 1600, height: 1000 } };
   await p.goto(url); await opened(p); await p.waitForTimeout(300);
   await p.evaluate(() => { window.__k = 0; window.addEventListener("keydown", () => window.__k++); });
   for (const k of ["f", "m", "Meta+]", "Control+[", "ArrowRight", "ArrowLeft"]) await p.keyboard.press(k);
-  ok("page shortcuts get no keys while the welcome is open", (await p.evaluate(() => window.__k)) === 0 && await p.evaluate(() => cassiniWelcome.on));
+  const st5 = await p.evaluate(() => ({ k: window.__k, on: cassiniWelcome.on, tour: cassiniTutorial.active })); if (st5.k || !st5.on) console.log("detail5", JSON.stringify(st5));
+  ok("page shortcuts get no keys while the welcome is open", st5.k === 0 && st5.on);
   await p.keyboard.press("Enter"); ok("Enter on the focused Take the tour starts the tour", await tourOn(p));
+  await ctx.close(); }
+
+// 5b. Tab to "Just explore" and Enter: closes, no tour
+{ const ctx = await browser.newContext(vp); const p = await ctx.newPage();
+  await p.goto(url); await opened(p); await p.waitForTimeout(800);
+  await p.keyboard.press("Shift+Tab"); const f = await p.evaluate(() => document.activeElement.textContent);
+  await p.keyboard.press("Enter"); await p.waitForTimeout(1500);
+  ok("Shift+Tab to Just explore, Enter: closes with no tour", f === "Just explore" && !(await p.evaluate(() => cassiniWelcome.on || cassiniTutorial.active)));
   await ctx.close(); }
 
 // 6. a tour started from the menu before the welcome is due is not stopped by it
