@@ -35,7 +35,9 @@ contracts in `web/public/` (brief: `docs/public-site/briefs/WP4.md`). It never f
 
 Caching: pictures and table parts `public, max-age=31536000, immutable` (their keys change with their tags). The Cache
 API sits in front of R2 for pictures and for the alias shards and pass-table parts a table answer reads, so a colo reads
-each from R2 once; the isolate keeps its last 16 alias shards parsed. Manifest
+each from R2 once a publish; the isolate keeps its last 16 alias shards parsed. Table copies are kept under the
+manifest's publish_id as well as their key, because a new publish under the same picture versions rewrites the same
+table keys (an alias shard gains the frames of years added). Manifest
 answers and `no_alias_answer`s `public, max-age=60`, refusals, misses and markers `no-store`. No manifest: 503.
 
 Bindings: `BUCKET` (R2), `MANIFEST_KEY`, `SITE_ENV` (local, staging, production), `USAGE` (Analytics Engine, optional),
@@ -44,8 +46,8 @@ Bindings: `BUCKET` (R2), `MANIFEST_KEY`, `SITE_ENV` (local, staging, production)
 ## Counting
 
 Analytics Engine data points (WP8's cost sheet and the gates). A point costs about as much as the Worker request, so
-with `USAGE_SAMPLE` = N every Nth answer of an isolate that came back whole (below 400, outcome `ok` or `fallback`) is
-written, weighing N, and the rest of those not at all; every refusal, miss, marker, `none`, error and POST /usage word
+with `USAGE_SAMPLE` = N an answer that came back whole (below 400, outcome `ok` or `fallback`) is written with chance
+1 in N, weighing N (an unbiased total), and the rest of those not at all; every refusal, miss, marker, `none`, error and POST /usage word
 is written, weighing 1, so the gates count them exactly. Without `USAGE_SAMPLE`, one point per answer. Sum `double3`
 (times `_sample_interval`) for answers. One point: `index1` the policy route id (`none` when
 no route fits); `blob1` the store (`usage` for a counted word), `blob2` the status (the word for usage), `blob3` the

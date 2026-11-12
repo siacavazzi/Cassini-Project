@@ -12,16 +12,20 @@
 //      worker:   GET /health and POST /usage;
 //      refused:  404 (405 when the path is a route of another method), counted;
 //   3. CORS, caching and download names per headers.json worker_adds; the Cache API in front of R2, for pictures and
-//      for the alias shards and pass-table parts a table answer reads (all keyed by their tags, so never stale), and
-//      the last few alias shards kept parsed in the isolate.
+//      for the alias shards and pass-table parts a table answer reads, and the last few alias shards kept parsed in
+//      the isolate. A table's key carries its family's tag, which follows the picture versions only: a new publish
+//      under the same versions rewrites the same keys (an alias shard gains the frames of years added, a pass's maps
+//      follow its built tiles). So the table copies are kept under the publish too (cache key and isolate memo), and
+//      a new manifest starts them cold: one R2 read per colo per object, once a publish.
 //
 // Bindings (web/deploy/ fills them; wrangler.toml here is the local template): BUCKET the R2 bucket, MANIFEST_KEY the
 // manifest's key (manifest/<publish_id>.json), USAGE an Analytics Engine dataset (optional), USAGE_SAMPLE (optional,
 // a whole number N; staging and production set 10), SITE_ENV (local, staging or production; reported on /health).
 //
 // Analytics Engine data points, for the cost sheet (WP8) and the gates (refusals and misses). A point costs about as
-// much as the Worker request itself, so ordinary answers are sampled: every Nth answer of an isolate that came back
-// whole (status below 400, outcome ok or fallback) is written, weighing N (double3), and the others not at all. Every
+// much as the Worker request itself, so ordinary answers are sampled: an answer that came back whole (status below
+// 400, outcome ok or fallback) is written with chance 1 in N, weighing N (double3), so the weighted total is unbiased
+// however short-lived the isolates are; the others not at all. Every
 // refusal, miss, marker, none, error, 4xx and 5xx and every POST /usage word is written, weighing 1, so the gates
 // count them exactly. Sum double3 (times _sample_interval) for requests; double1 and double2 times double3 for bytes
 // and R2 reads. One point:
@@ -157,10 +161,10 @@ async function answerR2(env, ans, route, cache, origin, ctx, note) {
   return null;
 }
 
-// a table object's text: from the Cache API when the colo holds it, else from R2 (one read), then kept there. Table
-// keys carry the table family's tag, so a kept copy is never stale. A missing object is not kept.
-async function readText(env, key, cache, origin, ctx, note) {
-  const cacheKey = cache ? new Request(`${origin}/__r2/${encodeURIComponent(key)}`) : null;
+// a table object's text: from the Cache API when the colo holds it for this publish, else from R2 (one read), then
+// kept there under this publish (pub: the manifest's publish_id). A missing object is not kept.
+async function readText(env, key, pub, cache, origin, ctx, note) {
+  const cacheKey = cache ? new Request(`${origin}/__r2/${encodeURIComponent(pub)}/${encodeURIComponent(key)}`) : null;
   if (cache) {
     const hit = await cache.match(cacheKey);
     if (hit) { if (note.cache !== "miss") note.cache = "hit"; return hit.text(); }
@@ -177,26 +181,27 @@ async function readText(env, key, cache, origin, ctx, note) {
 // the last SHARDS_KEPT alias shards this isolate read, parsed (a camera window asks the tables of many frames of the
 // same shard in a row; a shard is parsed once, not once per frame)
 const SHARDS_KEPT = 16;
-const shards = new Map();   // alias key -> its frames object
-async function shardOf(env, key, cache, origin, ctx, note) {
-  if (shards.has(key)) {
-    const frames = shards.get(key);
-    shards.delete(key); shards.set(key, frames);
+const shards = new Map();   // publish id and alias key -> its frames object
+async function shardOf(env, key, pub, cache, origin, ctx, note) {
+  const memo = pub + " " + key;
+  if (shards.has(memo)) {
+    const frames = shards.get(memo);
+    shards.delete(memo); shards.set(memo, frames);
     if (note.cache !== "miss") note.cache = "hit";
     return frames;
   }
-  const text = await readText(env, key, cache, origin, ctx, note);
+  const text = await readText(env, key, pub, cache, origin, ctx, note);
   if (text === null) return null;
   const frames = JSON.parse(text).frames || {};
-  shards.set(key, frames);
+  shards.set(memo, frames);
   if (shards.size > SHARDS_KEPT) shards.delete(shards.keys().next().value);
   return frames;
 }
 export function forgetShards() { shards.clear(); }
 
-async function answerTable(env, ans, cache, origin, ctx, note) {
+async function answerTable(env, ans, pub, cache, origin, ctx, note) {
   if (ans.answer !== undefined) return json(200, ans.answer, FOREVER);
-  const frames = await shardOf(env, ans.alias_key, cache, origin, ctx, note);
+  const frames = await shardOf(env, ans.alias_key, pub, cache, origin, ctx, note);
   const entry = frames ? frames[ans.frame] : undefined;
   // a frame in no pass (or, for tile_map, in a pass with no tile map) answers as the server does
   const noAlias = () => {
@@ -206,21 +211,21 @@ async function answerTable(env, ans, cache, origin, ctx, note) {
   };
   if (!entry || (ans.part_key.includes("{m}") && !entry.m)) return noAlias();
   const partKey = ans.part_key.replace("{pass}", entry.p).replace("{m}", entry.m || "");
-  const part = await readText(env, partKey, cache, origin, ctx, note);
+  const part = await readText(env, partKey, pub, cache, origin, ctx, note);
   if (part === null) { note.outcome = "miss"; return json(404, { error: "no table published for this pass" }, NO_STORE); }
   if (ans.route === "pass_info") return json(200, { ...JSON.parse(part), n: entry.n }, FOREVER);
   return json(200, part, FOREVER);
 }
 
 // ---- counting (Workers Analytics Engine) ----------------------------------------------------------------------------
-let ordinary = 0;   // the isolate's ordinary answers so far (the sampling's counter)
-export function forgetSampling() { ordinary = 0; }
+let random = Math.random;   // the sampling's draw (tests set a fixed one)
+export function sampleWith(draw) { random = draw || Math.random; }
 function count(env, request, note) {
   try {
     if (!env.USAGE) return;
     const every = Math.max(1, Math.floor(+env.USAGE_SAMPLE) || 1);
     const whole = note.store !== "usage" && (note.outcome === "ok" || note.outcome === "fallback") && +note.status < 400;
-    if (whole && every > 1 && ordinary++ % every !== 0) return;
+    if (whole && every > 1 && random() * every >= 1) return;
     const colo = (request.cf && request.cf.colo) || "";
     env.USAGE.writeDataPoint({
       indexes: [(note.route || "none").slice(0, 96)],
@@ -279,7 +284,7 @@ async function answer(request, env, ctx, note) {
 
   ans = K.canonical(method, url.pathname + url.search, manifest.families);
   const cache = typeof caches !== "undefined" && caches.default ? caches.default : null;
-  if (ans.store === "table") return answerTable(env, ans, cache, url.origin, ctx, note);
+  if (ans.store === "table") return answerTable(env, ans, manifest.publish_id || env.MANIFEST_KEY, cache, url.origin, ctx, note);
 
   // r2
   let res = await answerR2(env, ans, ROUTES[ans.route], cache, url.origin, ctx, note);
