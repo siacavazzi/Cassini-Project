@@ -51,6 +51,8 @@ def check(ok, what):
 # ---------- the guard (no archive needed) ----------
 def test_guard():
     import resolve
+    check(resolve.resolve("/frames/N1500060789_2.webp", {}, tempfile.mkdtemp()).kind == "none",
+          "resolve() answers none on an empty cache")
     d = tempfile.mkdtemp()
     stopped = []
     for name, act in [
