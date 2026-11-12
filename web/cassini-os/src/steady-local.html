@@ -527,10 +527,12 @@ onmessage = async e => {
   const blob = await out.convertToBlob(m.webp ? { type: "image/webp", quality: 0.95 } : { type: "image/png" });
   postMessage({ id: m.id, blob, moves, gain, ms: [t1 - t0, performance.now() - t1] });
 };`;
-  // the workers: one per core but one (up to 12), each frame to the least busy, so a Pre-process (the Movie Editor's,
+  // the workers: one per core but one (up to 6), each frame to the least busy, so a Pre-process (the Movie Editor's,
   // made in this browser) works out a stretch's frames side by side instead of one at a time; a pass's table goes
   // to a worker the first time it is given one of its frames
-  const POOL = Math.max(1, Math.min(12, (navigator.hardwareConcurrency || 4) - 1));
+  // (at most 6: a worker doing a filled pass's detail filter holds a WebGL context of its own, and past Chrome's ~16 the
+  // oldest, which may be the 3D view, is lost)
+  const POOL = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
   const workers = [], tablesOf = new Map();   // pass key -> its table
   let seq = 0;
   const waiting = new Map();

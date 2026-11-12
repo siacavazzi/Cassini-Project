@@ -588,17 +588,30 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // here takes them. Named by every address the entry's pictures would have (look, movie style, centering, size), so
   // a setting changed since is a new picture. Up to KEEP_BYTES, the oldest let go past it.
   const KEEP_BYTES = 1.2e9, keptFiles = new Map();
-  let keptBytes = 0;
-  const keyOf = (e, size, cut) => `${size}|${e.id}|${(e.tries || [["frame", e.src]]).map(([k, s]) => pictureUrl(k, s, size, false, cut)).join(" ")}`;
+  let keptBytes = 0, dropped = 0;
+  // (and every setting the steps worked out here follow, which the addresses leave out: on the public site publicUrl
+  // drops stabilization, trail and the exposure smoothing, and Natural color (emulated) is in no address)
+  const stepsNow = () => JSON.stringify([S.get("movies.stabilizeLocal"), window.cassiniStabilize ? window.cassiniStabilize() : 0,
+    window.cassiniExposure ? window.cassiniExposure() : 0, S.get("movies.trail") || 0, !!(window.cassiniEye && window.cassiniEye()),
+    S.get("movies.fade") || 0, S.get("movies.persist") ?? 35, S.get("movies.laps") || 1, S.get("movies.mosaicFrames") || ""]);
+  const keyOf = (e, size, cut) => `${size}|${e.id}|${stepsNow()}|${(e.tries || [["frame", e.src]]).map(([k, s]) => pictureUrl(k, s, size, false, cut)).join(" ")}`;
   function keep(k, v) {
     if (keptFiles.has(k)) return;
     keptFiles.set(k, v); keptBytes += v.blob.size;
-    for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; }
+    for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; dropped++; }
   }
-  // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null
-  async function fileOf(e, size, stop) {
+  // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null;
+  // one being made already (Pre-process, the stage, Play's look ahead) is waited for, not made again
+  const making = new Map();
+  function fileOf(e, size, stop) {
     const k = keyOf(e, size);
-    if (keptFiles.has(k)) return keptFiles.get(k);
+    if (keptFiles.has(k)) return Promise.resolve(keptFiles.get(k));
+    if (making.has(k)) return making.get(k);
+    const p = makeFile(e, size, stop, k).finally(() => making.delete(k));
+    making.set(k, p);
+    return p;
+  }
+  async function makeFile(e, size, stop, k) {
     for (const [kind, src] of e.tries || []) {
       let here = true, blob = kind === "movie" ? await movieHere(e.id, size, stop, centreOn(), true) : kind === "rolling" ? await rollingHere(e.id, size, stop, centreOn(), true) : null;
       if (!blob) {
@@ -611,7 +624,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     return null;
   }
   window.cassiniPicturesHere = { fileOf, kept: (e, size) => keptFiles.get(keyOf(e, size)) || null, forget: () => { keptFiles.clear(); keptBytes = 0; },
-    get bytes() { return keptBytes; }, get count() { return keptFiles.size; } };
+    get bytes() { return keptBytes; }, get count() { return keptFiles.size; }, get dropped() { return dropped; } };
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop, cut) {
     const kp = keptFiles.get(keyOf(e, size, cut));

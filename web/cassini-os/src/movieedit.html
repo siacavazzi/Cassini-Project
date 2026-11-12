@@ -834,7 +834,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const PH = here();
     if (PH && e.tries) {
       try {
-        const f = PH.kept(e, 1024) || await PH.fileOf(e, 1024, { done: false });
+        // (stopped once the stage moves on to another frame, so a picture still being worked out holds nothing up)
+        const f = PH.kept(e, 1024) || await PH.fileOf(e, 1024, { get done() { return n !== drawn; } });
         if (n !== drawn) return;
         if (f) { shown = await createImageBitmap(f.blob); got = 0; }
       } catch (err) { if (n !== drawn) return; }
@@ -1504,7 +1505,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       tell(true);
       while (!me.plan && !stop.done) await new Promise(r => setTimeout(r, 100));
       if (stop.done) return;
-      const PH = here(), todo = PH ? ME.frames.filter(e => kept(e) && e.tries) : [];
+      const PH = here(), todo = PH ? ME.frames.filter(e => kept(e) && e.tries) : [], dropped0 = PH ? PH.dropped : 0;
       Object.assign(job, { state: "making", total: todo.length, frames: todo.length });
       recent.push([performance.now(), 0]); tell(true);
       let i = 0;
@@ -1517,7 +1518,8 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       };
       await Promise.all(Array.from({ length: PREP_AT_ONCE }, one));
       if (stop.done) return;
-      Object.assign(job, { state: "done", took: (performance.now() - t0) / 1000, eta: null }); tell(true);
+      // (pictures let go past the memory cap, cassiniPicturesHere: made again when shown)
+      Object.assign(job, { state: "done", took: (performance.now() - t0) / 1000, eta: null, dropped: PH ? PH.dropped - dropped0 : 0 }); tell(true);
       thumbs();
     })();
     return { stop() { if (stop.done) return; stop.done = true; Object.assign(job, { state: "stopped", eta: null }); update({ ...job }); } };
@@ -1559,7 +1561,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const n = L.plan ? ME.frames.length : (window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null);
     $("mlwhat").textContent = `${fmtDur(ME.b - ME.a)}${n ? ` · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : ""}`;
     const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
-    mk.hidden = PUB();   // the public site makes nothing ahead: every picture is published
+    // (the public site's server makes nothing ahead, every picture is published; the pictures made ahead in this
+    // browser are shown, there as anywhere)
+    mk.hidden = PUB() && !(j && j.here);
     plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
     plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: ${PUB() ? "this computer" : "the frame server"} works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";

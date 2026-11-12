@@ -3845,10 +3845,12 @@ onmessage = async e => {
   const blob = await out.convertToBlob(m.webp ? { type: "image/webp", quality: 0.95 } : { type: "image/png" });
   postMessage({ id: m.id, blob, moves, gain, ms: [t1 - t0, performance.now() - t1] });
 };`;
-  // the workers: one per core but one (up to 12), each frame to the least busy, so a Pre-process (the Movie Editor's,
+  // the workers: one per core but one (up to 6), each frame to the least busy, so a Pre-process (the Movie Editor's,
   // made in this browser) works out a stretch's frames side by side instead of one at a time; a pass's table goes
   // to a worker the first time it is given one of its frames
-  const POOL = Math.max(1, Math.min(12, (navigator.hardwareConcurrency || 4) - 1));
+  // (at most 6: a worker doing a filled pass's detail filter holds a WebGL context of its own, and past Chrome's ~16 the
+  // oldest, which may be the 3D view, is lost)
+  const POOL = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
   const workers = [], tablesOf = new Map();   // pass key -> its table
   let seq = 0;
   const waiting = new Map();
@@ -10296,17 +10298,30 @@ function targetLabel(k) {
   // here takes them. Named by every address the entry's pictures would have (look, movie style, centering, size), so
   // a setting changed since is a new picture. Up to KEEP_BYTES, the oldest let go past it.
   const KEEP_BYTES = 1.2e9, keptFiles = new Map();
-  let keptBytes = 0;
-  const keyOf = (e, size, cut) => `${size}|${e.id}|${(e.tries || [["frame", e.src]]).map(([k, s]) => pictureUrl(k, s, size, false, cut)).join(" ")}`;
+  let keptBytes = 0, dropped = 0;
+  // (and every setting the steps worked out here follow, which the addresses leave out: on the public site publicUrl
+  // drops stabilization, trail and the exposure smoothing, and Natural color (emulated) is in no address)
+  const stepsNow = () => JSON.stringify([S.get("movies.stabilizeLocal"), window.cassiniStabilize ? window.cassiniStabilize() : 0,
+    window.cassiniExposure ? window.cassiniExposure() : 0, S.get("movies.trail") || 0, !!(window.cassiniEye && window.cassiniEye()),
+    S.get("movies.fade") || 0, S.get("movies.persist") ?? 35, S.get("movies.laps") || 1, S.get("movies.mosaicFrames") || ""]);
+  const keyOf = (e, size, cut) => `${size}|${e.id}|${stepsNow()}|${(e.tries || [["frame", e.src]]).map(([k, s]) => pictureUrl(k, s, size, false, cut)).join(" ")}`;
   function keep(k, v) {
     if (keptFiles.has(k)) return;
     keptFiles.set(k, v); keptBytes += v.blob.size;
-    for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; }
+    for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; dropped++; }
   }
-  // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null
-  async function fileOf(e, size, stop) {
+  // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null;
+  // one being made already (Pre-process, the stage, Play's look ahead) is waited for, not made again
+  const making = new Map();
+  function fileOf(e, size, stop) {
     const k = keyOf(e, size);
-    if (keptFiles.has(k)) return keptFiles.get(k);
+    if (keptFiles.has(k)) return Promise.resolve(keptFiles.get(k));
+    if (making.has(k)) return making.get(k);
+    const p = makeFile(e, size, stop, k).finally(() => making.delete(k));
+    making.set(k, p);
+    return p;
+  }
+  async function makeFile(e, size, stop, k) {
     for (const [kind, src] of e.tries || []) {
       let here = true, blob = kind === "movie" ? await movieHere(e.id, size, stop, centreOn(), true) : kind === "rolling" ? await rollingHere(e.id, size, stop, centreOn(), true) : null;
       if (!blob) {
@@ -10319,7 +10334,7 @@ function targetLabel(k) {
     return null;
   }
   window.cassiniPicturesHere = { fileOf, kept: (e, size) => keptFiles.get(keyOf(e, size)) || null, forget: () => { keptFiles.clear(); keptBytes = 0; },
-    get bytes() { return keptBytes; }, get count() { return keptFiles.size; } };
+    get bytes() { return keptBytes; }, get count() { return keptFiles.size; }, get dropped() { return dropped; } };
   // Pictures.picture: the first of the entry's tries the server has, and what it is
   async function pictureOf(e, size, stop, cut) {
     const kp = keptFiles.get(keyOf(e, size, cut));
@@ -13237,7 +13252,8 @@ void main() {
     const PH = here();
     if (PH && e.tries) {
       try {
-        const f = PH.kept(e, 1024) || await PH.fileOf(e, 1024, { done: false });
+        // (stopped once the stage moves on to another frame, so a picture still being worked out holds nothing up)
+        const f = PH.kept(e, 1024) || await PH.fileOf(e, 1024, { get done() { return n !== drawn; } });
         if (n !== drawn) return;
         if (f) { shown = await createImageBitmap(f.blob); got = 0; }
       } catch (err) { if (n !== drawn) return; }
@@ -13907,7 +13923,7 @@ void main() {
       tell(true);
       while (!me.plan && !stop.done) await new Promise(r => setTimeout(r, 100));
       if (stop.done) return;
-      const PH = here(), todo = PH ? ME.frames.filter(e => kept(e) && e.tries) : [];
+      const PH = here(), todo = PH ? ME.frames.filter(e => kept(e) && e.tries) : [], dropped0 = PH ? PH.dropped : 0;
       Object.assign(job, { state: "making", total: todo.length, frames: todo.length });
       recent.push([performance.now(), 0]); tell(true);
       let i = 0;
@@ -13920,7 +13936,8 @@ void main() {
       };
       await Promise.all(Array.from({ length: PREP_AT_ONCE }, one));
       if (stop.done) return;
-      Object.assign(job, { state: "done", took: (performance.now() - t0) / 1000, eta: null }); tell(true);
+      // (pictures let go past the memory cap, cassiniPicturesHere: made again when shown)
+      Object.assign(job, { state: "done", took: (performance.now() - t0) / 1000, eta: null, dropped: PH ? PH.dropped - dropped0 : 0 }); tell(true);
       thumbs();
     })();
     return { stop() { if (stop.done) return; stop.done = true; Object.assign(job, { state: "stopped", eta: null }); update({ ...job }); } };
@@ -13962,7 +13979,9 @@ void main() {
     const n = L.plan ? ME.frames.length : (window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null);
     $("mlwhat").textContent = `${fmtDur(ME.b - ME.a)}${n ? ` · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : ""}`;
     const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
-    mk.hidden = PUB();   // the public site makes nothing ahead: every picture is published
+    // (the public site's server makes nothing ahead, every picture is published; the pictures made ahead in this
+    // browser are shown, there as anywhere)
+    mk.hidden = PUB() && !(j && j.here);
     plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
     plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: ${PUB() ? "this computer" : "the frame server"} works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
@@ -15112,7 +15131,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"d67fde603870";
+  const BUILD = /*BUILD*/"891461800f66";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
