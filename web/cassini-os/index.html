@@ -3864,6 +3864,9 @@ onmessage = async e => {
     const w = workers.reduce((a, b) => (b.busy < a.busy ? b : a));
     if (key && !w.keys.has(key)) { w.keys.add(key); w.postMessage({ key, table: tablesOf.get(key) }); }
     w.busy++;
+    // (how many workers there are, and the most frames they held at once: the stats a page check reads)
+    stats.workers = workers.length;
+    stats.busyMost = Math.max(stats.busyMost || 0, workers.reduce((n, x) => n + x.busy, 0));
     return w;
   };
   const S = () => window.cassiniSettings;
@@ -3990,7 +3993,7 @@ onmessage = async e => {
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
       const r = await new Promise(res => { waiting.set(mid, res); work(e.key).postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, webp: !!o.blob, planes }, bitmaps); });
-      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
+      stats.frames++; stats.raw = (stats.raw || 0) + (o.raw ? 1 : 0); stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       // o.blob: the picture itself (WebP), to keep (the Movie Editor's Pre-process)
       if (o.blob) return r.blob;
       const url = URL.createObjectURL(r.blob), out = new Image();
@@ -10311,15 +10314,18 @@ function targetLabel(k) {
     for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; dropped++; }
   }
   // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null;
-  // one being made already (Pre-process, the stage, Play's look ahead) is waited for, not made again
+  // one being made already (Pre-process, the stage, Play's look ahead) is waited for, not made again; it stops only
+  // once every caller waiting on it has stopped (the stage moving on leaves Pre-process's picture to be made)
   const making = new Map();
   function fileOf(e, size, stop) {
     const k = keyOf(e, size);
     if (keptFiles.has(k)) return Promise.resolve(keptFiles.get(k));
-    if (making.has(k)) return making.get(k);
-    const p = makeFile(e, size, stop, k).finally(() => making.delete(k));
-    making.set(k, p);
-    return p;
+    const m = making.get(k);
+    if (m) { m.stops.push(stop); return m.p; }
+    const entry = { stops: [stop] }, all = { get done() { return entry.stops.every(s => s && s.done); } };
+    entry.p = makeFile(e, size, all, k).finally(() => making.delete(k));
+    making.set(k, entry);
+    return entry.p;
   }
   async function makeFile(e, size, stop, k) {
     for (const [kind, src] of e.tries || []) {
@@ -15131,7 +15137,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"891461800f66";
+  const BUILD = /*BUILD*/"0651ea996e30";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {

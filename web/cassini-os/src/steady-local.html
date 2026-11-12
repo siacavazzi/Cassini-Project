@@ -546,6 +546,9 @@ onmessage = async e => {
     const w = workers.reduce((a, b) => (b.busy < a.busy ? b : a));
     if (key && !w.keys.has(key)) { w.keys.add(key); w.postMessage({ key, table: tablesOf.get(key) }); }
     w.busy++;
+    // (how many workers there are, and the most frames they held at once: the stats a page check reads)
+    stats.workers = workers.length;
+    stats.busyMost = Math.max(stats.busyMost || 0, workers.reduce((n, x) => n + x.busy, 0));
     return w;
   };
   const S = () => window.cassiniSettings;
@@ -672,7 +675,7 @@ onmessage = async e => {
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
       const r = await new Promise(res => { waiting.set(mid, res); work(e.key).postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, webp: !!o.blob, planes }, bitmaps); });
-      stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
+      stats.frames++; stats.raw = (stats.raw || 0) + (o.raw ? 1 : 0); stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       // o.blob: the picture itself (WebP), to keep (the Movie Editor's Pre-process)
       if (o.blob) return r.blob;
       const url = URL.createObjectURL(r.blob), out = new Image();

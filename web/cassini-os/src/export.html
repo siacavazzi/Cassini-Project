@@ -601,15 +601,18 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     for (const [old, o] of keptFiles) { if (keptBytes <= KEEP_BYTES) break; keptFiles.delete(old); keptBytes -= o.blob.size; dropped++; }
   }
   // the entry's picture as a file, made as pictureOf makes it: {blob, what, here (worked out in this browser)}, or null;
-  // one being made already (Pre-process, the stage, Play's look ahead) is waited for, not made again
+  // one being made already (Pre-process, the stage, Play's look ahead) is waited for, not made again; it stops only
+  // once every caller waiting on it has stopped (the stage moving on leaves Pre-process's picture to be made)
   const making = new Map();
   function fileOf(e, size, stop) {
     const k = keyOf(e, size);
     if (keptFiles.has(k)) return Promise.resolve(keptFiles.get(k));
-    if (making.has(k)) return making.get(k);
-    const p = makeFile(e, size, stop, k).finally(() => making.delete(k));
-    making.set(k, p);
-    return p;
+    const m = making.get(k);
+    if (m) { m.stops.push(stop); return m.p; }
+    const entry = { stops: [stop] }, all = { get done() { return entry.stops.every(s => s && s.done); } };
+    entry.p = makeFile(e, size, all, k).finally(() => making.delete(k));
+    making.set(k, entry);
+    return entry.p;
   }
   async function makeFile(e, size, stop, k) {
     for (const [kind, src] of e.tries || []) {
