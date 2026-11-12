@@ -20,8 +20,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 src = open(os.path.join(HERE, "cassini-os", "src", "export.html"), encoding="utf8").read()
-a = src.index("  async function fetchPicture")
-code = src[a:src.index("\n  }\n", a) + 4]
+# (fetchBlob, which waits by fetchFinished, and fetchPicture, which decodes its file)
+a = src.index("  async function fetchBlob")
+code = src[a:src.index("\n  }\n", src.index("  async function fetchPicture", a)) + 4]
 lev = open(os.path.join(HERE, "cassini-os", "src", "levels-local.js"), encoding="utf8").read()
 a = lev.index("  const WAIT_MOST = ")
 wait = lev[a:lev.index("\n  }\n", lev.index("async function fetchFinished")) + 4]

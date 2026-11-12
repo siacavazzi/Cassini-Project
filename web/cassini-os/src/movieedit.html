@@ -666,6 +666,10 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
   const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
   function thumb(img, e) {
+    // (a picture made in this browser: itself)
+    const PH = here(), f = PH && e.tries ? PH.kept(e, 1024) : null;
+    if (img.dataset.kept && (!f || img.dataset.keptOf !== e.id)) { URL.revokeObjectURL(img.dataset.kept); delete img.dataset.kept; }
+    if (f) { if (!img.dataset.kept) { img.onerror = null; img.dataset.kept = URL.createObjectURL(f.blob); img.dataset.keptOf = e.id; img.src = img.dataset.kept; } return; }
     const urls = thumbTries(e).map(pub); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
     if (img.getAttribute("src") !== urls[0]) img.src = urls[0];
@@ -826,7 +830,17 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     // the picture the film shows; one that cannot be centered as it is, and one that cannot be made the raw frame, as in the film
     shown = null;
     const urls = tries(e, 1024); let got = -1;
-    for (const url of urls) {
+    // made in this browser (the Pre-process here, or now): the picture the film made here shows
+    const PH = here();
+    if (PH && e.tries) {
+      try {
+        // (stopped once the stage moves on to another frame, so a picture still being worked out holds nothing up)
+        const f = PH.kept(e, 1024) || await PH.fileOf(e, 1024, { get done() { return n !== drawn; } });
+        if (n !== drawn) return;
+        if (f) { shown = await createImageBitmap(f.blob); got = 0; }
+      } catch (err) { if (n !== drawn) return; }
+    }
+    if (!shown) for (const url of urls) {
       try { shown = await bitmap(url); got = urls.indexOf(url); break; } catch (err) { if (n !== drawn) return; }
     }
     if (n !== drawn) return;
@@ -963,7 +977,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     ME.sel = next; ME.picked = new Set(); ME.none = false; stripState();
     const el = $("mestrip").querySelector(`.meth[data-i="${next}"]`); if (el) el.scrollIntoView({ block: "nearest" });
     // the next few, asked for ahead
-    let ahead = next; for (let n = 0; n < 4; n++) { ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break; bitmap(picUrl(ME.frames[ahead], 1024)); }
+    let ahead = next; for (let n = 0; n < 4; n++) {
+      ahead = ME.frames.findIndex((e, i) => i > ahead && kept(e)); if (ahead < 0) break;
+      const PH = here(), e = ME.frames[ahead];
+      if (PH && e.tries) { if (!PH.kept(e, 1024)) PH.fileOf(e, 1024, { done: false }).catch(() => {}); } else bitmap(picUrl(e, 1024));
+    }
     await show();
     playT = setTimeout(tick, Math.max(0, 1000 / fps - (performance.now() - at)));
   }
@@ -1455,8 +1473,56 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     // (the words tick on while the frame server is busy: how long it has been at each step)
     clearInterval(begin.tick); begin.tick = setInterval(() => { if (L !== me || !card.classList.contains("loading")) clearInterval(begin.tick); else loadUi(); }, 1000);
     load().then(() => { if (L !== me) return; me.plan = true; me.planTook = (performance.now() - me.planAt) / 1000; me.makeAt = performance.now(); loadUi(); ready(); });
-    if (window.cassiniSegment && cassiniSegment.make) me.maker = cassiniSegment.make(ME.a, ME.b, j => { if (L !== me) return; me.job = j; loadUi(); prepUi(); ready(); });
+    const tell = j => { if (L !== me) return; me.job = j; loadUi(); prepUi(); ready(); };
+    if (here()) me.maker = prepHere(me, tell);
+    else if (window.cassiniSegment && cassiniSegment.make) me.maker = cassiniSegment.make(ME.a, ME.b, tell);
     else me.job = { state: "failed", unsupported: true };
+  }
+  // ---------- Pre-process in this browser: every picture of the stretch made here before it plays ----------
+  // The film made on this computer's pictures (export.html cassiniPicturesHere: the movie steps worked out here, on
+  // the frames the frame server keeps; every other picture fetched from its cache), made PREP_AT_ONCE at a time in
+  // time order and kept, so the editor and the film play them at once. The frame server draws nothing for it (on a
+  // home server a picture its cache lacks is still made when fetched); before, the server made the stretch's
+  // pictures itself, a pass's frames one at a time, and its bar spent most of its time on the last 10 to 15%
+  // (2026-11-12). Answers { stop() }; update(job) hears { state, done, total, frames, eta, took, errors, here }.
+  const here = () => (window.cassiniPicturesHere && ME.src !== "raw" ? window.cassiniPicturesHere : null);
+  const PREP_AT_ONCE = Math.max(4, Math.min(24, 2 * (navigator.hardwareConcurrency || 4)));
+  function prepHere(me, update) {
+    const stop = { done: false }, job = { state: "planning", done: 0, total: 0, frames: 0, errors: 0, took: null, here: true };
+    const t0 = performance.now(), recent = [];
+    let told = 0;
+    const tell = force => {
+      const now = performance.now();
+      if (!force && now - told < 250) return;
+      told = now;
+      // the time left from the pace of the last 20 s (once 4 s of it are in)
+      while (recent.length > 1 && recent[0][0] < now - 20000) recent.shift();
+      const r0 = recent[0], r1 = recent[recent.length - 1];
+      job.eta = job.state === "making" && r0 && r1[0] - r0[0] > 4000 && r1[1] > r0[1] ? (job.total - job.done) / ((r1[1] - r0[1]) / ((r1[0] - r0[0]) / 1000)) : null;
+      update({ ...job });
+    };
+    (async () => {
+      tell(true);
+      while (!me.plan && !stop.done) await new Promise(r => setTimeout(r, 100));
+      if (stop.done) return;
+      const PH = here(), todo = PH ? ME.frames.filter(e => kept(e) && e.tries) : [], dropped0 = PH ? PH.dropped : 0;
+      Object.assign(job, { state: "making", total: todo.length, frames: todo.length });
+      recent.push([performance.now(), 0]); tell(true);
+      let i = 0;
+      const one = async () => {
+        while (i < todo.length && !stop.done) {
+          const e = todo[i++];
+          try { if (!await PH.fileOf(e, 1024, stop)) job.errors++; } catch (err) { job.errors++; }
+          job.done++; recent.push([performance.now(), job.done]); tell();
+        }
+      };
+      await Promise.all(Array.from({ length: PREP_AT_ONCE }, one));
+      if (stop.done) return;
+      // (pictures let go past the memory cap, cassiniPicturesHere: made again when shown)
+      Object.assign(job, { state: "done", took: (performance.now() - t0) / 1000, eta: null, dropped: PH ? PH.dropped - dropped0 : 0 }); tell(true);
+      thumbs();
+    })();
+    return { stop() { if (stop.done) return; stop.done = true; Object.assign(job, { state: "stopped", eta: null }); update({ ...job }); } };
   }
   const BUSY = /^(queued|planning|making|waiting|finishing)$/;
   const making = () => !!(L && L.job && BUSY.test(L.job.state));
@@ -1495,7 +1561,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const n = L.plan ? ME.frames.length : (window.cassiniSegment ? cassiniSegment.frames(ME.a, ME.b) : null);
     $("mlwhat").textContent = `${fmtDur(ME.b - ME.a)}${n ? ` · ${n.toLocaleString()} frame${n === 1 ? "" : "s"}` : ""}`;
     const plan = $("mlplan"), mk = $("mlmake"), j = L.job;
-    mk.hidden = PUB();   // the public site makes nothing ahead: every picture is published
+    // (the public site's server makes nothing ahead, every picture is published; the pictures made ahead in this
+    // browser are shown, there as anywhere)
+    mk.hidden = PUB() && !(j && j.here);
     plan.className = !L.plan ? "on" : ME.error ? "warn" : "ok";
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
     plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: ${PUB() ? "this computer" : "the frame server"} works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
