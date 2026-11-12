@@ -3610,7 +3610,7 @@ def _tile_ring_samples(u, t, im, rings, reach):
     x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
     h, w = im.shape[:2]
     gx, gy = np.meshgrid(np.arange(-reach, w + reach + 1) * k + x0, np.arange(-reach, h + reach + 1) * k + y0)
-    radius, on = rings(gx, gy, t["id"])
+    radius, on = rings(gx, gy, _ring_id(t))
     sy, sx = np.mgrid[reach:reach + h:RING_STEP, reach:reach + w:RING_STEP]
     sy, sx = sy.ravel(), sx.ravel()
     px = im[sy - reach, sx - reach]
@@ -3731,7 +3731,7 @@ def ring_moves(u, cache, p, tiles):
     or with Settings > Processing's align or panels step off."""
     if not (calibration.step("align") and calibration.step("panels")) or _ring_geometry(u) is None:
         return {}
-    path = os.path.join(folder(u, cache), RING_FILE + PLAN_FILE)
+    path = os.path.join(folder(u, cache), (RING_REDRAW_DIR + "-" if any("ring_at" in t for t in tiles) else "") + RING_FILE + PLAN_FILE)
     with _ulock(u):
         kept, ref = {}, None
         if os.path.exists(path):
@@ -3743,8 +3743,11 @@ def ring_moves(u, cache, p, tiles):
         if todo:
             there = _tiles(u, cache, p["display_scale"])
 
+            pics = {t["n"]: t["pic"] for t in tiles if "pic" in t}
+
             def picture(j):
-                fp = os.path.join(there, f"{j}.png")
+                # (a tile redrawn as at the epoch, ring_redraw: its redrawn picture, which its box and ring_at are for)
+                fp = pics.get(j) or os.path.join(there, f"{j}.png")
                 with _lock:
                     got = _made_pictures.get(fp)
                 if got is None and os.path.exists(fp):
@@ -3789,7 +3792,7 @@ def ring_moves(u, cache, p, tiles):
                         by.setdefault(roots.get(n, n), []).append(v[:2])
                 rings = _ring_geometry(u)
                 for t in todo:
-                    if t["n"] not in kept and rings is not None and not rings.knows(t["id"]):
+                    if t["n"] not in kept and rings is not None and not rings.knows(_ring_id(t)):
                         continue   # (no time for its frame in the geometry cache yet: asked again next time, not kept)
                     if t["n"] not in kept:
                         ms = by.get(roots.get(t["n"], t["n"]))
@@ -3839,7 +3842,7 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
         sy, sx = np.mgrid[2:h - 2:3, 2:w - 2:3]
         sy, sx = sy.ravel(), sx.ravel()
         gx, gy = sx * k + x0, sy * k + y0
-        radius, on = rings(gx, gy, q["id"])
+        radius, on = rings(gx, gy, _ring_id(q))
         px = im[sy, sx]
         use = on & (px[:, 3] == 255)
         samp.append((gx[use], gy[use], radius[use], px[use, :3].astype(np.float32).mean(axis=1)))
@@ -3879,7 +3882,7 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
         lag += 0.5 * (sc[j - 1] - sc[j + 1]) / den
     # the rings' radial direction at the overlap, and km per px along it (SPICE's ring plane at tile s's time)
     cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
-    r = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), s["id"])[0]
+    r = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), _ring_id(s))[0]
     grad = np.array([r[1] - r[0], r[2] - r[0]], float)
     g = float(np.hypot(*grad))
     if g <= 0:
@@ -3889,7 +3892,7 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     # middle alone; where the ring plane is seen nearly edge on it changes across the overlap, and the middle's said
     # 118RI's rings were half as far apart as they are, so the solve moved its pointings twice too far)
     gx, gy = A[0][ins[0]], A[1][ins[0]]
-    step = rings(gx + n[0], gy + n[1], s["id"])[0] - A[2][ins[0]]
+    step = rings(gx + n[0], gy + n[1], _ring_id(s))[0] - A[2][ins[0]]
     step = step[np.isfinite(step) & (step > 0)]
     if len(step) >= 100:
         g = float(np.median(step))
@@ -3906,6 +3909,53 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
                                                       "normal": [round(float(n[0]), 4), round(float(n[1]), 4)],
                                                       "lag_km": round(lag * RING_BIN, 1)}
+
+
+RING_PAIR_PARTS = 4     # (ring_pair_parts) pieces the overlap of two tiles is cut in along its length
+
+
+def ring_pair_parts(u, rings, s, ref, t, mine):
+    """ring_pair_shift on each of RING_PAIR_PARTS pieces of the two tiles' overlap, cut along its length: [(shift,
+    how)] of the pieces whose rings were matched, when two or more were and their directions across the rings differ
+    (else []). One match over the whole overlap says how far across the rings tile t sits at the overlap's middle
+    only, and leaves it free to slide along them; across a wide mosaic's seam the rings run every way (the near arm,
+    the ansa, the far arm, ISS_00ARI_COMPHIDRK001), so a slide along them at the middle steps them apart elsewhere:
+    the global solve slid that pass's pointings 20 to 30 px along the rings and left 8 to 12 px seams on the arms.
+    Matched piece by piece, each across the rings where it is, the pieces hold both ways."""
+    ax0 = max(s["offset"][0] + s["box"][0], t["offset"][0] + t["box"][0])
+    ax1 = min(s["offset"][0] + s["box"][0] + s["box"][2], t["offset"][0] + t["box"][0] + t["box"][2])
+    ay0 = max(s["offset"][1] + s["box"][1], t["offset"][1] + t["box"][1])
+    ay1 = min(s["offset"][1] + s["box"][1] + s["box"][3], t["offset"][1] + t["box"][1] + t["box"][3])
+    if ax1 - ax0 < PANEL_NARROW or ay1 - ay0 < PANEL_NARROW:
+        return []
+    long_x = (ax1 - ax0) > (ay1 - ay0)
+    lo_, hi_ = (ax0, ax1) if long_x else (ay0, ay1)
+    got = []
+    for i in range(RING_PAIR_PARTS):
+        a_, b_ = lo_ + (hi_ - lo_) * i / RING_PAIR_PARTS, lo_ + (hi_ - lo_) * (i + 1) / RING_PAIR_PARTS
+        cut = []
+        for q, im in ((s, ref), (t, mine)):
+            k = q["box"][2] / im.shape[1]
+            along = (np.arange(im.shape[1]) * k + q["offset"][0] + q["box"][0]) if long_x else \
+                (np.arange(im.shape[0]) * k + q["offset"][1] + q["box"][1])
+            out = (along < a_) | (along >= b_)
+            im = im.copy()
+            if long_x:
+                im[:, out, 3] = 0
+            else:
+                im[out, :, 3] = 0
+            cut.append(im)
+        d, how = ring_pair_shift(u, rings, s, cut[0], t, cut[1])
+        if d is not None:
+            got.append((d, how))
+    if len(got) < 2:
+        return []
+    ns = np.array([h["normal"] for _, h in got])
+    # (directions across the rings that differ by 10 degrees or more somewhere, or the pieces add nothing a whole match
+    # would not say)
+    if float(np.linalg.eigvalsh(ns.T @ ns / len(ns))[0]) < math.sin(math.radians(10)) ** 2 / 2:
+        return []
+    return got
 
 
 def _ring_geometry(u):
@@ -3935,6 +3985,12 @@ def _ring_geometry(u):
         with _lock:
             _ring_geometries[key] = got
     return got
+
+
+def _ring_id(t):
+    """The frame whose time SPICE's ring plane is taken at for tile t: its own, or the pass's epoch when its rings were
+    redrawn as at the epoch (ring_redraw, surface_pictures: its "ring_at")."""
+    return t.get("ring_at", t["id"])
 
 
 def pair_turn(s, ref, t, mine, most=None, rounds=3):
@@ -4180,6 +4236,17 @@ def _combine(found):
     return move
 
 
+def ring_redraw(u):
+    """True when pass u's tiles have their rings redrawn as at the pass's epoch (RING_REDRAW) rather than a surface
+    (surface_pictures): a clouded body's pass that SPICE places rings for (_ring_geometry)."""
+    return RING_REDRAW and clouded(u) and u["key"][0] in RING_BODIES and _ring_geometry(u) is not None
+
+
+def _redraw_dir(u):
+    """The folder (and the solve files' prefix) of pass u's redrawn tiles: SURFACE_DIR, or RING_REDRAW_DIR for rings."""
+    return RING_REDRAW_DIR if ring_redraw(u) else SURFACE_DIR
+
+
 def clouded(u):
     """True when pass u's body shows clouds or haze that move on their own (SURFACE_CLOUDED; the rings are Saturn's
     passes): its panels are registered on edges only (edge_shift) and its surface is not redrawn."""
@@ -4197,6 +4264,17 @@ SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject
 # a pass's tiles redrawn as at its epoch (surface_pictures), kept beside its tiles; renamed whenever the rule changes
 SURFACE_DIR = "surface7"
 SURFACE_TAG = "-s7"  # in the name of a layout whose tiles are redrawn so (layout), so its pictures are its own
+# a ringed, clouded body's pass (Saturn's) has its tiles' rings redrawn as at its epoch instead (reproject.ring_field):
+# the disk's clouds move on their own, but the ring plane is where SPICE says, and Cassini's view of it can change a lot
+# in a pass (ISS_00ARI_COMPHIDRK001 near periapsis: the rings' ellipse a quarter flatter by the last pointing; tiles put
+# on the body's centre stepped 10 to 30 px at every seam, and no shift could line up both arms and the ansa at once)
+RING_REDRAW = os.environ.get("CASSINI_RING_REDRAW", "1") != "0"
+RING_REDRAW_DIR = "rings-redrawn5"
+RING_REDRAW_TAG = "-rr1"
+# (SURFACE_REACH for rings: on a ring plane seen at a low angle its places slide along the arcs by hundreds of px between
+# a pass's first frame and its epoch, ISS_00ARI_COMPHIDRK001's up to 360; kept within SURFACE_REACH, its first and last
+# pointings lost an eighth of their pictures and stayed as taken, a step at both seams)
+RING_REDRAW_REACH = 768
 # a tile registered to another filter's (C8, _register) is redrawn from the time of the tile it was registered to,
 # not its own: the registration's shift already took out the surface's motion between the two frames (the body turning
 # and Cassini moving, ~17 px a filter on Rhea's mapping mosaics), so redrawn from its own time it moved that far twice.
@@ -4290,11 +4368,12 @@ def surface_pictures(u, cache, p, tiles):
     when the kernels or the geometry cache cannot say; none for a clouded body (SURFACE_CLOUDED), and not a tile
     the redrawing would distort (SURFACE_STRETCH), which keeps SPICE's place and the panels step's nudge (found
     once and kept too, SURFACE_TAKEN)."""
-    if not calibration.step("surface") or not tiles or clouded(u):
+    rung = ring_redraw(u)
+    if not calibration.step("surface") or not tiles or clouded(u) and not rung:
         return {}
     import reproject as rp
     there = _tiles(u, cache, p["display_scale"])
-    out_dir = os.path.join(there, SURFACE_DIR)
+    out_dir = os.path.join(there, _redraw_dir(u))
     taken = _surface_taken(u, cache, p, out_dir)
     out, todo = {}, []
     for t in tiles:
@@ -4343,8 +4422,9 @@ def surface_pictures(u, cache, p, tiles):
                 continue
             if t["id"] not in ets or not _with_kernels(t["t"]):
                 continue
-            # (from the time of the tile it is registered to, when it was moved onto it: REDRAW_AT_REFERENCE)
-            when = _redraw_from(t, by_id) or t["id"]
+            # (from the time of the tile it is registered to, when it was moved onto it: REDRAW_AT_REFERENCE; rings from
+            # their own time, at SPICE's place: _ring_taken)
+            when = t["id"] if rung else _redraw_from(t, by_id) or t["id"]
             if when not in ets:
                 continue
             try:
@@ -4358,20 +4438,33 @@ def surface_pictures(u, cache, p, tiles):
             if image is None:
                 image = np.asarray(Image.open(src).convert("RGBA"))
             # (the field worked out SURFACE_REACH round the tile too, where its ground may move to: surface_redrawn)
-            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px, view_turn(u))
+            if rung:
+                t = _ring_taken(t)
+                if _disk_in_view(rp, epoch, view, t, image.shape[:2], km_px, view_turn(u)) \
+                        and (root == t["n"] or root not in out):
+                    # (the disk is drawn as taken, its clouds moving on their own: the rings by it redrawn as at the
+                    # epoch came apart from it, a wedge of rings the frame saw behind the disk left empty beside the
+                    # limb, and rings seen over the disk dragged its light out past it, ISS_00ARI_COMPHIDRK001)
+                    print(f"surface: tile {t['n']} kept as taken (the disk is in view)", flush=True)
+                    found.add(t["n"])
+                    continue
+            reach = RING_REDRAW_REACH if rung else SURFACE_REACH
+            dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px, view_turn(u),
+                                           rp.ring_field if rung else rp.sky_field, reach)
             path = os.path.join(out_dir, f"{t['n']}.png")
-            r = SURFACE_REACH // SURFACE_STEP
-            stretch = rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
+            r = reach // SURFACE_STEP
+            stretch = (rp.field_squeeze if rung else rp.field_stretch)(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], SURFACE_STEP)
             if stretch > SURFACE_STRETCH and (root == t["n"] or root not in out):
                 print(f"surface: tile {t['n']} kept as taken (stretch {stretch:.2f})", flush=True)
                 found.add(t["n"])
                 continue
-            lost = surface_lost(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r])
+            lost = surface_lost(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r], reach)
             if lost > SURFACE_LOST and (root == t["n"] or root not in out):
                 print(f"surface: tile {t['n']} kept as taken ({lost:.0%} of its ground moves past SURFACE_REACH)", flush=True)
                 found.add(t["n"])
                 continue
-            picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
+            picture, box = ring_redrawn(rp, image, t, dx, dy, weight, reach, epoch, view, km_px, view_turn(u)) if rung \
+                else surface_redrawn(rp, image, t, dx, dy, weight, reach)
             # (the box first, so a picture never sits there without it)
             with open(path + SURFACE_BOX, "w") as fh:
                 json.dump(box, fh)
@@ -4391,13 +4484,23 @@ def surface_pictures(u, cache, p, tiles):
     return out
 
 
-def surface_lost(dx, dy, weight):
+def _ring_taken(t):
+    """Tile t at SPICE's place (its spice_offset, before C8 moved it onto another filter of its pointing), as its rings
+    are redrawn (ring_redraw): SPICE knows the ring plane at the tile's own time, and C8's match of two ring pictures
+    taken minutes apart slides along the ringlets and misses the plane's change of shape between them, so a filter
+    redrawn from the time of the one it was matched to (REDRAW_AT_REFERENCE, right for a surface) kept that change:
+    ISS_00ARI_COMPHIDRK001's later filters sat 8 to 19 px out from their pointing's first. The global solve's ring
+    filter step (RING_FILTERS) lines them up from there."""
+    return dict(t, offset=t["spice_offset"]) if t.get("spice_offset") else t
+
+
+def surface_lost(dx, dy, weight, reach=SURFACE_REACH):
     """The share of a tile's ground (sky_field's grid over its box, on the body) that its redrawing moves further than
     SURFACE_REACH: surface_redrawn keeps no more than that round the box, so that much of its picture would be cut."""
     on = weight > 0.5
     if not on.any():
         return 0.0
-    return float((np.hypot(dx, dy)[on] > SURFACE_REACH).mean())
+    return float((np.hypot(dx, dy)[on] > reach).mean())
 
 
 def _redraw_from(t, by_id=None):
@@ -4419,33 +4522,34 @@ def _redraw_from(t, by_id=None):
             return when
 
 
-def surface_field(rp, epoch, view, shape, t, km_px, turn=0.0):
+def surface_field(rp, epoch, view, shape, t, km_px, turn=0.0, field=None, reach=SURFACE_REACH):
     """reproject.sky_field for tile t (its picture shape, h x w) on SURFACE_STEP's grid over its box grown by
     SURFACE_REACH each way: the grid's point (SURFACE_REACH // SURFACE_STEP, the same) is the tile's pixel (0, 0), at
     the tile's corner on the sky, so the grid's inner part is the field over the tile's own box. turn: the pass's axes
     (view_turn), turn degrees short of the sky's north up that sky_field works on: places are turned onto the sky
     and the shifts back."""
+    field = field or rp.sky_field
     h, w = shape
-    m = SURFACE_REACH
+    m = reach
     gy, gx = np.mgrid[-m:h + m + SURFACE_STEP:SURFACE_STEP, -m:w + m + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
     x0, y0 = t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1]
     if not turn:
-        return rp.sky_field(epoch, view, gx + x0, gy + y0, km_px)
+        return field(epoch, view, gx + x0, gy + y0, km_px)
     # a place p on the pass's canvas is R(turn) p on the north-up sky (R as cv2.getRotationMatrix2D turns), and a
     # shift on the sky R(-turn) d on the canvas
     a = math.radians(turn)
     c, sn = math.cos(a), math.sin(a)
     x, y = gx + x0, gy + y0
-    dx, dy, w = rp.sky_field(epoch, view, c * x + sn * y, c * y - sn * x, km_px)
+    dx, dy, w = field(epoch, view, c * x + sn * y, c * y - sn * x, km_px)
     return (c * dx - sn * dy).astype(np.float32), (sn * dx + c * dy).astype(np.float32), w
 
 
-def surface_redrawn(rp, image, t, dx, dy, weight):
+def surface_redrawn(rp, image, t, dx, dy, weight, reach_most=SURFACE_REACH):
     """Tile t's picture (image, RGBA, on its box t["box"] about t["offset"]) redrawn as at the epoch: (picture, box),
     the picture on the box grown by the furthest its surface moves (up to SURFACE_REACH) and cut to its drawn
     pixels, and that box (reference px about the tile's offset, as t["box"]). dx, dy, weight: surface_field's."""
     h, w = image.shape[:2]
-    r = SURFACE_REACH // SURFACE_STEP
+    r = reach_most // SURFACE_STEP
     inner = weight[r:-r, r:-r] > 0
     reach = float(max(np.abs(dx[r:-r, r:-r][inner]).max(), np.abs(dy[r:-r, r:-r][inner]).max())) if inner.any() else 0.0
     # the grown box: a whole number of grid steps out, up to SURFACE_REACH
@@ -4453,6 +4557,54 @@ def surface_redrawn(rp, image, t, dx, dy, weight):
     pad = steps * SURFACE_STEP
     cut = slice(r - steps, dx.shape[0] - (r - steps)), slice(r - steps, dx.shape[1] - (r - steps))
     picture = rp.warp_sky(np.pad(image, ((pad, pad), (pad, pad), (0, 0))), dx[cut], dy[cut], weight[cut], SURFACE_STEP)
+    found = Image.fromarray(picture).getbbox(alpha_only=True)
+    if found is None:
+        return np.ascontiguousarray(image), list(t["box"])
+    c0, r0, c1, r1 = found
+    return (np.ascontiguousarray(picture[r0:r1, c0:c1]),
+            [t["box"][0] - pad + c0, t["box"][1] - pad + r0, c1 - c0, r1 - r0])
+
+
+def _disk_in_view(rp, epoch, view, t, shape, km_px, turn=0.0):
+    """True when tile t (at SPICE's place, its picture shape h x w) shows the body's disk, at the epoch or at its own
+    time (on SURFACE_STEP's grid over its box): ring_redraw keeps such a tile as taken."""
+    h, w = shape
+    gy, gx = np.mgrid[0:h + SURFACE_STEP:SURFACE_STEP, 0:w + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
+    x, y = gx + t["offset"][0] + t["box"][0], gy + t["offset"][1] + t["box"][1]
+    a = math.radians(turn)
+    c, sn = math.cos(a), math.sin(a)
+    return any(rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)[1].any() for v in (epoch, view))
+
+
+RING_MASK_STEP = 2   # px: (ring_redrawn) the grid the disk's edge is worked out on, each way
+
+
+def ring_redrawn(rp, image, t, dx, dy, weight, reach_most, epoch, view, km_px, turn=0.0):
+    """surface_redrawn for a tile's rings (ring_field): its picture redrawn as at the epoch on its box grown by the
+    furthest its rings move, with the disk's edge worked out pixel by pixel (ring_masks, on RING_MASK_STEP's grid):
+    the disk where the epoch sees it in front of the rings stays as taken, and a place of the rings the frame saw
+    behind the disk is left empty. (picture, box)."""
+    h, w = image.shape[:2]
+    r = reach_most // SURFACE_STEP
+    inner = weight[r:-r, r:-r] > 0
+    reach = float(max(np.abs(dx[r:-r, r:-r][inner]).max(), np.abs(dy[r:-r, r:-r][inner]).max())) if inner.any() else 0.0
+    steps = min(r, math.ceil(reach / SURFACE_STEP))
+    pad = steps * SURFACE_STEP
+    cut = slice(r - steps, dx.shape[0] - (r - steps)), slice(r - steps, dx.shape[1] - (r - steps))
+    big = np.pad(image, ((pad, pad), (pad, pad), (0, 0)))
+    H, W = big.shape[:2]
+    # (the disk's edge: at the epoch, and in the frame where each place is drawn from, on a grid of RING_MASK_STEP px)
+    gy, gx = np.mgrid[0:H:RING_MASK_STEP, 0:W:RING_MASK_STEP].astype(np.float32)
+    sdx = cv2.remap(dx[cut], gx / SURFACE_STEP, gy / SURFACE_STEP, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    sdy = cv2.remap(dy[cut], gx / SURFACE_STEP, gy / SURFACE_STEP, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    x = gx.astype(np.float64) + t["offset"][0] + t["box"][0] - pad
+    y = gy.astype(np.float64) + t["offset"][1] + t["box"][1] - pad
+    a = math.radians(turn)
+    c, sn = math.cos(a), math.sin(a)
+    sky = lambda px_, py_: (c * px_ + sn * py_, c * py_ - sn * px_)
+    keep, hole = rp.ring_masks(epoch, view, *sky(x, y), *sky(x + sdx, y + sdy), km_px)
+    grow = lambda m: np.repeat(np.repeat(m, RING_MASK_STEP, 0), RING_MASK_STEP, 1)[:H, :W]
+    picture = rp.warp_rings(big, dx[cut], dy[cut], weight[cut], SURFACE_STEP, grow(keep), grow(hole))
     found = Image.fromarray(picture).getbbox(alpha_only=True)
     if found is None:
         return np.ascontiguousarray(image), list(t["box"])
@@ -4501,7 +4653,7 @@ def panel_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     # (measured on the tiles as drawn: their surface redrawn as at the epoch, or not, each kept apart)
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
+    path = os.path.join(folder(u, cache), (_redraw_dir(u) + "-" if surfaced else "") + (EDGE_FILE if edges else "") + PANEL_FILE)
     rec = _kept_tiles(u, cache, p["display_scale"])
     with _ulock(u):
         name = "panels" + SURFACE_TAG * surfaced + EDGE_TAG * edges
@@ -4707,7 +4859,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
     of fewer tiles is not kept over one of more. Kept in the pass's folder."""
     surfaced = any("pic" in t for t in tiles)
     edges = clouded(u)
-    path = os.path.join(folder(u, cache), (SURFACE_DIR + "-" if surfaced else "") + (EDGE_FILE if edges else "") + ("ringed-" if anchors else "") + PANEL_FILE)
+    path = os.path.join(folder(u, cache), (_redraw_dir(u) + "-" if surfaced else "") + (EDGE_FILE if edges else "") + ("ringed-" if anchors else "") + PANEL_FILE)
     by_n = {t["n"]: t for t in tiles if "offset" in t}
     rec = _kept_tiles(u, cache, p["display_scale"])
     name = "global" + SURFACE_TAG * surfaced + EDGE_TAG * edges + "-ringed" * bool(anchors)
@@ -4804,7 +4956,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             # (SPICE's view at each tile's time worked out here, one at a time: SPICE is not safe to call from several
             # threads, and the matches below run side by side; once worked out, a ring plane is plain arithmetic)
             for t in by_n.values():
-                rings(np.zeros(1), np.zeros(1), t["id"])
+                rings(np.zeros(1), np.zeros(1), _ring_id(t))
 
         def measure(pr):
             j, n = pr
@@ -4813,6 +4965,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if ref is None or mine is None:
                 return pr, None, "no picture"
             if rings is not None and s["filter"] == t["filter"]:
+                parts = ring_pair_parts(u, rings, s, ref, t, mine)
+                if parts:
+                    return pr, parts[0][0], {"ring": True, "parts": [dict(h, shift=[round(v, 2) for v in d]) for d, h in parts],
+                                             "ncc": round(float(np.mean([h["ncc"] for _, h in parts])), 3)}
                 got = ring_pair_shift(u, rings, s, ref, t, mine)
                 if got[0] is not None:
                     return (pr,) + got
@@ -4851,6 +5007,12 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if shift is None:
                 continue
             nrm = how.get("normal") if isinstance(how, dict) else None
+            if isinstance(how, dict) and how.get("parts"):
+                # (ring matches part by part along the overlap: each across the rings where it is, so together they say
+                # both ways how far tile n sits from tile j: ring_pair_parts)
+                for h in how["parts"]:
+                    meas.append((rootmap[j], rootmap[n], np.array(h["shift"], float), np.outer(h["normal"], h["normal"]), float(h["ncc"])))
+                continue
             if isinstance(how, dict) and how.get("ring"):
                 # (a ring match: how far tile n's ringlets sit out from tile j's, across the rings only)
                 meas.append((rootmap[j], rootmap[n], np.array(shift, float), np.outer(nrm, nrm), float(how["ncc"])))
@@ -4892,7 +5054,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 if rings is not None:
                     t = by_n[r]
                     cx, cy = t["offset"][0] + t["box"][0] + t["box"][2] / 2, t["offset"][1] + t["box"][1] + t["box"][3] / 2
-                    rr = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), t["id"])[0]
+                    rr = rings(np.array([cx, cx + 1, cx]), np.array([cy, cy, cy + 1]), _ring_id(t))[0]
                     grad = np.array([rr[1] - rr[0], rr[2] - rr[0]], float)
                     if np.hypot(*grad) > 0:
                         nn = grad / np.hypot(*grad)
@@ -5628,8 +5790,11 @@ def layout(u, n, cache):
         if kept:
             tiles = [dict(t, as_taken=True) if t["n"] in kept and "offset" in t else t for t in tiles]
     if surfaced:
-        tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t)) if t["n"] in surfaced else t
-                 for t in tiles]
+        # (rings redrawn as at the epoch are on SPICE's ring plane at the epoch's time: ring_at, _ring_id)
+        rung = ring_redraw(u)
+        at = {"ring_at": u["frames"][len(u["frames"]) // 2][1]} if rung else {}
+        tiles = [dict(_ring_taken(t) if rung else t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t), **at)
+                 if t["n"] in surfaced else t for t in tiles]
     # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
     # keep that place, and their pointings' panel moves are not added
     rung = ring_moves(u, cache, p, tiles)
@@ -5677,7 +5842,7 @@ def layout(u, n, cache):
         # (the global solve can move a pointing drawn before when it is solved again on more tiles, a cold pass grown on
         # demand: the moves used are in the name, so a picture kept from fewer tiles' places is never served for these)
         name += "_m" + hashlib.sha1(json.dumps(sorted((n, v[:3]) for n, v in moved.items())).encode()).hexdigest()[:8]
-    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + (SURFACE_TAG if surfaced else "") + ((RING_EDGE_TAG if rung else EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
+    return p, tiles, rect, count, used, name + "_" + "_".join(str(round(v)) for v in rect) + ((RING_REDRAW_TAG if ring_redraw(u) else SURFACE_TAG) if surfaced else "") + ((RING_EDGE_TAG if rung else EDGE_TAG if clouded(u) else PANEL_TAG) if moved else "")
 
 
 TUNE_MAX = 0.5   # furthest a pointing can be moved, as a fraction of the picture
