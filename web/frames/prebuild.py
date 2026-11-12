@@ -20,6 +20,15 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   strips      a movie pass's steadied frames at 128 (the movie strip)
   chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
               Stabilize and Even exposure read
+  tables      the public site's per-frame JSON (tables.py), once per pass, into --tables-out (<cache>/public-tables):
+              each table route's answer (pass_info, kind_of, steady_table, fade_table, tile_map) for every pass, and
+              the alias shards naming each frame's pass, then coverage.json. Run on a finished cache (after mosaics,
+              movies and chains): it makes no picture, only the chains a steady table still waits for
+  fullview    the full view of every mosaic pass (decision D3): its mosaic at its last frame at size=full (CANVAS up to
+              FULL_MAX, 2048 px), as the mosaic route makes it. Run after mosaics
+
+tables and fullview add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
+picture phases left it).
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
 disk priority), one process with a few threads. It waits while the 1-minute load is over --max-load, while the
@@ -71,8 +80,10 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 import slices  # noqa: E402
+import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview")
+ADDED = ("tables", "fullview")   # phases run on a finished cache, not recorded in slices.json
 
 
 @functools.lru_cache(None)
@@ -156,6 +167,12 @@ def items(phase):
             return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c))
                 for u in movie_passes()]
+    if phase == "tables":
+        movies = {tuple(u["key"]) for u in movie_passes()}
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_tables(u, c, tuple(u["key"]) in movies))
+                for u in all_passes()]
+    if phase == "fullview":
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes() if u["mosaic"]]
     raise ValueError(phase)
 
 
@@ -276,8 +293,15 @@ def chosen(args):
 
 def built(args, total, errors):
     """A finished phase recorded in the cache's slices.json (slices.record): the stretches it built and the picture
-    versions it built them under. A remake of some frames (--only) adds nothing: the stretch was built before."""
-    if getattr(args, "only", None):
+    versions it built them under. A remake of some frames (--only) adds nothing: the stretch was built before.
+    tables: the alias shards and coverage.json instead (tables.finish), over every pass the run was asked for."""
+    if args.phase == "tables":
+        report = tables.finish(tables_out(args.cache), [tables.name_id(name) for name, _ in chosen(args)])
+        print(json.dumps({k: report[k] for k in ("passes", "written", "shards", "frames", "parts")}), flush=True)
+        if report["without_tables"] or report["missing_parts"] or report["errors"]:
+            print(f"coverage: {len(report['without_tables'])} passes without tables, {len(report['missing_parts'])} "
+                  f"with parts missing, {len(report['errors'])} with errors (coverage.json)", flush=True)
+    if args.phase in ADDED or getattr(args, "only", None):
         return
     slices.record(args.cache, args.phase, spans_of(args), frame_server.picture_versions(), total, errors)
 
@@ -353,6 +377,38 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
             if made:
                 made(f[3])
     return n
+
+
+_tables_out = None
+
+
+def tables_out(cache):
+    """Where the tables phase writes: --tables-out, else <cache>/public-tables (the publisher's input)."""
+    return _tables_out or os.path.join(cache, "public-tables")
+
+
+def make_tables(u, cache, movie):
+    """The pass's public tables (tables.make_pass): every part the table routes answer for its frames, and its alias
+    entries. movie: a movie pass (its steady tables); Auto center's decision for it (centred) says whether the
+    center=0 steady tables are asked too. Found, not made, when written under the same picture versions. Its frames."""
+    return tables.make_pass(u, cache, tables_out(cache), movie, uncentred=centred(u["frames"][0][1]) is None,
+                            versions=frame_server.picture_versions())
+
+
+def make_fullview(u, cache):
+    """The full view of mosaic pass u (decision D3): its mosaic at its last frame at size=full, as the mosaic route
+    makes it for ?size=full (obs_mosaic.mosaic_webp, out CANVAS up to FULL_MAX), after the pass's plan and tiles
+    (made by the mosaics phase; found here). 1, or 0 for a pass with nothing drawn at its last frame (the route answers
+    404 for it as for any size: obs_mosaic.blank, a ring scan whose tiles hold nothing above black)."""
+    made = obs_mosaic.mosaic_webp(u["frames"][-1][1], frame_server.FULL, cache, None, fmt="webp",
+                                  out=min(obs_mosaic.CANVAS, frame_server.FULL_MAX), force=False,
+                                  tune=obs_mosaic.parse_tune("", ""))
+    if not made:
+        print(f"fullview {u['frames'][-1][1]}: no mosaic at the pass's last frame (the route's 404)", flush=True)
+        return 0
+    if made[1].get("behind"):
+        raise ValueError(f"mosaic {made[1]['behind']} frames behind its last frame: run the mosaics phase first")
+    return 1
 
 
 def make_planes(u, cache, centre=True):
@@ -555,7 +611,7 @@ def make(args, todo, status, errors, holds):
                 status.update(last=name)
 
 
-PASS_PHASES = ("mosaics", "movies", "strips", "chains")
+PASS_PHASES = ("mosaics", "movies", "strips", "chains", "tables", "fullview")
 BALANCE = 8   # stretches per process (procs --balanced): enough small ones that the processes run out together
 
 
@@ -1085,7 +1141,10 @@ def main():
                          "first, each process taking the next as it finishes the last")
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
+    ap.add_argument("--tables-out", help="tables: the folder to write into (default <cache>/public-tables)")
     args = ap.parse_args()
+    global _tables_out
+    _tables_out = args.tables_out
     if args.phase == "count":
         ids, sets, passes, movies = frame_ids(), page_sets(), mosaic_passes(), movie_passes()
         spans = spans_of(args)
@@ -1100,6 +1159,8 @@ def main():
         return
     obs_mosaic.tiles_ahead = lambda *a, **k: None      # everything is made here, in order (warm_pass.py)
     obs_mosaic.rolling_ahead = lambda *a, **k: None
+    if args.phase == "tables":
+        obs_mosaic.warm_movie = lambda *a, **k: None   # (a steady table's chains are made in order, tables._steady)
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
