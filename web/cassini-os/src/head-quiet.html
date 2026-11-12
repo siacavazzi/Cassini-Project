@@ -1967,7 +1967,9 @@ function targetLabel(k) {
         range.disabled = !on;
         row.querySelector("small").textContent = on ? steadyNote(row.dataset.key, range.value) : "Off (every window)";
       }
-      pass.hidden = !st.inPass;
+      // (public: Auto center is always on and a pass plays as it was made, so neither is offered)
+      pass.hidden = !st.inPass || PUB;
+      el.querySelector(".wmrow").hidden = PUB;
       for (const b of pass.querySelectorAll(".wmopt")) {
         const m = b.dataset.mode, on = m === st.mode;
         b.setAttribute("aria-checked", String(on));
@@ -2658,7 +2660,9 @@ function targetLabel(k) {
     // window), else the cameras.passes default; "auto" follows the server (a mosaic pass builds, a movie or a stare
     // plays its frames, a mosaic movie rolls: each place shows its newest tile)
     const passChoice = new Map();
-    const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
+    // (public: every pass plays as the pre-build made it, Auto: a movie route frame of a mosaic pass, a rolling mosaic of
+    // a movie pass or a mosaic of a movie pass is not published, so a forced kind would only ask for what is not there)
+    const modeOf = k => PUB ? "auto" : passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
     const playsAs = k => { const m = modeOf(k); return m !== "auto" ? m : lapPass(k) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePass(k) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
     // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
@@ -2697,7 +2701,10 @@ function targetLabel(k) {
     };
     // a pass played as a movie (the Mosaic / Movie switch, with Settings > Movie > Steady movie passes on): its
     // frames come from /frames/movie
-    const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie";
+    // (public: and a frame the pass's steady table places, once that table is here: a frame SPICE could not place has no
+    // movie picture, prebuild.make_pass; until the table says, the frame as it is, cassiniSteadyLocal.placed)
+    const playsMovie = k => S.get("movies.steady") && playsAs(k) === "movie"
+      && (!PUB || !window.cassiniSteadyLocal || window.cassiniSteadyLocal.placed(FRAMES, catalog.id[k]) === true);
     const movieUrl = (id, sz, steady, exposure, color, trail) => PUB ? publicMovieUrl(id, sz, exposure, color) : `${FRAMES}/frames/movie/${id}.webp?size=${sz || size()}&color=${(color ?? (S.get("cameras.composites") ? 1 : 0))}${window.cassiniMovieStyle({ center: centreOn(), steady, exposure, trail })}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`;
     // public: only the movie frames the pre-build makes (prebuild.make_pass, make_planes, make_evened): centred, no
     // trail and no stabilization from the server (the page does both, steady-local.html), a colour frame at 128, 512 or
@@ -3485,6 +3492,8 @@ function targetLabel(k) {
       const holdUp = update.hold || (!own && !!body), up = well.classList.contains("has-frame") && heldBody === body;
       const coming = k < 0 && holdUp && !up && framesOf(cam, body).ks.length > 0;
       if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
+      // public: a frame outside the stretches published (/frames/slices.json) has no pictures; the window is quiet there
+      if (PUB && k >= 0 && !slice.has(catalog.et[k])) k = -1;
       // Complete mosaics only: inside a mosaic pass the window keeps the picture from before it, until the pass's
       // last frame brings up the finished mosaic
       if (k >= 0 && !coming && completeMosaics() && playsAs(k) === "mosaic") {
@@ -3568,7 +3577,7 @@ function targetLabel(k) {
       card.querySelectorAll(":is(.info, .capline) [data-f]").forEach(dd => { dd.title = dd.textContent; });   // the whole line, when steady size cuts it short
       const ks = framesOf(cam, body).ks;
       // look ahead: the next 6 frames, or up to 12 when they come within 4 s of playback (a burst), nearest first
-      const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) ahead.push(ks[p + d]);
+      const ahead = []; for (let d = 1; d <= 12 && ks[p + d] !== undefined && (d <= 6 || catalog.et[ks[p + d]] - state.et <= 4 * state.speed); d++) if (!PUB || slice.has(catalog.et[ks[p + d]])) ahead.push(ks[p + d]);
       // looked ahead at the size shown, so full view plays in full resolution too
       nextViews = new Map(ahead.map(q => view(q, catalog.et[q], size())).map(w => [w.key, w]));
       next = [...nextViews.keys()];
@@ -3577,6 +3586,7 @@ function targetLabel(k) {
       if (window.cassiniMosaics !== false && (S.get("cameras.mosaics") || S.get("movies.steady")))
         for (let d = 0; d <= 120 && ks[p + d] !== undefined; d++) {
           const q = ks[p + d], o = passOf(q);
+          if (PUB && !slice.has(catalog.et[q])) continue;   // (public: no table outside the stretches published)
           if (warnedObs.has(o)) continue;
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);

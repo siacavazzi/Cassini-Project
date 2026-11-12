@@ -8,7 +8,7 @@ contracts in `web/public/` (brief: `docs/public-site/briefs/WP4.md`). It never f
 |---|---|
 | `src/index.mjs` | The Worker. Imports `web/public/keys.mjs` and the contract JSON as they are |
 | `wrangler.toml` | Local template, no account and no secret. WP8's `web/deploy/` holds the deployed config |
-| `tools/mirror.mjs` | Reads a publish mirror (`publish.py --to-dir`) into an R2 binding |
+| `tools/mirror.mjs` | Reads a publish mirror (`publish.py --to-dir`) into R2: in batches through a small loader Worker (one request per few hundred objects, so a 100,000-object mirror does not use up the ephemeral ports), retrying connection errors |
 | `tools/dev.mjs` | Loads a mirror into wrangler's local R2 and starts `wrangler dev` on port 8911 |
 | `tools/record_mirror.mjs` | A stand-in mirror until WP3: the frames requests of harness logs, asked of a frame server, written under their canonical keys |
 | `test/fixture_mirror.mjs` | A hand-made mirror with an answer for each of the 232 key fixtures |

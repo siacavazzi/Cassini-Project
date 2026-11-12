@@ -18,7 +18,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -192,7 +191,7 @@ try:
     check("resolve.Answer refuses an unknown kind", False)
 except ValueError:
     check("resolve.Answer refuses an unknown kind", True)
-check("resolve() answers none on an empty cache", resolve.resolve("/frames/N1500060789_2.webp", {}, tempfile.mkdtemp()).kind == "none")
+# (resolve() itself is tested in web/frames/test_resolve.py: calling it loads the picture pipeline, cv2 included)
 
 print(f"{'all ok' if not bad else f'{bad} failed'}")
 sys.exit(1 if bad else 0)
