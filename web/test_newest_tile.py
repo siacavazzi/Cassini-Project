@@ -30,5 +30,12 @@ check("a moved tile's outline moves with it", om.newest_tile(u, 1, made(tiles[:2
       [[0.55, 0], [1.05, 0], [1.05, 0.5], [0.55, 0.5]])
 check("a filter the picture does not draw still marks its own place", om.newest_tile(u, 2, made(tiles[:3]), None)["id"], "N1000000002_1")
 check("a frame with no place marks the newest tile drawn", om.newest_tile(u, 3, made(tiles), None)["n"], 1)
+# a tile made before outlines were stored: measured now from its picture, at its (moved) offset, so not moved again
+om.outline, kept = (lambda u, t, cache: t.get("outline") or sq(*t["offset"])), om.outline
+check("a measured outline is not moved twice", om.newest_tile(u, 1, made([dict(tiles[1], outline=None) and {k: v for k, v in tiles[1].items() if k != "outline"}]), None)["poly"],
+      [[0.55, 0], [1.05, 0], [1.05, 0.5], [0.55, 0.5]])
+om.outline = lambda u, t, cache: (_ for _ in ()).throw(KeyError("box"))
+check("an error working out the mark marks nothing", om.newest_tile(u, 0, made(tiles[:1]), None), None)
+om.outline = kept
 check("nothing placed marks nothing", om.newest_tile(u, 3, made(tiles[3:]), None), None)
 print(f"{checks} checks ok")

@@ -9908,9 +9908,11 @@ def newest_tile(u, n, made, cache):
         t = max(drawn, key=lambda t: t["n"])
     try:
         corners = outline(u, t, cache)
-    except (OSError, ValueError):
+    except Exception:   # (a mark that cannot be worked out never costs the picture)
         return None
-    dx, dy = (t["offset"][0] - t["spice_place"][0], t["offset"][1] - t["spice_place"][1]) if "spice_place" in t else (0, 0)
+    # (a stored outline is at SPICE's place; one measured now from the tile's picture is at t's offset already)
+    dx, dy = (t["offset"][0] - t["spice_place"][0], t["offset"][1] - t["spice_place"][1]) \
+        if "spice_place" in t and "outline" in t else (0, 0)
     x0, y0, w, h = rect
     return {"n": t["n"], "id": t.get("id") or u["frames"][t["n"]][1],
             "poly": [[round((x + dx - x0) / w, 5), round((y + dy - y0) / h, 5)] for x, y in corners]}
