@@ -83,8 +83,12 @@ def test_guard():
         try:
             om._not_kept("ring fits")
             check(False, "kept_only stops budgeted work once its budget is spent")
-        except om.NotKept:
-            pass
+        except om.NotKept as e:
+            check(e.budget, "work stopped by the budget says so (busy, not 'not there')")
+        try:
+            om._not_kept("tile 0", budgeted=False)
+        except om.NotKept as e:
+            check(not e.budget, "a tile or plan the cache lacks is 'not there', not busy")
     om._not_kept("ring fits", budgeted=False)   # (outside kept_only: nothing)
     # outside the cache: files are written (SPICE's kernel cache, for one), and a database in the cache opens read-only
     outside = tempfile.mkdtemp()
@@ -249,7 +253,7 @@ def test_servers(args):
     before = settle(args.cache)
 
     resolve.prepare()
-    checked = collections.Counter()
+    checked, mosaics = collections.Counter(), []
     for ans, c in picks:
         st, h, body = normal[c]
         path, query = urlsplit(c).path, parse_qs(urlsplit(c).query)
@@ -284,6 +288,22 @@ def test_servers(args):
         check(reports(ph) == reports(h), f"{c}: --public sends the same X-* reports")
         check(ph.get("content-type") == h.get("content-type"), f"{c}: --public sends the same Content-Type")
         checked[ans["route"]] += 1
+        if ans["route"] == "mosaic":
+            mosaics.append(c)
+    # a mosaic whose layout works out its ring fits again on every request (no ring file kept): with no budget left it
+    # answers "busy", never "none", and --public answers 503 with Retry-After
+    saved, busy = resolve.BUDGET, []
+    try:
+        resolve.BUDGET = 0.0
+        for c in mosaics:   # (those resolve() named a file for above, with the budget)
+            a = resolve.resolve(urlsplit(c).path, parse_qs(urlsplit(c).query), args.cache)
+            if a.kind != "file":
+                busy.append((c, a.kind))
+    finally:
+        resolve.BUDGET = saved
+    if busy:
+        check(all(k == "busy" for _, k in busy), f"a mosaic resolved with no budget is busy, not none: {busy[:3]}")
+        checked["busy with no budget"] = len(busy)
     print("checked:", dict(checked), flush=True)
     print("skipped:", dict(tally), flush=True)
     check(sum(checked.values()) > 0, "some URLs were checked")

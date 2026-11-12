@@ -2291,6 +2291,8 @@ def make_public_handler(site, cache):
                 if ans["route"] == "mosaic_kind":
                     q["warm"] = ["1"]   # (the key drops warm=; it is what makes the mosaic route a table)
                 found = resolve.table(url.path, q, cache)
+                if found is resolve.BUSY:
+                    return self.send_busy()
                 if found is None:
                     count("miss")
                     return self.send_json({"error": "not kept"}, 404)
@@ -2302,6 +2304,8 @@ def make_public_handler(site, cache):
             for key in [ans["key"]] + ans["fallback"]:
                 path, query = path_query(key)
                 answer = resolve.resolve(path, query, cache)
+                if answer.kind == "busy":
+                    return self.send_busy()
                 if answer.kind == "negative":
                     count("marker")
                     self.send_response(answer.status)
@@ -2322,6 +2326,18 @@ def make_public_handler(site, cache):
                     return self.send_bytes(resolve.read(answer), answer.mime, True, headers)
             count("miss")
             return self.send_error(404, "Not in the cache")
+
+        def send_busy(self):
+            # resolve's budget ran out on work the cache keeps nothing of (resolve.BUSY): not "not there", ask again
+            count("busy")
+            body = b'{"busy": true}'
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", "2")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def send_site(self, url):
             # the page and its replay data, as the normal server sends them (Pages on the public site)

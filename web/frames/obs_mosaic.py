@@ -1443,7 +1443,12 @@ _kept_only = contextvars.ContextVar("kept_only", default=None)   # None, or (dea
 
 class NotKept(BaseException):
     """Raised under kept_only() where the cache does not keep what is asked for and it would be worked out. A
-    BaseException, so an `except Exception` on the way cannot swallow it."""
+    BaseException, so an `except Exception` on the way cannot swallow it. budget: True when it was raised because the
+    budget ran out on work that may well finish given longer (the answer is "busy, ask again", not "not there")."""
+
+    def __init__(self, what, budget=False):
+        super().__init__(what)
+        self.budget = budget
 
 
 @contextlib.contextmanager
@@ -1462,8 +1467,12 @@ def _not_kept(what, budgeted=True):
     under kept_only(), NotKept once its budget is spent, or at once when the work is not budgeted (making a plan or a
     tile); elsewhere nothing."""
     deadline = _kept_only.get()
-    if deadline is not None and (not budgeted or time.monotonic() > deadline):
+    if deadline is None:
+        return
+    if not budgeted:
         raise NotKept(what)
+    if time.monotonic() > deadline:
+        raise NotKept(what, budget=True)
 
 
 def _ulock(u):

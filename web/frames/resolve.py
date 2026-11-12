@@ -16,14 +16,18 @@ removed, or thread started in its context stops it (NotMade), and it answers "no
                   "negative": a deliberate negative answer (Auto center's 404 with X-Center): answer.status,
                   answer.headers and answer.body are what the server sends
                   "none": the cache has no answer (not made yet, made only in part, or not a picture this route makes)
+                  "busy" (resolve.BUSY, status 503): not known yet. The route's layout works something out again on
+                  every request because the cache keeps none of it (ring fits a pass never keeps), and that took longer
+                  than BUDGET seconds. Ask again: it is not "not there". The publisher retries it (with a larger
+                  CASSINI_RESOLVE_BUDGET if it keeps coming back busy); --public answers 503 with Retry-After
 
   read(answer)    the bytes of a "file" answer. The archive route (/frames/<ID>.png) answers the archive's own PNG,
                   which is no file of the cache: its path is the file when the archive is a folder, else
                   "<archive.zip>!/<member>", which read() reads; every other path is a plain file.
 
   table(path, query, cache)   the --public mode's answer to a table route (tile map, pass info, steady and fade tables,
-                  warm=1's pass kind) from what the cache keeps, as the same obs_mosaic functions work it out, or None
-                  (a miss: never {"working": true}).
+                  warm=1's pass kind) from what the cache keeps, as the same obs_mosaic functions work it out, None
+                  (a miss: never {"working": true}), or resolve.BUSY (as above: ask again).
 
 What it answers is what the server sends for the same request on the same cache, with two differences on purpose: a
 picture the server sends as a stand-in it asks for again (a mosaic behind its frame, a mosaic movie drawn without some
@@ -41,7 +45,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-KINDS = ("file", "negative", "none")
+KINDS = ("file", "negative", "none", "busy")
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,10 @@ class Answer:
 
 
 NONE = Answer("none", 404)
+# the budget (BUDGET) ran out on work the layout does on every request because the cache keeps none of it (ring fits a
+# pass never keeps): the answer is not known yet, not "not there". Ask again (a publisher retries it, given more time
+# with a larger CASSINI_RESOLVE_BUDGET, or on a quieter machine; --public answers 503 with Retry-After)
+BUSY = Answer("busy", 503)
 ZIP_MEMBER = "!/"   # an archive frame inside the archive zip: "<zip>!/<member>"
 
 
@@ -216,7 +224,9 @@ def resolve(path: str, query: Dict[str, List[str]], cache: str) -> Answer:
                 fs.calibration.coloring(_first(query, "colors", fs.calibration.COLORS[0])), \
                 fs.calibration.stepping(_first(query, "off", "")):
             return _route(fs, path, query, cache) or NONE
-    except (NotMade, fs.obs_mosaic.NotKept, FileNotFoundError, LookupError, ValueError):
+    except fs.obs_mosaic.NotKept as e:
+        return BUSY if e.budget else NONE
+    except (NotMade, FileNotFoundError, LookupError, ValueError):
         return NONE
 
 
@@ -428,8 +438,8 @@ def read(answer: Answer) -> bytes:
 # ---------- tables ----------
 def table(path: str, query: Dict[str, List[str]], cache: str):
     """The answer (a JSON-able object) to a table route from what the cache keeps, as the server's own functions work
-    it out (obs_mosaic.tile_map, pass_info, steady_table, fade_table, kind_of), or None: a miss (never
-    {"working": true}, which the server answers while it works the table out)."""
+    it out (obs_mosaic.tile_map, pass_info, steady_table, fade_table, kind_of), None: a miss (never
+    {"working": true}, which the server answers while it works the table out), or BUSY: the budget ran out, ask again."""
     fs = _fs()
     prepare()
     om = fs.obs_mosaic
@@ -455,7 +465,9 @@ def table(path: str, query: Dict[str, List[str]], cache: str):
             m = re.match(r"^/frames/movie/([^/]+)\.json$", path)
             if m and fs.FRAME_ID.match(m.group(1)):
                 return _kept(om.pass_info(m.group(1), cache))
-    except (NotMade, om.NotKept, FileNotFoundError, LookupError, ValueError, KeyError):
+    except om.NotKept as e:
+        return BUSY if e.budget else None
+    except (NotMade, FileNotFoundError, LookupError, ValueError, KeyError):
         return None
     return None
 
