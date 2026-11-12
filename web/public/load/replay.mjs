@@ -133,6 +133,24 @@ export async function checkTarget(base) {
   return u.origin;
 }
 
+// The frames host must also say it is the Worker running here: an address on this computer can still forward to
+// Cloudflare (`wrangler dev --remote` runs the Worker on the edge against the real bucket; a tunnel or proxy does the
+// same). The Worker answers /health with X-Site-Env from SITE_ENV ("local" in web/worker/wrangler.toml, "staging" or
+// "production" in web/deploy's config), and an answer that came through Cloudflare's edge carries CF-Ray or
+// "Server: cloudflare". Anything but a 200 "local" answer with neither is refused.
+export async function checkWorker(origin, timeoutMs = 5000) {
+  let res;
+  try { res = await fetch(`${origin}/health`, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) }); }
+  catch (e) { throw new Error(`refused: ${origin}/health did not answer (${(e && e.cause && e.cause.code) || (e && e.message) || e}); the load runner only targets the local rehearsal Worker`); }
+  await res.arrayBuffer().catch(() => {});
+  const env = res.headers.get("x-site-env");
+  if (res.status !== 200 || env !== "local")
+    throw new Error(`refused: ${origin}/health answered ${res.status} with X-Site-Env ${env === null ? "missing" : JSON.stringify(env)}; the load runner only targets a Worker whose SITE_ENV is "local"`);
+  if (res.headers.get("cf-ray") || /cloudflare/i.test(res.headers.get("server") || ""))
+    throw new Error(`refused: ${origin}/health came through Cloudflare's edge (CF-Ray or Server: cloudflare): is this wrangler dev --remote? The load runner only targets the Worker running on this computer`);
+  return origin;
+}
+
 // --flag value pairs; the flags named in `bare` take no value ("1"); the rest of the arguments are positional
 export function parseArgs(argv, bare = []) {
   const flags = {}, rest = [];

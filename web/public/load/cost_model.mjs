@@ -1,9 +1,11 @@
 // The gate G3 cost model (public site, WP10a): turns zero-origin harness logs into requests and bytes per
 // viewer-minute, by what Cloudflare bills (Worker requests and CPU, R2 Class B reads, Analytics Engine data points,
-// Pages, egress), and prices them at 1,000 viewers with prices.json (the capacity report's prices).
+// Pages, egress), and prices them at 1,000 viewers with WP8's web/deploy/pricing.json (the capacity report's prices).
+// WP8's cost.py prices the same logs per frames request; this model also follows each request's store (R2 reads of
+// tables, fallbacks and markers), weighs a mix of sessions and prints the G3 table.
 //
 //   node web/public/load/cost_model.mjs [--mix S1=6,S2=2,S3=1] [--edge-hit 0.5] [--cpu-ms 1] [--isolates 300]
-//        [--storage-gb 250] [--objects 5000000] [--viewers 1000] [--prices FILE] [--json OUT] LOG...
+//        [--storage-gb 250] [--objects 5000000] [--viewers 1000] [--prices pricing.json] [--json OUT] LOG...
 //
 // LOG         harness logs: <session>.json files or zero_origin.mjs --out folders (a summary.json alone is read too,
 //             from its per-route counts, and marked "from summary")
@@ -30,7 +32,21 @@ import { readSessions, parseArgs } from "./replay.mjs";
 import { loadKeys } from "../keys.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-export const PRICES = JSON.parse(fs.readFileSync(path.join(here, "prices.json"), "utf8"));
+// the prices are WP8's cost sheet's (web/deploy/pricing.json), one file for both tools
+export function pricesFrom(J) {
+  return {
+    checked: J.checked,
+    workers: { plan_month: J.workers_paid_monthly, included_requests_month: J.workers_requests_included, per_million_requests: J.workers_per_million_requests,
+      included_cpu_ms_month: J.workers_cpu_ms_included, per_million_cpu_ms: J.workers_per_million_cpu_ms },
+    r2: { storage_gb_month: J.r2_storage_per_gb_month, included_storage_gb: J.r2_storage_gb_free, class_b_per_million: J.r2_per_million_class_b,
+      included_class_b_month: J.r2_class_b_included, egress_per_gb: J.r2_egress_per_gb,
+      // Class A (writes) is only in a publish; WP8's sheet has no line for it, so R2's published price is the default
+      class_a_per_million: J.r2_per_million_class_a ?? 4.50, included_class_a_month: J.r2_class_a_included ?? 1000000 },
+    analytics_engine: { included_data_points_month: J.analytics_engine_points_included, per_million_data_points: J.analytics_engine_per_million_points },
+    pages: { per_request: 0, per_gb: 0 },
+  };
+}
+export const PRICES = pricesFrom(JSON.parse(fs.readFileSync(path.join(here, "..", "..", "deploy", "pricing.json"), "utf8")));
 const POLICY = JSON.parse(fs.readFileSync(path.join(here, "..", "policy.json"), "utf8"));
 const STORE = Object.fromEntries(POLICY.routes.map(r => [r.id, r.store]));
 
@@ -151,7 +167,7 @@ export function model(counts, o = {}, P = PRICES) {
   const publish = { objects, class_a_usd: Math.max(0, objects - P.r2.included_class_a_month) * P.r2.class_a_per_million / 1e6 };
   return {
     when: new Date().toISOString(),
-    assumptions: { edge_hit: o.edgeHit ?? 0.5, cpu_ms_per_request: o.cpuMs ?? 1, isolates: o.isolates ?? 300, storage_gb: o.storageGb ?? 0, viewers, mix: o.mix || "equal", prices_checked: P.checked, prices_extra_checked: P.checked_extra },
+    assumptions: { edge_hit: o.edgeHit ?? 0.5, cpu_ms_per_request: o.cpuMs ?? 1, isolates: o.isolates ?? 300, storage_gb: o.storageGb ?? 0, viewers, mix: o.mix || "equal", prices_checked: P.checked },
     per_viewer_minute: rate, per_session,
     worker_rps_at_viewers: rate.worker * viewers / 60,
     per_viewer_hour: perViewerHour,
@@ -171,7 +187,7 @@ export function printModel(M, out = console.log) {
   const r = M.per_viewer_minute;
   out(`mix     ${"".padStart(14)} ${f(r.worker, 1).padStart(8)} ${f(r.picture, 1).padStart(8)} ${f(r.table, 1).padStart(7)} ${f(r.static, 1).padStart(7)} ${(f(r.reads_cacheable, 1) + " + " + f(r.reads_fixed, 1)).padStart(22)} ${f(r.frames_bytes / 1e6).padStart(10)} ${f(r.static_bytes / 1e6).padStart(10)}`);
   const a = M.assumptions;
-  out(`\nAssumptions: edge cache answers ${a.edge_hit * 100}% of pictures; ${a.cpu_ms_per_request} CPU ms a request; ${a.isolates} isolates; prices of ${a.prices_checked}${a.prices_extra_checked ? "" : " (CPU, Class A, Analytics Engine not rechecked)"}`);
+  out(`\nAssumptions: edge cache answers ${a.edge_hit * 100}% of pictures; ${a.cpu_ms_per_request} CPU ms a request; ${a.isolates} isolates; prices ${a.prices_checked} (web/deploy/pricing.json)`);
   const h = M.viewers_for_an_hour, q = h.quantities;
   out(`\n${f(a.viewers, 0)} viewers for one hour (no monthly allowance): Worker ${f(M.worker_rps_at_viewers, 0)} req/s`);
   out(`  Worker requests ${f(q.worker_requests / 1e6, 2)} M  $${f(h.usd.worker_requests)}   CPU ${f(q.cpu_ms / 1e6, 2)} M ms  $${f(h.usd.cpu)}   R2 Class B ${f(q.class_b / 1e6, 2)} M  $${f(h.usd.r2_class_b)}   Analytics ${f(q.data_points / 1e6, 2)} M  $${f(h.usd.analytics)}`);
@@ -187,7 +203,7 @@ if (isMain) {
   const { flags, rest } = parseArgs(process.argv.slice(2));
   if (!rest.length) { console.error("give one or more harness logs (session .json files or zero_origin --out folders)"); process.exit(2); }
   const mix = flags.mix ? Object.fromEntries(flags.mix.split(",").map(p => p.split("=")).map(([k, v]) => [k.trim().toUpperCase(), +v])) : {};
-  const P = flags.prices ? JSON.parse(fs.readFileSync(flags.prices, "utf8")) : PRICES;
+  const P = flags.prices ? pricesFrom(JSON.parse(fs.readFileSync(flags.prices, "utf8"))) : PRICES;
   const sessions = (await readSessions(rest)).filter(s => !s.error || s.requests);
   const counts = await Promise.all(sessions.map(countSession));
   const M = model(counts, {

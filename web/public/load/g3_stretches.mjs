@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseArgs, readSessions, checkTarget } from "./replay.mjs";
+import { parseArgs, readSessions, checkTarget, checkWorker } from "./replay.mjs";
 import { countSession, model, printModel } from "./cost_model.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,7 @@ const { flags } = parseArgs(process.argv.slice(2), ["spares", "headed"]);
 const fail = m => { console.error(m); process.exit(2); };
 if (!flags.site || !flags.out) fail("--site URL and --out DIR are needed");
 const site = await checkTarget(flags.site).catch(e => fail(e.message));
-const frames = flags.frames ? await checkTarget(flags.frames).catch(e => fail(e.message)) : site;
+const frames = await checkWorker(flags.frames ? await checkTarget(flags.frames).catch(e => fail(e.message)) : site).catch(e => fail(e.message));
 const S = JSON.parse(fs.readFileSync(path.join(here, "stretches.json"), "utf8"));
 let list = S.stretches.map((s, i) => ({ ...s, n: i + 1 }));
 if (flags.spares) list = list.concat(S.spares.map((s, i) => ({ ...s, n: S.stretches.length + i + 1 })));

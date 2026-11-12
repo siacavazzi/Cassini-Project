@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
-import { privateAddress, checkTarget, percentile, readSessions, classOf, parseArgs } from "./replay.mjs";
+import { privateAddress, checkTarget, checkWorker, percentile, readSessions, classOf, parseArgs } from "./replay.mjs";
 import { runLoad, judge } from "./load_runner.mjs";
 import { countSession, mixRates, price, model, PRICES } from "./cost_model.mjs";
 import { fixtureLog } from "./fixture_log.mjs";
@@ -25,6 +25,25 @@ test("the guard allows this computer, the home network and the tailnet, and noth
   assert.equal(await checkTarget("http://localhost:8915"), "http://localhost:8915");
   for (const u of ["https://1.1.1.1", "https://cassini-frames.example.workers.dev", "https://staging.cassinios.com", "https://box.tail1234.ts.net", "ftp://127.0.0.1"])
     await assert.rejects(checkTarget(u), /refused|not http/, u);
+});
+
+test("the frames host must say it is the Worker running here, not through Cloudflare", async () => {
+  // stand-ins for /health: the local Worker, staging, no header, a 404, and `wrangler dev --remote` (local env, edge headers)
+  const answers = {
+    local: [200, { "X-Site-Env": "local" }], staging: [200, { "X-Site-Env": "staging" }], production: [200, { "X-Site-Env": "production" }],
+    none: [200, {}], notfound: [404, { "X-Site-Env": "local" }],
+    remote: [200, { "X-Site-Env": "local", "CF-Ray": "8f1e2d3c4b5a6978-SJC" }], server: [200, { "X-Site-Env": "local", Server: "cloudflare" }],
+  };
+  for (const [name, [status, headers]] of Object.entries(answers)) {
+    const srv = http.createServer((req, res) => { res.writeHead(req.url === "/health" ? status : 404, headers); res.end("ok public\n"); });
+    await new Promise(r => srv.listen(0, "127.0.0.1", r));
+    const origin = `http://127.0.0.1:${srv.address().port}`;
+    try {
+      if (name === "local") assert.equal(await checkWorker(origin), origin);
+      else await assert.rejects(checkWorker(origin), /refused/, name);
+    } finally { srv.close(); }
+  }
+  await assert.rejects(checkWorker("http://127.0.0.1:9", 2000), /did not answer/);
 });
 
 test("judging an answer against the logged one", () => {

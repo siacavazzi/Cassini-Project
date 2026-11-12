@@ -8,8 +8,7 @@ first is the harness itself, run on the ten stretches.
 | File | What it is |
 |---|---|
 | `load_runner.mjs` | Replays harness logs as N viewers (default 100) against the rehearsal Worker; errors and picture times |
-| `cost_model.mjs` | Requests, R2 reads and bytes per viewer-minute by what Cloudflare bills; cost at 1,000 viewers |
-| `prices.json` | The prices it uses (the capacity report's, 2026-10-27; three are marked to be rechecked) |
+| `cost_model.mjs` | Requests, R2 reads and bytes per viewer-minute by what Cloudflare bills; cost at 1,000 viewers, with WP8's `web/deploy/pricing.json` |
 | `stretches.json` | The ten G3 stretches (2000 to 2017), each a moment the page itself offers, plus two spares |
 | `g3_stretches.mjs` | Runs harness session S1 on each stretch (`--moment`, `--speed`), G2's counts per stretch, then the cost model |
 | `fixture_log.mjs` | A log of every key fixture, so the runner can be run on the Worker's fixture mirror without the rig |
@@ -20,8 +19,11 @@ first is the harness itself, run on the ten stretches.
 
 `load_runner.mjs` and `g3_stretches.mjs` refuse any target that is not this computer, the home network (10/8,
 172.16/12, 192.168/16) or the tailnet (100.64/10): the host is resolved and every address must be private, and
-`*.workers.dev`, `*.pages.dev`, `*.r2.dev`, `*.ts.net` and any `cassinios` name are refused by name. There is no flag
-around it. Load on Cloudflare staging would be a change to `replay.mjs`, through review, with Sam's word.
+`*.workers.dev`, `*.pages.dev`, `*.r2.dev`, `*.ts.net` and any `cassinios` name are refused by name. The frames host
+must then answer `/health` with 200 and `X-Site-Env: local`, with no `CF-Ray` and no `Server: cloudflare`, so a local
+address that forwards to Cloudflare (`wrangler dev --remote`, a tunnel, a proxy) is refused too. The `--site` host
+(Pages or a static copy) has no `/health` and gets the address check only; by default its requests are not replayed.
+There is no flag around either check. Load on Cloudflare staging would be a change to `replay.mjs`, through review, with Sam's word.
 
 ## The G3 run on the rig (WP9a: Worker on 8915, page on 8916)
 

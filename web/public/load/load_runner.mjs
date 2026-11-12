@@ -19,13 +19,14 @@
 // that is now 404 is a miss; any other change is "changed". G3 passes when errors + misses + changes are 0.
 // Picture time is from sending the request to its last byte; "wait" is time queued behind the per-host limit.
 //
-// Load only ever goes to this computer, the home network or the tailnet (replay.mjs checkTarget): a public service,
-// Cloudflare staging or production included, is refused. Exit status 0 when G3 passes, 1 when it does not, 2 for bad
+// Load only ever goes to this computer, the home network or the tailnet (replay.mjs checkTarget), and only to a frames
+// host whose /health says it is the Worker running locally (checkWorker: X-Site-Env local, not through Cloudflare's
+// edge, so not `wrangler dev --remote`): a public service, Cloudflare staging or production included, is refused. Exit status 0 when G3 passes, 1 when it does not, 2 for bad
 // arguments or a refused target.
 import fs from "node:fs";
 import path from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
-import { readSessions, percentile, checkTarget, parseArgs } from "./replay.mjs";
+import { readSessions, percentile, checkTarget, checkWorker, parseArgs } from "./replay.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
 
@@ -185,7 +186,7 @@ if (isMain) {
   if (!flags.frames) fail("--frames URL (the rehearsal Worker) is needed");
   if (!rest.length) fail("give one or more harness logs (session .json files or zero_origin --out folders)");
   let frames, site = null;
-  try { frames = await checkTarget(flags.frames); if (flags.site) site = await checkTarget(flags.site); } catch (e) { fail(e.message); }
+  try { frames = await checkWorker(await checkTarget(flags.frames)); if (flags.site) site = await checkTarget(flags.site); } catch (e) { fail(e.message); }
   const sessions = await readSessions(rest);
   const { summary, results } = await runLoad({
     sessions, frames, site,
