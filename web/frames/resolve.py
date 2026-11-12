@@ -16,14 +16,18 @@ removed, or thread started in its context stops it (NotMade), and it answers "no
                   "negative": a deliberate negative answer (Auto center's 404 with X-Center): answer.status,
                   answer.headers and answer.body are what the server sends
                   "none": the cache has no answer (not made yet, made only in part, or not a picture this route makes)
+                  "busy" (resolve.BUSY, status 503): not known yet. The route's layout works something out again on
+                  every request because the cache keeps none of it (ring fits a pass never keeps), and that took longer
+                  than BUDGET seconds. Ask again: it is not "not there". The publisher retries it (with a larger
+                  CASSINI_RESOLVE_BUDGET if it keeps coming back busy); --public answers 503 with Retry-After
 
   read(answer)    the bytes of a "file" answer. The archive route (/frames/<ID>.png) answers the archive's own PNG,
                   which is no file of the cache: its path is the file when the archive is a folder, else
                   "<archive.zip>!/<member>", which read() reads; every other path is a plain file.
 
   table(path, query, cache)   the --public mode's answer to a table route (tile map, pass info, steady and fade tables,
-                  warm=1's pass kind) from what the cache keeps, as the same obs_mosaic functions work it out, or None
-                  (a miss: never {"working": true}).
+                  warm=1's pass kind) from what the cache keeps, as the same obs_mosaic functions work it out, None
+                  (a miss: never {"working": true}), or resolve.BUSY (as above: ask again).
 
 What it answers is what the server sends for the same request on the same cache, with two differences on purpose: a
 picture the server sends as a stand-in it asks for again (a mosaic behind its frame, a mosaic movie drawn without some
@@ -41,7 +45,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-KINDS = ("file", "negative", "none")
+KINDS = ("file", "negative", "none", "busy")
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,10 @@ class Answer:
 
 
 NONE = Answer("none", 404)
+# the budget (BUDGET) ran out on work the layout does on every request because the cache keeps none of it (ring fits a
+# pass never keeps): the answer is not known yet, not "not there". Ask again (a publisher retries it, given more time
+# with a larger CASSINI_RESOLVE_BUDGET, or on a quieter machine; --public answers 503 with Retry-After)
+BUSY = Answer("busy", 503)
 ZIP_MEMBER = "!/"   # an archive frame inside the archive zip: "<zip>!/<member>"
 
 
@@ -70,9 +78,16 @@ class NotMade(BaseException):
 
 
 # ---------- cache only: nothing written, nothing started ----------
+# seconds a resolve may spend working out again what a layout works out on every request because nothing of it is kept
+# (obs_mosaic.kept_only): a ring pass whose fits find too little to keep takes about a second, and is answered; one
+# whose fits the cache lacks would take minutes, and is answered "none" when this is spent
+BUDGET = float(os.environ.get("CASSINI_RESOLVE_BUDGET", "5"))
 _cache_only = contextvars.ContextVar("cache_only", default=None)   # the picture cache being read (its real path)
 _WRITE_EVENTS = {"os.mkdir", "os.rename", "os.remove", "os.rmdir", "os.link", "os.symlink", "os.truncate",
                  "os.chmod", "os.utime", "shutil.copyfile", "shutil.move", "shutil.rmtree", "shutil.make_archive"}
+# a child process could write anywhere, the cache included: none is started under cache_only
+_CHILD_EVENTS = {"subprocess.Popen", "os.posix_spawn", "os.spawn", "os.system", "os.exec", "os.fork", "os.forkpty",
+                 "pty.spawn", "os.startfile"}
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
 _installed = []
 _install_lock = threading.Lock()
@@ -98,12 +113,29 @@ def _audit(event, args):
             raise NotMade(f"would write {args[0]}")
     elif event in _WRITE_EVENTS and args and _inside(args[0], cache):
         raise NotMade(f"would {event} {args[0]}")
+    elif event in _CHILD_EVENTS:
+        raise NotMade(f"would start a child process ({event})")
+    elif event == "sqlite3.connect" and args:
+        # a database in the cache is opened read-only (a URI with mode=ro) or not at all: sqlite writes through its own
+        # file calls, which the open hook never sees
+        db = args[0]
+        db = os.fsdecode(db) if isinstance(db, bytes) else str(db)
+        if db.startswith("file:"):
+            name, _, opts = db[5:].partition("?")
+            if "mode=ro" in opts.split("&") or not _inside(name, cache):
+                return
+            raise NotMade(f"would open {name} for writing")
+        if db != ":memory:" and _inside(db, cache):
+            raise NotMade(f"would open {db} for writing")
 
 
 def _install():
     """The guards cache_only relies on, installed once per process: an audit hook that stops any file of the picture cache
-    written (or folder made, moved, removed in it) and a check in Thread.start that stops any thread started, while
-    cache_only is on in the calling context. Both do nothing anywhere else (the server's own requests, its warmers).
+    written (or folder made, moved, removed in it, or a database in it opened other than read-only), and any child
+    process started, and a check in Thread.start that stops any thread started, while cache_only is on in the calling
+    context. obs_mosaic.kept_only(BUDGET) goes with it: the mosaic code never makes a plan or a tile, and stops working
+    out fits and registrations the cache does not keep once BUDGET is spent, checked tile by tile, rather than at the
+    write after minutes of it. Both do nothing anywhere else (the server's own requests, its warmers).
     Files outside the cache are not pictures: SPICE's kernels extracted to its own cache, for one, stay allowed."""
     if _installed:
         return
@@ -123,11 +155,14 @@ def _install():
 
 @contextlib.contextmanager
 def cache_only(cache):
-    """Code run inside this writes nothing into the picture cache and starts nothing (NotMade where it would)."""
+    """Code run inside this writes nothing into the picture cache, starts nothing and works out nothing the cache does
+    not keep (NotMade, or obs_mosaic.NotKept, where it would)."""
     _install()
+    om = _fs().obs_mosaic   # (imported before the guard is on: importing frame_server starts a process, bootleg_autonav)
     token = _cache_only.set(os.path.realpath(cache))
     try:
-        yield
+        with om.kept_only(BUDGET):
+            yield
     finally:
         _cache_only.reset(token)
 
@@ -190,6 +225,8 @@ def resolve(path: str, query: Dict[str, List[str]], cache: str) -> Answer:
                 fs.calibration.coloring(_first(query, "colors", fs.calibration.COLORS[0])), \
                 fs.calibration.stepping(_first(query, "off", "")):
             return _route(fs, path, query, cache) or NONE
+    except fs.obs_mosaic.NotKept as e:
+        return BUSY if e.budget else NONE
     except (NotMade, FileNotFoundError, LookupError, ValueError):
         return NONE
 
@@ -402,8 +439,8 @@ def read(answer: Answer) -> bytes:
 # ---------- tables ----------
 def table(path: str, query: Dict[str, List[str]], cache: str):
     """The answer (a JSON-able object) to a table route from what the cache keeps, as the server's own functions work
-    it out (obs_mosaic.tile_map, pass_info, steady_table, fade_table, kind_of), or None: a miss (never
-    {"working": true}, which the server answers while it works the table out)."""
+    it out (obs_mosaic.tile_map, pass_info, steady_table, fade_table, kind_of), None: a miss (never
+    {"working": true}, which the server answers while it works the table out), or BUSY: the budget ran out, ask again."""
     fs = _fs()
     prepare()
     om = fs.obs_mosaic
@@ -429,6 +466,8 @@ def table(path: str, query: Dict[str, List[str]], cache: str):
             m = re.match(r"^/frames/movie/([^/]+)\.json$", path)
             if m and fs.FRAME_ID.match(m.group(1)):
                 return _kept(om.pass_info(m.group(1), cache))
+    except om.NotKept as e:
+        return BUSY if e.budget else None
     except (NotMade, FileNotFoundError, LookupError, ValueError, KeyError):
         return None
     return None
