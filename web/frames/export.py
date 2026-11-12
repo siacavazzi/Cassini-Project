@@ -624,6 +624,9 @@ def levels_key(opt):
     return hashlib.sha1(json.dumps([LEVELS_VERSION, key], sort_keys=True).encode()).hexdigest()[:16]
 
 
+STAND_IN_AGAIN = 1800   # s: a stretch measured on a stand-in (a picture given up on, Pictures.timed_out) is measured again after this
+
+
 def measure(opt, cache, pictures, wait=False):
     """The brightness (brightness) of the picture every frame of opt's stretch shows, both cameras, nothing cut:
     {done, total, logs: {frame id: log or None}} so far. Measured once on a thread of its own on the pictures the
@@ -631,6 +634,9 @@ def measure(opt, cache, pictures, wait=False):
     key = levels_key(opt)
     path = os.path.join(cache, LEVELS_VERSION, key + ".json")
     with _lock:
+        held = _measured.get(key)
+        if held and held.get("again_at") and time.monotonic() >= held["again_at"]:
+            _measured.pop(key)   # measured on a stand-in a while ago: measured again
         got = _measured.get(key) or _measuring.get(key)
         if got is None and os.path.exists(path):
             try:
@@ -645,7 +651,7 @@ def measure(opt, cache, pictures, wait=False):
             got["thread"].start()
     if wait and got.get("thread"):
         got["thread"].join()
-    return {k: (dict(v) if k == "logs" else v) for k, v in got.items() if k != "thread"}
+    return {k: (dict(v) if k == "logs" else v) for k, v in got.items() if k not in ("thread", "again_at")}
 
 
 def _measure(opt, key, path, pictures, got):
@@ -664,10 +670,17 @@ def _measure(opt, key, path, pictures, got):
                 for fid, lv in pool.map(lambda e: contextvars.copy_context().run(one, e), pics):
                     got["logs"][fid] = None if lv is None else round(lv, 5)
                     got["done"] += 1
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path + ".part", "w") as fh:
-            json.dump(got["logs"], fh)
-        os.replace(path + ".part", path)
+        if pictures.timed_out:
+            # measured on a stand-in for a picture that took too long: answered for now, never kept on disk, and
+            # measured again after STAND_IN_AGAIN s (measure), when the picture is likely made
+            got["stand_in"] = sorted(pictures.timed_out)
+            got["again_at"] = time.monotonic() + STAND_IN_AGAIN
+            print(f"export levels {key}: {len(got['stand_in'])} measured on a stand-in, not kept", flush=True)
+        else:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path + ".part", "w") as fh:
+                json.dump(got["logs"], fh)
+            os.replace(path + ".part", path)
     except Exception as e:
         got["error"] = f"{type(e).__name__}: {e}"
         print(f"export levels {key}: {got['error']}", flush=True)
@@ -823,6 +836,9 @@ class Pictures:
     def __init__(self, cache, color=None, processed=None, frame=None, slots=None):
         self.cache, self.slots, self.movie = cache, slots, dict(MOVIE)
         self._color, self._processed, self._frame = color, processed, frame
+        # the frames whose first choice of picture was given up on for taking too long (a mosaic not finished in
+        # MOSAIC_WAIT): another try stood in, which a later asking may not need
+        self.timed_out = set()
 
     def finished_mosaic(self, frame_id, size, **kw):
         """obs_mosaic.mosaic_webp's mosaic at frame_id with every tile up to that frame made, as the film shows it, or
@@ -945,6 +961,8 @@ class Pictures:
                 continue
             except Exception as err:   # a picture the pipeline cannot make: the next try stands in
                 print(f"export: {kind} {arg}: {type(err).__name__}: {err}", flush=True)
+                if isinstance(err, TimeoutError):
+                    self.timed_out.add(e["id"])
                 continue
             if not made or not made[0]:
                 continue
