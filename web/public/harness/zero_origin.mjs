@@ -48,6 +48,8 @@ for (const f of sessionFiles) {
 
 // routes whose 404 is an answer the page expects (policy.json probe_404), counted apart from misses
 const PROBE = new Set(JSON.parse(fs.readFileSync(path.join(here, "..", "policy.json"), "utf8")).routes.filter(r => r.probe_404).map(r => r.id));
+// the headers a log keeps: the reports (x-*) and the type
+const keep = hd => Object.fromEntries(Object.entries(hd || {}).filter(([k]) => /^x-|^content-type$/.test(k)));
 const hostOf = u => { try { return new URL(u).host; } catch (e) { return ""; } };
 const siteHost = hostOf(site), framesHost = hostOf(frames);
 
@@ -64,6 +66,7 @@ function classify(r) {
     out.origin = mode === "before";
     if (ans.refused) out.verdict = "refused";
     else if (r.status === 404 && r.headers["x-center"]) out.verdict = "marker";
+    else if (r.pending) out.verdict = "pending";
     else if (r.status === 404 && ans.route && PROBE.has(ans.route)) out.verdict = "probe";
     else if (r.failed === "net::ERR_ABORTED") out.verdict = "cancelled";
     else if (r.failed || r.status >= 400 || r.status === 0) out.verdict = "miss";
@@ -76,7 +79,7 @@ function classify(r) {
 }
 
 function summarize(reqs) {
-  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, probe: 0, cancelled: 0, cdn: 0, other_hosts: 0, bytes: 0 };
+  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, probe: 0, cancelled: 0, pending: 0, cdn: 0, other_hosts: 0, bytes: 0 };
   const byRoute = {}, refusedWhy = {}, missRoutes = {}, otherHosts = {};
   for (const r of reqs) {
     const k = r.k;
@@ -93,6 +96,7 @@ function summarize(reqs) {
       if (k.verdict === "marker") c.marker++;
       if (k.verdict === "probe") c.probe++;
       if (k.verdict === "cancelled") c.cancelled++;
+      if (k.verdict === "pending") c.pending++;
     }
   }
   return { counts: c, by_route: byRoute, refused_why: refusedWhy, miss_routes: missRoutes, other_hosts: otherHosts };
@@ -111,12 +115,16 @@ for (const s of sessions) {
   page.on("requestfinished", async q => {
     const r = live.get(q); if (!r) return; live.delete(q);
     try { const res = await q.response(); r.status = res ? res.status() : 0; r.headers = res ? await res.allHeaders() : {}; r.bytes = (await q.sizes()).responseBodySize; } catch (e) { r.status = r.status || 0; }
-    r.headers = Object.fromEntries(Object.entries(r.headers || {}).filter(([k]) => /^x-|^content-type$/.test(k)));
+    r.headers = keep(r.headers);
     reqs.push(r);
   });
   // an answer whose body the page never reads (a 404 it only checks .ok of) has no requestfinished: its status and
   // headers are kept when they come, so the request is counted, and idle() does not wait on it
-  page.on("response", async res => { const r = live.get(res.request()); if (!r) return; r.status = res.status(); r.answered = true; try { r.headers = await res.allHeaders(); } catch (e) {} });
+  page.on("response", async res => {
+    const r = live.get(res.request()); if (!r) return; r.status = res.status(); r.answered = true;
+    let all = {}; try { all = await res.allHeaders(); } catch (e) {}
+    if (live.get(res.request()) === r) r.headers = keep(all);   // (requestfinished may have taken it meanwhile)
+  });
   page.on("requestfailed", q => { const r = live.get(q); if (!r) return; live.delete(q); r.failed = q.failure() ? q.failure().errorText : "failed"; r.status = 0; reqs.push(r); });
   const h = {
     site, frames, minutes, page, ctx, browser,
@@ -155,7 +163,9 @@ for (const s of sessions) {
   // a blank page first, on the site's origin, so moment() can ask the frames host before the session opens a moment
   try { await page.goto(`${site}/robots.txt`).catch(() => {}); await s.run(h); } catch (e) { error = String(e && e.stack || e).slice(0, 2000); }
   await page.waitForTimeout(1500);
-  for (const r of live.values()) if (r.answered) { r.headers = Object.fromEntries(Object.entries(r.headers || {}).filter(([k]) => /^x-|^content-type$/.test(k))); r.unread = true; reqs.push(r); }
+  // still in flight at the end: answered but never read (counted from its answer), or never answered at all (counted
+  // as pending, so a hung picture shows in the counts rather than being left out)
+  for (const r of live.values()) { if (r.answered) r.unread = true; else { r.pending = true; r.status = 0; } r.headers = keep(r.headers); reqs.push(r); }
   live.clear();
   for (const r of reqs) r.k = classify(r);
   const sum = summarize(reqs);
@@ -166,7 +176,7 @@ for (const s of sessions) {
     fs.writeFileSync(path.join(args.out, `${s.id}.json`), JSON.stringify({ ...out, requests: reqs }, null, 1));
   }
   const c = sum.counts;
-  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cancelled ${String(c.cancelled).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
+  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cancelled ${String(c.cancelled).padStart(4)}  pending ${String(c.pending).padStart(3)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
   await ctx.close();
 }
 await browser.close();
