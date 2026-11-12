@@ -82,8 +82,8 @@ body.phone #tourhint button { padding: 6px 11px; }
 
   // ---- the steps of the tour (other features add theirs with cassiniTutorial.add) ----
   const STEPS = [
-    { id: "welcome", at: null, title: "Welcome aboard Cassini",
-      text: p => `This is NASA and ESA's Cassini mission, 1997 to 2017, replayed along its real path. ${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
+    { id: "welcome", at: null, title: "Look around",
+      text: p => `${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
     { id: "play", at: ["#speedtool", "#play"], title: "Play and speed",
       text: "Play or pause the mission here. The speed slider sets how much mission time passes each second, from real time up to days a second." },
     { id: "timeline", at: ["#tl"], title: "The timeline",
@@ -116,6 +116,7 @@ body.phone #tourhint button { padding: 6px 11px; }
     const b = document.body.classList;
     return b.contains("cutscene") || b.contains("cutscene-out") || (window.cassiniAmbient && cassiniAmbient.on) || (window.cassiniMovie && cassiniMovie.on)
       || ($("loading") && !$("loading").hidden) || ($("loadscreen") && $("loadscreen").classList.contains("on"))
+      || (window.cassiniWelcome && cassiniWelcome.on)
       || ["cassiniFinale", "cassiniLaunch", "cassiniSOI", "cassiniHuygensRelease", "cassiniHuygensLanding"].some(k => window[k] && window[k].running);
   }
 
@@ -248,12 +249,17 @@ body.phone #tourhint button { padding: 6px 11px; }
   }
   setInterval(() => { if (tips.length) nextTip(); }, 3000);
 
-  // ---- the first visit: once the page has loaded and is quiet, after a few seconds of the view on its own ----
-  if (q !== "0" && (q === "1" || (!saved.tour && tipsAllowed()))) {
+  // ---- the first visit: once the page has loaded and is quiet, after a few seconds of the view on its own, the
+  // welcome (welcome.html), which offers the tour; a visitor who has seen the welcome but not the tour gets the tour ----
+  const welcomeDue = () => q !== "1" && window.cassiniWelcome && cassiniWelcome.due;
+  if (q !== "0" && (q === "1" || welcomeDue() || (!saved.tour && tipsAllowed()))) {
     let calm = 0;
     const wait = setInterval(() => {
       calm = busy() || document.querySelector(".menu.open") ? 0 : calm + 1;
-      if (calm >= 4) { clearInterval(wait); if (!T.active && (q === "1" || !saved.tour)) start(); }
+      if (calm < 4) return;
+      clearInterval(wait);
+      if (welcomeDue() && !T.active) cassiniWelcome.open();   // not over a tour the visitor already started
+      else if (!T.active && (q === "1" || !saved.tour)) start();
     }, 1000);
   }
 
@@ -266,6 +272,7 @@ body.phone #tourhint button { padding: 6px 11px; }
   addEventListener("resize", place);
 
   window.cassiniTutorial = { add, tip, start, stop, get active() { return T.active; }, get step() { return T.cur && T.cur.id; },
-    seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS };
+    seen: id => id ? !!saved.tips[id] : !!saved.tour, steps: STEPS,
+    markSeen: () => { saved.tour = 1; store(); setTimeout(nextTip, 1500); } };
 })();
 </script>

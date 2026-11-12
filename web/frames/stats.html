@@ -195,7 +195,7 @@ footer { color: var(--dim); font-size: 12px; margin-top: 18px; }
     if (!r.ok) { $("tiles").innerHTML = `<div class="empty">The stats did not load (${r.status})</div>`; return; }
     data = await r.json();
     $("span").textContent = `${data.days[0].day} to ${data.days[data.days.length - 1].day} (UTC)`;
-    $("foot").textContent = `Daily totals only: no cookies, no addresses kept, nothing per person. ${fmt(data.bots)} requests from crawlers and test browsers were left out of every count above.`;
+    $("foot").textContent = `Daily totals only: no tracking cookies, no addresses kept, nothing per person. ${fmt(data.bots)} requests from crawlers and test browsers were left out of every count above.`;
     tiles(); chart(); countries(); pics();
   }
   $("range").onclick = e => { const b = e.target.closest("button"); if (b) { days = +b.dataset.days; load(); } };

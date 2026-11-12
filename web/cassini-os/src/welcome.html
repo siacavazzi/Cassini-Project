@@ -1,0 +1,185 @@
+<!-- The welcome for Cassini OS: what a first-time visitor sees once the page has loaded. A short card over the view
+     that says what this is (the real mission, real pictures, the real flight) and offers the tour or the page itself.
+     build.py splices the style into the head and the script just ahead of the tour's (tutorial.html), which decides
+     when it shows: on the first visit, once the page is quiet, in place of the tour starting on its own.
+
+     That it has been seen is kept in a cookie (cassini-welcome, a year, this site only) and in localStorage, so it
+     shows once. Choosing either button counts as seen; so does the tour's first-visit start (a visitor who chose
+     "Just explore" is not then given the tour on their next visit). ?welcome=1 shows it, ?welcome=0 or ?tour=0 keeps
+     it away. It can be opened again from the Cassini OS menu, Settings > Interface and the About window.
+
+       cassiniWelcome.open(), close(), get on, get seen -->
+<style>
+#welcome { position: fixed; inset: 0; z-index: 1600; display: grid; place-items: center; padding: 24px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(6,7,10,.38), rgba(6,7,10,.72));
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); opacity: 0; transition: opacity .45s ease; }
+#welcome.on { opacity: 1; }
+#welcome[hidden] { display: none; }
+#welcome .wcard { position: relative; box-sizing: border-box; width: min(600px, 100%); max-height: calc(100dvh - 48px); overflow-y: auto;
+  padding: 36px 40px 26px; border-radius: 14px; background: rgba(16,17,20,.80); color: var(--q-text);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2); backdrop-filter: blur(22px) saturate(1.2);
+  border: 1px solid var(--q-line); box-shadow: 0 24px 70px rgba(0,0,0,.6); font: 13.5px/1.6 var(--ui);
+  transform: translateY(8px); transition: transform .45s ease; }
+#welcome.on .wcard { transform: none; }
+#welcome h2 { margin: 0 0 12px; font-size: 26px; line-height: 1.2; font-weight: 300; color: #fff; letter-spacing: -.005em; }
+#welcome .wlead { margin: 0 0 18px; color: var(--q-text); }
+#welcome .wpts { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 10px; }
+#welcome .wpts li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+#welcome .wpts li::before { content: ""; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--q-accent); transform: translateY(-1px); }
+#welcome .wpts b, #welcome .wlead b { font-weight: normal; color: #fff; }
+#welcome .wpts a { color: var(--q-accent); text-decoration: none; }
+#welcome .wpts a:hover { text-decoration: underline; }
+#welcome .wpts a:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 1px; border-radius: 2px; }
+#welcome .wfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#welcome .wfoot { justify-content: flex-end; }
+#welcome .wcredit { margin: 20px 0 0; padding-top: 12px; border-top: 1px solid var(--q-line); font-size: 10.5px; line-height: 1.55; color: var(--q-dim); }
+#welcome button { all: unset; box-sizing: border-box; cursor: default; padding: 8px 16px; border-radius: 7px; font-size: 13px; color: var(--q-text);
+  border: 1px solid var(--q-line); background: rgba(255,255,255,.05); white-space: nowrap; text-align: center; }
+#welcome button:hover { color: #fff; background: rgba(255,255,255,.10); }
+#welcome button:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 2px; }
+#welcome .wtour { color: #fff; background: rgba(138,182,255,.24); border-color: rgba(138,182,255,.45); }
+#welcome .wtour:hover { background: rgba(138,182,255,.36); }
+#welcome .wx { position: absolute; top: 10px; right: 12px; padding: 2px 8px; border: 0; background: none; font-size: 17px; line-height: 1.2; color: var(--q-dim); }
+@media (prefers-reduced-motion: reduce) { #welcome, #welcome .wcard { transition: opacity .2s ease; transform: none; } }
+body.phone #welcome { padding: calc(env(safe-area-inset-top, 0px) + 12px) 10px calc(env(safe-area-inset-bottom, 0px) + 12px); }
+body.phone #welcome .wcard { padding: 26px 20px 18px; font-size: 14px; max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+body.phone #welcome h2 { font-size: 23px; }
+body.phone #welcome .wfoot { flex-direction: column-reverse; align-items: stretch; }
+body.phone #welcome .wcredit { text-align: center; margin-top: 16px; }
+body.phone #welcome button:not(.wx) { padding: 11px 16px; font-size: 14.5px; }
+</style>
+
+<script>
+// ---------- the welcome: what this is, once, for a first-time visitor ----------
+(function () {
+  const S = window.cassiniSettings;
+  const KEY = "cassini-welcome";
+  const params = new URLSearchParams(location.search);
+  const q = params.get("welcome");
+  const readSeen = () => {
+    if (document.cookie.split(/;\s*/).some(c => c === KEY + "=1")) return true;
+    try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; }
+  };
+  function markSeen() {
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${KEY}=1; Max-Age=${60 * 60 * 24 * 365}; Path=/; SameSite=Lax${secure}`;
+    try { localStorage.setItem(KEY, "1"); } catch (e) {}
+  }
+
+  // the words (one place, so they are easy to change). {pictures} is how many pictures this site has, counted from
+  // the mission data (mission.json's catalog), so it stays true as the data grows
+  const COPY = {
+    title: "This is the real Cassini mission",
+    lead: "Cassini spent 13 years orbiting Saturn, studying its rings and moons, until it plunged into the planet in 2017. You can follow the whole journey here.",
+    points: [
+      "<b>Every picture is real.</b> Cassini's cameras took about 453,000 pictures, and {pictures} of them are here: the original frames, cleaned up and aligned (<a href=\"how/\" target=\"_blank\" rel=\"noopener\">see how</a>), with nothing invented.",
+      "<b>The flight telemetry is real.</b> The spacecraft moves and turns the way NASA's navigation and pointing records say it did.",
+      "<b>Everything else is as close to the truth as we can make it,</b> built only from NASA's public data. Anyone can look at it: <a href=\"https://pds-imaging.jpl.nasa.gov/\" target=\"_blank\" rel=\"noopener\">the Planetary Data System</a> keeps the archive, and <a href=\"#\" data-w=\"sources\">every source</a> is listed in About."
+    ],
+    credit: "The pictures and flight data are courtesy of NASA, ESA and JPL (images NASA/JPL-Caltech/Space Science Institute).<br>An independent project by Sam Iacavazzi, not affiliated with NASA, ESA or JPL."
+  };
+  function pictures() {
+    try {
+      const n = Object.values(mission.catalog).reduce((a, y) => a + (y.images || 0), 0);
+      if (n > 1000) return n.toLocaleString("en-US");
+    } catch (e) {}
+    return "nearly all";
+  }
+
+  const el = document.createElement("div");
+  el.id = "welcome"; el.hidden = true;
+  el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "wtitle");
+  function render() {
+    const c = COPY, n = pictures();
+    el.innerHTML = `<div class="wcard">
+      <button class="wx" data-w="explore" aria-label="Close" title="Close">×</button>
+      <h2 id="wtitle">${c.title}</h2>
+      <p class="wlead">${c.lead}</p>
+      <ul class="wpts">${c.points.map(p => `<li><span>${p.replace("{pictures}", n)}</span></li>`).join("")}</ul>
+      <div class="wfoot"><button data-w="explore">Just explore</button><button class="wtour" data-w="tour">Take the tour</button></div>
+      <p class="wcredit">${c.credit}</p>
+    </div>`;
+  }
+  ($("app") || document.body).append(el);
+  function $(id) { return document.getElementById(id); }
+  // clicks and keys on the welcome stay its own (the 3D view under it does not turn)
+  for (const t of ["pointerdown", "mousedown", "dblclick", "wheel", "touchstart"]) el.addEventListener(t, e => e.stopPropagation(), { passive: true });
+
+  // the mission clock stops while the welcome is up, and goes on again after if it was playing
+  let on = false, lastFocus = null, wasPlaying = false;
+  const playing = () => typeof state !== "undefined" && !!state.playing;
+  const play = v => { if (typeof setPlaying === "function") setPlaying(v); };
+  function open() {
+    if (on) return;
+    render();
+    on = true; lastFocus = document.activeElement;
+    wasPlaying = playing(); if (wasPlaying) play(false);
+    document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    if (window.cassiniTutorial && cassiniTutorial.active) cassiniTutorial.stop();
+    el.hidden = false; el.offsetWidth; el.classList.add("on");
+    document.body.classList.remove("idle");
+    const focusTour = () => { const b = el.querySelector(".wtour"); if (b && on && !el.contains(document.activeElement)) b.focus({ preventScroll: true }); };
+    focusTour(); setTimeout(focusTour, 60); setTimeout(focusTour, 600);
+  }
+  function close(then) {
+    if (!on) return;
+    on = false; markSeen();
+    if (wasPlaying && !playing()) play(true);
+    wasPlaying = false;
+    if (window.cassiniTutorial && cassiniTutorial.markSeen) cassiniTutorial.markSeen();
+    el.classList.remove("on");
+    setTimeout(() => { if (!on) el.hidden = true; }, 460);
+    if (lastFocus && lastFocus.focus && then !== "tour") try { lastFocus.focus({ preventScroll: true }); } catch (e) {}
+    if (then === "tour" && window.cassiniTutorial) setTimeout(() => cassiniTutorial.start(), 350);
+  }
+  function keys(e) {
+    if (!on) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); close(); return; }
+    if (e.key === "Tab") {                       // focus stays in the card
+      const bs = [...el.querySelectorAll("button, a")].filter(b => b.offsetParent);
+      const i = bs.indexOf(document.activeElement);
+      e.preventDefault(); e.stopImmediatePropagation(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus();
+      return;
+    }
+    e.stopImmediatePropagation();                // the page's shortcuts wait
+    // Enter and Space press the focused button here (the browser's own press does not get through reliably)
+    // (Enter with nothing in the card focused yet is the card's main button)
+    if ((e.key !== "Enter" && e.key !== " ") || e.repeat) return;
+    const f = document.activeElement && document.activeElement.closest && document.activeElement.closest("#welcome button, #welcome a");
+    const b = f || (e.key === "Enter" && el.querySelector(".wtour"));
+    if (b) { e.preventDefault(); b.click(); }
+  }
+  // on the window, in the capture phase, ahead of the page's own shortcuts (they listen on the window too)
+  window.addEventListener("keydown", keys, true);
+  el.addEventListener("click", e => {
+    e.stopPropagation();
+    const b = e.target.closest("[data-w]");
+    if (b && b.dataset.w === "sources") {        // the sources: About's Credits, over the page once the welcome has gone
+      e.preventDefault(); close();
+      if (window.cassiniAbout) setTimeout(() => cassiniAbout.open("Credits"), 200);
+      return;
+    }
+    if (b) return close(b.dataset.w);
+    if (e.target.closest("a")) return;           // the archive link opens in a new tab and the welcome stays
+    if (!e.target.closest(".wcard")) close();     // a click outside the card: explore
+  });
+
+  // reopened from Settings > Interface, the Cassini OS menu and the About window
+  if (S) S.define({ key: "interface.welcome", section: "Interface", label: "Welcome", type: "action", button: "Show the welcome",
+    hint: "What Cassini OS is, in a few lines, as a first-time visitor sees it.", run: () => { S.close(); open(); } });
+  document.addEventListener("click", e => {
+    const b = e.target.closest('[data-act="welcome"]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation(); document.querySelectorAll(".menu.open").forEach(m => m.classList.remove("open"));
+    if (window.cassiniAbout) cassiniAbout.close();
+    open();
+  }, true);
+
+  window.cassiniWelcome = {
+    open, close,
+    get on() { return on; },
+    // shown on its own on this visit: not seen before (or ?welcome=1), and not kept away by a link
+    get due() { return q === "1" || (q !== "0" && params.get("tour") !== "0" && !readSeen()); },
+    get seen() { return readSeen(); }
+  };
+})();
+</script>
