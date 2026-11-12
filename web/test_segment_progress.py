@@ -15,6 +15,10 @@ om.tile = lambda u, j, cache, scale=None: None
 om.rolling_webp = lambda fid, size, cache, laps=1, wait=False, fade=(0, 0): calls.append(("rolling", fid, size))
 om._mosaic_at = lambda u, j, size, cache, *a, **k: calls.append(("mosaic", u["frames"][j][1], size))
 om.movie_webp = lambda fid, size, cache, *a, **k: calls.append(("movie", fid, size))
+om.keep_reports = lambda u, cache, p: None
+om.solve_places = lambda u, cache: None
+om.tile_map = lambda fid, cache: None
+om._mosaic_made = lambda u, j, size, cache: False
 
 
 def unit(kind, mosaic):

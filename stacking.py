@@ -44,8 +44,8 @@ def frame_id(path):
 
 
 """
-Where SPICE puts the body in each of the frames ids, from the geometry cache (bootleg_autonav,
-CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
+Where SPICE puts the body in each of the frames ids (its target, or the body it shows instead, ba.shown_targets),
+from the geometry cache (bootleg_autonav, CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
 the distance in km. Frames that are not cached, or that SPICE could not place, are left out.
 """
 def places(ids):
@@ -59,6 +59,8 @@ def places(ids):
                 f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
             # on the frame as it is drawn: a WAC frame's shift grown by its geometric correction (ba.linear_ratio)
             r = ba.linear_ratio(camera, scale)
+            # a frame that shows another body than its target: that body's place (ba.shown_targets)
+            x, y, z = ba.shown_targets().get(frame, (None, x, y, z))[1:]
             out[frame] = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
     return out
 
@@ -95,6 +97,12 @@ def load_index():
         with _index_lock:
             if index is None:
                 idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
+                # a frame that shows another body than the archive's target is grouped with that body's frames, as its
+                # label and places have it (ba.shown_targets)
+                shown = ba.shown_targets()
+                if shown:
+                    ids = [frame_id(p) if isinstance(p, str) else None for p in idx["path"].tolist()]
+                    idx["TARGET_NAME"] = [shown[i][0] if i in shown else t for i, t in zip(ids, idx["TARGET_NAME"].tolist())]
                 # row positions of every camera/target/observation/filter combination, for fast lookup
                 groups = idx.groupby(keys, sort=False).indices
                 columns = {k: idx[k].to_numpy() for k in keys + ["path", "seconds_1970"]}
