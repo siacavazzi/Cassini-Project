@@ -33,11 +33,12 @@ contracts in `web/public/` (brief: `docs/public-site/briefs/WP4.md`). It never f
   words (`visit`, `visit-link`, `copy-link`).
 - **refused**: 404, or 405 with `Allow` when the path is a route of another method.
 
-Caching: pictures and table parts `public, max-age=31536000, immutable` (their keys change with their tags). The Cache
-API sits in front of R2 for pictures and for the alias shards and pass-table parts a table answer reads, so a colo reads
-each from R2 once a publish; the isolate keeps its last 16 alias shards parsed. Table copies are kept under the
-manifest's publish_id as well as their key, because a new publish under the same picture versions rewrites the same
-table keys (an alias shard gains the frames of years added). Manifest
+Caching in the viewer's browser: pictures and table answers fixed in keys.json `public, max-age=31536000, immutable`
+(their keys change with their tags); table answers read from a publish `public, max-age=300` (their addresses are the
+same in every publish, and a new publish under the same picture versions can change them: an alias shard gains the
+frames of years added). The Cache API sits in front of R2 for pictures and for the alias shards and pass-table parts a
+table answer reads, so a colo reads each from R2 once a publish; the isolate keeps its last 16 alias shards parsed.
+Table copies are kept under the manifest's publish_id as well as their key, for the same reason. Manifest
 answers and `no_alias_answer`s `public, max-age=60`, refusals, misses and markers `no-store`. No manifest: 503.
 
 Bindings: `BUCKET` (R2), `MANIFEST_KEY`, `SITE_ENV` (local, staging, production), `USAGE` (Analytics Engine, optional),
