@@ -458,11 +458,22 @@ def table_files(folder):
 _W = {}
 
 
-def _init(cache, target_spec, state, tags, verify, dry):
+def resolver():
+    """The resolver module: web/frames/resolve.py, or the one CASSINI_PUBLISH_RESOLVER names (test_publish.py's stand-in)."""
+    import importlib
+    return importlib.import_module(os.environ.get("CASSINI_PUBLISH_RESOLVER") or "resolve")
+
+
+def _init(cache, target_spec, state, tags, verify, dry, budget=None):
     import faulthandler
     import signal
-    import resolve
+    resolve = resolver()
     faulthandler.register(signal.SIGUSR1, all_threads=True)   # kill -USR1 <worker>: where it is, on stderr
+    if budget:
+        # (a larger work budget for the URLs resolve() answered busy: WP1's CASSINI_RESOLVE_BUDGET, read by resolve.BUDGET)
+        os.environ["CASSINI_RESOLVE_BUDGET"] = str(budget)
+        if hasattr(resolve, "BUDGET"):
+            resolve.BUDGET = float(budget)
     _W.update(cache=cache, tags=tags, verify=verify, dry=dry, resolve=resolve)
     resolve.prepare()
     _W["target"] = make_target(target_spec)
@@ -475,7 +486,7 @@ def make_target(spec):
 
 
 def read_answer(answer):
-    import resolve
+    resolve = resolver()
     reader = getattr(resolve, "read", None)
     if reader is not None:
         return reader(answer)
@@ -521,6 +532,11 @@ def one(u, tags=None, cache=None, resolve_fn=None, target=None, ledger=None, ver
         t0 = time.monotonic()
         answer = resolve_fn(parts.path, urllib.parse.parse_qs(parts.query), cache)
         took = time.monotonic() - t0
+        if answer.kind == "busy":
+            # (resolve() ran out of its work budget: not known yet, never "not there"; asked again with a larger one)
+            rec.update(outcome="busy", reason=f"resolve() busy after {took:.0f} s (its work budget)")
+            recs.append(rec)
+            continue
         if answer.kind == "none":
             rec.update(outcome="missing", reason="not in the cache (resolve: none)")
             if took > SLOW and gave_up is not None:
@@ -598,7 +614,7 @@ def summary(recs):
     counts = collections.defaultdict(lambda: collections.defaultdict(lambda: {"objects": 0, "bytes": 0}))
     outcomes = collections.Counter()
     roles = collections.Counter()
-    missing, refused = [], []
+    missing, refused, busy = [], [], []
     meta = collections.defaultdict(list)
     for r in recs:
         outcomes[r["outcome"]] += 1
@@ -611,6 +627,8 @@ def summary(recs):
                 meta[(r["route"], r.get("role", "whole"))].append(r.get("meta", 0))
         elif r["outcome"] == "missing":
             missing.append({k: r.get(k) for k in ("url", "key", "family", "year", "reason")})
+        elif r["outcome"] == "busy":
+            busy.append({k: r.get(k) for k in ("url", "key", "family", "year", "reason")})
         elif r["outcome"] == "refused":
             refused.append({k: r.get(k) for k in ("url", "family", "year", "reason")})
     total = {"objects": sum(c["objects"] for f in counts.values() for c in f.values()),
@@ -619,7 +637,7 @@ def summary(recs):
                   for f, ys in counts.items()}
     return {"total": total, "families": per_family, "by_year": {f: dict(sorted(ys.items())) for f, ys in sorted(counts.items())},
             "outcomes": dict(outcomes), "storage": dict(roles), "metadata": metadata_sizes(meta),
-            "missing": missing, "refused": refused}
+            "missing": missing, "refused": refused, "busy": busy}
 
 
 def metadata_sizes(meta):
@@ -718,39 +736,19 @@ def main(argv=None):
     print(f"{len(work)} units, {sum(len(u['urls']) for u in work)} URLs (before Auto center's as-is pictures) "
           f"in {time.monotonic() - started:.0f} s", flush=True)
 
-    recs = []
-    by_year = collections.defaultdict(list)
-    for u in work:
-        by_year[u["year"]].append(u)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max(1, args.jobs), initializer=_init,
-                                                initargs=(cache, target_spec, state, tags, args.verify, args.dry_run)) as pool:
-        for y in sorted(by_year):
-            us = by_year[y]
-            size = max(1, min(200, len(us) // (args.jobs * 4) or 1))
-            # (a pass's frames stay together in one batch, in order: a route that resolve() gives up on is not asked
-            # again for the rest of the pass)
-            passes = collections.OrderedDict()
-            for u in us:
-                passes.setdefault(u.get("pass") or id(u), []).append(u)
-            batches, cur = [], []
-            for group in passes.values():
-                if len(group) > 1:
-                    batches.append(group)
-                    continue
-                cur += group
-                if len(cur) >= size:
-                    batches.append(cur)
-                    cur = []
-            if cur:
-                batches.append(cur)
-            batches.sort(key=len, reverse=True)   # the longest passes first, so they do not finish last
-            t0 = time.monotonic()
-            for got in pool.map(_batch, batches):
-                recs += got
-            s = summary([r for r in recs if r["year"] == y])
-            print(f"{y}: {s['total']['objects']} objects, {s['total']['bytes'] / 1e6:.1f} MB, "
-                  f"outcomes {s['outcomes']} in {time.monotonic() - t0:.0f} s", flush=True)
-            write_json(os.path.join(state, "published.json"), dict(summary(recs), publish_id=publish_id, partial=True))
+    recs = run_units(work, args, cache, target_spec, state, tags, publish_id)
+    for budget in BUSY_BUDGETS:
+        busy = {r["url"] for r in recs if r["outcome"] == "busy"}
+        if not busy:
+            break
+        print(f"{len(busy)} URLs answered busy: asked again with a work budget of {budget} s", flush=True)
+        again = []
+        for u in work:
+            urls = [x for x in u["urls"] + (u.get("as_is") or []) if x in busy]
+            if urls:
+                again.append(dict(u, urls=urls, as_is=[x for x in (u.get("as_is") or []) if x not in urls]))
+        recs = [r for r in recs if r["outcome"] != "busy"] + run_units(again, args, cache, target_spec, state, tags,
+                                                                      publish_id, budget, recs)
 
     target = make_target(target_spec) if not args.dry_run else None
     ledger = Ledger(os.path.join(state, "ledger.sqlite")) if not args.dry_run else None
@@ -773,7 +771,8 @@ def main(argv=None):
         store(target, None, [(man_key, json.dumps(man, indent=1).encode(), "application/json", {}, "manifest")])
     write_json(os.path.join(state, "published.json"), report)
     print(f"done in {time.monotonic() - started:.0f} s: {s['total']['objects']} objects, {s['total']['bytes'] / 1e9:.2f} GB; "
-          f"outcomes {s['outcomes']}; storage {s['storage']}; {len(s['missing'])} missing, {len(s['refused'])} refused",
+          f"outcomes {s['outcomes']}; storage {s['storage']}; {len(s['missing'])} missing, {len(s['refused'])} refused, "
+          f"{len(s['busy'])} still busy (listed in published.json)",
           flush=True)
     print(f"published.json: {os.path.join(state, 'published.json')}")
     if args.no_manifest:
@@ -811,6 +810,49 @@ def manifest_only(args, cache, state, target_spec, publish_id, commit, versions,
     write_json(os.path.join(state, "published.json"), last)
     print(man_key)
     return 0
+
+
+BUSY_BUDGETS = (30, 120)   # s: the work budgets the URLs resolve() answered busy are asked again with, in turn
+
+
+def run_units(work, args, cache, target_spec, state, tags, publish_id, budget=None, before=()):
+    """Publishes the units year by year in a pool of --jobs processes; returns their records."""
+    recs, by_year = [], collections.defaultdict(list)
+    for u in work:
+        by_year[u["year"]].append(u)
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max(1, args.jobs), initializer=_init,
+                                                initargs=(cache, target_spec, state, tags, args.verify, args.dry_run,
+                                                          budget)) as pool:
+        for y in sorted(by_year):
+            us = by_year[y]
+            size = max(1, min(200, len(us) // (args.jobs * 4) or 1))
+            # (a pass's frames stay together in one batch, in order: a route that resolve() gives up on is not asked
+            # again for the rest of the pass)
+            passes = collections.OrderedDict()
+            for u in us:
+                passes.setdefault(u.get("pass") or id(u), []).append(u)
+            batches, cur = [], []
+            for group in passes.values():
+                if len(group) > 1:
+                    batches.append(group)
+                    continue
+                cur += group
+                if len(cur) >= size:
+                    batches.append(cur)
+                    cur = []
+            if cur:
+                batches.append(cur)
+            batches.sort(key=len, reverse=True)   # the longest passes first, so they do not finish last
+            t0 = time.monotonic()
+            for got in pool.map(_batch, batches):
+                recs += got
+            s = summary([r for r in recs if r["year"] == y])
+            print(f"{y}: {s['total']['objects']} objects, {s['total']['bytes'] / 1e6:.1f} MB, "
+                  f"outcomes {s['outcomes']} in {time.monotonic() - t0:.0f} s" + (f" (budget {budget} s)" if budget else ""),
+                  flush=True)
+            write_json(os.path.join(state, "published.json"),
+                       dict(summary([r for r in before if r["outcome"] != "busy"] + recs), publish_id=publish_id, partial=True))
+    return recs
 
 
 def write_json(path, obj):

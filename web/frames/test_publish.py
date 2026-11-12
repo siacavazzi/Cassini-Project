@@ -245,8 +245,81 @@ def test_one():
                             "urls": [f"/frames/mosaic/N150000000{n}_1.webp?size=1024"]},
                            tags=tags, cache="/c", resolve_fn=nothing, target=None, ledger=None, dry=True, gave_up=gave_up)
     publish.SLOW = slow
+    busy = publish.one({"family": "pass", "year": 2009, "pass": "Q", "urls": ["/frames/mosaic/N1500000001_1.webp?size=512"]},
+                       tags=tags, cache="/c", resolve_fn=lambda *a: FakeAnswer("busy", status=503), target=None,
+                       ledger=None, dry=True, gave_up={})
+    s = publish.summary(busy)
+    check(busy[0]["outcome"] == "busy" and len(s["busy"]) == 1 and not s["missing"],
+          "a busy answer (resolve()'s work budget ran out) is never counted missing: it is kept to be asked again, "
+          "and listed busy if it stays so")
     check(len(calls) == 1 and recs[0]["outcome"] == "missing" and "earlier frame" in recs[0]["reason"],
           "a route resolve() gives up on slowly is not asked again for the rest of the pass, and is listed missing")
+
+
+FAKE_RESOLVER = """
+import os
+from resolve import Answer, NONE
+BUDGET = float(os.environ.get("CASSINI_RESOLVE_BUDGET", "5"))
+def prepare():
+    pass
+def resolve(path, query, cache):
+    if "N1500000001" in path:          # slow: answers only with a work budget of 30 s or more
+        return Answer("file", 200, os.path.join(cache, "slow.webp"), "image/webp") if BUDGET >= 30 else Answer("busy", 503)
+    if "N1500000002" in path:          # never within any budget
+        return Answer("busy", 503)
+    return Answer("file", 200, os.path.join(cache, "fast.webp"), "image/webp")
+def read(answer):
+    with open(answer.path, "rb") as fh:
+        return fh.read()
+"""
+
+
+def test_busy_retry(tmp):
+    """run_units then the busy rounds, as main() runs them, with a stand-in resolver in the worker processes."""
+    import argparse
+    import resolve
+    if "busy" not in resolve.KINDS:
+        check(True, "busy retry: skipped (this resolve.py has no busy answer yet)")
+        return
+    fake = os.path.join(tmp, "fakeres")
+    os.makedirs(fake)
+    with open(os.path.join(fake, "fake_resolver.py"), "w") as fh:
+        fh.write(FAKE_RESOLVER)
+    cache = os.path.join(tmp, "fcache")
+    os.makedirs(cache)
+    for name in ("fast", "slow"):
+        with open(os.path.join(cache, name + ".webp"), "wb") as fh:
+            fh.write(name.encode())
+    old = {k: os.environ.get(k) for k in ("CASSINI_PUBLISH_RESOLVER", "PYTHONPATH", "CASSINI_RESOLVE_BUDGET")}
+    os.environ["CASSINI_PUBLISH_RESOLVER"] = "fake_resolver"
+    os.environ["PYTHONPATH"] = os.pathsep.join([fake, HERE] + ([old["PYTHONPATH"]] if old["PYTHONPATH"] else []))
+    os.environ.pop("CASSINI_RESOLVE_BUDGET", None)
+    sys.path.insert(0, fake)   # (spawned workers start with the parent's sys.path)
+    try:
+        tags = {f: "t000000000000" for f in publish.FAMILIES}
+        work = [{"family": "frame", "year": 2009, "urls": [f"/frames/N150000000{n}_1.webp?size=1024"]} for n in (0, 1, 2)]
+        args = argparse.Namespace(jobs=2, verify=False, dry_run=False)
+        spec = "dir:" + os.path.join(tmp, "busy-mirror")
+        state = os.path.join(tmp, "busy-state")
+        os.makedirs(state)
+        recs = publish.run_units(work, args, cache, spec, state, tags, "p")
+        first = sorted(r["outcome"] for r in recs)
+        for budget in publish.BUSY_BUDGETS:
+            busy = {r["url"] for r in recs if r["outcome"] == "busy"}
+            again = [dict(u, urls=[x for x in u["urls"] if x in busy]) for u in work if set(u["urls"]) & busy]
+            recs = [r for r in recs if r["outcome"] != "busy"] + publish.run_units(again, args, cache, spec, state, tags,
+                                                                                  "p", budget, recs)
+        out = {r["url"].split("/")[2][:11]: r["outcome"] for r in recs}
+        check(first == ["busy", "busy", "published"] and out == {"N1500000000": "published", "N1500000001": "published",
+                                                                  "N1500000002": "busy"},
+              "a URL answered busy is asked again with a larger work budget and published; one still busy is reported busy")
+    finally:
+        sys.path.remove(fake)
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def test_manifest():
@@ -393,6 +466,7 @@ def main():
         test_mirror(tmp)
         test_r2(tmp)
         test_one()
+        test_busy_retry(tmp)
         test_manifest()
         cache, mirror = os.environ.get("CASSINI_PUBLISH_CACHE"), os.environ.get("CASSINI_PUBLISH_MIRROR")
         if cache and mirror:
