@@ -10120,6 +10120,33 @@ def tile_map(frame_id, cache):
     return found
 
 
+def newest_tile(u, n, made, cache):
+    """Where frame n's tile lies in the picture layout() or rolling_layout() made, for the camera windows' mark on
+    the picture Cassini just took: {n, id, poly [[x, y] x4]} with x, y fractions (0-1) of the picture, as tile_map's
+    outlines; the newest tile the picture draws when frame n has no place in it (SPICE could not place it, or a
+    mosaic shown behind the clock, made with the tiles so far). None when nothing is placed or its outline is not
+    there. A tile moved onto its neighbours (panel registration: spice_place is where SPICE put it) has its outline
+    moved with it."""
+    _, tiles, rect, _, used, _ = made
+    placed = [t for t in tiles if "offset" in t]
+    t = next((t for t in placed if t["n"] == n), None)
+    if t is None:
+        drawn = [t for t in placed if t["filter"] in used or t.get("drawn")]
+        if not drawn:
+            return None
+        t = max(drawn, key=lambda t: t["n"])
+    try:
+        corners = outline(u, t, cache)
+    except Exception:   # (a mark that cannot be worked out never costs the picture)
+        return None
+    # (a stored outline is at SPICE's place; one measured now from the tile's picture is at t's offset already)
+    dx, dy = (t["offset"][0] - t["spice_place"][0], t["offset"][1] - t["spice_place"][1]) \
+        if "spice_place" in t and "outline" in t else (0, 0)
+    x0, y0, w, h = rect
+    return {"n": t["n"], "id": t.get("id") or u["frames"][t["n"]][1],
+            "poly": [[round((x + dx - x0) / w, 5), round((y + dy - y0) / h, 5)] for x, y in corners]}
+
+
 MAPS_DIR = "maps-1"   # the kept manifests (under the pass's versioned folder), renamed whenever tile_map's answer changes
 _maps = {}   # (pass folder, layout name) -> its tile map: a mosaic's map is asked for on every hover of a new picture
 MAPS_KEEP = 512   # a few passes' every mosaic (a map is ~100 bytes a pointing), so a pass played again maps none again
@@ -10493,7 +10520,10 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
         calibration.hdr_note_served(path, path[:-len(".webp")] + ".hdr.webp")
     if not report:
         report = reel.report_of(meta)
-    return data, report
+    # where the picture's newest tile is (the camera windows mark it while a mosaic builds): worked out on every
+    # answer, never kept with the picture, so pictures made before it have it too
+    newest = newest_tile(u, n, made, cache)
+    return data, (dict(report, newest=newest) if newest else report)
 
 
 def warm(u, upto, cache, size=None, slots=None, start=0, force=False):

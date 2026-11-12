@@ -341,7 +341,7 @@ body.phone .srow input[type=range] { width: 96px; }
     ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     ((o.exposure ?? window.cassiniExposure()) ? `&exposure=${o.exposure ?? window.cassiniExposure()}` : "");
-  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
+  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.newestTile, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -361,6 +361,8 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "cameras.pointingLook", section: "Cameras", label: "Frames opened from a mosaic", type: "choice", value: "mosaic",
       options: [["mosaic", "As in the mosaic"], ["own", "On its own"]],
       hint: "Hover a mosaic to outline a frame (arrow keys step to the others) and click to open it. As in the mosaic shows that spot of the mosaic, larger: the same levels, seams and colors. On its own shows the frames as a picture of their own, on their own scale. The switch by a held frame's breadcrumb changes it." });
+  D({ key: "cameras.newestTile", section: "Cameras", label: "Mark the newest tile", type: "toggle", value: true,
+      hint: "While a mosaic or a mosaic movie builds, a faint line goes round the tile Cassini just took. It moves with each new tile and fades when none follows. On screen only: saved pictures and films never have it." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
   D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
