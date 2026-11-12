@@ -187,6 +187,9 @@ plainly what it did not exercise.
   URL class the policy allows; `--public` and R2 return the same bytes for 1,000 sampled URLs; a recording of each session.
 - **G3**, whole mission (WP10): G2 on ten stretches spread over 1997 to 2017; cost per viewer-hour from measured
   requests and bytes per minute; 100 simulated viewers from a cloud runner with no errors and their p95 picture time.
+  The tools are in `web/public/load/` (WP10a): `g3_stretches.mjs` (the ten stretches), `cost_model.mjs` and
+  `load_runner.mjs`. The runner targets the rehearsal rig only; load on Cloudflare staging needs a reviewed change and
+  Sam's word.
 - **G4**, go public: Sam's word.
 
 ## Risks

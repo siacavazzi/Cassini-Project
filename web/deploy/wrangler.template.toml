@@ -39,6 +39,8 @@ routes = [
 [env.staging.vars]
 MANIFEST_KEY = "@MANIFEST_KEY@"
 SITE_ENV = "staging"
+# one Analytics Engine point per 10 ordinary answers, weighing 10; refusals and misses every time (web/worker/README.md)
+USAGE_SAMPLE = "10"
 [[env.staging.r2_buckets]]
 binding = "BUCKET"
 bucket_name = "@R2_BUCKET_NAME@"
@@ -55,6 +57,7 @@ routes = [
 [env.production.vars]
 MANIFEST_KEY = "@MANIFEST_KEY@"
 SITE_ENV = "production"
+USAGE_SAMPLE = "10"
 [[env.production.r2_buckets]]
 binding = "BUCKET"
 bucket_name = "@R2_BUCKET_NAME@"

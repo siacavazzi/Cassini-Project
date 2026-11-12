@@ -3877,7 +3877,15 @@ onmessage = async e => {
         // whether the page evens the pass itself (obs_mosaic.page_evens, on the colour table): the public site then has
         // no exposure= frames of it (prebuild.make_evened made them only for the passes it does not); a table the
         // public site does not have says nothing either way
-        if (!t.missing) evened.set(k, !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets)));
+        // (and draws no frame in its set's colour, the table's "tint": want() leaves such a frame to the server's evened
+        // picture, which the pre-build now makes, obs_mosaic.page_evens; asked plain, the pass played without it)
+        // (for every frame of the pass, not only the one whose lookup fetched the table: the others find byId filled
+        // and never come here, so their evens() stayed undefined and they were asked plain)
+        if (!t.missing) {
+          const ev = !!(t.local && t.exposure && t.exposure.local && !(color && t.colour && !t.sets) && !(color && t.tint && t.tint.length));
+          evened.set(k, ev);
+          for (const fid of t.ids || []) evened.set(`${tag(center, color)}:${fid}`, ev);
+        }
         // (public: no table published means the frame is in no movie pass, policy.json steady_table, so it has no movie
         // picture either; {"local": false} is a pass the server drew whole)
         if (!t.local) { byId.set(k, null); if (!t.missing) drawn.add(k); if (PUB()) window.dispatchEvent(new Event("cassini-steady-local")); return; }
@@ -4815,24 +4823,37 @@ onmessage = async e => {
     const url = kind === "movie" ? `${base}&color=1${style}${look}` : kind === "rolling" ? `${base}${style}${look}` : kind === "frame" ? base : `${base}${look}`;
     return root.cassiniExport && root.cassiniExport.publicUrl ? root.cassiniExport.publicUrl(url) : url;
   }
-  // a picture as RGBA, waited for while the server makes it (503) or is busy (429), as export.html's fetchPicture
-  // waits (0.5 s growing to 4 s, here for up to WAIT_MOST, export.MOSAIC_WAIT as the server waits), and while a mosaic is still behind its frame (X-Reel
-  // "behind": the tiles made so far; the film draws the finished one); null for any other refusal (404: not
-  // centred) or failure
+  // a picture's answer, waited for as the server's film waits for one (export.Pictures): while it is being made (503)
+  // or the server is busy (429), while the request fails, and while a mosaic is still behind its frame (X-Reel
+  // "behind": the tiles made so far; the film draws the finished one, export.Pictures.finished_mosaic). The wait grows
+  // from 0.5 s to 4 s; asked again, it is asked past the browser's cache. After WAIT_MOST (export.MOSAIC_WAIT) of
+  // waiting, or once stop.done, it answers null, so the next try stands in, as the server's film does on its
+  // TimeoutError; null too for any other refusal (404: not centred). The one wait rule for every picture a film or
+  // its exposure graph asks for: export.html's fetchPicture uses it as cassiniPlanLocal.fetchFinished.
   const WAIT_MOST = 900e3, sleep = ms => new Promise(r => setTimeout(r, ms));
   const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
-  async function fetchRGBA(url) {
+  async function fetchFinished(url, stop) {
     const t0 = Date.now();
-    for (let wait = 500, again = false; ; wait = Math.min(4000, wait * 1.5), again = true) {
+    for (let wait = 500, again = false; !(stop && stop.done); wait = Math.min(4000, wait * 1.5), again = true) {
       let r;
       try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (err) { r = null; }
-      if (r && (r.status === 503 || r.status === 429 || (r.ok && behind(r))) && Date.now() - t0 < WAIT_MOST) { await sleep(wait); continue; }
-      if (!r || !r.ok || behind(r)) return null;   // (still behind after WAIT_MOST: the next try, as the server's film)
-      try {
-        const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
-        return { data: pixels(bmp), width: bmp.width, height: bmp.height };
-      } catch (err) { return null; }
+      if (!r || r.status === 503 || r.status === 429 || (r.ok && behind(r))) {
+        if (Date.now() - t0 >= WAIT_MOST) return null;
+        await sleep(wait);
+        continue;
+      }
+      return r.ok ? r : null;
     }
+    return null;
+  }
+  // a picture as RGBA (fetchFinished's answer, decoded), or null
+  async function fetchRGBA(url) {
+    const r = await fetchFinished(url);
+    if (!r) return null;
+    try {
+      const bmp = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+      return { data: pixels(bmp), width: bmp.width, height: bmp.height };
+    } catch (err) { return null; }
   }
   // a decoded picture's RGBA as the server's Pillow reads it. A 2D canvas keeps its pixels premultiplied, so a partly
   // transparent pixel (a centred close-up placed where it is, a frame's soft edge) comes back with its colour rounded
@@ -4932,11 +4953,11 @@ onmessage = async e => {
     }
   }
 
-  const API = { levels, _levels: { pictureUrl, picture, used, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
+  const API = { levels, fetchFinished, _levels: { pictureUrl, picture, used, pixels, pixelsHow: () => how, brightness, onBlack, resize, resizeRGBA, percentile32, median32, stretches, exposures, interp, EXPOSURE, measured } };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else {
     const P = root.cassiniPlanLocal = root.cassiniPlanLocal || {};
-    P.levels = levels; P._levels = API._levels;
+    P.levels = levels; P.fetchFinished = fetchFinished; P._levels = API._levels;
     P.source = P.source || {};
     if (!P.source.picture) P.source.picture = picture;
   }
@@ -9839,8 +9860,12 @@ function targetLabel(k) {
   // a picture's address as the public site has it (policy.json): a movie frame without the steps the page works out
   // itself (stabilization and trails from steady.json, a mosaic movie's fade from fade.json, exposure evening, which is
   // published only as obs_mosaic.EXPOSURE_SMOOTH), a mosaic without Studio's tile tuning, a picture without a format or
-  // download; unchanged off the public site
+  // download, then put in the page's one canonical form (steady-local.html's cassiniPublicUrlMaker, which
+  // web/test_public_cameras.mjs holds to keys.mjs: defaults dropped, sizes snapped, parameters in the key's order), so
+  // a film asks for the same address, and the same Worker cache entry, as the camera windows do; unchanged off the
+  // public site
   const EXPOSURE_BUILT = 8;
+  let canonical = null;
   function publicUrl(url) {
     if (!PUB() || !url) return url;
     let u;
@@ -9856,7 +9881,9 @@ function targetLabel(k) {
     if (/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) { q.delete("tune"); q.delete("hide"); }
     q.delete("format"); q.delete("download");
     const out = u.origin + u.pathname + (u.search ? u.search.replace(/%2C/gi, ",").replace(/%3A/gi, ":") : "");
-    return /^https?:/.test(url) ? out : out.slice(u.origin.length);
+    if (!canonical && window.cassiniPublicUrlMaker) canonical = window.cassiniPublicUrlMaker();
+    const kept = canonical ? canonical(out) : out;
+    return /^https?:/.test(url) ? kept : kept.slice(u.origin.length);
   }
 
   // ---------- the marked stretch, in mission time (et) ----------
@@ -10215,28 +10242,14 @@ function targetLabel(k) {
     return publicUrl(`${onHost(src)}${sep}size=${size}${look}`);
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
-  // a mosaic still behind its frame (X-Reel "behind": the tiles made so far, the rest still being made) is asked for
-  // again until it is finished, as the server's film waits (export.Pictures.finished_mosaic), for up to MOSAIC_WAIT;
-  // then the next try stands in, as there
-  const MOSAIC_WAIT = 900e3;
-  const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
+  // a picture, waited for as the server's film waits (503 while it is made, 429 busy, a mosaic still behind its
+  // frame: export.Pictures.finished_mosaic), up to export.MOSAIC_WAIT, then the next try stands in, as there; null when
+  // there is none. The wait rule is levels-local.js's (cassiniPlanLocal.fetchFinished), the one the exposure graph
+  // measures with, so a film and its graph see the same picture.
   async function fetchPicture(url, stop) {
-    const t0 = Date.now();
-    for (let wait = 500, again = false; !stop.done; wait = Math.min(4000, wait * 1.5)) {
-      let r;
-      try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (e) { await sleep(wait); continue; }
-      if (r.status === 503 || r.status === 429) { await sleep(wait); continue; }
-      if (!r.ok) return null;
-      if (behind(r)) {
-        if (Date.now() - t0 >= MOSAIC_WAIT) return null;
-        again = true;
-        await sleep(wait);
-        continue;
-      }
-      try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
-    }
-    return null;
+    const r = await window.cassiniPlanLocal.fetchFinished(url, stop);
+    if (!r) return null;
+    try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
   }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop, center = centreOn()) {
@@ -10248,7 +10261,8 @@ function targetLabel(k) {
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
     const base = j => `${FRAMES}/frames/movie/${j}.webp?size=1024&color=0${window.cassiniMovieStyle({ center, steady: 0, exposure: 0, trail: 0 })}${window.cassiniLook()}`;
-    const r = await fetch(base(id) + (w.raw ? "&detail=0" : "")).catch(() => null);
+    // (its address as the camera windows ask it on the public site, as steady-local.html asks the neighbors' planes)
+    const r = await fetch(publicUrl(base(id) + (w.raw ? "&detail=0" : ""))).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
@@ -10260,7 +10274,7 @@ function targetLabel(k) {
   async function rollingHere(id, size, stop, center = centreOn()) {
     const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
-    const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
+    const r = await fetch(publicUrl(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`)).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
@@ -14994,7 +15008,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e774eff335ac";
+  const BUILD = /*BUILD*/"ba7999c788c0";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {

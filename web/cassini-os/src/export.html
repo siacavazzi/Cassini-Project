@@ -148,8 +148,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   // a picture's address as the public site has it (policy.json): a movie frame without the steps the page works out
   // itself (stabilization and trails from steady.json, a mosaic movie's fade from fade.json, exposure evening, which is
   // published only as obs_mosaic.EXPOSURE_SMOOTH), a mosaic without Studio's tile tuning, a picture without a format or
-  // download; unchanged off the public site
+  // download, then put in the page's one canonical form (steady-local.html's cassiniPublicUrlMaker, which
+  // web/test_public_cameras.mjs holds to keys.mjs: defaults dropped, sizes snapped, parameters in the key's order), so
+  // a film asks for the same address, and the same Worker cache entry, as the camera windows do; unchanged off the
+  // public site
   const EXPOSURE_BUILT = 8;
+  let canonical = null;
   function publicUrl(url) {
     if (!PUB() || !url) return url;
     let u;
@@ -165,7 +169,9 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     if (/^\/frames\/mosaic\/[NW]\d{10}_\d+\.webp$/.test(u.pathname)) { q.delete("tune"); q.delete("hide"); }
     q.delete("format"); q.delete("download");
     const out = u.origin + u.pathname + (u.search ? u.search.replace(/%2C/gi, ",").replace(/%3A/gi, ":") : "");
-    return /^https?:/.test(url) ? out : out.slice(u.origin.length);
+    if (!canonical && window.cassiniPublicUrlMaker) canonical = window.cassiniPublicUrlMaker();
+    const kept = canonical ? canonical(out) : out;
+    return /^https?:/.test(url) ? kept : kept.slice(u.origin.length);
   }
 
   // ---------- the marked stretch, in mission time (et) ----------
@@ -524,28 +530,14 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     return publicUrl(`${onHost(src)}${sep}size=${size}${look}`);
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  // a picture, waited for while the server makes it (503), as the server's own export waits; null when there is none
-  // a mosaic still behind its frame (X-Reel "behind": the tiles made so far, the rest still being made) is asked for
-  // again until it is finished, as the server's film waits (export.Pictures.finished_mosaic), for up to MOSAIC_WAIT;
-  // then the next try stands in, as there
-  const MOSAIC_WAIT = 900e3;
-  const behind = r => { try { return (JSON.parse(r.headers.get("X-Reel") || "{}").behind || 0) > 0; } catch (e) { return false; } };
+  // a picture, waited for as the server's film waits (503 while it is made, 429 busy, a mosaic still behind its
+  // frame: export.Pictures.finished_mosaic), up to export.MOSAIC_WAIT, then the next try stands in, as there; null when
+  // there is none. The wait rule is levels-local.js's (cassiniPlanLocal.fetchFinished), the one the exposure graph
+  // measures with, so a film and its graph see the same picture.
   async function fetchPicture(url, stop) {
-    const t0 = Date.now();
-    for (let wait = 500, again = false; !stop.done; wait = Math.min(4000, wait * 1.5)) {
-      let r;
-      try { r = await fetch(url, again ? { cache: "no-store" } : undefined); } catch (e) { await sleep(wait); continue; }
-      if (r.status === 503 || r.status === 429) { await sleep(wait); continue; }
-      if (!r.ok) return null;
-      if (behind(r)) {
-        if (Date.now() - t0 >= MOSAIC_WAIT) return null;
-        again = true;
-        await sleep(wait);
-        continue;
-      }
-      try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
-    }
-    return null;
+    const r = await window.cassiniPlanLocal.fetchFinished(url, stop);
+    if (!r) return null;
+    try { return await createImageBitmap(await r.blob()); } catch (e) { return null; }
   }
   // a movie frame whose steps this computer works out (steady-local.html): the base frame moved, gained and mixed
   async function movieHere(id, size, stop, center = centreOn()) {
@@ -557,7 +549,8 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const w = SL.want(FRAMES, id, { center, color: true });
     if (!w) return null;
     const base = j => `${FRAMES}/frames/movie/${j}.webp?size=1024&color=0${window.cassiniMovieStyle({ center, steady: 0, exposure: 0, trail: 0 })}${window.cassiniLook()}`;
-    const r = await fetch(base(id) + (w.raw ? "&detail=0" : "")).catch(() => null);
+    // (its address as the camera windows ask it on the public site, as steady-local.html asks the neighbors' planes)
+    const r = await fetch(publicUrl(base(id) + (w.raw ? "&detail=0" : ""))).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
@@ -569,7 +562,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
   async function rollingHere(id, size, stop, center = centreOn()) {
     const FL = window.cassiniFadeLocal, fh = FL && (size === 1024 || PUB()) ? FL.want(FRAMES, id) : null;
     if (!fh) return null;
-    const r = await fetch(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`).catch(() => null);
+    const r = await fetch(publicUrl(`${FRAMES}/frames/movie/${id}.webp?mode=rolling&size=1024${window.cassiniMovieStyle({ center, fade: 0 })}${window.cassiniLook()}`)).catch(() => null);
     if (!r || !r.ok) return null;
     const im = new Image(), u = URL.createObjectURL(await r.blob());
     try { im.src = u; await im.decode(); } catch (e) { URL.revokeObjectURL(u); return null; }
