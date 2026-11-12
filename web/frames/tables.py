@@ -18,6 +18,11 @@ Under <out> (prebuild's --tables-out, by default <cache>/public-tables):
   work/<pass id>.json                            the pass's alias entries and notes, until finish() writes the shards
   coverage.json                                  finish(): every pass asked for, the parts it has, what is missing
 
+The phase draws no picture, but it is not read-only on the cache: tile_map, layout and steady_table can work out and
+keep a pass's tile maps, global solve (the layout name) and chains the first time they are asked, as the routes do.
+Run it on a finished cache (after mosaics, movies and chains), so it finds what the pictures were drawn under. A pass
+is made again when its picture versions or its count of built tiles changed since its work file (make_pass, built()).
+
 A table the server would answer {"working": true} is never written: a steady table whose chains are not made yet has
 them made first by the repo's own makers (steady_chain, exposure_chain, as prebuild's chains phase makes them), then
 is asked again; anything still not final is listed as missing in coverage.json.
@@ -218,15 +223,32 @@ def write(out, rel, data):
     os.replace(part, path)
 
 
+def built(u, cache):
+    """How many of mosaic pass u's tiles the cache holds (a report file each, made or given up on, as
+    obs_mosaic._has_tile counts them), on its kept plan's scale; 0 with no plan kept, None for a pass that is no
+    mosaic. Its maps and layout names (the global solve, worked out again on more tiles) follow the tiles made, so a
+    pass whose frames were not all built at an earlier tables run (a cache extended to more years) is made again."""
+    if not u.get("mosaic"):
+        return None
+    if not os.path.exists(obs_mosaic._plan_path(u, cache)):
+        return 0
+    tiles = obs_mosaic._tiles(u, cache, obs_mosaic.plan(u, cache)["display_scale"])
+    try:
+        return sum(1 for f in os.listdir(tiles) if f.endswith(".json"))
+    except OSError:
+        return 0
+
+
 def make_pass(u, cache, out, movie=False, uncentred=False, versions=None):
     """Writes pass u's parts under out and its alias entries and notes to work/<pass id>.json (finish() joins them
-    into the shards). Found, not made, when its work file is there for the same versions. The pass's frames."""
+    into the shards). Found, not made, when its work file is there for the same versions and the same count of
+    built tiles (built()). The pass's frames."""
     pid = pass_id(u)
     work = os.path.join(out, "work", pid + ".json")
     try:
         with open(work) as fh:
             kept = json.load(fh)
-        if kept.get("versions") == versions and not kept.get("errors"):
+        if kept.get("versions") == versions and not kept.get("errors") and kept.get("built", "?") == built(u, cache):
             return len(kept.get("alias", {}))
     except (OSError, ValueError):
         pass
@@ -245,6 +267,7 @@ def make_pass(u, cache, out, movie=False, uncentred=False, versions=None):
             errors.append(f"alias {f}: {bad}")
     write(out, os.path.relpath(work, out), json.dumps({
         "pass": pid, "key": list(u["key"]), "kind": u.get("kind"), "versions": versions,
+        "built": built(u, cache),   # (counted after the run: a tile it made is not a reason to make it again)
         "parts": sorted(os.path.relpath(r, f"table/pass/{pid}") for r in parts), "missing": missing, "notes": notes,
         "errors": errors, "seconds": round(time.monotonic() - t0, 2), "alias": alias}).encode())
     if errors:
