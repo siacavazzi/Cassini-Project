@@ -142,7 +142,10 @@ window.cassiniSound = { async render(events, seconds, rate) {
   return ctx.startRendering();
 } };
 </script>""" % ("true" if PUBLIC else "false", json.dumps([e["id"] for e in pics]))
-page = f"<!doctype html><meta charset=utf-8>{style}<body><canvas id=tl></canvas><ul id=gomenu></ul>{window}{stubs}{script}"
+# the page's levels-local.js as build.py inlines it before export.html's script: its cassiniPlanLocal.fetchFinished is the
+# wait rule export.html's fetchPicture asks every picture through (on the public site and off it)
+levels = "<script>\n" + open(os.path.join(HERE, "cassini-os", "src", "levels-local.js")).read() + "\n</script>"
+page = f"<!doctype html><meta charset=utf-8>{style}<body><canvas id=tl></canvas><ul id=gomenu></ul>{window}{stubs}{levels}{script}"
 with open(os.path.join(tmp, "page.html"), "w") as fh:
     fh.write(page)
 pngs = {}
