@@ -156,7 +156,22 @@ def load_groups():
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frames"))
     import sets_passes
-    return sets_passes.groups()
+    got = sets_passes.groups()
+    check_pass_kinds(got[2])
+    return got
+
+
+def check_pass_kinds(passes):
+    """Stops the build when no pass has a kind (mosaic, movie, mosaic_movie): obs_mosaic judges passes from the
+    geometry cache, so without CASSINI_GEOMETRY_CACHE every pass comes out with an empty kind, and the page (its
+    camera windows, and the Movie Editor's film plan and exposure graph, plan-local.js) would quietly draw no
+    mosaic or movie pass at all. Many passes have no kind (a single frame, a stare); none at all is a build
+    without the geometry cache."""
+    if passes and not any(p[0] for p in passes.values()):
+        raise SystemExit(f"build_data --groups: none of the {len(passes):,} passes has a kind (mosaic, movie or "
+                         "mosaic_movie). obs_mosaic judges them from the geometry cache: set CASSINI_GEOMETRY_CACHE "
+                         "(and the frame server's other CASSINI_* settings) and run again.")
+    print(f"groups: {sum(1 for p in passes.values() if p[0]):,} of {len(passes):,} passes with a kind", flush=True)
 
 
 def add_groups(cat, groups, rows=None):
