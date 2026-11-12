@@ -81,3 +81,17 @@ assert (out[:8] == img[:8]).all()
 assert (out[-8:, :, 3] == 0).all()
 assert tuple(out[20, 20]) == (200, 100, 50, 255), out[20, 20]   # (drawn from 16 px to the right)
 print("warp_rings keeps, empties and redraws; ok")
+
+# a redrawn tile's ring plane is the pass's middle frame's (ring_at), which SPICE may not have placed (no distance,
+# fr[7] == 0): its view is still worked out from its time, never a KeyError that failed the pass's layout
+sys.path.insert(0, os.path.join(HERE, "frames"))
+import obs_mosaic as om  # noqa: E402
+calls = []
+om._ets, om._with_kernels = (lambda ids: {i: 1.0e8 for i in ids}), (lambda t: calls.append(t) or True)
+rp.sky_view = lambda target, et: {"et": et}
+u = {"key": ["SATURN", "ISS_TEST", "W", 0], "z": 1.0e6,
+     "frames": [[0, "W1_1", 0, 100.0, 0, 0, 0, 1.0e6], [1, "W2_1", 0, 200.0, 0, 0, 0, 0], [2, "W3_1", 0, 300.0, 0, 0, 0, 1.0e6]]}
+view = om._sky_views(u)
+assert view("W2_1") == {"et": 1.0e8} and calls[-1] == 200.0
+assert view("W9_9") is None
+print("a frame SPICE did not place still has its view; ok")

@@ -3739,11 +3739,16 @@ def ring_moves(u, cache, p, tiles):
                 rec = json.load(fh)
             kept = {int(n): v for n, v in rec.get("tiles", {}).items()}
             ref = np.array([np.nan if v is None else v for v in rec["ref"]]) if rec.get("ref") else None
+            # (a move kept while the tile was still as taken, its rings' redrawing waiting on SPICE, is fitted again
+            # once it is redrawn: what each was fitted on is kept with it, ring_redraw)
+            drawn = {t["n"]: "ring_at" in t for t in tiles if "offset" in t}
+            kept = {n: v for n, v in kept.items() if n not in drawn or (len(v) > 4 and v[4]) == drawn[n]}
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
         if todo:
             there = _tiles(u, cache, p["display_scale"])
 
             pics = {t["n"]: t["pic"] for t in tiles if "pic" in t}
+            by_n_ = {t["n"]: t for t in tiles}
 
             def picture(j):
                 # (a tile redrawn as at the epoch, ring_redraw: its redrawn picture, which its box and ring_at are for)
@@ -3779,7 +3784,7 @@ def ring_moves(u, cache, p, tiles):
                     if not v["ok"] or math.hypot(v["move"][0] - mid[0], v["move"][1] - mid[1]) > RING_AGREE:
                         v["move"] = [round(mid[0], 2), round(mid[1], 2)]
                 for n, v in found.items():
-                    kept[n] = v["move"] + [v["ncc"][1], bool(v["ok"])]
+                    kept[n] = v["move"] + [v["ncc"][1], bool(v["ok"]), "ring_at" in by_n_[n]]
             if ref is not None:
                 # (too little ring: read once, and moved with its pointing's fitted filters, or kept where it is)
                 roots = {}
@@ -3798,7 +3803,7 @@ def ring_moves(u, cache, p, tiles):
                         ms = by.get(roots.get(t["n"], t["n"]))
                         mid = [round(float(np.median([m[0] for m in ms])), 2), round(float(np.median([m[1] for m in ms])), 2)] \
                             if ms else [0, 0]
-                        kept[t["n"]] = mid + [None, False]
+                        kept[t["n"]] = mid + [None, False, "ring_at" in t]
             if found or ref is not None:
                 part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
                 try:
@@ -3957,7 +3962,8 @@ def ring_pair_parts(u, rings, s, ref, t, mine):
     ns = np.array([h["normal"] for _, h in got])
     # (directions across the rings that differ by 10 degrees or more somewhere, or the pieces add nothing a whole match
     # would not say)
-    if float(np.linalg.eigvalsh(ns.T @ ns / len(ns))[0]) < math.sin(math.radians(10)) ** 2 / 2:
+    # (two directions theta apart give a least eigenvalue of sin(theta / 2) ** 2)
+    if float(np.linalg.eigvalsh(ns.T @ ns / len(ns))[0]) < math.sin(math.radians(5)) ** 2:
         return []
     return got
 
@@ -4084,6 +4090,9 @@ def _sky_views(u):
     import reproject as rp
     key = tuple(u["key"])
     t_of = {fr[1]: fr[3] for fr in u["frames"] if fr[7]}
+    # (any frame of the pass can be asked for, not only those SPICE placed: a redrawn ring tile's ring plane is the
+    # pass's middle frame's, ring_at, which may be one SPICE could not place)
+    t_all = {fr[1]: fr[3] for fr in u["frames"]}
     ets = _ets(list(t_of))
 
     def view(fid):
@@ -4095,8 +4104,10 @@ def _sky_views(u):
             ets.update(_ets([fid]))
             if fid not in ets:
                 return None
+        if fid not in t_all:
+            return None
         with _spice_lock:
-            if not _with_kernels(t_of[fid]):
+            if not _with_kernels(t_all[fid]):
                 return None
             try:
                 got = rp.sky_view(u["key"][0], ets[fid])
@@ -4523,7 +4534,11 @@ def _ring_motion(rp, u, t, by_id, ets, view, image, km_px, there):
     fp = os.path.join(there, f"{r['n']}.png")
     if rings is None or not os.path.exists(fp):
         return tries[0]
-    ref = np.asarray(Image.open(fp).convert("RGBA"))
+    with _lock:
+        ref = _made_pictures.get(fp)
+    if ref is None:
+        ref = np.asarray(Image.open(fp).convert("RGBA"))
+        _keep_made(fp, ref)   # (read once for every filter of its pointing)
     best = None
     for k, d in enumerate(tries):
         got, how = ring_pair_shift(u, rings, r, ref, dict(t, offset=[t["offset"][0] + d[0], t["offset"][1] + d[1]]), image,
@@ -5050,8 +5065,12 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             if isinstance(how, dict) and how.get("parts"):
                 # (ring matches part by part along the overlap: each across the rings where it is, so together they say
                 # both ways how far tile n sits from tile j: ring_pair_parts)
+                # (each piece at its own weight: each says how far apart the two sit across the rings in its own
+                # direction, which no other piece says; weighted by its share of the pair, the weak ring fits anchoring
+                # the pointings, ring_moves, outweighed them, and ISS_00ARI_COMPHIDRK001's seams went back to 32 px p90)
                 for h in how["parts"]:
-                    meas.append((rootmap[j], rootmap[n], np.array(h["shift"], float), np.outer(h["normal"], h["normal"]), float(h["ncc"])))
+                    meas.append((rootmap[j], rootmap[n], np.array(h["shift"], float), np.outer(h["normal"], h["normal"]),
+                                 float(h["ncc"])))
                 continue
             if isinstance(how, dict) and how.get("ring"):
                 # (a ring match: how far tile n's ringlets sit out from tile j's, across the rings only)
@@ -5637,7 +5656,8 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     mine = _mine(u, p, tiles, f)
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
-    whole = plain in ("", PANEL_TAG, EDGE_TAG, RING_EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG)
+    whole = plain in ("", PANEL_TAG, EDGE_TAG, RING_EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG, RING_REDRAW_TAG,
+                      RING_REDRAW_TAG + RING_EDGE_TAG, RING_REDRAW_TAG + EDGE_TAG)
     if whole and not _rolling.get() and calibration.step("level") and not all("under" in t for t in mine):
         # a pass's mosaic (not a mosaic movie's lap): a tile far darker than the picture before it goes under it
         # (decided here on all the pass's tiles; the mosaic of fewer tiles _grown starts from keeps the decisions)
@@ -6582,7 +6602,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
     tag = ("-" + plain.rsplit("-", 1)[1] if plain.startswith("lap-") else "") + \
-        "".join(x for x in (SURFACE_TAG, PANEL_TAG, EDGE_TAG, RING_EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
+        "".join(x for x in (SURFACE_TAG, RING_REDRAW_TAG, PANEL_TAG, EDGE_TAG, RING_EDGE_TAG) if x in plain) + ("-tune" + tuned if tuned else "")
     # the seams are solved on the best covered filter drawn and shared by all (balanced look)
     ref = max(used, key=lambda f: count[f])
     # the luminance base under the picture, where it holds tiles the picture would not show (a mosaic movie's
