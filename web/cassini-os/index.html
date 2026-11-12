@@ -767,6 +767,14 @@ body.phone .savemenu a { padding: 11px 14px; }
 .tilemap .other { stroke: rgba(232,236,242,.28); stroke-width: 1; }
 .tilemap .hot { stroke: #fff; stroke-width: 1.6; filter: drop-shadow(0 0 2px rgba(0,0,0,.9)); }
 .well.tilehover, .win.full .well.tilehover { cursor: pointer; }
+/* the tile Cassini just took, while a mosaic builds (cameras.newestTile): a thin soft line round it that moves to each
+   new tile and fades out when no new one follows (cameraFeed newest); on screen only, never in a saved picture or film */
+.newesttile { position: absolute; pointer-events: none; overflow: visible; z-index: 2; opacity: 0; transition: opacity .9s ease-out; }
+.newesttile.on { opacity: 1; transition: opacity .15s ease-out; }
+.newesttile polygon { fill: none; stroke: rgba(226,236,255,.62); stroke-width: 1.2; stroke-linejoin: round;
+  filter: drop-shadow(0 0 2.5px rgba(138,182,255,.75)) drop-shadow(0 0 1px rgba(0,0,0,.6)); }
+.tilemap.on ~ .newesttile, .well.tilehover .newesttile { opacity: 0; transition: none; }
+@media (prefers-reduced-motion: reduce) { .newesttile, .newesttile.on { transition: none; } }
 .tiletip { position: absolute; z-index: 3; pointer-events: none; padding: 5px 8px; border-radius: 5px; max-width: 220px; font: 10.5px/1.35 var(--ui); text-transform: none; letter-spacing: normal; text-align: left;
   color: var(--q-text); background: rgba(16,17,21,.92); border: 1px solid var(--q-line); white-space: nowrap; }
 .tiletip[hidden] { display: none; }
@@ -2806,7 +2814,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     ((o.fade ?? S.get("movies.fade")) && S.get("movies.mosaicFrames") !== "whole" ? `&fade=${o.fade ?? S.get("movies.fade")}&persist=${S.get("movies.persist") ?? 35}` : "") +
     ((o.steady ?? window.cassiniStabilize()) ? `&steady=${o.steady ?? window.cassiniStabilize()}` : "") +
     ((o.exposure ?? window.cassiniExposure()) ? `&exposure=${o.exposure ?? window.cassiniExposure()}` : "");
-  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.stale and cameras.lingerColor / lingerMosaic)
+  // Cameras (the camera windows read cameras.steady, cameras.passes, cameras.fullRes, cameras.fullDelay, cameras.drill, cameras.pointingLook, cameras.newestTile, cameras.stale and cameras.lingerColor / lingerMosaic)
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
@@ -2826,6 +2834,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
   D({ key: "cameras.pointingLook", section: "Cameras", label: "Frames opened from a mosaic", type: "choice", value: "mosaic",
       options: [["mosaic", "As in the mosaic"], ["own", "On its own"]],
       hint: "Hover a mosaic to outline a frame (arrow keys step to the others) and click to open it. As in the mosaic shows that spot of the mosaic, larger: the same levels, seams and colors. On its own shows the frames as a picture of their own, on their own scale. The switch by a held frame's breadcrumb changes it." });
+  D({ key: "cameras.newestTile", section: "Cameras", label: "Mark the newest tile", type: "toggle", value: true,
+      hint: "While a mosaic or a mosaic movie builds, a faint line goes round the tile Cassini just took. It moves with each new tile and fades when none follows. On screen only: saved pictures and films never have it." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
   D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
@@ -5919,6 +5929,7 @@ function targetLabel(k) {
       if (!keep) {
         shot.src = im.src; shot.dataset.src = v.key; shot.dataset.report = ""; obsShown = null; obsK = -1; well.classList.remove("mosaic"); saving(v.key);
         mosaicId = null; draw(null);
+        if (!v.rolling) freshOff();
         kind = { color: v.set >= 0, mosaic: false };
         if (!steady() || shapeOf !== passOf(v.k)) { well.style.aspectRatio = ""; shapeOf = null; }
       }
@@ -5945,6 +5956,7 @@ function targetLabel(k) {
         // request is answered from the browser cache), which a color pass holds over its clear and other frames
         fetch(v.key).then(r => JSON.parse(r.headers.get("X-Movie") || "null"), () => null).then(rep => {
           if (!rep || shown !== v) return;
+          if (rep.rolling && rep.newest) newest(shot.src, rep.newest);
           if (rep.rolling && rep.lap) card.querySelector(".kindtag").textContent = `${rep.filters >= 2 ? ((rep.filter_names || []).includes("GRN") ? "COLOR " : "FALSE COLOR ") : ""}MOSAIC MOVIE · LAP ${rep.lap} OF ${Math.max(rep.lap, rep.laps || 0)} · ${rep.places} PLACES`;
           if (rep.color) field("colour").textContent = field("colour").title = `${rep.ids && rep.ids.includes(catalog.id[v.k]) ? "Color" : "Color held"}: ${rep.color.join(" · ")}`;
           else if (rep.filter_names && rep.filter_names.length >= 2) field("colour").textContent = field("colour").title = `Mosaic movie: ${rep.filter_names.join(" · ")}`;
@@ -6330,6 +6342,7 @@ function targetLabel(k) {
         saving(r.url);
         well.classList.add("mosaic"); drillable();
         mosaicId = rep && rep.observation ? id : null; redraw();
+        if (rep && rep.newest) newest(shot.src, rep.newest);
         if (rep && rep.observation) {
           if (mode !== "mosaic") mosaicPasses.add(passOf(k));   // the server's call, not one the person asked for
           chipText();
@@ -6682,6 +6695,49 @@ function targetLabel(k) {
     // a new picture of the mosaic (another tile came): the outline under the pointer is drawn again on it
     const redraw = () => (pointer && mosaicId ? (rested && draw(hitAt(pointer))) : draw(null));
     shot.addEventListener("load", () => { if (pointer && mosaicId && rested) draw(hitAt(pointer)); });
+
+    // ---- the tile Cassini just took: a quiet line round it while a mosaic builds ----
+    // Each mosaic picture (a pass's mosaic, X-Reel, or a mosaic movie's rolling one, X-Movie) names where its newest
+    // tile lies (obs_mosaic.newest_tile: an outline as fractions of the picture, like the tile map's). The line goes
+    // round it when the picture is up, moves with the next tile, and fades once no new tile has come for NEWEST_HOLD
+    // ms. Drawn over the picture in the page only, so nothing saved or exported has it. Settings > Cameras > "Mark
+    // the newest tile" (cameras.newestTile) turns it off.
+    const NEWEST_HOLD = 1400;
+    const fresh = document.createElementNS(NS, "svg");
+    fresh.setAttribute("class", "newesttile"); fresh.setAttribute("viewBox", "0 0 1 1"); fresh.setAttribute("preserveAspectRatio", "none");
+    fresh.setAttribute("aria-hidden", "true");
+    const freshLine = document.createElementNS(NS, "polygon");
+    freshLine.setAttribute("vector-effect", "non-scaling-stroke");
+    fresh.appendChild(freshLine);
+    well.appendChild(fresh);
+    let freshFor = null, freshT = 0, freshId = null;   // the picture (its src) the line is waiting to go round, and its outline; the tile it went round last
+    function freshPlace() {
+      const b = picBox();
+      if (!b) return false;
+      Object.assign(fresh.style, { left: b.x - b.well.left + "px", top: b.y - b.well.top + "px", width: b.w + "px", height: b.h + "px" });
+      return true;
+    }
+    function freshOff() { freshFor = null; clearTimeout(freshT); fresh.classList.remove("on"); }
+    // the picture whose src is src has its newest tile at poly: the line goes round it once that picture is up
+    function newest(src, tile) {
+      if (!tile || !tile.poly || S.get("cameras.newestTile") === false || hold) return;
+      // the same picture again (at another size, full view's full resolution one) once the line has gone: no new tile
+      if (tile.id === freshId && !fresh.classList.contains("on")) return;
+      freshFor = { src, tile };
+      if (shot.src === src && shot.complete && shot.naturalWidth) freshShow();
+    }
+    function freshShow() {
+      const f = freshFor;
+      if (!f || shot.src !== f.src || !freshPlace()) return;
+      freshFor = null; freshId = f.tile.id;
+      freshLine.setAttribute("points", f.tile.poly.map(c => c.join(",")).join(" "));
+      fresh.classList.add("on");
+      clearTimeout(freshT);
+      freshT = setTimeout(() => fresh.classList.remove("on"), NEWEST_HOLD);
+    }
+    shot.addEventListener("load", freshShow);
+    // the window resized (full view, a phone turned): the line keeps to the picture
+    new ResizeObserver(() => { if (fresh.classList.contains("on")) freshPlace(); }).observe(well);
     function openPointing(q, m = tmap && (tmap.data || tmap.prev), own = S.get("cameras.pointingLook") === "own") {
       const fs = drawnFs(m, q), ids = fs.map(f => idOf(q, f));
       const base = hold ? hold.levels.slice() : [{ kind: "mosaic", live: true, mid: mosaicId, label: `Mosaic · ${m.observation}`, src: shot.dataset.src,
@@ -6809,7 +6865,7 @@ function targetLabel(k) {
         if (!hold || top() !== t || t.url(size()) !== url) return;
         levelKey = url;
         shot.src = im.src; shot.dataset.src = url; shot.dataset.report = "";
-        mosaicId = t.kind === "mosaic" ? t.mid : null;
+        mosaicId = t.kind === "mosaic" ? t.mid : null; freshOff();
         well.classList.add("has-frame"); well.classList.remove("kept");
         well.classList.toggle("composite", t.kind !== "mosaic"); well.classList.toggle("mosaic", t.kind === "mosaic");
         if (t.kind === "composite" && t.s) channelsFrom(im, t.s);
@@ -13652,7 +13708,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"11b933bc962e";
+  const BUILD = /*BUILD*/"45f5bc17d855";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
