@@ -7241,9 +7241,12 @@ def _steady_table(u, n, cache, centre=True, colour=False):
 def page_evens(u, cache, colour=True, centre=True):
     """True when a browser evens the exposure of pass u's movie by itself (steady-local.html want(), with Exposure
     normalization on, its default): the pass's steady table is local, its brightness chain is on frames with no gain of
-    their own, and a colour pass mixes in natural colour (a false colour set is drawn by the server). Otherwise the
-    window asks the server for its frames with exposure= (the pre-build makes them, prebuild.make_evened). Works the
-    pass's chains out first when they are not made (steady_chain, exposure_chain)."""
+    their own, and a colour pass mixes in natural colour (a false colour set is drawn by the server) and draws no frame
+    in its set's colour (the table's "tint": want() leaves such a frame to the server, which evens it: a Jupiter WAC
+    movie, C23RI RMOV001, has all 71 frames tinted, and the pre-build made none of them evened, so the window and a
+    Pre-process drew every one on demand, 2026-11-12). Otherwise the window asks the server for its frames with
+    exposure= (the pre-build makes them, prebuild.make_evened). Works the pass's chains out first when they are not
+    made (steady_chain, exposure_chain)."""
     if u.get("track") or not calibration.step("align"):
         return False
     p = plan(u, cache)
@@ -7251,7 +7254,8 @@ def page_evens(u, cache, colour=True, centre=True):
     exposure_chain(u, cache, p, colour, centre, 0)
     t = _steady_table(u, 0, cache, centre, colour)
     return bool(t.get("local") and (t.get("exposure") or {}).get("local")
-                and not (colour and t.get("colour") and not t.get("sets")))
+                and not (colour and t.get("colour") and not t.get("sets"))
+                and not (colour and t.get("tint")))
 
 
 def one_white(tiles, scale):
