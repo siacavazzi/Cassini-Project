@@ -320,9 +320,13 @@ def ring_masks(epoch, view, x, y, sx, sy, km_px):
     picture saw the disk in front of that place of it: there is nothing of the rings to draw (left empty, for a
     neighbour to fill), where a disk's piece would otherwise have been dragged out onto the rings."""
     _, _, seen = _plane_seen(epoch, x, y, km_px)
-    _, _, seen2 = _plane_seen(view, sx, sy, km_px)
+    _, on = ring_plane(epoch, x, y, km_px)
+    _, hit = sky_to_surface(epoch, x, y, km_px)
+    # (the disk with no ring in front of it, as between the C ring and the cloud tops, is the disk's too)
+    keep = ~seen | (hit & ~on)
+    _, on2 = ring_plane(view, sx, sy, km_px)
     _, hit2 = sky_to_surface(view, sx, sy, km_px)
-    return ~seen, seen & ~seen2 & hit2
+    return keep, ~keep & hit2 & ~on2
 
 
 def surface_to_sky(view, points, km_px):
