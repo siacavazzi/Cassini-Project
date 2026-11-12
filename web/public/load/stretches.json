@@ -1,0 +1,21 @@
+{
+  "about": "Gate G3's ten stretches (plan: 'G2 again on ten stretches spread over 1997 to 2017'). Each is a moment the page itself offers (the landing moments of settings.html and the harness's moments.mjs), so it is known to hold pictures, at the speed the page plays it. g3_stretches.mjs runs the harness session S1 (default play, both cameras) on each with --moment and --speed, then the cost model on all ten. The cruise years 1997 to 1999 have no page moment; Jupiter (2000-12) is the earliest stretch. Before the run, the rig's /frames/slices.json must cover every stretch (the runner checks and names any it does not).",
+  "session": "S1",
+  "minutes": 3,
+  "stretches": [
+    { "t": "2000-12-29T03:04:00", "speed": 600, "label": "Jupiter portrait", "why": "cruise, Jupiter flyby: the only pre-Saturn pictures in the page's moments" },
+    { "t": "2004-06-11T19:00:00", "speed": 600, "label": "Phoebe flyby", "why": "approach, a small moon close up" },
+    { "t": "2005-01-14T09:30:00", "speed": 600, "label": "Huygens lands", "why": "Titan, colour sets and mosaics" },
+    { "t": "2005-02-17T05:46:09", "speed": 60, "label": "Enceladus flyby", "why": "close flyby at slow speed: many processed frames a minute" },
+    { "t": "2005-09-26T00:40:07", "speed": 600, "label": "Hyperion, the sponge moon", "why": "a page landing; close flyby" },
+    { "t": "2006-09-15T14:28:00", "speed": 600, "label": "In Saturn's Shadow", "why": "a page landing; the big backlit mosaic" },
+    { "t": "2010-02-13T17:54:31", "speed": 60, "label": "Mimas, the Death Star moon", "why": "a page landing at 60x" },
+    { "t": "2010-11-30T07:25:10", "speed": 600, "label": "The plumes of Enceladus", "why": "a page landing; plume movie" },
+    { "t": "2013-07-19T22:23:19", "speed": 600, "label": "The Day the Earth Smiled", "why": "a page landing; the largest mosaic" },
+    { "t": "2017-04-26T07:48:14", "speed": 60, "label": "The first dive inside the rings", "why": "a page landing; Grand Finale orbits, movie passes" }
+  ],
+  "spares": [
+    { "t": "2017-04-26T01:17:00", "speed": 600, "label": "north polar laps", "why": "mosaic movie (harness MOVIE list)" },
+    { "t": "2017-09-15T10:31:00", "speed": 60, "label": "Grand Finale", "why": "the last pictures" }
+  ]
+}
