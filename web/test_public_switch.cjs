@@ -32,9 +32,8 @@ const HIDDEN = {
   "movies.laps above 1": d => d.filter(x => x.key === "movies.laps"),
 };
 const OPTIONS = { "cameras.colors values raw and false": ["cameras.colors", ["raw", "false"]] };
-// hidden whole on the public site, beyond what a policy line says, and held at this value
-const ALSO_HIDDEN = { "cameras.passes": "auto", "playback.builtOnly": true };
-HIDDEN["cameras.passes value mosaic (Always mosaic)"] = d => d.filter(x => x.key === "cameras.passes");
+HIDDEN["cameras.passes (held at auto: every pass is published only as the kind the prebuild made it)"] = d => d.filter(x => x.key === "cameras.passes");
+HIDDEN["playback.builtOnly (held on: the public site has only the years published)"] = d => d.filter(x => x.key === "playback.builtOnly");
 const ELSEWHERE = {   // lines met by a part of the page rather than a setting
   "Pre-process (segment.html)": "WP7b (segment.html)", "Studio tile tuning": "WP7b (studio.html)",
   "the flag button and /flags links": "flags", "the reel window (D2)": "reels",
@@ -105,11 +104,7 @@ function serve(dir) {
       const x = d.find(x => x.key === key);
       check(`public forces ${key} = ${JSON.stringify(want)} (saved ${JSON.stringify(SAVED[key])})`, x && x.value === want && x.hidden && !rows.has(key), x);
     }
-    for (const [key, want] of Object.entries(ALSO_HIDDEN)) {
-      const x = d.find(x => x.key === key);
-      check(`public hides ${key}, held at ${JSON.stringify(want)} (saved ${JSON.stringify(SAVED[key])})`, x && x.hidden && x.value === want && !rows.has(key), x);
-    }
-    check("public: every hidden setting at its forced value or its default", d.filter(x => x.hidden).every(x => x.value === (x.key in policy.forced ? policy.forced[x.key] : x.key in ALSO_HIDDEN ? ALSO_HIDDEN[x.key] : x.def)), d.filter(x => x.hidden && x.value !== x.def));
+    check("public: every hidden setting at its forced value or its default", d.filter(x => x.hidden).every(x => x.value === (x.key in policy.forced ? policy.forced[x.key] : x.def)), d.filter(x => x.hidden && x.value !== x.def));
     check("public: a hidden setting cannot be set", await page.evaluate(() => { cassiniSettings.set("cameras.autoCenter", false); cassiniSettings.set("processing.align", false); return cassiniSettings.get("cameras.autoCenter") === true && cassiniSettings.get("processing.align") === true; }));
     check("public: picture queries carry no look, off, hdr, center=0 or laps above 1", await page.evaluate(() =>
       window.cassiniLook({ center: true }) === "&center=1" && window.cassiniOff() === "" && window.cassiniHdr(1024) === "" && !/center=0|laps=[2-9]/.test(window.cassiniMovieStyle())), await page.evaluate(() => [window.cassiniLook(), window.cassiniMovieStyle()]));

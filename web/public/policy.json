@@ -131,7 +131,7 @@
 
   "page_settings": {
     "about": "What the page's public switch (window.cassiniPublic, WP6) does to Settings so that the page only asks for what this policy allows. WP5 to WP7b keep every change behind the switch.",
-    "hidden": ["processing.* (the 18 step toggles, calibration.STEPS)", "cameras.balancedColor", "cameras.colors values raw and false", "cameras.autoCenter (D4: always on)", "cameras.hdr and cameras.hdrGlow (D8)", "movies.laps above 1", "cameras.passes value mosaic (Always mosaic)", "Pre-process (segment.html)", "the flag button and /flags links", "the reel window (D2)", "Studio tile tuning"],
-    "forced": {"movies.stabilizeLocal": true, "cameras.autoCenter": true, "cameras.hdr": "off"}
+    "hidden": ["processing.* (the 18 step toggles, calibration.STEPS)", "cameras.balancedColor", "cameras.colors values raw and false", "cameras.autoCenter (D4: always on)", "cameras.hdr and cameras.hdrGlow (D8)", "movies.laps above 1", "cameras.passes (held at auto: every pass is published only as the kind the prebuild made it)", "playback.builtOnly (held on: the public site has only the years published)", "Pre-process (segment.html)", "the flag button and /flags links", "the reel window (D2)", "Studio tile tuning"],
+    "forced": {"movies.stabilizeLocal": true, "cameras.autoCenter": true, "cameras.hdr": "off", "cameras.passes": "auto", "playback.builtOnly": true}
   }
 }
