@@ -21,7 +21,7 @@ if (!pub || pub === "-") {
 const policy = JSON.parse(fs.readFileSync(path.join(__dirname, "public", "policy.json"), "utf8")).page_settings;
 const SAVED = { "processing.align": false, "processing.calibrate": false, "cameras.balancedColor": false, "cameras.colors": "raw",
   "cameras.autoCenter": false, "cameras.hdr": "auto", "cameras.hdrGlow": 40, "movies.laps": 4, "movies.stabilizeLocal": false,
-  "cameras.passes": "mosaic", "interface.flags": false };
+  "cameras.passes": "movie", "playback.builtOnly": false, "interface.flags": false };
 
 // policy.json page_settings, line by line: what each hidden line means on the page (a new line fails here until it has one)
 const HIDDEN = {
@@ -31,7 +31,9 @@ const HIDDEN = {
   "cameras.hdr and cameras.hdrGlow (D8)": d => d.filter(x => x.key === "cameras.hdr" || x.key === "cameras.hdrGlow"),
   "movies.laps above 1": d => d.filter(x => x.key === "movies.laps"),
 };
-const OPTIONS = { "cameras.colors values raw and false": ["cameras.colors", ["raw", "false"]], "cameras.passes value mosaic (Always mosaic)": ["cameras.passes", ["mosaic"]] };
+const OPTIONS = { "cameras.colors values raw and false": ["cameras.colors", ["raw", "false"]] };
+HIDDEN["cameras.passes (held at auto: every pass is published only as the kind the prebuild made it)"] = d => d.filter(x => x.key === "cameras.passes");
+HIDDEN["playback.builtOnly (held on: the public site has only the years published)"] = d => d.filter(x => x.key === "playback.builtOnly");
 const ELSEWHERE = {   // lines met by a part of the page rather than a setting
   "Pre-process (segment.html)": "WP7b (segment.html)", "Studio tile tuning": "WP7b (studio.html)",
   "the flag button and /flags links": "flags", "the reel window (D2)": "reels",
@@ -142,7 +144,7 @@ function serve(dir) {
     const d = await defs(page), rows = new Set(await listed(page));
     check("off: no setting hidden", !d.some(x => x.hidden), d.filter(x => x.hidden).map(x => x.key));
     check("off: every setting listed", d.every(x => rows.has(x.key)), d.filter(x => !rows.has(x.key)).map(x => x.key));
-    check("off: every option offered", d.find(x => x.key === "cameras.colors").options.includes("raw") && d.find(x => x.key === "cameras.passes").options.includes("mosaic"));
+    check("off: every option offered", d.find(x => x.key === "cameras.colors").options.includes("raw") && ["mosaic", "movie", "mosaic_movie"].every(o => d.find(x => x.key === "cameras.passes").options.includes(o)));
     for (const [key, v] of Object.entries(SAVED)) {
       const x = d.find(x => x.key === key);
       if (x) check(`off: saved ${key} = ${JSON.stringify(v)} kept`, x.value === v, x.value);

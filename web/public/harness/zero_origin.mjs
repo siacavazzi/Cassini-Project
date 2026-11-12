@@ -6,7 +6,9 @@
 //             that is neither the site (Pages) nor the frames host (the Worker) nor an allowed CDN
 //   refused   frames-host requests policy.json refuses (keys.mjs canonical): must be 0
 //   miss      frames-host requests policy.json allows that answered 404 or worse (Auto center's marker 404s, with an
-//             X-Center header, are counted apart as marker): must be 0
+//             X-Center header, are counted apart as marker): must be 0. A request the page cancelled itself
+//             (net::ERR_ABORTED: a picture it no longer wants as playback moves on) is no miss; it is counted
+//             apart as cancelled
 //   cdn       requests to the CDNs listed in --cdn (three.js, fonts): reported, so WP6 can bring them onto Pages
 //
 //   node web/public/harness/zero_origin.mjs --site http://127.0.0.1:8955 [--frames URL] [--mode before|public]
@@ -63,6 +65,7 @@ function classify(r) {
     if (ans.refused) out.verdict = "refused";
     else if (r.status === 404 && r.headers["x-center"]) out.verdict = "marker";
     else if (r.status === 404 && ans.route && PROBE.has(ans.route)) out.verdict = "probe";
+    else if (r.failed === "net::ERR_ABORTED") out.verdict = "cancelled";
     else if (r.failed || r.status >= 400 || r.status === 0) out.verdict = "miss";
     else out.verdict = "ok";
     return out;
@@ -73,7 +76,7 @@ function classify(r) {
 }
 
 function summarize(reqs) {
-  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, probe: 0, cdn: 0, other_hosts: 0, bytes: 0 };
+  const c = { requests: reqs.length, static: 0, frames: 0, origin: 0, refused: 0, miss: 0, marker: 0, probe: 0, cancelled: 0, cdn: 0, other_hosts: 0, bytes: 0 };
   const byRoute = {}, refusedWhy = {}, missRoutes = {}, otherHosts = {};
   for (const r of reqs) {
     const k = r.k;
@@ -89,6 +92,7 @@ function summarize(reqs) {
       if (k.verdict === "miss") { c.miss++; missRoutes[k.route || "(no route)"] = (missRoutes[k.route || "(no route)"] || 0) + 1; }
       if (k.verdict === "marker") c.marker++;
       if (k.verdict === "probe") c.probe++;
+      if (k.verdict === "cancelled") c.cancelled++;
     }
   }
   return { counts: c, by_route: byRoute, refused_why: refusedWhy, miss_routes: missRoutes, other_hosts: otherHosts };
@@ -150,7 +154,7 @@ for (const s of sessions) {
     fs.writeFileSync(path.join(args.out, `${s.id}.json`), JSON.stringify({ ...out, requests: reqs }, null, 1));
   }
   const c = sum.counts;
-  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
+  console.log(`${s.id.padEnd(3)} ${String(c.requests).padStart(6)} req  origin ${String(c.origin).padStart(5)}  refused ${String(c.refused).padStart(5)}  miss ${String(c.miss).padStart(4)}  marker ${String(c.marker).padStart(4)}  probe ${String(c.probe).padStart(4)}  cancelled ${String(c.cancelled).padStart(4)}  cdn ${String(c.cdn).padStart(3)}  other ${String(c.other_hosts).padStart(3)}  ${(c.bytes / 1e6).toFixed(1)} MB  ${out.seconds}s${error ? "  ERROR " + error.split("\n")[0] : ""}${steps.some(x => x.skipped) ? "  (" + steps.filter(x => x.skipped).length + " steps skipped)" : ""}`);
   await ctx.close();
 }
 await browser.close();
