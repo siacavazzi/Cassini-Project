@@ -109,9 +109,14 @@ def objects_for(answer, route, key, read):
         custom = {"x-status": str(answer.status)}
         if view is not None:
             custom["x-center"] = compact(json.loads(view))
-        body = answer.body or b""
+        body = (answer.body or b"").decode("utf-8", "replace")
+        if not body.isascii():   # (metadata travels as HTTP headers: ASCII only; JSON keeps its meaning escaped)
+            try:
+                body = json.dumps(json.loads(body))
+            except ValueError:
+                body = body.encode("ascii", "backslashreplace").decode()
         if len(body) <= MARKER_BODY_MAX:
-            custom["x-body"] = body.decode("utf-8", "replace")
+            custom["x-body"] = body
         return [(key, b"", HEADERS["markers"]["content_type"], custom, "marker")]
     data = read(answer)
     header = route.get("header")
@@ -383,18 +388,17 @@ def pass_units(u, cache, movie_pass, om):
     the strips phase; make_planes; make_evened), each frame its own unit. Whether a pass is filled (planes before
     detail) and whether the page evens it are read from the cache as resolve() reads it (cache only); where that is
     not known the pictures are listed, and resolve() says whether they are there."""
-    import resolve
+    resolve = resolver()
     kind, frames = u.get("kind"), u["frames"]
     filled = evens = None
     try:
-        with resolve.cache_only():
+        with cache_only(resolve, cache):
             p = om.plan(u, cache)
             filled = om.sharpens(p["display_scale"])
             if movie_pass:
                 evens = om.page_evens(u, cache, True, True)
-    except BaseException as e:   # noqa: BLE001  (NotMade: a chain not kept; any other: the pass's plan not kept)
-        if isinstance(e, (KeyboardInterrupt, SystemExit)):
-            raise
+    except not_kept(resolve, om):
+        pass   # (the pass's plan or chains are not kept: unsure, the pictures are listed and resolve() decides)
     last = len(frames) - 1
     for j, f in enumerate(frames):
         fid, urls = f[1], []
@@ -422,6 +426,20 @@ def pass_units(u, cache, movie_pass, om):
                 urls += [url(f"/frames/movie/{fid}.webp", size=s, exposure=EVENED) for s in PASS_SIZES]
         yield {"family": "pass", "frame": fid, "urls": urls, "pass": "_".join(map(str, u["key"])),
                "unsure": {"detail=0": filled is None, "exposure": evens is None}}
+
+
+def cache_only(resolve, cache):
+    """resolve.cache_only for this cache (it takes the cache folder since WP1's #423; e0cf137 took none)."""
+    import inspect
+    return resolve.cache_only(cache) if inspect.signature(resolve.cache_only).parameters else resolve.cache_only()
+
+
+def not_kept(resolve, om):
+    """The errors that mean "the cache does not keep this", where pass_units reads how a pass was built: resolve's
+    NotMade, obs_mosaic's NotKept (WP1's #427), a file not there, a lookup that finds nothing. Anything else (a mistake
+    in the call) is raised, not taken for "unsure"."""
+    return tuple(e for e in (getattr(resolve, "NotMade", None), getattr(om, "NotKept", None)) if e) + \
+        (FileNotFoundError, LookupError, ValueError)
 
 
 def highlight_hints(site):
@@ -737,18 +755,7 @@ def main(argv=None):
           f"in {time.monotonic() - started:.0f} s", flush=True)
 
     recs = run_units(work, args, cache, target_spec, state, tags, publish_id)
-    for budget in BUSY_BUDGETS:
-        busy = {r["url"] for r in recs if r["outcome"] == "busy"}
-        if not busy:
-            break
-        print(f"{len(busy)} URLs answered busy: asked again with a work budget of {budget} s", flush=True)
-        again = []
-        for u in work:
-            urls = [x for x in u["urls"] + (u.get("as_is") or []) if x in busy]
-            if urls:
-                again.append(dict(u, urls=urls, as_is=[x for x in (u.get("as_is") or []) if x not in urls]))
-        recs = [r for r in recs if r["outcome"] != "busy"] + run_units(again, args, cache, target_spec, state, tags,
-                                                                      publish_id, budget, recs)
+    recs = retry_busy(work, recs, args, cache, target_spec, state, tags, publish_id)
 
     target = make_target(target_spec) if not args.dry_run else None
     ledger = Ledger(os.path.join(state, "ledger.sqlite")) if not args.dry_run else None
@@ -813,6 +820,26 @@ def manifest_only(args, cache, state, target_spec, publish_id, commit, versions,
 
 
 BUSY_BUDGETS = (30, 120)   # s: the work budgets the URLs resolve() answered busy are asked again with, in turn
+
+
+def retry_busy(work, recs, args, cache, target_spec, state, tags, publish_id, log=print):
+    """The URLs resolve() answered busy, asked again with each of BUSY_BUDGETS in turn (never more): a picture is
+    published, a none counts none, and one still busy after the last stays "busy" (listed, nothing uploaded). A unit's
+    as-is pictures already recorded are not asked again (they would count twice)."""
+    for budget in BUSY_BUDGETS:
+        busy = {r["url"] for r in recs if r["outcome"] == "busy"}
+        if not busy:
+            break
+        log(f"{len(busy)} URLs answered busy: asked again with a work budget of {budget} s")
+        done = {r["url"] for r in recs if r["outcome"] != "busy"}
+        again = []
+        for u in work:
+            urls = [x for x in u["urls"] + (u.get("as_is") or []) if x in busy]
+            if urls:
+                again.append(dict(u, urls=urls, as_is=[x for x in (u.get("as_is") or []) if x not in busy and x not in done]))
+        recs = [r for r in recs if r["outcome"] != "busy"] + run_units(again, args, cache, target_spec, state, tags,
+                                                                      publish_id, budget, recs)
+    return recs
 
 
 def run_units(work, args, cache, target_spec, state, tags, publish_id, budget=None, before=()):

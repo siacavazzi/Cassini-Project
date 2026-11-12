@@ -72,6 +72,11 @@ def test_storage():
 
     view = {"centre": False, "why": "a sky pass"}
     neg = FakeAnswer("negative", status=404, headers={"X-Center": json.dumps(view)}, body=json.dumps(view).encode())
+    wide = {"centre": False, "why": "Iapetus’ dark side"}
+    objs = publish.objects_for(FakeAnswer("negative", status=404, headers={"X-Center": json.dumps(wide)},
+                                          body=json.dumps(wide, ensure_ascii=False).encode()), route, "k", None)
+    check(objs[0][3]["x-body"].isascii() and json.loads(objs[0][3]["x-body"]) == wide,
+          "a marker's body with a non-ASCII character is kept as ASCII JSON (metadata travels as HTTP headers)")
     objs = publish.objects_for(neg, route, "k", None)
     check(objs == [("k", b"", "application/json", {"x-status": "404", "x-center": publish.compact(view),
                                                     "x-body": json.dumps(view)}, "marker")],
@@ -306,11 +311,7 @@ def test_busy_retry(tmp):
         os.makedirs(state)
         recs = publish.run_units(work, args, cache, spec, state, tags, "p")
         first = sorted(r["outcome"] for r in recs)
-        for budget in publish.BUSY_BUDGETS:
-            busy = {r["url"] for r in recs if r["outcome"] == "busy"}
-            again = [dict(u, urls=[x for x in u["urls"] if x in busy]) for u in work if set(u["urls"]) & busy]
-            recs = [r for r in recs if r["outcome"] != "busy"] + publish.run_units(again, args, cache, spec, state, tags,
-                                                                                  "p", budget, recs)
+        recs = publish.retry_busy(work, recs, args, cache, spec, state, tags, "p", log=lambda m: None)
         out = {r["url"].split("/")[2][:11]: r["outcome"] for r in recs}
         check(first == ["busy", "busy", "busy", "published"]
               and out == {"N1500000000": "published", "N1500000001": "published", "N1500000002": "busy",
@@ -328,6 +329,52 @@ def test_busy_retry(tmp):
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+class FakeOM:
+    """obs_mosaic as pass_units reads it: a plan's scale, whether it sharpens, whether the page evens the pass."""
+    class NotKept(Exception):
+        pass
+
+    def __init__(self, filled, evens, error=None):
+        self.filled, self.evens, self.error = filled, evens, error
+
+    def plan(self, u, cache):
+        if self.error:
+            raise self.error
+        return {"display_scale": "filled" if self.filled else "plain"}
+
+    def sharpens(self, scale):
+        return scale == "filled"
+
+    def page_evens(self, u, cache, colour, centre):
+        return self.evens
+
+
+def test_pass_units(tmp):
+    import resolve
+    u = {"key": ("SATURN", "ISS_X", "N", 0), "kind": "movie", "mosaic": False, "frames": [(None, "N1500000000_1", "CL1", 0)]}
+    cache = os.path.join(tmp, "pcache")
+    os.makedirs(cache, exist_ok=True)
+
+    def urls(om):
+        return list(publish.pass_units(u, cache, True, om))[0]
+    got = urls(FakeOM(True, False))
+    check(got["unsure"] == {"detail=0": False, "exposure": False}
+          and any("detail=0" in x for x in got["urls"]) and any("exposure=8" in x for x in got["urls"]),
+          "a filled pass the page cannot even is read as such: planes before detail and evened frames listed")
+    got = urls(FakeOM(False, True))
+    check(got["unsure"] == {"detail=0": False, "exposure": False}
+          and not any("detail=0" in x or "exposure=" in x for x in got["urls"]),
+          "a plain pass the page evens itself lists neither planes before detail nor evened frames")
+    got = urls(FakeOM(True, True, error=FakeOM.NotKept("no plan")))
+    check(got["unsure"] == {"detail=0": True, "exposure": True}, "a pass whose plan is not kept is unsure (both listed)")
+    try:
+        urls(FakeOM(True, True, error=TypeError("a mistake in the call")))
+        check(False, "any other error in reading a pass is raised, not taken for unsure")
+    except TypeError:
+        check(True, "any other error in reading a pass is raised, not taken for unsure")
+    check(resolve.cache_only is not None, "pass_units calls resolve.cache_only with the cache where it takes one")
 
 
 def test_manifest():
@@ -475,6 +522,7 @@ def main():
         test_r2(tmp)
         test_one()
         test_busy_retry(tmp)
+        test_pass_units(tmp)
         test_manifest()
         cache, mirror = os.environ.get("CASSINI_PUBLISH_CACHE"), os.environ.get("CASSINI_PUBLISH_MIRROR")
         if cache and mirror:
