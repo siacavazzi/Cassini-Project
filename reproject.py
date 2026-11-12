@@ -265,6 +265,70 @@ def ring_plane(view, x, y, km_px):
     return radius, on
 
 
+def _plane_seen(view, x, y, km_px):
+    """ring_plane's crossing without its radius limits: (body-fixed point, radius km, seen: in front of Cassini and
+    not behind the body's disk)."""
+    ray = (view["c"] + (-x * km_px)[..., None] * view["east"] + (-y * km_px)[..., None] * view["north"]) @ view["rot"].T
+    o = view["rot"] @ -view["c"]
+    dz = ray[..., 2]
+    t = np.where(np.abs(dz) > 1e-12, -o[2] / np.where(np.abs(dz) > 1e-12, dz, 1.0), -1.0)
+    point = o + t[..., None] * ray
+    surface, hit = sky_to_surface(view, x, y, km_px)
+    t_disk = np.linalg.norm(surface - o, axis=-1) / np.maximum(np.linalg.norm(ray, axis=-1), 1e-12)
+    return point, np.hypot(point[..., 0], point[..., 1]), (t > 0) & ~(hit & (t_disk < t))
+
+
+RING_FIELD_REACH = 1.05  # of RING_OUTER: how far out the ring plane is followed (ring_field), past the rings onto the sky
+
+
+def ring_field(epoch, view, x, y, km_px):
+    """sky_field for the rings: for sky places x, y at the epoch's view, where the picture taken at view shows the same
+    place of the ring plane (its shift dx, dy from x, y), and weight 1 wherever the line of sight meets the plane in
+    front of Cassini (out to RING_FIELD_REACH of RING_OUTER, past the rings, so the field is smooth across their outer
+    edge), 0 elsewhere. The field runs on behind the body's disk, smooth: which places show the disk instead, at the
+    epoch or in the picture, ring_masks says pixel by pixel. The plane is taken as fixed in space (J2000), not turning
+    with the body: the rings are the same all round, and what is not (the planet's shadow on them) stays put against
+    the sun. Over a pass Cassini's view of the plane changes, near a periapsis fast: ISS_00ARI_COMPHIDRK001
+    (2004-10-28, 80 minutes) saw the rings' ellipse a quarter flatter at its last pointing than at its first, so tiles
+    placed on the body's centre could not meet across a seam, whatever shift registration gave them."""
+    sx, sy, use = _ring_seen_at(epoch, view, x, y, km_px)
+    return (np.where(use, sx - x, 0.0).astype(np.float32), np.where(use, sy - y, 0.0).astype(np.float32),
+            use.astype(np.float32))
+
+
+def _ring_seen_at(epoch, view, x, y, km_px):
+    """(sx, sy, on the plane): where view sees the place of the ring plane the epoch sees at x, y (ring_field)."""
+    ray = (epoch["c"] + (-x * km_px)[..., None] * epoch["east"] + (-y * km_px)[..., None] * epoch["north"]) @ epoch["rot"].T
+    o = epoch["rot"] @ -epoch["c"]
+    dz = ray[..., 2]
+    t = np.where(np.abs(dz) > 1e-12, -o[2] / np.where(np.abs(dz) > 1e-12, dz, 1.0), -1.0)
+    point = o + t[..., None] * ray
+    use = (t > 0) & (np.hypot(point[..., 0], point[..., 1]) <= RING_FIELD_REACH * RING_OUTER)
+    # the same place of the plane seen from the frame's view: body-fixed at the epoch -> J2000 -> body-fixed then
+    there = (point @ epoch["rot"]) @ view["rot"].T
+    v = (there - view["rot"] @ -view["c"]) @ view["rot"]   # (J2000, Cassini to the place)
+    along = v @ view["ch"]
+    use &= along > 0
+    sky = v * (np.linalg.norm(view["c"]) / np.where(along > 0, along, 1.0))[..., None] - view["c"]
+    return -(sky @ view["east"]) / km_px, -(sky @ view["north"]) / km_px, use
+
+
+def ring_masks(epoch, view, x, y, sx, sy, km_px):
+    """For sky places x, y at the epoch, which the ring field draws from sx, sy of the picture taken at view: (keep,
+    hole). keep: the epoch sees the body's disk there in front of the ring plane, or no plane: the picture stays as
+    it is (the disk is drawn as taken, its clouds move on their own). hole: the epoch sees the plane there, but the
+    picture saw the disk in front of that place of it: there is nothing of the rings to draw (left empty, for a
+    neighbour to fill), where a disk's piece would otherwise have been dragged out onto the rings."""
+    _, _, seen = _plane_seen(epoch, x, y, km_px)
+    _, on = ring_plane(epoch, x, y, km_px)
+    _, hit = sky_to_surface(epoch, x, y, km_px)
+    # (the disk with no ring in front of it, as between the C ring and the cloud tops, is the disk's too)
+    keep = ~seen | (hit & ~on)
+    _, on2 = ring_plane(view, sx, sy, km_px)
+    _, hit2 = sky_to_surface(view, sx, sy, km_px)
+    return keep, ~keep & hit2 & ~on2
+
+
 def surface_to_sky(view, points, km_px):
     """Sky places (reference pixels from the body's centre) of body-fixed points, and which are on the near side."""
     observer = view["rot"] @ -view["c"]
@@ -309,6 +373,41 @@ def field_stretch(dx, dy, weight, step):
             if both.any():
                 worst = max(worst, float(np.abs(g[both]).max()) / step)
     return worst
+
+
+def field_squeeze(dx, dy, weight, step):
+    """field_stretch for the rings (ring_field): how much the field squeezes or stretches the picture it redraws,
+    whichever way, from the map's own local scales (1 less the smaller singular value of 1 + its gradient, or the
+    larger less 1, the worse), not from any one change of the shift. On a ring plane seen at a low angle the plane's
+    places slide along the rings by very different amounts from one arc to the next (ISS_00ARI_COMPHIDRK001: a shear
+    of 0.6, along the arcs), which field_stretch read as a squeeze though nothing is squeezed: the ringlets keep their
+    widths. The worst grid cell all on the plane counts."""
+    on = (weight[1:, 1:] > 0.5) & (weight[:-1, 1:] > 0.5) & (weight[1:, :-1] > 0.5) & (weight[:-1, :-1] > 0.5)
+    if not on.any():
+        return 0.0
+    gxx = (dx[1:, 1:] - dx[1:, :-1] + dx[:-1, 1:] - dx[:-1, :-1]) / (2 * step)
+    gxy = (dx[1:, 1:] - dx[:-1, 1:] + dx[1:, :-1] - dx[:-1, :-1]) / (2 * step)
+    gyx = (dy[1:, 1:] - dy[1:, :-1] + dy[:-1, 1:] - dy[:-1, :-1]) / (2 * step)
+    gyy = (dy[1:, 1:] - dy[:-1, 1:] + dy[1:, :-1] - dy[:-1, :-1]) / (2 * step)
+    m = np.stack([np.stack([1 + gxx[on], gxy[on]], -1), np.stack([gyx[on], 1 + gyy[on]], -1)], -2)
+    sv = np.linalg.svd(m, compute_uv=False)
+    return float(max((1 - sv[:, 1]).max(), (sv[:, 0] - 1).max()))
+
+
+def warp_rings(image, dx, dy, weight, step, keep, hole):
+    """warp_sky for the rings (ring_field): where the field has the plane, image redrawn from where the frame saw that
+    place of it, except where keep (the disk in front at the epoch: as it is) and with nothing where hole (ring_masks,
+    pixel by pixel, the picture's size). The shift stays smooth across the disk's edge, so its pixels are not smeared."""
+    h, w = image.shape[:2]
+    fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / step, np.arange(w, dtype=np.float32) / step, indexing="ij")
+    fine = lambda a: cv2.remap(a, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    sx, sy, wt = fine(dx), fine(dy), fine(weight)
+    px, py = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    warped = cv2.remap(image, px + sx, py + sy, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_CONSTANT,
+                       borderValue=(0, 0, 0, 0)).astype(np.float32)
+    warped[hole] = 0
+    k = (wt * ~keep)[..., None]
+    return np.clip(warped * k + image.astype(np.float32) * (1 - k), 0, 255).round().astype(np.uint8)
 
 
 def warp_sky(image, dx, dy, weight, step):
