@@ -10461,7 +10461,7 @@ def _mosaic_made(u, n, size, cache):
     if not made:
         return True
     path = _mosaic_path(u, made, size, cache)
-    return is_blank(path) or os.path.exists(path)
+    return os.path.exists(path) or is_blank(path)
 
 
 def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
@@ -10493,7 +10493,8 @@ def is_blank(path):
     """Whether the mosaic at path (a picture's path in the cache) was found blank: by this process (_blank) or by the
     one that made the pass, which kept an empty <name>.blank beside where the picture would be. Read-only (resolve.py):
     the server answers such a mosaic with its 404 (the window keeps its frame), so the public site knows that 404 is
-    the answer, not a picture the pre-build missed."""
+    the answer, not a picture the pre-build missed. Callers look for the picture first: a picture at path wins over a
+    mark beside it. A change to the blank rule (blank, BLANK_LEVEL) needs a version bump, since its marks are kept."""
     return path in _blank or os.path.exists(path[:path.rindex(".")] + BLANK_MARK)
 
 
@@ -10510,7 +10511,9 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
     """(picture, report) of the mosaic so_far draws from made, kept at path; None before anything is above black.
     post: a step applied to so_far's picture before it is kept (a mosaic movie's fade, _faded)."""
     report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
-    if is_blank(path):
+    # (a picture kept wins over a blank mark beside it: a cache copied together from two machines can hold both for a
+    # mosaic near the blank line)
+    if not os.path.exists(path) and is_blank(path):
         return None
 
     def make():
