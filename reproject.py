@@ -313,20 +313,25 @@ def _ring_seen_at(epoch, view, x, y, km_px):
     return -(sky @ view["east"]) / km_px, -(sky @ view["north"]) / km_px, use
 
 
+RING_DISK_PAD = 12.0   # px: (ring_masks) the disk taken this much wider all round: its glow past the limb on a long
+# exposure (ISS_00ARI_COMPHIDRK001's saturated disk) dragged out with the rings drew a bright line beside it
+
+
 def ring_masks(epoch, view, x, y, sx, sy, km_px):
     """For sky places x, y at the epoch, which the ring field draws from sx, sy of the picture taken at view: (keep,
-    hole). keep: the epoch sees the body's disk there in front of the ring plane, or no plane: the picture stays as
-    it is (the disk is drawn as taken, its clouds move on their own). hole: the epoch sees the plane there, but the
-    picture saw the disk in front of that place of it: there is nothing of the rings to draw (left empty, for a
-    neighbour to fill), where a disk's piece would otherwise have been dragged out onto the rings."""
+    hole). keep: where the picture stays as it is: where the epoch sees no ring plane, or sees the body's disk, rings
+    over it or not, or where the picture saw the disk at that place of the plane (the disk taken RING_DISK_PAD wider
+    both times). The disk is drawn as taken, on the body's centre at any time, since its clouds move on their own. Rings
+    over the disk drawn from another place of the frame put sky, or the disk's light from elsewhere, behind them, and
+    past the tile's edge floated bright bars of them where no disk was drawn; a place of the plane the frame saw the
+    disk at, drawn from there, dragged the disk's light out past the limb, and left empty it was a black wedge beside
+    the limb that no other tile filled (ISS_00ARI_COMPHIDRK001). hole: places left empty (none, now)."""
     _, _, seen = _plane_seen(epoch, x, y, km_px)
-    _, on = ring_plane(epoch, x, y, km_px)
-    _, hit = sky_to_surface(epoch, x, y, km_px)
-    # (the disk with no ring in front of it, as between the C ring and the cloud tops, is the disk's too)
-    keep = ~seen | (hit & ~on)
-    _, on2 = ring_plane(view, sx, sy, km_px)
-    _, hit2 = sky_to_surface(view, sx, sy, km_px)
-    return keep, ~keep & hit2 & ~on2
+    wide = lambda v: dict(v, radii=v["radii"] + RING_DISK_PAD * km_px)
+    _, hit = sky_to_surface(wide(epoch), x, y, km_px)
+    _, hit2 = sky_to_surface(wide(view), sx, sy, km_px)
+    keep = ~seen | hit | hit2
+    return keep, np.zeros_like(keep)
 
 
 def surface_to_sky(view, points, km_px):

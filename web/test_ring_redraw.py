@@ -55,7 +55,7 @@ print("a place of the ring plane lands on the same radius in the other view; ok"
 keep, hole = rp.ring_masks(e, f, x, y, x + dx, y + dy, KM_PX)
 _, hit = rp.sky_to_surface(e, x, y, KM_PX)
 assert keep[hit & ~on_e].all()
-assert not (hole & keep).any()
+assert not (hole & keep).any() and not hole.any()
 print("the disk stays as taken, and nothing is both kept and a hole; ok")
 
 # a shear along the arcs (dx growing with y) squeezes nothing; field_stretch read it as a squeeze
