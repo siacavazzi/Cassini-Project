@@ -966,6 +966,9 @@ body.phone .lcdhead .speedtool input[type=range]::-webkit-slider-thumb { width: 
 body.phone .lcdhead .warp { flex: 1 1 auto; justify-content: space-between; height: 32px; min-width: 0; }
 body.phone .lcdhead .warp button { width: 22px; height: 32px; }
 body.phone .lcdhead .warp button svg { width: 12px; height: 16px; }
+/* arrows and slider together: the slider takes a row of its own under the arrows, full width */
+body.phone.warp-steps:not(.warp-only) .lcdhead .speedtool { flex-wrap: wrap; height: auto; row-gap: 0; padding: 2px 12px 4px; border-radius: 16px; }
+body.phone.warp-steps:not(.warp-only) .lcdhead .speedtool input[type=range] { order: 3; flex: 1 0 100%; width: 100%; }
 body.phone .lcdhead .clockbox { grid-area: clock; }
 body.phone .lcdhead .transport { grid-area: tr; }
 body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }
@@ -4870,8 +4873,9 @@ function targetLabel(k) {
   $("warp").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) { warpTo(warpLadder()[+b.dataset.i]); b.blur(); } });
   const typing = el => !!el && el.closest && !!el.closest('textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=color])');
   window.addEventListener("keydown", e => {
-    // Shift with them (< and > on most layouts) steps fine, through every round speed the slider lands on
-    const k = { ",": -1, ".": 1, "<": -2, ">": 2 }[e.key] || (e.shiftKey && { Comma: -2, Period: 2 }[e.code]);
+    // Shift with them steps fine, through every round speed the slider lands on. Matched on the character typed, not
+    // the physical key, so other layouts are safe: < and > (US), or a , or . still typed with Shift held
+    const k = { ",": -1, ".": 1, "<": -2, ">": 2 }[e.key] * (e.shiftKey && (e.key === "," || e.key === ".") ? 2 : 1);
     if (!k || e.metaKey || e.ctrlKey || e.altKey) return;
     if (typing(e.target) || typing(document.activeElement)) return;
     if (window.cassiniCutscene && cassiniCutscene.active) return;
@@ -13798,7 +13802,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"199f9197e39b";
+  const BUILD = /*BUILD*/"27076537b55e";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

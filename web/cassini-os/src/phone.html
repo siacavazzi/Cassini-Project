@@ -64,6 +64,9 @@ body.phone .lcdhead .speedtool input[type=range]::-webkit-slider-thumb { width: 
 body.phone .lcdhead .warp { flex: 1 1 auto; justify-content: space-between; height: 32px; min-width: 0; }
 body.phone .lcdhead .warp button { width: 22px; height: 32px; }
 body.phone .lcdhead .warp button svg { width: 12px; height: 16px; }
+/* arrows and slider together: the slider takes a row of its own under the arrows, full width */
+body.phone.warp-steps:not(.warp-only) .lcdhead .speedtool { flex-wrap: wrap; height: auto; row-gap: 0; padding: 2px 12px 4px; border-radius: 16px; }
+body.phone.warp-steps:not(.warp-only) .lcdhead .speedtool input[type=range] { order: 3; flex: 1 0 100%; width: 100%; }
 body.phone .lcdhead .clockbox { grid-area: clock; }
 body.phone .lcdhead .transport { grid-area: tr; }
 body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }

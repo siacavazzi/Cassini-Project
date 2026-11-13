@@ -1350,8 +1350,9 @@ function targetLabel(k) {
   $("warp").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) { warpTo(warpLadder()[+b.dataset.i]); b.blur(); } });
   const typing = el => !!el && el.closest && !!el.closest('textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=color])');
   window.addEventListener("keydown", e => {
-    // Shift with them (< and > on most layouts) steps fine, through every round speed the slider lands on
-    const k = { ",": -1, ".": 1, "<": -2, ">": 2 }[e.key] || (e.shiftKey && { Comma: -2, Period: 2 }[e.code]);
+    // Shift with them steps fine, through every round speed the slider lands on. Matched on the character typed, not
+    // the physical key, so other layouts are safe: < and > (US), or a , or . still typed with Shift held
+    const k = { ",": -1, ".": 1, "<": -2, ">": 2 }[e.key] * (e.shiftKey && (e.key === "," || e.key === ".") ? 2 : 1);
     if (!k || e.metaKey || e.ctrlKey || e.altKey) return;
     if (typing(e.target) || typing(document.activeElement)) return;
     if (window.cassiniCutscene && cassiniCutscene.active) return;
