@@ -4284,7 +4284,7 @@ SURFACE_TAG = "-s7"  # in the name of a layout whose tiles are redrawn so (layou
 # in a pass (ISS_00ARI_COMPHIDRK001 near periapsis: the rings' ellipse a quarter flatter by the last pointing; tiles put
 # on the body's centre stepped 10 to 30 px at every seam, and no shift could line up both arms and the ansa at once)
 RING_REDRAW = os.environ.get("CASSINI_RING_REDRAW", "1") != "0"
-RING_REDRAW_DIR = "rings-redrawn11"
+RING_REDRAW_DIR = "rings-redrawn12"
 RING_REDRAW_TAG = "-rr1"
 # (SURFACE_REACH for rings: on a ring plane seen at a low angle its places slide along the arcs by hundreds of px between
 # a pass's first frame and its epoch, ISS_00ARI_COMPHIDRK001's up to 360; kept within SURFACE_REACH, its first and last
@@ -4611,6 +4611,7 @@ def surface_redrawn(rp, image, t, dx, dy, weight, reach_most=SURFACE_REACH):
             [t["box"][0] - pad + c0, t["box"][1] - pad + r0, c1 - c0, r1 - r0])
 
 
+RING_KEEP_PAD = 4    # px: (ring_redrawn) how much wider the places kept as taken by the disk are kept
 RING_MASK_STEP = 2   # px: (ring_redrawn) the grid the disk's edge is worked out on, each way
 
 
@@ -4639,7 +4640,10 @@ def ring_redrawn(rp, image, t, dx, dy, weight, reach_most, epoch, view, km_px, t
     sky = lambda px_, py_: (c * px_ + sn * py_, c * py_ - sn * px_)
     keep, hole = rp.ring_masks(epoch, view, *sky(x, y), *sky(x + sdx, y + sdy), km_px)
     grow = lambda m: np.repeat(np.repeat(m, RING_MASK_STEP, 0), RING_MASK_STEP, 1)[:H, :W]
-    picture = rp.warp_rings(big, dx[cut], dy[cut], weight[cut], SURFACE_STEP, grow(keep), grow(hole))
+    # (kept a few px wider: the redrawn picture's lookups by the disk's edge reach the saturated disk between pixels,
+    # a bright line along it otherwise)
+    keep = cv2.dilate(grow(keep).astype(np.uint8), np.ones((2 * RING_KEEP_PAD + 1,) * 2, np.uint8)) > 0
+    picture = rp.warp_rings(big, dx[cut], dy[cut], weight[cut], SURFACE_STEP, keep, grow(hole))
     found = Image.fromarray(picture).getbbox(alpha_only=True)
     if found is None:
         return np.ascontiguousarray(image), list(t["box"])

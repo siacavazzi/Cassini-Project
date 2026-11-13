@@ -315,11 +315,10 @@ def _ring_seen_at(epoch, view, x, y, km_px):
 
 def ring_masks(epoch, view, x, y, sx, sy, km_px):
     """For sky places x, y at the epoch, which the ring field draws from sx, sy of the picture taken at view: (keep,
-    hole). keep: the epoch sees the body's disk there with no ring in front of it, or no plane, or the rings over the
-    disk where the picture saw them against the sky: the picture stays as it is (the disk is drawn as taken, its
-    clouds move on their own). hole: the epoch sees the plane there against the sky, but the picture saw the disk at
-    that place of it (behind the rings or in front of them): there is nothing of the rings alone to draw (left empty,
-    for a neighbour to fill), where a piece of the disk would otherwise have been dragged out onto the rings."""
+    hole). keep: the picture stays as it is there: where the epoch sees the body's disk with no ring in front of it,
+    or no plane, or the rings over the disk where the picture saw them against the sky, or where the picture saw the
+    disk at that place of the plane (the disk is drawn as taken, its clouds move on their own, and its light must not
+    be dragged off it with the rings). hole: places left empty (none: an empty place by the limb was never filled)."""
     _, _, seen = _plane_seen(epoch, x, y, km_px)
     _, on = ring_plane(epoch, x, y, km_px)
     _, hit = sky_to_surface(epoch, x, y, km_px)
@@ -329,9 +328,12 @@ def ring_masks(epoch, view, x, y, sx, sy, km_px):
     # place the epoch sees the rings over the disk where the frame saw them against the sky: rings drawn there from the
     # frame would put sky behind them on the disk)
     keep = ~seen | (hit & ~on) | (hit & ~hit2)
-    # (and nothing where the frame saw the disk, or the rings over it, at a place the epoch sees against the sky: the
-    # disk's light, through the rings, dragged out past the limb with them, ISS_00ARI_COMPHIDRK001's bright wedge)
-    return keep, ~keep & hit2 & (~on2 | ~hit)
+    # (and as taken where the frame saw the disk, or the rings over it, at a place the epoch sees against the sky: the
+    # disk's light, through the rings, was dragged out past the limb with them, and left empty instead, those places
+    # were a black wedge beside the limb no other tile filled, ISS_00ARI_COMPHIDRK001. As taken, the disk is not there
+    # either: it is drawn on the body's centre, the same place at any time)
+    keep |= hit2 & (~on2 | ~hit)
+    return keep, np.zeros_like(keep)
 
 
 def surface_to_sky(view, points, km_px):
