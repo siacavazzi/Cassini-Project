@@ -53,3 +53,22 @@ cores between them rather than each taking one. Background cache builds give way
 processes (prebuild workers, the farm, long-running frame servers), so they don't oversubscribe; a
 one-off job run as a single process should leave BLAS threads at their default or start one process per
 free core.
+
+## Image changes need the benchmark report
+
+Sam's rule (2026-11-13): a pull request that can change a served picture (a picture version bump, or a change to the
+pipeline, calibration, `obs_mosaic`, `reel`, `color_image`, `mosaic`, `stacking` or `frame_server`'s makers) runs the
+image regression benchmark against the `main` it merges into, and attaches its report: the verdict, the table and the
+sheet of every changed item.
+
+```
+python web/frames/image_bench.py run --base origin/main --candidate HEAD --target <items it means to change> \
+    --notes notes.json --hosts local,mini
+```
+
+It merges only when every item builds on both commits, the target items look better, and nothing outside the target
+is worse, by the measures (clipped, crushed, lit, detail, seams, centre) or by eye. Every change outside the target
+must be explained in `--notes`, and the report must show no new over-processing. A `FAIL` verdict blocks the merge.
+`NEEDS EYES` means the reviewer looks at every changed sheet before approving. A defect a PR fixes that is not in the
+set goes into `web/frames/image_bench_items.json` in the same PR. The full rule and how the measures work are in
+`docs/image-benchmark.md`.
