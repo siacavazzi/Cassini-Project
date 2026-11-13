@@ -28,8 +28,11 @@ commits, the base (usually `origin/main`) and the candidate (the PR's head). The
   - `plain` holds pictures across 1999 to 2017 that must not change unless a change means to: the Moon, Venus,
     Masursky and Jupiter from cruise, then Saturn, its rings and the big and small moons. They come as stills, colour
     composites, movies and mosaics, including NAC and WAC, filled Titan passes, specks and dots.
-- **Cost.** A commit builds in about 25 minutes on the MacBook's free cores. With `--hosts local,mini` the Mini
-  takes a third of the items. The base is built once per commit and kept (`~/cassini-build/image-bench/results`),
+- **Cost**, measured 2026-11-13 while other threads shared both Macs:
+  - one commit takes 17.8 minutes on 12 MacBook processes, or 24.5 minutes on 8 of the Mini's;
+  - the long pole is the 290-tile Grand Finale mosaic (about 10 minutes even with its tiles spread over the cores);
+  - with `--hosts local,mini` the Mini takes a third of the items;
+  - comparing two commits takes about 30 seconds. The base is built once per commit and kept (`~/cassini-build/image-bench/results`),
   so a PR usually waits only for its own build. The scratch cache is removed once the pictures are taken out.
 
 ## Running it
@@ -116,5 +119,7 @@ review approves only after looking, and says which sheets it looked at.
   the archive.
 - **The list's hash names the cached results.** Editing the list means every base is built again on its next run,
   which is automatic.
-- **The base build checks the noise floor.** Building the same commit twice gives the same bytes; a change in the
-  pipeline that breaks that shows up as changes on every run and must be fixed first.
+- **The noise floor is zero.** Building the same commit twice on the MacBook (12 items) and once on the Mini
+  (14 items) gave byte-identical pictures on 2026-11-13 (`evidence/image_bench/noise-*.md`). So any change the
+  report shows comes from the code. If a pipeline change ever breaks that, every run shows changes, and it must be
+  fixed first.

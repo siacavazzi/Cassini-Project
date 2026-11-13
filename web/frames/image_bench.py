@@ -121,9 +121,19 @@ def set_key(items, env):
     """The hash naming a commit's results: the item list and the inputs' sizes (a different archive or calibration
     folder makes different pictures from the same code)."""
     h = hashlib.sha256(json.dumps(items, sort_keys=True).encode())
-    for k in INPUTS:
+    # (the archives and the calibration files, as farm.fingerprint has them; not the geometry and SPICE caches,
+    # whose files differ in size between machines holding the same rows)
+    for k in ("CASSINI_DATA", "CASSINI_KERNELS"):
         p = env.get(k)
         h.update(f"{k}={os.path.getsize(p) if p and os.path.isfile(p) else ''}".encode())
+    root = env.get("CASSINI_CISSCAL")
+    if root and os.path.isdir(root):
+        n = b = 0
+        for d, _, fs in os.walk(root):
+            for f in fs:
+                n += 1
+                b += os.path.getsize(os.path.join(d, f))
+        h.update(f"cisscal={n},{b}".encode())
     h.update(TOOL_VERSION.encode())
     return h.hexdigest()[:10]
 
@@ -309,6 +319,16 @@ class Builder:
         self.result = os.path.join(self.root, "results", f"{self.sha[:12]}-{self.key}")
         self.wt = os.path.join(self.root, "wt", self.sha[:12])
         self.cache = os.path.join(self.root, "cache", self.sha[:12])
+        self.tool = os.path.abspath(__file__)
+
+    def snapshot(self):
+        """A copy of this tool (and seam_bench, which it loads beside it) for the workers to run, so an edit to the
+        checkout during a build cannot reach a build half way."""
+        there = tempfile.mkdtemp(prefix="image-bench-tool-")
+        for f in ("image_bench.py", "seam_bench.py"):
+            shutil.copy2(os.path.join(HERE, f), there)
+        self.tool = os.path.join(there, "image_bench.py")
+        return self.tool
 
     def done_items(self):
         try:
@@ -326,7 +346,7 @@ class Builder:
 
     def worker(self, *args, timeout=None):
         """Run a worker command (this file, the commit's code) in a fresh process; (rc, seconds, last lines)."""
-        cmd = [self.cfg["python"], os.path.abspath(__file__), "work", *args, "--code", os.path.join(self.wt, "web", "frames"),
+        cmd = [self.cfg["python"], self.tool, "work", *args, "--code", os.path.join(self.wt, "web", "frames"),
                "--cache", self.cache]
         t0 = time.time()
         p = subprocess.run(cmd, cwd=self.wt, env=job_env(self.cfg), capture_output=True, text=True, timeout=timeout)
@@ -342,6 +362,7 @@ class Builder:
             return self.result
         self.worktree()
         os.makedirs(self.result, exist_ok=True)
+        self.snapshot()
         os.makedirs(self.cache, exist_ok=True)
         t0 = time.time()
         res = os.path.join(self.result, "resolve.json")
@@ -609,28 +630,31 @@ def over_black(rgba):
 
 
 def sheet(a, b, d, path, title, crop_at=None):
-    """base | candidate | difference (x4, hot where changed), 1024 px each at most, and a 1:1 crop row of the
-    place that changed most when the pictures are bigger than that."""
+    """base | candidate | difference (x4, hot where changed), side by side (one above the other for a wide picture,
+    a ring mosaic), at most 1024 px (1600 stacked) wide each, and a row of 1:1 crops of the place that changed most
+    when the pictures were made smaller."""
     import numpy as np
     from PIL import Image, ImageDraw
     ims = [Image.fromarray(over_black(a)), Image.fromarray(over_black(b))]
     heat = np.clip(d.astype(np.float32) * 4, 0, 255).astype(np.uint8)
     hm = np.stack([heat, np.clip(heat.astype(np.int16) - 128, 0, 255).astype(np.uint8) * 2, np.zeros_like(heat)], axis=2)
     ims.append(Image.fromarray(hm))
-    w = min(1024, ims[0].width)
+    wide = ims[0].width > 1.3 * ims[0].height
+    w = min(1600 if wide else 1024, ims[0].width)
     k = w / ims[0].width
     small = [im.resize((w, max(1, round(im.height * k))), Image.LANCZOS) if k != 1 else im for im in ims]
-    rows = [small]
+    rows = [[im] for im in small] if wide else [small]
     if crop_at is not None and k < 1:
         y, x = crop_at
-        half = 256
-        y0, x0 = max(0, min(y - half, a.shape[0] - 2 * half)), max(0, min(x - half, a.shape[1] - 2 * half))
-        rows.append([im.crop((x0, y0, x0 + 2 * half, y0 + 2 * half)) for im in ims])
+        hy, hx = min(256, a.shape[0] // 2), min(256, a.shape[1] // 2)
+        y0, x0 = max(0, min(y - hy, a.shape[0] - 2 * hy)), max(0, min(x - hx, a.shape[1] - 2 * hx))
+        rows.append([im.crop((x0, y0, x0 + 2 * hx, y0 + 2 * hy)) for im in ims])
+    W = max(sum(im.width + 6 for im in r) for r in rows)
     H = 28 + sum(r[0].height + 6 for r in rows)
-    W = sum(im.width for im in rows[0]) + 12
-    out = Image.new("RGB", (max(W, sum(im.width for im in rows[-1]) + 12), H), (24, 24, 24))
+    out = Image.new("RGB", (W, H), (24, 24, 24))
     dr = ImageDraw.Draw(out)
-    dr.text((6, 6), title + "    base | candidate | difference x4", fill=(230, 230, 230))
+    dr.text((6, 6), title + ("    base / candidate / difference x4" if wide else "    base | candidate | difference x4")
+            + ("; then 1:1 crops of where it changed most" if len(rows) > (3 if wide else 1) else ""), fill=(230, 230, 230))
     y = 28
     for r in rows:
         x = 0
@@ -641,98 +665,107 @@ def sheet(a, b, d, path, title, crop_at=None):
     out.save(path, quality=88)
 
 
-def compare(base_dir, cand_dir, out, targets=(), notes=None, log=print):
-    """The report: summary.json, report.md and index.html in out, with a sheet for every changed picture."""
+def compare_item(task):
+    """One item's row of the report (compare), its sheet written into out/sheets."""
     import numpy as np
     from PIL import Image
+    it, base_dir, cand_dir, out, targets, notes, B, C = task
+    name = it["name"]
+    row = {"name": name, "group": it["group"], "watch": it.get("watch", ""), "frame": it["frame"],
+           "time": (C["resolved"].get(name) or {}).get("time") or it.get("t"), "target": name in targets,
+           "note": notes.get(name, ""), "pictures": {}}
+    bd, cd = os.path.join(base_dir, name), os.path.join(cand_dir, name)
+    if name not in B["built"] or name not in C["built"]:
+        row["status"] = "not built"
+        row["why"] = "; ".join(f"{side}: {(S.get('failed') or {}).get(name) or (S['resolved'].get(name) or {}).get('error') or 'not built'}"[:200]
+                               for side, S in (("base", B), ("candidate", C)) if name not in S["built"])
+        return row
+    bm, cm = (json.load(open(os.path.join(d, "meta.json"))) for d in (bd, cd))
+    row["seconds"] = [bm.get("seconds"), cm.get("seconds")]
+    row["pass"] = [bm.get("key"), cm.get("key")]
+    names = sorted(set(f for f in os.listdir(bd) if f.endswith(".webp")) | set(f for f in os.listdir(cd) if f.endswith(".webp")))
+    changed, flagged, worst = [], {}, None
+    edges = {}
+    for side, d in (("base", bd), ("cand", cd)):
+        if os.path.exists(os.path.join(d, "edges.png")):
+            edges[side] = np.asarray(Image.open(os.path.join(d, "edges.png"))) > 0
+    for f in names:
+        pb, pc = os.path.join(bd, f), os.path.join(cd, f)
+        pic = {}
+        if not (os.path.exists(pb) and os.path.exists(pc)):
+            pic["status"] = "only in base" if os.path.exists(pb) else "only in candidate"
+            changed.append(f)
+            row["pictures"][f] = pic
+            continue
+        if open(pb, "rb").read() == open(pc, "rb").read():
+            row["pictures"][f] = {"status": "identical"}
+            continue
+        same_bytes = False
+        a, b = decode(pb), decode(pc)
+        ma = measures(a, edges.get("base") if f == "mosaic_full.webp" else None)
+        base_lit = (a[..., 3] > 0) & (a[..., :3].astype(np.float32).mean(axis=2) > 8)
+        mb = measures(b, edges.get("cand") if f == "mosaic_full.webp" else None, base_lit)
+        pic["base"], pic["cand"] = ma, mb
+        if same_bytes:
+            pic["status"] = "identical"
+        elif a.shape != b.shape:
+            pic["status"] = "changed"
+            pic["diff"] = {"shape": [list(a.shape[:2]), list(b.shape[:2])]}
+            changed.append(f)
+        else:
+            dd, dmap = diff(a, b)
+            pic["diff"] = dd
+            if dd["max"] <= PIXEL_NOISE:
+                pic["status"] = "same"
+            else:
+                pic["status"] = "changed"
+                changed.append(f)
+                # (the full-size mosaic when it changed: its crops show the seams at 1:1)
+                if worst is None or f == "mosaic_full.webp" or (worst[1] != "mosaic_full.webp" and dd["moved"] > worst[0]):
+                    worst = (dd["moved"], f, a, b, dmap, dd["at"])
+        if pic["status"] == "changed":
+            w = worse(it["kind"], ma, mb)
+            if w:
+                pic["worse"] = w
+                for k, v in w.items():
+                    flagged.setdefault(k, f"{f}: {v}")
+        row["pictures"][f] = pic
+    if worst is not None:
+        sp = os.path.join("sheets", f"{name}.jpg")
+        try:
+            sheet(worst[2], worst[3], worst[4], os.path.join(out, sp), f"{name} {worst[1]}", worst[5])
+            row["sheet"] = sp
+        except Exception as e:   # noqa: BLE001
+            row["sheet_error"] = repr(e)
+    # a pass's pictures of different shapes (its frames re-split): a sheet of its first picture side by side
+    if worst is None and changed:
+        f = next((x for x in changed if x in row["pictures"] and "base" in row["pictures"][x]), None)
+        if f:
+            a, b = decode(os.path.join(bd, f)), decode(os.path.join(cd, f))
+            h = min(a.shape[0], b.shape[0])
+            sp = os.path.join("sheets", f"{name}.jpg")
+            ia, ib = Image.fromarray(over_black(a)), Image.fromarray(over_black(b))
+            both = Image.new("RGB", (ia.width + ib.width + 6, max(ia.height, ib.height)), (24, 24, 24))
+            both.paste(ia, (0, 0))
+            both.paste(ib, (ia.width + 6, 0))
+            both.save(os.path.join(out, sp), quality=88)
+            row["sheet"] = sp
+    row["changed"] = changed
+    row["of"] = len(names)
+    row["worse"] = flagged
+    row["status"] = "changed" if changed else "identical"
+    return row
+
+
+def compare(base_dir, cand_dir, out, targets=(), notes=None, log=print, procs=None):
+    """The report: summary.json, report.md and index.html in out, with a sheet for every changed picture (the
+    items measured side by side over the free cores)."""
     os.makedirs(os.path.join(out, "sheets"), exist_ok=True)
     B, C = (json.load(open(os.path.join(d, "build.json"))) for d in (base_dir, cand_dir))
-    items = load_items()
     notes = notes or {}
-    rows = []
-    for it in items:
-        name = it["name"]
-        row = {"name": name, "group": it["group"], "watch": it.get("watch", ""), "frame": it["frame"],
-               "time": (C["resolved"].get(name) or {}).get("time") or it.get("t"), "target": name in targets,
-               "note": notes.get(name, ""), "pictures": {}}
-        bd, cd = os.path.join(base_dir, name), os.path.join(cand_dir, name)
-        if name not in B["built"] or name not in C["built"]:
-            row["status"] = "not built"
-            row["why"] = "; ".join(f"{side}: {(S.get('failed') or {}).get(name) or (S['resolved'].get(name) or {}).get('error') or 'not built'}"[:200]
-                                   for side, S in (("base", B), ("candidate", C)) if name not in S["built"])
-            rows.append(row)
-            continue
-        bm, cm = (json.load(open(os.path.join(d, "meta.json"))) for d in (bd, cd))
-        row["seconds"] = [bm.get("seconds"), cm.get("seconds")]
-        row["pass"] = [bm.get("key"), cm.get("key")]
-        names = sorted(set(f for f in os.listdir(bd) if f.endswith(".webp")) | set(f for f in os.listdir(cd) if f.endswith(".webp")))
-        changed, flagged, worst = [], {}, None
-        edges = {}
-        for side, d in (("base", bd), ("cand", cd)):
-            if os.path.exists(os.path.join(d, "edges.png")):
-                edges[side] = np.asarray(Image.open(os.path.join(d, "edges.png"))) > 0
-        for f in names:
-            pb, pc = os.path.join(bd, f), os.path.join(cd, f)
-            pic = {}
-            if not (os.path.exists(pb) and os.path.exists(pc)):
-                pic["status"] = "only in base" if os.path.exists(pb) else "only in candidate"
-                changed.append(f)
-                row["pictures"][f] = pic
-                continue
-            same_bytes = open(pb, "rb").read() == open(pc, "rb").read()
-            a, b = decode(pb), decode(pc)
-            ma = measures(a, edges.get("base") if f == "mosaic_full.webp" else None)
-            base_lit = (a[..., 3] > 0) & (a[..., :3].astype(np.float32).mean(axis=2) > 8)
-            mb = measures(b, edges.get("cand") if f == "mosaic_full.webp" else None, base_lit)
-            pic["base"], pic["cand"] = ma, mb
-            if same_bytes:
-                pic["status"] = "identical"
-            elif a.shape != b.shape:
-                pic["status"] = "changed"
-                pic["diff"] = {"shape": [list(a.shape[:2]), list(b.shape[:2])]}
-                changed.append(f)
-            else:
-                dd, dmap = diff(a, b)
-                pic["diff"] = dd
-                if dd["max"] <= PIXEL_NOISE:
-                    pic["status"] = "same"
-                else:
-                    pic["status"] = "changed"
-                    changed.append(f)
-                    if worst is None or dd["moved"] > worst[0]:
-                        worst = (dd["moved"], f, a, b, dmap, dd["at"])
-            if pic["status"] == "changed":
-                w = worse(it["kind"], ma, mb)
-                if w:
-                    pic["worse"] = w
-                    for k, v in w.items():
-                        flagged.setdefault(k, f"{f}: {v}")
-            row["pictures"][f] = pic
-        if worst is not None:
-            sp = os.path.join("sheets", f"{name}.jpg")
-            try:
-                sheet(worst[2], worst[3], worst[4], os.path.join(out, sp), f"{name} {worst[1]}", worst[5])
-                row["sheet"] = sp
-            except Exception as e:   # noqa: BLE001
-                row["sheet_error"] = repr(e)
-        # a pass's pictures of different shapes (its frames re-split): a sheet of its first picture side by side
-        if worst is None and changed:
-            f = next((x for x in changed if x in row["pictures"] and "base" in row["pictures"][x]), None)
-            if f:
-                a, b = decode(os.path.join(bd, f)), decode(os.path.join(cd, f))
-                h = min(a.shape[0], b.shape[0])
-                sp = os.path.join("sheets", f"{name}.jpg")
-                ia, ib = Image.fromarray(over_black(a)), Image.fromarray(over_black(b))
-                both = Image.new("RGB", (ia.width + ib.width + 6, max(ia.height, ib.height)), (24, 24, 24))
-                both.paste(ia, (0, 0))
-                both.paste(ib, (ia.width + 6, 0))
-                both.save(os.path.join(out, sp), quality=88)
-                row["sheet"] = sp
-        row["changed"] = changed
-        row["of"] = len(names)
-        row["worse"] = flagged
-        row["status"] = "changed" if changed else "identical"
-        rows.append(row)
+    tasks = [(it, base_dir, cand_dir, out, set(targets), notes, B, C) for it in load_items()]
+    with concurrent.futures.ProcessPoolExecutor(procs or min(len(tasks), free_slots())) as pool:
+        rows = list(pool.map(compare_item, tasks))
     summary = verdict(rows)
     summary.update(base=B["commit"], candidate=C["commit"], base_versions=B["versions"], candidate_versions=C["versions"],
                    seconds={"base": B.get("seconds"), "candidate": C.get("seconds")}, tool=TOOL_VERSION,
@@ -785,13 +818,14 @@ def report_md(s):
         L.append(f"- target items with a measure worse (look at them): {', '.join(s['worse_target'])}")
     L += ["", f"Built in {(s['seconds']['base'] or 0) / 60:.0f} min (base) and {(s['seconds']['candidate'] or 0) / 60:.0f} min "
                f"(candidate). Targets: {', '.join(s['targets']) or 'none named'}.", "",
-          "| item | group | status | pictures changed | moved (worst) | worse by measure | note |", "|---|---|---|---|---|---|---|"]
+          "| item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |", "|---|---|---|---|---|---|---|---|"]
     for r in s["rows"]:
         moved = max((p.get("diff", {}).get("moved", 0) for p in r["pictures"].values() if isinstance(p.get("diff", {}).get("moved"), float)), default=0)
+        top = max((p.get("diff", {}).get("max", 0) for p in r["pictures"].values() if isinstance(p.get("diff", {}).get("max"), int)), default=0)
         tag = "target" if r["target"] else r["group"]
         st = r["status"] if r["status"] != "not built" else f"not built ({r.get('why', '')[:80]})"
         L.append(f"| {r['name']} | {tag} | {st} | {len(r.get('changed', []))}/{r.get('of', 0)} | "
-                 f"{moved:.2%} | {'; '.join(r.get('worse', {}).values()) or ''} | {r['note']} |")
+                 f"{moved:.2%} | {top or ''} | {'; '.join(r.get('worse', {}).values()) or ''} | {r['note']} |")
     L += ["", "Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of the place that changed most).", ""]
     return "\n".join(L)
 
