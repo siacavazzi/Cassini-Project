@@ -606,6 +606,25 @@ body.s-steady .info dd { white-space: nowrap; overflow: hidden; text-overflow: e
 .speedtool.nopics #speedv { color: var(--q-dim); }
 /* movie mode: the slider sets pictures a second (movie.fps); its read-out takes the Movie button's accent */
 .speedtool.movie #speedeff { color: var(--q-accent, #8ab6ff); }
+/* time warp: a fixed ladder of speeds as a row of arrows, filled up to the current step (, and . step down and up, a
+   click jumps to a step). Settings > Playback > Speed control picks the arrows, the slider, or both. Steps past the
+   speed where pictures stop loading are dimmer, as the slider's track is; in movie mode the filled arrows take the
+   Movie button's accent */
+.warp { display: none; align-items: center; gap: 2px; height: 22px; }
+body.warp-steps .warp { display: flex; }
+body.warp-only .speedtool input[type=range] { display: none; }
+body.warp-only .speedtool > svg { display: none; }
+.warp button { all: unset; display: grid; place-items: center; width: 11px; height: 20px; border-radius: 3px; cursor: default; }
+.warp button svg { width: 9px; height: 12px; display: block; }
+.warp button svg path { fill: transparent; stroke: rgba(255,255,255,.34); stroke-width: 1.2; stroke-linejoin: round; transition: fill .12s, stroke .12s; }
+.warp button.on svg path { fill: #e3e7ee; stroke: #e3e7ee; }
+.warp button.nopic svg path { stroke: rgba(255,255,255,.16); }
+.warp button.nopic.on svg path { fill: rgba(227,231,238,.5); stroke: rgba(227,231,238,.5); }
+.warp button:hover svg path { stroke: #fff; }
+.warp button:focus-visible { outline: 1px solid var(--q-accent); outline-offset: 1px; }
+.speedtool.movie .warp button.on svg path { fill: var(--q-accent, #8ab6ff); stroke: var(--q-accent, #8ab6ff); }
+.warp.bump button.cur svg path { animation: warpbump .35s ease-out; }
+@keyframes warpbump { 0% { filter: drop-shadow(0 0 4px rgba(255,255,255,.9)); } 100% { filter: none; } }
 /* too fast for pictures: a camera window keeps its last picture, dimmed, and says why */
 .well.toofast .shot { opacity: .3; }
 .well.toofast:not(.has-frame)::before { display: none; }
@@ -940,6 +959,9 @@ body.phone .lcdhead { grid-template-columns: auto minmax(0, 1fr); grid-template-
 body.phone .lcdhead .speedtool { grid-area: speed; height: 40px; }
 body.phone .lcdhead .speedtool input[type=range] { width: auto; flex: 1 1 auto; min-width: 0; height: 28px; }
 body.phone .lcdhead .speedtool input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -7.5px; }
+body.phone .lcdhead .warp { flex: 1 1 auto; justify-content: space-between; height: 32px; min-width: 0; }
+body.phone .lcdhead .warp button { width: 22px; height: 32px; }
+body.phone .lcdhead .warp button svg { width: 12px; height: 16px; }
 body.phone .lcdhead .clockbox { grid-area: clock; }
 body.phone .lcdhead .transport { grid-area: tr; }
 body.phone .lcdhead .tltools { grid-area: tools; min-width: 0; width: 100%; }
@@ -2133,6 +2155,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
           <div class="speedtool" id="speedtool" title="Playback speed: how much mission time passes each second">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 12a6 6 0 1 1 10.8 0"/><path d="M8 10l3.2-3.6"/></svg>
             <input type="range" id="speed" min="0" max="1000" step="1" value="500" aria-label="Playback speed">
+            <div class="warp" id="warp" role="group" aria-label="Time warp: comma slows down, period speeds up"></div>
             <div class="speedval"><span id="speedv">—</span><span id="speedeff" hidden></span></div>
           </div>
           <div class="clockbox">
@@ -2930,7 +2953,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     label: v => `${+(+v).toFixed(v < 10 && v % 1 ? 1 : 0)} fps`
   };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
-      hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
+      hint: "Mission time per second of playback when the page opens; the time warp arrows (or the speed slider) in the replay window change it while you watch. Jumping to a moment still picks its own speed." });
+  D({ key: "playback.speedControl", section: "Playback", label: "Speed control", type: "choice", value: "warp",
+      options: [["warp", "Warp steps"], ["slider", "Slider"], ["both", "Both"]],
+      hint: "Warp steps: a row of arrows by the clock, one for each fixed speed from real time to a month a second; click one, or press period (.) to speed up a step and comma (,) to slow down. Slider: any speed in between. Both shows the two side by side. The keys work with either." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
       options: [[86400, "Day"], [432000, "5 days"], [604800, "Week"], [2592000, "Month"]],
       hint: "How much of the mission the timeline covers when the page opens." });
@@ -2991,7 +3017,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
   // Sam 2026-10-28: movie mode is about watching the pictures, so it starts slow (5) and the dock slider sets it
   D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", log: true, value: 5, was: [8], min: MF.min, max: MF.max, stops: MF.stops, format: MF.label,
-      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the speed slider in the replay window sets this instead of mission time per second. The camera windows show every picture as they always do." });
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the time warp arrows (or the speed slider) in the replay window set this instead of mission time per second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
       hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });
@@ -4741,6 +4767,7 @@ function targetLabel(k) {
   const spAt = (p, K = spScale()) => { const v = K.min * Math.pow(K.max / K.min, p / 1000); return K.stops.reduce((a, b) => Math.abs(Math.log(b / v)) < Math.abs(Math.log(a / v)) ? b : a); };
   let spShown = "", spHeld = false;
   function syncSpeedTool() {
+    syncWarp();
     if (inMovie()) return syncMovieSpeed();
     const v = state.speed, cap = picturesCap(), fast = tooFast();
     const rate = window.cassiniPlayRate ? cassiniPlayRate() : v, slowed = state.playing && !fast && rate < v * 0.9;
@@ -4792,6 +4819,64 @@ function targetLabel(k) {
     const v = n < 0 ? down[Math.max(0, down.length + n)] : up[Math.min(up.length, n) - 1];
     e.preventDefault();
     if (v !== undefined) spSet(v);
+  });
+  // ---------- time warp ----------
+  // A fixed ladder of speeds, one arrow each, filled up to the step the clock runs at: period (.) goes one step up,
+  // comma (,) one down, a click on an arrow jumps there. A speed between steps (a ?speed= link, a moment's own speed,
+  // the slider) fills up to the step below it and the read-out shows the speed itself; the next step either way is
+  // the next on the ladder. In movie mode the ladder is pictures a second instead. Not while typing in a text field,
+  // with a modifier held (⌘, opens Settings), in a cutscene or in ambient mode.
+  const WARP = [1, 10, 60, 600, 3600, 21600, 86400, 604800, 2592000];
+  const WARP_MOVIE = [1, 2, 3, 5, 8, 12, 15, 24, 30];
+  const warpLadder = () => inMovie() ? WARP_MOVIE : WARP;
+  const warpLevel = (v, L = warpLadder()) => L.reduce((n, s, i) => v >= s * 0.999 ? i : n, -1);
+  const warpLabel = v => (inMovie() ? MF : SP).label(v);
+  let warpShown = "", warpBumpT = 0;
+  function syncWarp() {
+    const L = warpLadder(), v = spNow(), lvl = warpLevel(v, L), cap = inMovie() ? Infinity : picturesCap();
+    const key = `${inMovie()}|${v}|${cap}`;
+    if (key === warpShown) return;
+    warpShown = key;
+    const box = $("warp");
+    if (box.children.length !== L.length || box.dataset.movie !== String(inMovie())) {
+      box.dataset.movie = String(inMovie());
+      box.innerHTML = L.map((s, i) => `<button type="button" data-i="${i}"><svg viewBox="0 0 9 12" aria-hidden="true"><path d="M1.2 1.2 L7.8 6 L1.2 10.8 Z"/></svg></button>`).join("");
+    }
+    [...box.children].forEach((b, i) => {
+      b.classList.toggle("on", i <= lvl);
+      b.classList.toggle("cur", i === lvl);
+      b.classList.toggle("nopic", L[i] > cap);
+      b.setAttribute("aria-pressed", String(i === lvl));
+      b.setAttribute("aria-label", `Warp ${i + 1}: ${warpLabel(L[i])}`);
+      b.title = `${warpLabel(L[i])}${L[i] > cap ? " (too fast for pictures)" : ""}  ·  , slower  . faster`;
+    });
+  }
+  function warpTo(v) {
+    spSet(v);
+    const box = $("warp");
+    box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
+    clearTimeout(warpBumpT); warpBumpT = setTimeout(() => box.classList.remove("bump"), 400);
+  }
+  function warpStep(n) {
+    const L = warpLadder(), v = spNow();
+    const to = n > 0 ? L.find(s => s > v * 1.001) : [...L].reverse().find(s => s < v * 0.999);
+    if (to !== undefined) warpTo(to);
+  }
+  window.cassiniWarp = { step: warpStep, ladder: warpLadder, level: () => warpLevel(spNow()) };   // -1 below the first step (a movie under 1 fps)
+  $("warp").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) { warpTo(warpLadder()[+b.dataset.i]); b.blur(); } });
+  const typing = el => !!el && el.closest && !!el.closest('textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=color])');
+  window.addEventListener("keydown", e => {
+    if (e.key !== "," && e.key !== "." || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typing(e.target) || typing(document.activeElement)) return;
+    if (window.cassiniCutscene && cassiniCutscene.active) return;
+    if (window.cassiniAmbient && cassiniAmbient.on) return;
+    if (typeof $ === "function" && !$("loading").hidden) return;
+    e.preventDefault();
+    warpStep(e.key === "." ? 1 : -1);
+  });
+  window.cassiniSettings.on("playback.speedControl", v => {
+    document.body.classList.toggle("warp-steps", v !== "slider");
+    document.body.classList.toggle("warp-only", v === "warp");
   });
   $("tlout").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) * 2));
   $("tlin").addEventListener("click", () => zoomTimeline((state.view[1] - state.view[0]) / 2));
@@ -7280,7 +7365,7 @@ function targetLabel(k) {
   // pictures straight back. All the way right = always load.
   if (SETTINGS) SETTINGS.define({ key: "playback.picturesUpTo", section: "Playback", label: "Load pictures up to", type: "range", log: true,
       value: 86400, min: 60, max: cassiniSpeed.max, stops: cassiniSpeed.stops.filter(v => v >= 60), format: v => v >= cassiniSpeed.max ? "any speed" : cassiniSpeed.label(v),
-      hint: "Faster than this, the camera windows stop loading pictures (no frame server keeps up) and the timeline plays at the full speed; they show the picture of the moment again as soon as you slow down, pause or scrub. The speed slider's track is dimmer past this point. All the way right = always load." });
+      hint: "Faster than this, the camera windows stop loading pictures (no frame server keeps up) and the timeline plays at the full speed; they show the picture of the moment again as soon as you slow down, pause or scrub. The time warp arrows and the speed slider's track are dimmer past this point. All the way right = always load." });
   function picturesCap() { return +S.get("playback.picturesUpTo") || 86400; }
   function tooFast() {
     const cap = picturesCap();
@@ -13707,7 +13792,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"4565e2d9eb79";
+  const BUILD = /*BUILD*/"968db3bcdb98";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -13896,7 +13981,12 @@ void main() {
     { id: "welcome", at: null, title: "Look around",
       text: p => `${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
     { id: "play", at: ["#speedtool", "#play"], title: "Play and speed",
-      text: "Play or pause the mission here. The speed slider sets how much mission time passes each second, from real time up to days a second." },
+      text: () => {
+        const cl = document.body.classList, warp = "The arrows are time warp: each one is a faster speed, from real time up to a month a second. Click one, or press period to warp faster and comma to slow down.";
+        return "Play or pause the mission here. " + (cl.contains("warp-only") ? warp
+          : cl.contains("warp-steps") ? warp + " The slider beside them reaches any speed in between."
+          : "The speed slider sets how much mission time passes each second, from real time up to days a second. Period and comma step the speed up and down.");
+      } },
     { id: "timeline", at: ["#tl"], title: "The timeline",
       text: p => `Each mark is a picture Cassini took: narrow-angle camera on one lane, wide-angle on the other. ${p ? "Drag" : "Drag or scroll"} to move through time.` },
     { id: "cameras", at: ["#imgcard", "#wacard"], title: "Cassini's cameras",
