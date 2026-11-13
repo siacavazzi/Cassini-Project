@@ -45,7 +45,7 @@
   "worker_adds": {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Expose-Headers": "X-Composite, X-Movie, X-Reel, X-Thumb, X-Center",
-    "Cache-Control": "public, max-age=31536000, immutable on every picture and table part (the key changes when the picture does); public, max-age=60 on the manifest answers (version.json, slices.json); no-store on refusals",
+    "Cache-Control": "public, max-age=31536000, immutable on every picture and every table answer fixed in keys.json (the key changes when the picture does); public, max-age=300 on table answers read from a publish (their address is the same in every publish, and a new publish under the same picture versions can change them); public, max-age=60 on the manifest answers (version.json, slices.json); no-store on refusals",
     "Content-Type": "from the object's httpMetadata: image/webp, image/png or application/json",
     "Content-Disposition": "only when download=1 asked: attachment; filename=<download_names>"
   },

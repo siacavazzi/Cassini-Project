@@ -115,5 +115,6 @@ fits**, with 18,643 files and about 14.4 MiB per file to spare. The biggest fold
 
 `cost.py --harness <zero_origin --out folders>` turns the harness's request logs into frames requests and bytes per
 viewer-minute and prices a month at 1,000 viewers; `cost.py --ae --since ...` reads the live Worker's Analytics
-Engine points (WP4: one per answer; blob1 store, blob3 cache, blob5 outcome, double1 bytes, double2 R2 reads).
+Engine points (WP4: one per 10 ordinary answers on staging and production, USAGE_SAMPLE, and one per refusal or miss;
+blob1 store, blob3 cache, blob5 outcome, double1 bytes, double2 R2 reads, double3 the answers a point stands for).
 Only the Worker side costs money: Pages and bytes out are free.

@@ -67,7 +67,9 @@ const TABLES = { [A]: local(true, true, [[0, 1]]), [B]: local(true, true, [[0, 1
   check("public: evens(A), the page evens the pass", L.evens(F, A), true);
   check("public: evens(D), a pass the server drew (its exposure= frames are published)", L.evens(F, D), false);
   check("public: evens(E), no table: nothing to say", L.evens(F, E), undefined);
-  check("public: the local pass's table goes to the worker under one key", new Set(posted.map(m => m.key)).size, 1);
+  // (the workers are a pool: the table is kept under one key and goes to a worker with the pass's first frame drawn)
+  check("public: the local pass's table is kept under one key", new Set(L.tableKeys()).size, 1);
+  check("public: no table posted before a frame is drawn", posted.length, 0);
   // asked again: no new request for a table already answered (A, B share one; D and E answered)
   const before = asked.filter(u => !u.includes(Wk)).length;
   for (let i = 0; i < 3; i++) for (const id of [A, B, C, D, E]) { L.placed(F, id); L.evens(F, id); }
