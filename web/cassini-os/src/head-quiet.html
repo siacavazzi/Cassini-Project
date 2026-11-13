@@ -588,7 +588,7 @@ body.s-steady .info dd { white-space: nowrap; overflow: hidden; text-overflow: e
    between steps), drag along it for any speed, click an arrow to jump to its step, , and . step down and up.
    Settings > Playback > Speed control can bring the plain slider back instead. Steps past the speed where pictures
    stop loading are dimmer; in movie mode the filled arrows take the Movie button's accent */
-.warp { display: none; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 4px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: ew-resize; }
+.warp { display: none; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 4px; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: ew-resize; }
 body.warp-steps .warp { display: flex; }
 body.warp-only .speedtool input[type=range] { display: none; }
 body.warp-only .speedtool > svg { display: none; }
@@ -1363,7 +1363,9 @@ function targetLabel(k) {
   }
   window.cassiniWarp = { step: warpStep, ladder: warpLadder, level: () => warpLevel(spNow()), pos: () => warpPos(spNow()) };
   // dragging: where the pointer is along the row, an arrow's centre being its step; a press that moves less than a few
-  // pixels is a click and jumps to the arrow under it. Pointer capture keeps the drag going past the row's ends.
+  // pixels is a click and jumps to the arrow under it. Pointer capture keeps the drag going past the row's ends. A
+  // vertical swipe that starts on the row still scrolls the dock on a phone (touch-action pan-y): the browser takes it
+  // over and the pointercancel ends the drag without a jump.
   {
     const box = $("warp");
     let drag = null;
@@ -1377,6 +1379,7 @@ function targetLabel(k) {
     box.addEventListener("pointerdown", e => {
       if (e.button) return;
       e.preventDefault();
+      box.focus({ preventScroll: true });   // so the arrow keys work on it after a click, as on a slider
       drag = { x: e.clientX, moved: false, id: e.pointerId };
       try { box.setPointerCapture(e.pointerId); } catch (err) {}
       box.classList.add("dragging");
