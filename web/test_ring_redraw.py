@@ -95,3 +95,30 @@ view = om._sky_views(u)
 assert view("W2_1") == {"et": 1.0e8} and calls[-1] == 200.0
 assert view("W9_9") is None
 print("a frame SPICE did not place still has its view; ok")
+
+# _disk_saturated: a pointing the camera saturated stays as taken only when the white it drew is the lit disk's
+# (2004-10-28 COMPHIDRK001's last pointing); not a dark backlit disk (the Grand Finale's high phase, Day the Earth
+# Smiled), and not a frame blown over its rings too (HIPHASEFA001's pink-patch tile)
+e_ = math.radians(8.0)
+c_ = -1.2e6 * np.array([math.cos(e_), 0.0, math.sin(e_)])
+ch_ = c_ / np.linalg.norm(c_)
+n_ = np.array([0.0, 0.0, 1.0]) - ch_[2] * ch_
+n_ /= np.linalg.norm(n_)
+v = {"c": c_, "ch": ch_, "north": n_, "east": np.cross(n_, ch_), "rot": np.eye(3),
+     "radii": np.array([60268.0, 60268.0, 54364.0]), "sun": np.array([1.0, 0.0, 0.0])}   # (as view() above, 8 degrees up)
+KM = 600.0
+t = {"n": 1, "id": "W1_1", "offset": [0.0, 0.0], "box": [-200.0, -200.0, 400.0, 400.0]}
+yy, xx = np.mgrid[0:400, 0:400]
+_, disk = rp.sky_to_surface(v, (xx - 200).astype(float), (yy - 200).astype(float), KM)
+assert 1000 < disk.sum() < 0.9 * disk.size, disk.sum()
+def picture(on_disk, off_disk):
+    im = np.zeros((400, 400, 4), np.uint8)
+    im[..., 3] = 255
+    im[..., :3] = off_disk
+    im[disk, :3] = on_disk
+    return im
+assert om._disk_saturated(rp, v, v, t, picture(255, 60), KM, 0.0)        # lit disk drawn white, rings dim
+assert not om._disk_saturated(rp, v, v, t, picture(20, 60), KM, 0.0)     # dark backlit disk
+assert not om._disk_saturated(rp, v, v, t, picture(120, 255), KM, 0.0)   # rings blown, disk not
+assert not om._disk_saturated(rp, v, v, t, picture(255, 255), KM, 0.0)   # blown all over: the white is not the disk's
+print("a saturated pointing stays as taken only when its white is the lit disk; ok")
