@@ -4284,7 +4284,7 @@ SURFACE_TAG = "-s7"  # in the name of a layout whose tiles are redrawn so (layou
 # in a pass (ISS_00ARI_COMPHIDRK001 near periapsis: the rings' ellipse a quarter flatter by the last pointing; tiles put
 # on the body's centre stepped 10 to 30 px at every seam, and no shift could line up both arms and the ansa at once)
 RING_REDRAW = os.environ.get("CASSINI_RING_REDRAW", "1") != "0"
-RING_REDRAW_DIR = "rings-redrawn10"
+RING_REDRAW_DIR = "rings-redrawn11"
 RING_REDRAW_TAG = "-rr1"
 # (SURFACE_REACH for rings: on a ring plane seen at a low angle its places slide along the arcs by hundreds of px between
 # a pass's first frame and its epoch, ISS_00ARI_COMPHIDRK001's up to 360; kept within SURFACE_REACH, its first and last
@@ -4457,15 +4457,6 @@ def surface_pictures(u, cache, p, tiles):
             if rung:
                 moved = _ring_motion(rp, u, t, by_id, ets, view, image, km_px, there)
                 t = dict(t, offset=[t["offset"][0] + moved[0], t["offset"][1] + moved[1]])
-            if rung and _disk_in_view(rp, epoch, view, t, image.shape[:2], km_px, view_turn(u)) \
-                    and (root == t["n"] or root not in out):
-                # (the disk is drawn as taken, its clouds moving on their own: the rings by it redrawn as at the epoch
-                # came apart from it, a wedge of rings the frame saw behind the disk left empty beside the limb and rings
-                # seen over the disk dragging its light out past it, ISS_00ARI_COMPHIDRK001; their shift faded to none
-                # toward the disk instead squeezed them, and stepped Saturn's rings on ISS_00BSA_CYLMAP002)
-                print(f"surface: tile {t['n']} kept as taken (the disk is in view)", flush=True)
-                found.add(t["n"])
-                continue
             reach = RING_REDRAW_REACH if rung else SURFACE_REACH
             dx, dy, weight = surface_field(rp, epoch, view, image.shape[:2], t, km_px, view_turn(u),
                                            rp.ring_field if rung else rp.sky_field, reach)
@@ -4618,17 +4609,6 @@ def surface_redrawn(rp, image, t, dx, dy, weight, reach_most=SURFACE_REACH):
     c0, r0, c1, r1 = found
     return (np.ascontiguousarray(picture[r0:r1, c0:c1]),
             [t["box"][0] - pad + c0, t["box"][1] - pad + r0, c1 - c0, r1 - r0])
-
-
-def _disk_in_view(rp, epoch, view, t, shape, km_px, turn=0.0):
-    """True when tile t (its picture shape h x w) shows the body's disk, at the epoch or at its own time (on
-    SURFACE_STEP's grid over its box)."""
-    h, w = shape
-    gy, gx = np.mgrid[0:h + SURFACE_STEP:SURFACE_STEP, 0:w + SURFACE_STEP:SURFACE_STEP].astype(np.float64)
-    x, y = gx + t["offset"][0] + t["box"][0], gy + t["offset"][1] + t["box"][1]
-    a = math.radians(turn)
-    c, sn = math.cos(a), math.sin(a)
-    return any(rp.sky_to_surface(v, c * x + sn * y, c * y - sn * x, km_px)[1].any() for v in (epoch, view))
 
 
 RING_MASK_STEP = 2   # px: (ring_redrawn) the grid the disk's edge is worked out on, each way
