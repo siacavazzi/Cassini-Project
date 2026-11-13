@@ -22,7 +22,9 @@ export default {
       await h.open({ t, view: "follow", speed: "60", play: "0" });
       await h.wait(15000);
       if (!(await page.evaluate(() => !!window.cassiniStudio))) { h.skip("no Studio (window.cassiniStudio)", "WP7b"); return; }
-      if ((kind = await pick())) break;
+      // a mosaic pass's first frames have no mosaic yet (nothing placed): a few minutes on, while none is up
+      for (let i = 0; i < 10 && (kind = await pick()) !== "mosaic"; i++) { await page.evaluate(() => { state.et += 120; }); await h.idle(400, 8000); await h.wait(1500); }
+      if (kind) break;
     }
     if (!kind) { h.skip("no picture on screen at any of the moments", "WP7b"); return; }
     await page.evaluate(() => window.cassiniStudio.fromScreen());

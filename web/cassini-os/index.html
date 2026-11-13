@@ -7326,6 +7326,22 @@ function targetLabel(k) {
       const c = catalog.cls[k], pol = /^P\d|^IRP/.test(catalog.f1[k]) || /^IRP/.test(catalog.f2[k]) ? " · polarizer" : "";
       return `<span class="swatch" style="background:${CLS[c][1]}"></span>${catalog.f1[k]}/${catalog.f2[k]}${nmOf(k) ? ` · ${Math.round(nmOf(k))} nm` : ""}${pol}`;
     };
+    // public: whether frame id (catalog index k's pass) is left out of its pass's list, once a list covering its time
+    // is here (true or false; undefined until then, asked for now, shared with the filmstrip)
+    function notTile(k, id) {
+      const o = `${cam}|${passOf(k)}`, t = unix(k);
+      const info = (passInfos.get(o) || []).find(i => t >= i.frames[0][1] - 1 && t <= i.frames[i.frames.length - 1][1] + 1);
+      if (info) return !info.frames.some(f => f[0] === id);
+      const ask = catalog.id[k];
+      if (!filmAsked.has(ask)) {
+        filmAsked.add(ask);
+        fetch(`${FRAMES}/frames/movie/${ask}.json`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(i => {
+          if (!i || !i.frames || !i.frames.length) return;
+          i.key = o; passInfos.set(o, (passInfos.get(o) || []).concat([i]));
+        }).catch(() => {});
+      }
+      return undefined;
+    }
     function filmstrip(k) {
       if (k < 0 || !(playsMovie(k) || playsRolling(k)) || !S.get("movies.filmstrip")) { film.classList.remove("on"); filmInfo = null; return; }
       const o = `${cam}|${passOf(k)}`, t = unix(k);
@@ -7434,6 +7450,9 @@ function targetLabel(k) {
       // mosaicPass); the pre-build makes mosaics of mosaic passes only, so any other frame would be a miss
       if (PUB && !pass && !mosaicPass(w.k)) return;
       const sz = size(), id = catalog.id[w.set >= 0 && !pass ? catalog.sets[w.set].use[0] : w.k], ask = `${id}:${sz}`;
+      // public: a frame its pass's list (/frames/movie/<id>.json) leaves out is no tile (a second exposure at a
+      // pointing), so the pre-build made no mosaic at it: not asked (the window keeps the frame, as on the 404)
+      if (PUB && notTile(w.k, id)) { noMosaic = catalog.id[w.k]; return; }
       const L = pass ? mLane.pass : mLane.other;
       if (ask === L.last) return;
       if (L.busy) { L.next = [w, pass, catalog]; return; }
@@ -15153,7 +15172,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"1c7711c57ed7";
+  const BUILD = /*BUILD*/"0d2a79e6c5cf";
   const FRAMES = window.cassiniFrames;           // the frame server or the public frames host (settings.html)
   const ver = window.cassiniVersion = { page: BUILD || null, server: null };
   function showVersion() {
