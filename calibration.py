@@ -1448,22 +1448,30 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     if scale is not None:
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
-        out = []
+        out, drawn_at = [], []
         for iof, black in zip(iofs, scale["blacks"]):
             # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
             own = scale["black_of"](iof) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
             out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe, hdr=len(iofs) == 1))
-        for picture, full in zip(out, saturated or []):
+            drawn_at.append((black, toe))
+        for picture, full, iof, (black, toe) in zip(out, saturated or [], iofs, drawn_at):
             # what the camera saturated is brighter than it could measure: white, as in a one frame picture
             # (draw_saturated), wherever the shared white puts its clipped value (a mosaic's white is its brightest
-            # tile's, often a shorter exposure's, and a clipped crescent came out one flat gray)
-            if full is not None:
-                picture[full] = 255
+            # tile's, often a shorter exposure's, and a clipped crescent came out one flat gray). But only as far as
+            # the light it saturated on reaches white: a long exposure of a faint glow saturates on light far under a
+            # mosaic's white, and drawn white it was a blotch many times brighter than the glow round it, and in a
+            # colour mosaic one band of three at white (the Grand Finale high-phase ring mosaics: 269RI HIPHASEFB001's
+            # 38 s BL1 and 6.8 s GRN saturated at I/F 0.0009-0.001 in the glow under Saturn, where RED read 0.0013,
+            # drew a cyan and blue blob; 260RI HIPHASEFA001's 3.8 s RED, saturated at 0.0015 over 80% of the frame, a
+            # white block). saturated_code: the clip as bright as the light round it, eased to white from SAT_WHITE
+            if full is not None and full.any():
+                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale["white"], gamma,
+                                                                            scale.get("shoulder"), toe)[..., 0])
         sink = _hdr_sink.get()
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
-            # ... and HDR_SATURATED times white in its recovery map
-            sink[-1][saturated[0]] = hdr_code(np.log2(HDR_SATURATED))
+            # ... and HDR_SATURATED times white in its recovery map (where it is drawn white)
+            sink[-1][saturated[0] & (out[0][..., 0] == 255)] = hdr_code(np.log2(HDR_SATURATED))
         return out
     sky = None
     if off_disk is not None and len(iofs) > 1 and not _sky(iofs).mean() > sky_fraction:
@@ -1474,6 +1482,59 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
         return images
     shoulder = SHOULDER if look() == "balanced" else None
     return [display(iof, black, white, gamma, shoulder) for iof, black in zip(iofs, blacks)]
+
+
+SAT_WHITE = (64, 192)   # (saturated_code) display codes: a saturated patch whose clip, or the light round it, is drawn
+                        # under SAT_WHITE[0] keeps that code; from SAT_WHITE[1] it is white, as before; eased between
+SAT_RING = 3            # px round a saturated patch read for the light it saturated on
+SAT_RING_MOST = 4.0     # ... and at most this many times the patch's own clip: what reads far brighter beside a patch the
+                        # camera clipped in the same exposure is a bled or spiked pixel, not light (260RI HIPHASEFA001's
+                        # W1865188311_1: clipped at 0.0016 I/F, a tenth of its patch's edge read 0.8, and drew it white)
+SAT_NEAR = 0.8          # ... a patch whose ring reads this share of its clipped value or more there is a glow that rose
+SAT_SMOOTH = (0.3, 0.6) # ... through the camera's limit when this share of its ring does (eased between): drawn as that
+                        # glow; under it the patch has an edge and is white (250EN ENCELSPOL001's crescent: its ring the
+                        # night side and the sky; 269RI HIPHASEFB001's glow: its whole ring within 2% of the clip)
+SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or a spike beside a patch reads anything)
+
+
+def saturated_code(iof, full, draw):
+    """The display codes (uint8, one per pixel of full) of the pixels the camera saturated (full) in a picture of I/F
+    iof drawn by draw (I/F array -> codes). A patch the light round it climbs up to (SAT_SMOOTH of the unsaturated pixels
+    SAT_RING round it within SAT_NEAR of its own clipped value: a smooth glow that rose through the camera's limit) is
+    drawn as bright as that light: its own clipped value (its median: a hot pixel or a cosmic ray in the patch
+    calibrates to anything) or the SAT_RING_PCT percentile round it (up to SAT_RING_MOST times the clip: where every
+    exposure merged saturated, the clipped value sits under what a shorter one measured round it), whichever is
+    higher, white once that is drawn at SAT_WHITE[1], eased from SAT_WHITE[0]. A patch with an edge (a sunlit
+    crescent against its night side and the sky, a ring arc) is brighter than anything round it says: white, as before.
+    So the glow under Saturn that a 38 s exposure saturated on at a hundredth of the mosaic's white is drawn about as
+    bright as the glow round it, not as a white blotch, and Enceladus' crescent stays white."""
+    full = np.asarray(full, bool)
+    iof = np.asarray(iof, np.float32)
+    if iof.shape != full.shape:
+        iof = cv2.resize(iof, full.shape[::-1], interpolation=cv2.INTER_AREA)
+    count, labels = cv2.connectedComponents(full.astype(np.uint8), connectivity=8)
+    side = 2 * SAT_RING + 1
+    ring = cv2.dilate(full.astype(np.uint8), np.ones((side, side), np.uint8)).astype(bool) & ~full
+    near = cv2.dilate(labels.astype(np.float32), np.ones((side, side), np.uint8))   # (the patch each ring pixel is next to)
+    from scipy import ndimage
+    index = np.arange(1, count)
+    level = np.zeros(count, np.float32)
+    smooth = np.zeros(count, np.float32)
+    if count > 1:
+        level[1:] = ndimage.median(iof, labels, index)
+        near = near.astype(np.int32)
+        on = ring & (near > 0)
+        if on.any():
+            v, k = iof[on], near[on]
+            round_it = ndimage.labeled_comprehension(v, k, index, lambda q: np.percentile(q, SAT_RING_PCT), np.float32, 0.0)
+            close = ndimage.mean((v >= SAT_NEAR * level[k]).astype(np.float32), k, index)
+            smooth[1:] = np.clip((np.nan_to_num(close) - SAT_SMOOTH[0]) / (SAT_SMOOTH[1] - SAT_SMOOTH[0]), 0, 1)
+            level[1:] = np.maximum(level[1:], np.minimum(round_it, SAT_RING_MOST * level[1:]))
+    codes = draw(level[None, :]).astype(np.float32)[0]
+    w = np.clip((codes - SAT_WHITE[0]) / float(SAT_WHITE[1] - SAT_WHITE[0]), 0, 1)
+    codes = codes + (255 - codes) * (w * w * (3 - 2 * w))
+    codes = 255 - (255 - codes) * smooth   # (a patch with an edge: white)
+    return (codes[labels[full]] + 0.5).astype(np.uint8)[:, None]
 
 
 """
