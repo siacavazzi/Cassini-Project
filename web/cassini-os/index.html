@@ -937,7 +937,7 @@ body.phone .titlebar { cursor: default; }
 body.phone .camwin:not(.full) { top: calc(var(--menu) + var(--gap)) !important; bottom: auto !important; right: auto !important; height: auto !important; transform: none !important; }
 body.phone .camwin:not(.full) > .titlebar { display: none; }
 body.phone .camwin:not(.full) .body { padding: 4px; gap: 4px; }
-body.phone .camwin:not(.full) :is(.info, .capline, .chans) { display: none !important; }
+body.phone .camwin:not(.full) :is(.info, .capline, .chans, .filmstrip) { display: none !important; }
 body.phone .camwin:not(.full) .well:not(.has-frame, .kept) { height: 44px; font-size: 9px; }
 body.phone .camwin .well::after { position: absolute; left: 5px; top: 4px; font: 9px/1 var(--hudf); letter-spacing: .08em; color: rgba(232,236,242,.6); text-shadow: 0 0 3px #000; }
 body.phone #imgcard .well::after { content: "NAC"; }
@@ -6273,7 +6273,7 @@ function targetLabel(k) {
     // A body window's strip has its body's pictures only (framesOf).
     let stripAt = { key: "", ks: null, p: -1, first: 0, last: -1, n: 0 };   // what the strip shows now
     let picked = -1, pickedAt = 0;   // the picture the strip was last moved to, and when (a movie frame still on its way does not move it back)
-    const thumbMin = () => win.classList.contains("full") ? 84 : win.classList.contains("zoomed") ? 60 : 50;
+    const thumbMin = () => document.body.classList.contains("phone") ? 52 : win.classList.contains("full") ? 84 : win.classList.contains("zoomed") ? 60 : 50;
     const thumbUrl = (q, rolling) => !rolling && playsMovie(q) ? (S.get("movies.stabilizeLocal") ? movieUrl(catalog.id[q], 128, 0, 0, undefined, 0) : movieUrl(catalog.id[q], 128))
       : shownFrameUrl(q, 128);
     function filmstrip(k, onScreen) {
@@ -13849,7 +13849,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"16068590eceb";
+  const BUILD = /*BUILD*/"a4d7123d6375";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

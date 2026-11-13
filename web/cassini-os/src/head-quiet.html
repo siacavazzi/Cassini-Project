@@ -2753,7 +2753,7 @@ function targetLabel(k) {
     // A body window's strip has its body's pictures only (framesOf).
     let stripAt = { key: "", ks: null, p: -1, first: 0, last: -1, n: 0 };   // what the strip shows now
     let picked = -1, pickedAt = 0;   // the picture the strip was last moved to, and when (a movie frame still on its way does not move it back)
-    const thumbMin = () => win.classList.contains("full") ? 84 : win.classList.contains("zoomed") ? 60 : 50;
+    const thumbMin = () => document.body.classList.contains("phone") ? 52 : win.classList.contains("full") ? 84 : win.classList.contains("zoomed") ? 60 : 50;
     const thumbUrl = (q, rolling) => !rolling && playsMovie(q) ? (S.get("movies.stabilizeLocal") ? movieUrl(catalog.id[q], 128, 0, 0, undefined, 0) : movieUrl(catalog.id[q], 128))
       : shownFrameUrl(q, 128);
     function filmstrip(k, onScreen) {
