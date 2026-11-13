@@ -5248,9 +5248,21 @@ def _read_solve(path):
 def solve_places(u, cache):
     """The pass's pointings registered on all its tiles at once (global_places, through layout as a request draws it),
     for the pre-build to call once every tile is made and before any mosaic so far is drawn: those then take their
-    places from the whole pass's solve. Nothing with GLOBAL_PANELS off."""
-    if GLOBAL_PANELS and u["frames"]:
-        layout(u, len(u["frames"]) - 1, cache)
+    places from the whole pass's solve. Nothing with GLOBAL_PANELS off.
+    A pass whose surface reprojection redraws its tiles from some tile on (surface_pictures: a moon's mapping mosaic,
+    whose first tiles are sky or limb) is solved twice, as layout draws it: on all its tiles (with the redrawn ones, a
+    solve of its own, SURFACE_DIR) and on the tiles before the first redrawn one (the mosaics so far up to there, which
+    have none). Solved on the last tile only, those early mosaics were each solved on the tiles up to them as they were
+    drawn, a solve of fewer tiles every frame, so a server or the public site (resolve.py) asking for them later, with the
+    pass's solve kept, named other pictures than the ones made (Dione 221DI's first 52 frames, 2026-11-13)."""
+    if not (GLOBAL_PANELS and u["frames"]):
+        return
+    made = layout(u, len(u["frames"]) - 1, cache)
+    if not made:
+        return
+    first = min((t["n"] for t in made[1] if "pic" in t), default=0)
+    if first > 0:
+        layout(u, first - 1, cache)
 
 
 def view_rect(p, tiles=None):
@@ -10449,7 +10461,7 @@ def _mosaic_made(u, n, size, cache):
     if not made:
         return True
     path = _mosaic_path(u, made, size, cache)
-    return path in _blank or os.path.exists(path)
+    return is_blank(path) or os.path.exists(path)
 
 
 def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
@@ -10474,6 +10486,15 @@ def _mosaic_at(u, n, size, cache, slots=None, fmt="webp", out=OUT, made=None):
 
 BLANK_LEVEL = 2   # a mosaic whose 99th percentile over its tiles is at most this many levels holds nothing yet
 _blank = set()    # mosaics found blank (paths): asked again, they are blank again
+BLANK_MARK = ".blank"   # beside a mosaic's path less its extension: an empty file saying it was found blank (is_blank)
+
+
+def is_blank(path):
+    """Whether the mosaic at path (a picture's path in the cache) was found blank: by this process (_blank) or by the
+    one that made the pass, which kept an empty <name>.blank beside where the picture would be. Read-only (resolve.py):
+    the server answers such a mosaic with its 404 (the window keeps its frame), so the public site knows that 404 is
+    the answer, not a picture the pre-build missed."""
+    return path in _blank or os.path.exists(path[:path.rindex(".")] + BLANK_MARK)
 
 
 def blank(im):
@@ -10489,7 +10510,7 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
     """(picture, report) of the mosaic so_far draws from made, kept at path; None before anything is above black.
     post: a step applied to so_far's picture before it is kept (a mosaic movie's fade, _faded)."""
     report, full, meta = {}, size == "full", path[:-len(fmt)] + "json"
-    if path in _blank:
+    if is_blank(path):
         return None
 
     def make():
@@ -10500,6 +10521,12 @@ def _make_mosaic(u, n, size, path, cache, slots, made, fmt="webp", out=OUT, post
         if blank(im):
             with _lock:
                 _blank.add(path)
+            # (kept, so a later process, the server or the public site's resolve.py, knows it without drawing it again)
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                open(path[:-len(fmt) - 1] + BLANK_MARK, "a").close()
+            except OSError as e:
+                print(f"cannot keep {path}'s blank mark in the cache ({e})", flush=True)
             raise LookupError("nothing above black yet")
         report.update(rep)
         if post:
