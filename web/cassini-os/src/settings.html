@@ -459,6 +459,9 @@ body.phone .srow input[type=range] { width: 96px; }
   };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
       hint: "Mission time per second of playback when the page opens; the speed slider in the replay window changes it while you watch. Jumping to a moment still picks its own speed." });
+  D({ key: "playback.speedControl", section: "Playback", label: "Speed control", type: "choice", value: "warp",
+      options: [["warp", "Warp steps"], ["slider", "Slider"], ["both", "Both"]],
+      hint: "Warp steps: a row of arrows by the clock, one for each fixed speed from real time to a month a second; click one, or press period (.) to speed up a step and comma (,) to slow down. Slider: any speed in between. Both shows the two side by side. The keys work with either." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
       options: [[86400, "Day"], [432000, "5 days"], [604800, "Week"], [2592000, "Month"]],
       hint: "How much of the mission the timeline covers when the page opens." });
