@@ -1380,13 +1380,19 @@ function targetLabel(k) {
       if (e.button) return;
       e.preventDefault();
       box.focus({ preventScroll: true });   // so the arrow keys work on it after a click, as on a slider
-      drag = { x: e.clientX, moved: false, id: e.pointerId };
+      drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
       try { box.setPointerCapture(e.pointerId); } catch (err) {}
       box.classList.add("dragging");
     });
     box.addEventListener("pointermove", e => {
       if (!drag || e.pointerId !== drag.id) return;
-      if (!drag.moved && Math.abs(e.clientX - drag.x) < 4) return;
+      // a drag starts once the pointer goes sideways more than up or down; mostly vertical first, it is a swipe, not a
+      // drag, and lets go without changing anything (a jittery finger scrolling the dock past the row)
+      if (!drag.moved) {
+        const dx = Math.abs(e.clientX - drag.x), dy = Math.abs(e.clientY - drag.y);
+        if (dy >= 8 && dy > dx) { drag = null; box.classList.remove("dragging"); return; }
+        if (dx < 6 || dx < dy) return;
+      }
       drag.moved = true; spHeld = true;
       const v = warpAt(fAt(e.clientX));
       if (v !== spNow()) spSet(v);

@@ -4900,13 +4900,19 @@ function targetLabel(k) {
       if (e.button) return;
       e.preventDefault();
       box.focus({ preventScroll: true });   // so the arrow keys work on it after a click, as on a slider
-      drag = { x: e.clientX, moved: false, id: e.pointerId };
+      drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
       try { box.setPointerCapture(e.pointerId); } catch (err) {}
       box.classList.add("dragging");
     });
     box.addEventListener("pointermove", e => {
       if (!drag || e.pointerId !== drag.id) return;
-      if (!drag.moved && Math.abs(e.clientX - drag.x) < 4) return;
+      // a drag starts once the pointer goes sideways more than up or down; mostly vertical first, it is a swipe, not a
+      // drag, and lets go without changing anything (a jittery finger scrolling the dock past the row)
+      if (!drag.moved) {
+        const dx = Math.abs(e.clientX - drag.x), dy = Math.abs(e.clientY - drag.y);
+        if (dy >= 8 && dy > dx) { drag = null; box.classList.remove("dragging"); return; }
+        if (dx < 6 || dx < dy) return;
+      }
       drag.moved = true; spHeld = true;
       const v = warpAt(fAt(e.clientX));
       if (v !== spNow()) spSet(v);
@@ -13858,7 +13864,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"56bf66bf5841";
+  const BUILD = /*BUILD*/"e7f24dd29cdd";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
