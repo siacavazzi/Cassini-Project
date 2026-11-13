@@ -592,6 +592,10 @@ body.s-steady .info dd { white-space: nowrap; overflow: hidden; text-overflow: e
 body.warp-steps .warp { display: flex; }
 body.warp-only .speedtool input[type=range] { display: none; }
 body.warp-only .speedtool > svg { display: none; }
+/* arrows and slider side by side (the default): a shorter slider and no gauge icon, so the clock keeps its one line */
+body.warp-steps:not(.warp-only) .speedtool { gap: 8px; padding-left: 12px; }
+body.warp-steps:not(.warp-only) .speedtool > svg { display: none; }
+body.warp-steps:not(.warp-only) .speedtool input[type=range] { width: 84px; }
 .warp button { all: unset; display: grid; place-items: center; width: 11px; height: 20px; border-radius: 3px; cursor: default; }
 .warp button svg { width: 9px; height: 12px; display: block; }
 .warp button svg path { fill: transparent; stroke: rgba(255,255,255,.34); stroke-width: 1.2; stroke-linejoin: round; transition: fill .12s, stroke .12s; }
@@ -1328,7 +1332,7 @@ function targetLabel(k) {
       b.classList.toggle("nopic", L[i] > cap);
       b.setAttribute("aria-pressed", String(i === lvl));
       b.setAttribute("aria-label", `Warp ${i + 1}: ${warpLabel(L[i])}`);
-      b.title = `${warpLabel(L[i])}${L[i] > cap ? " (too fast for pictures)" : ""}  ·  , slower  . faster`;
+      b.title = `${warpLabel(L[i])}${L[i] > cap ? " (too fast for pictures)" : ""}  ·  , slower  . faster  (with Shift: finer)`;
     });
   }
   function warpTo(v) {
@@ -1337,8 +1341,8 @@ function targetLabel(k) {
     box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump");
     clearTimeout(warpBumpT); warpBumpT = setTimeout(() => box.classList.remove("bump"), 400);
   }
-  function warpStep(n) {
-    const L = warpLadder(), v = spNow();
+  function warpStep(n, fine) {
+    const L = fine ? spScale().stops : warpLadder(), v = spNow();
     const to = n > 0 ? L.find(s => s > v * 1.001) : [...L].reverse().find(s => s < v * 0.999);
     if (to !== undefined) warpTo(to);
   }
@@ -1346,13 +1350,15 @@ function targetLabel(k) {
   $("warp").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) { warpTo(warpLadder()[+b.dataset.i]); b.blur(); } });
   const typing = el => !!el && el.closest && !!el.closest('textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=color])');
   window.addEventListener("keydown", e => {
-    if (e.key !== "," && e.key !== "." || e.metaKey || e.ctrlKey || e.altKey) return;
+    // Shift with them (< and > on most layouts) steps fine, through every round speed the slider lands on
+    const k = { ",": -1, ".": 1, "<": -2, ">": 2 }[e.key] || (e.shiftKey && { Comma: -2, Period: 2 }[e.code]);
+    if (!k || e.metaKey || e.ctrlKey || e.altKey) return;
     if (typing(e.target) || typing(document.activeElement)) return;
     if (window.cassiniCutscene && cassiniCutscene.active) return;
     if (window.cassiniAmbient && cassiniAmbient.on) return;
     if (typeof $ === "function" && !$("loading").hidden) return;
     e.preventDefault();
-    warpStep(e.key === "." ? 1 : -1);
+    warpStep(Math.sign(k), Math.abs(k) === 2);
   });
   window.cassiniSettings.on("playback.speedControl", v => {
     document.body.classList.toggle("warp-steps", v !== "slider");

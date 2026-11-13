@@ -88,7 +88,7 @@ body.phone #tourhint button { padding: 6px 11px; }
       text: () => {
         const cl = document.body.classList, warp = "The arrows are time warp: each one is a faster speed, from real time up to a month a second. Click one, or press period to warp faster and comma to slow down.";
         return "Play or pause the mission here. " + (cl.contains("warp-only") ? warp
-          : cl.contains("warp-steps") ? warp + " The slider beside them reaches any speed in between."
+          : cl.contains("warp-steps") ? warp + " The slider beside them, or Shift with period and comma, reaches every speed in between."
           : "The speed slider sets how much mission time passes each second, from real time up to days a second. Period and comma step the speed up and down.");
       } },
     { id: "timeline", at: ["#tl"], title: "The timeline",

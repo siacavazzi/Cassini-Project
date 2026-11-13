@@ -16,7 +16,8 @@ comma (`,`) a step slower, and a click on an arrow jumps to it. A speed between 
 moment's own speed) fills up to the step below and the read-out shows the speed itself. Arrows past the speed where
 pictures stop loading are dimmer. In movie mode the same arrows step pictures a second (1 to 30). The keys do nothing
 while typing in a text field, with a modifier held (⌘, still opens Settings), in a cutscene or in ambient mode.
-Settings > Playback > Speed control switches to the speed slider, or shows both.
+The speed slider sits beside the arrows for any speed in between, and Shift with period or comma (`>` and `<`) steps
+through those finer speeds from the keyboard. Settings > Playback > Speed control can show the arrows or the slider alone.
 
 ## Movie mode
 
