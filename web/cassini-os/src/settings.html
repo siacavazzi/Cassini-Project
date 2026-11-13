@@ -458,10 +458,10 @@ body.phone .srow input[type=range] { width: 96px; }
     label: v => `${+(+v).toFixed(v < 10 && v % 1 ? 1 : 0)} fps`
   };
   D({ key: "playback.speed", section: "Playback", label: "Starting speed", type: "range", log: true, value: 600, min: SP.min, max: SP.max, stops: SP.stops, format: SP.label,
-      hint: "Mission time per second of playback when the page opens; the time warp arrows (or the speed slider) in the replay window change it while you watch. Jumping to a moment still picks its own speed." });
-  D({ key: "playback.speedControl", section: "Playback", label: "Speed control", type: "choice", value: "both", was: ["warp"],
-      options: [["both", "Warp steps and slider"], ["warp", "Warp steps"], ["slider", "Slider"]],
-      hint: "Warp steps: a row of arrows by the clock, one for each fixed speed from real time to a month a second; click one, or press period (.) to speed up a step and comma (,) to slow down. Slider: any speed in between. By default both sit side by side. Either way, Shift with period or comma (> and <) steps through every speed in between." });
+      hint: "Mission time per second of playback when the page opens; the time warp arrows in the replay window change it while you watch. Jumping to a moment still picks its own speed." });
+  D({ key: "playback.speedControl", section: "Playback", label: "Speed control", type: "choice", value: "warp", was: ["both"],
+      options: [["warp", "Warp arrows"], ["slider", "Slider"]],
+      hint: "Warp arrows: a row of arrows by the clock, one for each fixed speed from real time to a month a second. Drag along them for any speed in between, click one to jump to its step, or press period (.) to speed up a step and comma (,) to slow down. Slider: the plain speed slider instead. The keys work with either." });
   D({ key: "playback.span", section: "Playback", label: "Timeline shows", type: "choice", value: 432000,
       options: [[86400, "Day"], [432000, "5 days"], [604800, "Week"], [2592000, "Month"]],
       hint: "How much of the mission the timeline covers when the page opens." });
@@ -522,7 +522,7 @@ body.phone .srow input[type=range] { width: 96px; }
   // movie mode (movie.html) is a rule for the clock, so its speed sits with the playback settings
   // Sam 2026-10-28: movie mode is about watching the pictures, so it starts slow (5) and the dock slider sets it
   D({ key: "movie.fps", section: "Playback", label: "Movie mode speed", type: "range", log: true, value: 5, was: [8], min: MF.min, max: MF.max, stops: MF.stops, format: MF.label,
-      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the time warp arrows (or the speed slider) in the replay window set this instead of mission time per second. The camera windows show every picture as they always do." });
+      hint: "Movie mode (M) skips the time between pictures and steps from one picture to the next this many times a second. While movie mode is on, the time warp arrows in the replay window set this instead of mission time per second. The camera windows show every picture as they always do." });
   // what counts as a picture (head-quiet.html complete, cameraFeed)
   D({ key: "movie.completeFrames", section: "Playback", label: "Complete color pictures only", type: "toggle", value: true,
       hint: "Movie mode steps from one finished picture to the next: a color set shows once, as its color picture when its last filter is taken, never the black-and-white frames on the way. Off steps through every frame." });

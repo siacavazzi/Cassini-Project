@@ -11,13 +11,12 @@ menu-bar tray or zoom, and a Camera window that shows the real frame Cassini too
 ## Time warp
 
 Beside the play button, a row of arrows is a ladder of fixed speeds: real time, 10×, 1 min/s, 10 min/s, 1 h/s,
-6 h/s, 1 day/s, 1 week/s and 1 month/s, filled up to the one the clock runs at. Period (`.`) warps a step faster,
-comma (`,`) a step slower, and a click on an arrow jumps to it. A speed between two steps (a `?speed=` link, a
-moment's own speed) fills up to the step below and the read-out shows the speed itself. Arrows past the speed where
-pictures stop loading are dimmer. In movie mode the same arrows step pictures a second (1 to 30). The keys do nothing
-while typing in a text field, with a modifier held (⌘, still opens Settings), in a cutscene or in ambient mode.
-The speed slider sits beside the arrows for any speed in between, and Shift with period or comma (`>` and `<`) steps
-through those finer speeds from the keyboard. Settings > Playback > Speed control can show the arrows or the slider alone.
+6 h/s, 1 day/s, 1 week/s and 1 month/s, filled up to the speed the clock runs at. The row is also the speed slider:
+drag along it (mouse or touch) for any speed in between, the arrow being passed filling partway; a click or tap on an
+arrow jumps to its step. Period (`.`) warps a step faster and comma (`,`) a step slower, always to a step of the
+ladder. Arrows past the speed where pictures stop loading are dimmer. In movie mode the same arrows set pictures a
+second (1 to 30). The keys do nothing while typing in a text field, with a modifier held (⌘, still opens Settings), in
+a cutscene or in ambient mode. Settings > Playback > Speed control can bring back the plain slider instead.
 
 ## Movie mode
 
