@@ -8,6 +8,16 @@ menu-bar tray or zoom, and a Camera window that shows the real frame Cassini too
 | `index.html` | Smoked Mac OS X style panels, the camera feed as the main window, the interface fades when the pointer rests (the camera picture stays), window layout remembered per browser. Narrow-angle and wide-angle frames each have their own camera window; frames that make a filter set are shown as a colour composite with their channels underneath. |
 | `replay/` | Link to the plain replay viewer (`web/replay`), so one server shows both. |
 
+## Time warp
+
+Beside the play button, a row of arrows is a ladder of fixed speeds: real time, 10×, 1 min/s, 10 min/s, 1 h/s,
+6 h/s, 1 day/s, 1 week/s and 1 month/s, filled up to the one the clock runs at. Period (`.`) warps a step faster,
+comma (`,`) a step slower, and a click on an arrow jumps to it. A speed between two steps (a `?speed=` link, a
+moment's own speed) fills up to the step below and the read-out shows the speed itself. Arrows past the speed where
+pictures stop loading are dimmer. In movie mode the same arrows step pictures a second (1 to 30). The keys do nothing
+while typing in a text field, with a modifier held (⌘, still opens Settings), in a cutscene or in ambient mode.
+Settings > Playback > Speed control switches to the speed slider, or shows both.
+
 ## Movie mode
 
 The film button next to the moment arrows (or `M`, or Go > Movie mode) plays the camera frames one after another,
