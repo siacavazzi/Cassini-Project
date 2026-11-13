@@ -66,7 +66,7 @@ INPUTS = ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_
 SHARD_FROM = 40     # tiles: a pass with more is tiled by several processes first
 SHARD_MIN = 12      # tiles: the least a process is given
 SIZE = 1024
-TOOL_VERSION = "bench-v1"   # bump when what a result holds changes (results of older versions are rebuilt)
+TOOL_VERSION = "bench-v2"   # bump when what a result holds or how it is built changes (older results are rebuilt); v2: a private geometry cache per build
 
 # What counts as a picture changed, and as worse by measure (docs/image-benchmark.md). A picture whose bytes are the
 # same is identical; one whose pixels differ by at most PIXEL_NOISE levels nowhere is "same" (an encoder's rounding).
@@ -312,6 +312,10 @@ class Builder:
         self.cfg, self.log, self.keep_cache = cfg, log, keep_cache
         self.root = cfg["root"]
         self.sha = git("rev-parse", rev + "^{commit}")
+        if self.sha == git("rev-parse", "HEAD") and git("status", "--porcelain", "--untracked-files=no"):
+            # the benchmark builds commits, never a checkout's uncommitted edits: say so rather than test the old code
+            raise RuntimeError(f"{REPO} has uncommitted changes: the benchmark builds {rev} as committed ({self.sha[:12]}), "
+                               "not your edits. Commit them first (a result is kept by commit).")
         self.items = load_items()
         self.key = set_key(self.items, cfg["env"])
         self.names = names
@@ -329,6 +333,20 @@ class Builder:
             shutil.copy2(os.path.join(HERE, f), there)
         self.tool = os.path.join(there, "image_bench.py")
         return self.tool
+
+    def private_geometry(self):
+        """A copy of the geometry cache for this build alone (sqlite's backup, consistent while others read it): the
+        pipeline writes rows into it (bootleg_autonav._store_rows, keyed by frame), so two commits building into one
+        file would overwrite each other's rows, and a change to the geometry would reach the other commit too."""
+        import sqlite3
+        src = self.cfg["env"]["CASSINI_GEOMETRY_CACHE"]
+        dst = os.path.join(self.cache, "geometry.sqlite")
+        if not os.path.exists(dst):
+            a, b = sqlite3.connect(f"file:{src}?mode=ro", uri=True), sqlite3.connect(dst)
+            a.backup(b)
+            a.close()
+            b.close()
+        self.cfg = {**self.cfg, "env": {**self.cfg["env"], "CASSINI_GEOMETRY_CACHE": dst}}
 
     def done_items(self):
         try:
@@ -360,10 +378,23 @@ class Builder:
         if not todo:
             self.log(f"{self.sha[:12]}: all {len(want)} items already built ({self.result})")
             return self.result
+        problems = [f"{k} missing ({self.cfg['env'].get(k) or 'not set'})" for k in INPUTS
+                    if not (self.cfg["env"].get(k) and os.path.exists(self.cfg["env"][k]))]
+        if problems:
+            raise RuntimeError("the inputs are not all here: " + "; ".join(problems))
         self.worktree()
         os.makedirs(self.result, exist_ok=True)
+        import fcntl
+        self._lock = open(os.path.join(self.result, ".lock"), "w")
+        try:
+            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise RuntimeError(f"another build of {self.sha[:12]} is running into {self.result}")
+        have = self.done_items()   # (again: a build that finished while this one waited)
+        todo = [it for it in want if it["name"] not in have]
         self.snapshot()
         os.makedirs(self.cache, exist_ok=True)
+        self.private_geometry()
         t0 = time.time()
         res = os.path.join(self.result, "resolve.json")
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
@@ -386,6 +417,7 @@ class Builder:
                  + (f"; failed: {', '.join(failures)}" if failures else ""))
         if not self.keep_cache and not failures:
             shutil.rmtree(self.cache, ignore_errors=True)
+        self._lock.close()
         return self.result
 
     def _old_resolved(self):
@@ -485,6 +517,8 @@ def merge_result(into, src):
     os.makedirs(into, exist_ok=True)
     a = json.load(open(os.path.join(into, "build.json"))) if os.path.exists(os.path.join(into, "build.json")) else None
     b = json.load(open(os.path.join(src, "build.json")))
+    if a and (b.get("set") != a.get("set") or b.get("tool") != a.get("tool") or b.get("commit") != a.get("commit")):
+        raise RuntimeError(f"{src} is another build (commit, set or tool differ): not merged")
     for name in b["built"]:
         if os.path.isdir(os.path.join(src, name)):
             shutil.rmtree(os.path.join(into, name), ignore_errors=True)
@@ -515,6 +549,8 @@ def build_commit(rev, hosts, cfg, names=None, slots=None, keep_cache=False, log=
     def far(h):
         try:
             cfg, path = remote_build(h, b.sha, shares[h], log)
+            if not os.path.basename(path).endswith("-" + b.key):
+                raise RuntimeError(f"its result {os.path.basename(path)} is not this set ({b.key}): its inputs differ")
             tmp = tempfile.mkdtemp(prefix="bench-")
             subprocess.run(["rsync", "-a", f"{cfg['ssh']}:{path}/", tmp + "/"], check=True)
             out[h] = tmp
@@ -682,6 +718,12 @@ def compare_item(task):
         return row
     bm, cm = (json.load(open(os.path.join(d, "meta.json"))) for d in (bd, cd))
     row["seconds"] = [bm.get("seconds"), cm.get("seconds")]
+    # (a mosaic whose tiles' edges could not be worked out has no seam numbers: said, so the guard is not off unseen)
+    row["seam_missing"] = [side for side, m, d in (("base", bm, bd), ("candidate", cm, cd))
+                           if os.path.exists(os.path.join(d, "mosaic_full.webp")) and not os.path.exists(os.path.join(d, "edges.png"))]
+    if row["seam_missing"]:
+        row["seam_why"] = "; ".join(f"{side}: {m.get('edges_error', 'no edges')}" for side, m in (("base", bm), ("candidate", cm))
+                                    if side in row["seam_missing"])
     row["pass"] = [bm.get("key"), cm.get("key")]
     names = sorted(set(f for f in os.listdir(bd) if f.endswith(".webp")) | set(f for f in os.listdir(cd) if f.endswith(".webp")))
     changed, flagged, worst = [], {}, None
@@ -695,6 +737,9 @@ def compare_item(task):
         if not (os.path.exists(pb) and os.path.exists(pc)):
             pic["status"] = "only in base" if os.path.exists(pb) else "only in candidate"
             changed.append(f)
+            if pic["status"] == "only in base":   # a picture the candidate no longer makes is a loss, not a change
+                pic["worse"] = {"missing": "the candidate makes no such picture"}
+                flagged.setdefault("missing", f"{f}: the candidate makes no such picture")
             row["pictures"][f] = pic
             continue
         if open(pb, "rb").read() == open(pc, "rb").read():
@@ -763,7 +808,15 @@ def compare(base_dir, cand_dir, out, targets=(), notes=None, log=print, procs=No
     os.makedirs(os.path.join(out, "sheets"), exist_ok=True)
     B, C = (json.load(open(os.path.join(d, "build.json"))) for d in (base_dir, cand_dir))
     notes = notes or {}
-    tasks = [(it, base_dir, cand_dir, out, set(targets), notes, B, C) for it in load_items()]
+    items = load_items()
+    names = {it["name"] for it in items}
+    targets = set(targets)
+    unknown = sorted((targets - {"all"}) - names) + sorted(set(notes) - names)
+    if unknown:
+        raise SystemExit(f"--target/--notes name items not in image_bench_items.json: {', '.join(unknown)}")
+    if "all" in targets:   # a change meant to touch every picture (docs/image-benchmark.md)
+        targets = names
+    tasks = [(it, base_dir, cand_dir, out, targets, notes, B, C) for it in items]
     with concurrent.futures.ProcessPoolExecutor(procs or min(len(tasks), free_slots())) as pool:
         rows = list(pool.map(compare_item, tasks))
     summary = verdict(rows)
@@ -790,7 +843,11 @@ def verdict(rows):
     unexplained = [r["name"] for r in collateral if not r["note"]]
     worse_out = [r["name"] for r in collateral if r["worse"] and not r["note"]]
     worse_target = [r["name"] for r in changed if r["target"] and r["worse"]]
+    still = [r["name"] for r in rows if r["target"] and r["status"] == "identical"]
+    no_seams = [r["name"] for r in rows if r.get("seam_missing")]
     fails = []
+    if still and not all(r["target"] for r in rows):   # (--target all: a picture it leaves alone is no failure)
+        fails.append(f"target items that did not change (the rule needs the target better): {', '.join(still)}")
     if unbuilt:
         fails.append(f"{len(unbuilt)} items not built on both commits: {', '.join(unbuilt)}")
     if worse_out:
@@ -800,7 +857,7 @@ def verdict(rows):
     v = "FAIL" if fails else ("NEEDS EYES" if changed else "PASS (nothing changed)")
     return {"verdict": v, "fails": fails, "identical": sum(r["status"] == "identical" for r in rows),
             "changed": [r["name"] for r in changed], "collateral": [r["name"] for r in collateral],
-            "worse_target": worse_target, "unbuilt": unbuilt, "items": len(rows)}
+            "worse_target": worse_target, "unbuilt": unbuilt, "items": len(rows), "no_seams": no_seams}
 
 
 def _fmt_measures(m):
@@ -816,6 +873,8 @@ def report_md(s):
         L.append(f"- {f}")
     if s["worse_target"]:
         L.append(f"- target items with a measure worse (look at them): {', '.join(s['worse_target'])}")
+    if s.get("no_seams"):
+        L.append(f"- no seam numbers (the seam guard is off) for: {', '.join(s['no_seams'])}")
     L += ["", f"Built in {(s['seconds']['base'] or 0) / 60:.0f} min (base) and {(s['seconds']['candidate'] or 0) / 60:.0f} min "
                f"(candidate). Targets: {', '.join(s['targets']) or 'none named'}.", "",
           "| item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |", "|---|---|---|---|---|---|---|---|"]
@@ -862,6 +921,7 @@ tr.chg td:first-child{{border-left:4px solid #db3}}tr.bad td:first-child{{border
 <h1>Image benchmark: {e(s['candidate'][:12])} against {e(s['base'][:12])}</h1>
 <p><b>{e(s['verdict'])}</b>. {s['items']} items: {s['identical']} identical, {len(s['changed'])} changed ({len(s['collateral'])} outside the
 target), {len(s['unbuilt'])} not built. Targets: {e(', '.join(s['targets']) or 'none named')}.</p><ul>{fails}</ul>
+{('<p class=w>No seam numbers (the seam guard is off) for: ' + e(', '.join(s['no_seams'])) + '</p>') if s.get('no_seams') else ''}
 <table>{''.join(rows)}</table>"""
 
 

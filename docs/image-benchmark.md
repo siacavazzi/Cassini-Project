@@ -19,6 +19,9 @@ commits, the base (usually `origin/main`) and the candidate (the PR's head). The
   `frame_server.color_webp`. A pass goes through `prebuild.make_pass`, then gives up the finished mosaic (1024 and
   full size), a mosaic movie's last rolling picture, or every frame of a movie, plus the evened frames for a pass the
   page cannot even itself. Nothing is re-implemented.
+- **Each commit is built alone**: its own worktree, its own scratch cache and its own copy of the geometry cache
+  (the pipeline writes rows into that file, so two commits sharing it would overwrite each other's). A commit is built
+  as committed: the tool refuses a checkout with uncommitted changes rather than quietly testing the old code.
 - **The set** has two groups.
   - `hard` holds the cases recent changes fixed or broke: the Grand Finale ring mosaics HIPHASEFA and FB (#449, #456,
     #457), Day the Earth Smiled, the 2004 ring mosaic (#449), In Saturn's Shadow, 039RI's disk square, Jupiter
@@ -83,8 +86,9 @@ body or as attached evidence.
 
 It merges only when all of these hold.
 
-1. **Every item is built on both commits.** An item the candidate cannot make is a regression.
-2. **The target is better.**
+1. **Every item is built on both commits.** An item the candidate cannot make is a regression, and so is a picture
+   the base makes and the candidate no longer does.
+2. **The target is better.** A named target that did not change at all fails: the change did not do what it says.
    - Each target item changed, and its sheet shows the defect gone or clearly smaller.
    - Where a measure covers the defect (seams, centring, clipping, holes), it moved the right way.
    - A target item that trips a guard is explained in the PR.
@@ -100,7 +104,9 @@ It merges only when all of these hold.
      target and the sheets show it looks better.
    - No sharpening, ever.
 
-The tool decides rules 1, 3 (the measures) and 4 by itself. Its verdict is `FAIL` when any of them breaks, and it
+The tool decides rules 1, 2 (a target that did not change), 3 (the measures) and 4 by itself. It refuses `--target`
+and `--notes` names that are not in the list. When a mosaic's tiles' edges could not be worked out, the report says
+the seam guard is off for it. Its verdict is `FAIL` when any of them breaks, and it
 exits with status 1. Otherwise the verdict is `PASS (nothing changed)` or `NEEDS EYES`. `NEEDS EYES` means the
 reviewer, and Sam for anything he flagged, looks at every changed item's sheet for rules 2, 3 (by eye) and 5. A
 review approves only after looking, and says which sheets it looked at.

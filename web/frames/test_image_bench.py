@@ -90,3 +90,35 @@ def test_guards_one_by_one():
     assert "centre" in image_bench.worse("still", base, {**base, "centre": [10, 0]})
     assert "lit" in image_bench.worse("still", base, {**base, "lit": 0.45})
     assert "crushed" in image_bench.worse("still", base, {**base, "crushed": 0.01})
+
+
+def test_targets(tmp_path, monkeypatch):
+    rng = np.random.default_rng(2)
+    same, a, b = picture(rng), picture(rng), picture(rng, bright=1.2)
+    monkeypatch.setattr(image_bench, "load_items", lambda path=None: items(["same", "fix"]))
+    results(str(tmp_path / "b"), ["same", "fix"], {"same": same, "fix": a})
+    results(str(tmp_path / "c"), ["same", "fix"], {"same": same, "fix": b})
+    quiet = dict(log=lambda m: None, procs=1)
+    # a named target that did not change fails: the rule needs it better
+    s = image_bench.compare(str(tmp_path / "b"), str(tmp_path / "c"), str(tmp_path / "o1"), {"same"}, {"fix": "x"}, **quiet)
+    assert s["verdict"] == "FAIL" and any("did not change" in f for f in s["fails"])
+    # --target all: every item is a target; an unchanged one is fine
+    s = image_bench.compare(str(tmp_path / "b"), str(tmp_path / "c"), str(tmp_path / "o2"), {"all"}, {}, **quiet)
+    assert s["verdict"] == "NEEDS EYES" and not s["collateral"]
+    # names not in the list are refused
+    try:
+        image_bench.compare(str(tmp_path / "b"), str(tmp_path / "c"), str(tmp_path / "o3"), {"fixx"}, {}, **quiet)
+        assert False
+    except SystemExit as e:
+        assert "fixx" in str(e)
+
+
+def test_missing_picture(tmp_path, monkeypatch):
+    rng = np.random.default_rng(3)
+    p = picture(rng)
+    monkeypatch.setattr(image_bench, "load_items", lambda path=None: items(["gone"]))
+    results(str(tmp_path / "b"), ["gone"], {"gone": p})
+    results(str(tmp_path / "c"), ["gone"], {"gone": p})
+    save(str(tmp_path / "b" / "gone"), "frame001.webp", p)   # the base makes a second picture the candidate does not
+    s = image_bench.compare(str(tmp_path / "b"), str(tmp_path / "c"), str(tmp_path / "o"), set(), {"gone": "x"}, log=lambda m: None, procs=1)
+    assert "missing" in s["rows"][0]["worse"]
