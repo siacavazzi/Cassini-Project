@@ -1463,8 +1463,10 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # mosaic's white, and drawn white it was a blotch many times brighter than the glow round it, and in a
             # colour mosaic one band of three at white (the Grand Finale high-phase ring mosaics: 269RI HIPHASEFB001's
             # 38 s BL1 and 6.8 s GRN saturated at I/F 0.0009-0.001 in the glow under Saturn, where RED read 0.0013,
-            # drew a cyan and blue blob; 260RI HIPHASEFA001's 3.8 s RED, saturated at 0.0015 over 80% of the frame, a
-            # white block). saturated_code: the clip as bright as the light round it, eased to white from SAT_WHITE
+            # drew a cyan and blue blob). saturated_code: the clip as bright as the light round it, eased to white from
+            # SAT_WHITE, for a patch a smooth glow climbs into; one with an edge or among ringlets stays white (260RI
+            # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
+            # white block, since nothing round it says how bright it was)
             if full is not None and full.any():
                 picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale["white"], gamma,
                                                                             scale.get("shoulder"), toe)[..., 0])
@@ -1484,12 +1486,15 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     return [display(iof, black, white, gamma, shoulder) for iof, black in zip(iofs, blacks)]
 
 
-SAT_WHITE = (64, 192)   # (saturated_code) display codes: a saturated patch whose clip, or the light round it, is drawn
-                        # under SAT_WHITE[0] keeps that code; from SAT_WHITE[1] it is white, as before; eased between
+SAT_WHITE = (64, 96)    # (saturated_code) display codes: a saturated patch whose clip, or the light round it, is drawn
+                        # under SAT_WHITE[0] keeps that code; from SAT_WHITE[1] it is white, as before; eased between.
+                        # Only a faint glow far under white is drawn as itself (269RI's glow under Saturn, 44-47): from
+                        # 192, ringlets a long exposure clipped among bright ringlets (195RI HIPHASEC001, 143-245) were
+                        # drawn as flat gray bands among white ones
 SAT_RING = 3            # px round a saturated patch read for the light it saturated on
 SAT_RING_MOST = 4.0     # ... and at most this many times the patch's own clip: what reads far brighter beside a patch the
                         # camera clipped in the same exposure is a bled or spiked pixel, not light (260RI HIPHASEFA001's
-                        # W1865188311_1: clipped at 0.0016 I/F, a tenth of its patch's edge read 0.8, and drew it white)
+                        # W1865188311_1: clipped at 0.0016 I/F, a tenth of its patch's edge read 0.8)
 SAT_NEAR = 0.8          # ... a patch whose ring reads this share of its clipped value or more there is a glow that rose
 SAT_SMOOTH = (0.3, 0.6) # ... through the camera's limit when this share of its ring does (eased between): drawn as that
                         # glow; under it the patch has an edge and is white (250EN ENCELSPOL001's crescent: its ring the
