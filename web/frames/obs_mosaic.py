@@ -4284,7 +4284,7 @@ SURFACE_TAG = "-s7"  # in the name of a layout whose tiles are redrawn so (layou
 # in a pass (ISS_00ARI_COMPHIDRK001 near periapsis: the rings' ellipse a quarter flatter by the last pointing; tiles put
 # on the body's centre stepped 10 to 30 px at every seam, and no shift could line up both arms and the ansa at once)
 RING_REDRAW = os.environ.get("CASSINI_RING_REDRAW", "1") != "0"
-RING_REDRAW_DIR = "rings-redrawn12"
+RING_REDRAW_DIR = "rings-redrawn13"
 RING_REDRAW_TAG = "-rr1"
 # (SURFACE_REACH for rings: on a ring plane seen at a low angle its places slide along the arcs by hundreds of px between
 # a pass's first frame and its epoch, ISS_00ARI_COMPHIDRK001's up to 360; kept within SURFACE_REACH, its first and last
