@@ -485,6 +485,22 @@ body.idle .camwin .chans { opacity: .8; }
 .filmstrip canvas[hidden] { display: none; }
 .filmstrip .fsline { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.idle .camwin .filmstrip { opacity: .8; }
+/* the strip's bottom row: the Replay window's transport and speed while the window is full (camCtl), then a picture
+   back, where the picture is in its pass, a picture on */
+.filmstrip .fsrow { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.filmstrip .fsrow .fsline { flex: 0 1 auto; min-width: 0; }
+.filmstrip .camctl { display: none; }
+.win.full .filmstrip .camctl:not(:empty) { display: flex; align-items: center; gap: 8px; margin-right: 10px; }
+.filmstrip .camctl .transport { flex: none; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
+.filmstrip .camctl .transport .round { border: 0; background: none; }
+.filmstrip .camctl .transport .round:hover { background: rgba(255,255,255,.1); }
+.filmstrip .camctl #play { width: 30px; height: 30px; font-size: 11px; background: rgba(255,255,255,.08); }
+.filmstrip .camctl .skip { width: 26px; height: 26px; font-size: 8px; }
+.filmstrip .camctl .skip svg { width: 13px !important; height: 13px !important; }
+.filmstrip .pstep { all: unset; flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 3px; font-size: 14px; line-height: 1; color: var(--q-dim); cursor: default; }
+.filmstrip .pstep:hover { color: #fff; background: rgba(255,255,255,.1); }
+.filmstrip .pstep:focus-visible { outline: 1px solid var(--q-accent); }
+.win.full .filmstrip .fsline { font-size: 11px; }
 .well.has-frame:is(.movie, .steadying) .kindtag { display: block; }
 .well.steadying .kindtag { color: var(--q-dim); }
 /* steady size (Settings > Cameras, cameras.steady): the picture keeps its size while a color set or a mosaic builds.
@@ -1107,6 +1123,18 @@ function targetLabel(k) {
     if (on) front(w);
     const fb = w.querySelector(".fullbtn"); if (fb) fb.setAttribute("aria-label", on ? "Leave full view" : "Full view");
     document.body.classList.toggle("hasfull", !!document.querySelector(".win.full"));
+    camCtl();
+  }
+  // a picture window in full view covers the Replay window, so the Replay window's own transport (play, the moment
+  // arrows) and speed (slider and time warp) move into the window's picture strip while it is full, and back after:
+  // the same controls, never a second copy (Sam, 2026-11-13: everything is controllable from the camera view)
+  const CTL = { t: document.querySelector("#dock .lcdhead .transport"), s: $("speedtool") };
+  function camCtl() {
+    const f = document.querySelector(".win.full"), slot = f && f.querySelector(".filmstrip .camctl");
+    if (!CTL.t || !CTL.s) return;
+    if (slot) { if (CTL.t.parentNode !== slot) slot.append(CTL.t, CTL.s); }
+    else if (CTL.t.parentNode !== CTL.s.parentNode || !CTL.t.closest("#dock")) { const box = document.querySelector("#dock .lcdhead .clockbox"); box.before(CTL.t, CTL.s); }
+    document.body.classList.toggle("camctl", !!slot);
   }
   // the picture size a window asks for: the picture's true resolution (1024, the cameras' full frame; smaller frames
   // come at their own size), or small (512) on a phone or when the picture fills no more than that many screen
@@ -2398,7 +2426,7 @@ function targetLabel(k) {
     let film = card.querySelector(".filmstrip");
     if (!film) {
       film = document.createElement("div"); film.className = "filmstrip"; film.setAttribute("aria-label", "Filmstrip of the pass");
-      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsline"></div>';
+      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsrow"><span class="camctl"></span><button class="pstep" type="button" data-d="-1" aria-label="Previous picture" title="Previous picture (←)">‹</button><div class="fsline"></div><button class="pstep" type="button" data-d="1" aria-label="Next picture" title="Next picture (→)">›</button></div>';
       chans.after(film);
     }
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
@@ -2895,6 +2923,13 @@ function targetLabel(k) {
         if (steps) { wheel -= steps * unit; filmGo(stripAt.p + Math.sign(steps)); }
       }, { passive: false });
       film.addEventListener("pointerdown", e => e.stopPropagation());
+      // one picture back or on: the arrows beside the count, or the arrow keys while this window has the full view
+      film.querySelectorAll(".pstep").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); if (stripAt.ks) filmGo(stripAt.p + +b.dataset.d); }));
+      window.addEventListener("keydown", e => {
+        if (!win.classList.contains("full") || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || !/^Arrow(Left|Right)$/.test(e.key)) return;
+        if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || document.querySelector(".menu.open") || !stripAt.ks) return;
+        e.preventDefault(); filmGo(stripAt.p + (e.key === "ArrowRight" ? 1 : -1));
+      });
       // the window resized: as many pictures as now fit
       new ResizeObserver(() => { if (lastK >= 0 && film.classList.contains("on")) { stripAt.key = ""; filmstrip(stripAt.ks ? stripAt.ks[stripAt.p] : lastK); } }).observe(film);
     }
