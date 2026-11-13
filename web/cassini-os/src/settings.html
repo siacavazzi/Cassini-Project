@@ -345,6 +345,9 @@ body.phone .srow input[type=range] { width: 96px; }
   D({ key: "cameras.channels", section: "Cameras", label: "Filter channels", type: "toggle", value: true,
       hint: "The frames that make up a color picture, in a strip under it." });
   cls("cameras.channels", "s-nochans", false);
+  D({ key: "movies.filmstrip", section: "Cameras", label: "Picture strip", type: "toggle", value: true,
+      hint: "Under each camera and body window: the camera's pictures before and after the one shown, as many as the window's width holds, and under them a bar for the pass, a mark per picture. Click a picture, drag the pictures sideways or scroll over them to step one picture at a time; click or drag along the bar to go through the whole pass. The clock stops on the picture picked." });
+  cls("movies.filmstrip", "s-nofilmstrip", false);
   D({ key: "cameras.details", section: "Cameras", label: "Frame details", type: "toggle", value: true,
       hint: "The caption under each picture: its target and frame, the camera's status, filter and color. The (i) button by it shows the scale and credit too." });
   cls("cameras.details", "s-noinfo", false);
@@ -531,9 +534,6 @@ body.phone .srow input[type=range] { width: 96px; }
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
       hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north toward the top, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
-  D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
-      hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
-  cls("movies.filmstrip", "s-nofilmstrip", false);
   D({ key: "movies.trail", section: "Movie", label: "Movie trail", type: "range", value: 0, min: 0, max: 12, step: 1, unit: "frames",
       hint: "In a steady movie pass, this many earlier frames of the same filter stay under the newest one, fading with age, so a moving moon or a ring's shadow leaves a short trail. 0 shows each frame alone." });
   // a film's own stabilization (film-steady.html), the Movie Editor's Framing by default
