@@ -38,6 +38,15 @@ assert now[full].max() <= plain[ring].max() + 2 and now[full].min() >= plain[ful
 print("a glow saturated far under white is drawn as bright as the glow round it (%d, round it %d); ok"
       % (now[full].max(), plain[ring].max()))
 
+# ringlets a long exposure clipped among bright ringlets, the clip far over the glow's but under white (195RI
+# HIPHASEC001: 143-245 of 255): white as before, not flat gray bands among white ones
+rings = np.where((xx // 4) % 2 == 0, 0.22, 0.08).astype(np.float32)
+rings[:, 76:84] = 0.5
+full = rings >= 0.25
+_, now = drawn(np.minimum(rings, 0.25), full)
+assert now[full].min() == 255, now[full].min()
+print("ringlets clipped well over a glow's level are white; ok")
+
 # a body as bright as white, its bright side saturated: white, as before
 body = np.where(r2 < 50 ** 2, 0.8, 0.002).astype(np.float32)
 body[(r2 < 50 ** 2) & (xx > 100)] = 3.0
@@ -48,11 +57,10 @@ assert now[full].min() == 255, now[full].min()
 print("a body saturated at white is white; ok")
 
 # two patches in one frame: each its own level
-iof = np.full((H, H), 0.001, np.float32)
-full = np.zeros((H, H), bool)
-full[20:40, 20:40] = True       # a glow's patch
-iof[15:45, 15:45] = 0.01
-iof[20:40, 20:40] = 0.012
+iof = (0.001 + 0.02 * np.exp(-((yy - 30) ** 2 + (xx - 30) ** 2) / (2 * 30.0 ** 2))).astype(np.float32)
+full = iof >= 0.016             # a glow's patch, saturated on its middle
+iof = np.minimum(iof, 0.016)
+full[100:140, 100:140] = False
 full[100:140, 100:140] = True   # a lit body's
 iof[95:145, 95:145] = 0.85
 iof[100:140, 100:140] = 0.9
