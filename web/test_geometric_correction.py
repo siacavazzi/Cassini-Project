@@ -119,6 +119,26 @@ assert 0 < bad.sum() < 0.02 * bad.size and not bad[400:600, 400:600].any()
 valid = gc.correct_mask(np.ones((1024, 1024), bool), WAC)
 assert np.array_equal(valid, ~bad)
 
+# what is kept: a WAC sequence of more filters than the plans kept (PLANS_KEEP) works a frame's plan out again, with
+# the same weights and the edge mask kept from its first time; a mask's correction then asks for no plan at all
+pairs = list({f: p for p, f in gc.FOCAL_LENGTHS.items()}.values())[:gc.PLANS_KEEP + 3]   # (each its own focal length)
+assert len({gc.FOCAL_LENGTHS[p] for p in pairs}) == gc.PLANS_KEEP + 3
+infos = [dict(WAC, FILTER_NAME=f'("{a}", "{b}")') for a, b in pairs]
+small = (rng.random((256, 256)) > 0.2)
+pic = rng.random((256, 256)).astype(np.float32)
+gc._plan.cache_clear()
+first = [(gc.correct_mask(small, i), gc.correct(pic, i), gc._plan(256, gc.focal_length(i))) for i in infos]
+assert gc._plan.cache_info().currsize == gc.PLANS_KEEP and all((256, gc.focal_length(i)) in gc._edges for i in infos)
+worked = gc._plan.cache_info().misses
+masks = [gc.correct_mask(small, i) for i in infos]                    # (the plans of the first of them are gone)
+assert gc._plan.cache_info().misses == worked, "a mask's correction worked a plan out"
+assert all(np.array_equal(m, f[0]) for m, f in zip(masks, first))
+for i, (_, out, plan) in zip(infos, first):
+    again = gc._plan(256, gc.focal_length(i))
+    assert again[3] is plan[3] and all(np.array_equal(a, b) for a, b in zip(again[2][1] + again[2][3], plan[2][1] + plan[2][3]))
+    assert np.array_equal(gc.correct(pic, i), out) and not again[3].flags.writeable
+print("plans worked out again are the same, and masks ask for none:", len(pairs), "filter pairs")
+
 # centring: a WAC shift grows from SPICE's 200.77 mm to the corrected frames' 200.956 mm; NAC unchanged
 r = ba.linear_ratio("CASSINI_ISS_WAC", 200.77 / 0.012)
 assert abs(r - 200.956 / 200.77) < 1e-12, r
