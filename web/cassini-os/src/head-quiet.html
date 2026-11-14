@@ -495,6 +495,12 @@ body.idle .camwin .filmstrip { opacity: .8; }
 body.fulldock .win.full { bottom: calc(var(--fulldockh, 180px) + 16px) !important; }
 body.fulldock #dock { position: fixed !important; left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important; width: auto !important; transform: none !important; z-index: 2147482000 !important; opacity: 1 !important; pointer-events: auto !important; }
 body[data-proto="b"] .chans, body[data-proto="b"] .camwin.full .chans { display: none !important; }
+.filmstrip .fscount, .filmstrip .fspass { display: none; }
+body[data-proto="b"] .filmstrip .fsline { display: none; }
+body[data-proto="b"] .filmstrip .fscount { display: inline; font-size: 10.5px; color: var(--q-text); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: center; }
+body[data-proto="b"] .filmstrip .fspass { display: block; font-size: 10.5px; color: var(--q-dim); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; margin-left: 6px; }
+body[data-proto="b"] .filmstrip .fsrow .capstat { margin-left: auto; flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; }
+body[data-proto="b"] .filmstrip .fsrow .capstat .led { flex: none; align-self: center; }
 body[data-proto="b"] .filmstrip .thumbs img.chan { border-bottom: 3px solid var(--ch); }
 body[data-proto="b"] .filmstrip .thumbs img.chan.now { border-bottom-color: var(--ch); }
 body[data-proto="b"] .filmstrip .fsrow .chans { display: flex; gap: 3px; align-items: center; margin-left: 10px; flex: none; }
@@ -2470,9 +2476,10 @@ function targetLabel(k) {
     let film = card.querySelector(".filmstrip");
     if (!film) {
       film = document.createElement("div"); film.className = "filmstrip"; film.setAttribute("aria-label", "Filmstrip of the pass");
-      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsrow"><span class="camctl"></span><button class="pstep" type="button" data-d="-1" aria-label="Previous picture" title="Previous picture (←)">‹</button><div class="fsline"></div><button class="pstep" type="button" data-d="1" aria-label="Next picture" title="Next picture (→)">›</button></div>';
+      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsrow"><span class="camctl"></span><button class="pstep" type="button" data-d="-1" aria-label="Previous picture" title="Previous picture (←)">‹</button><div class="fsline"></div><span class="fscount"></span><button class="pstep" type="button" data-d="1" aria-label="Next picture" title="Next picture (→)">›</button><span class="fspass"></span></div>';
       chans.after(film);
     }
+    const fspass = film.querySelector(".fspass");
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
     // what the window should show for frame k at time et: the composite of its set when k is the frame that
     // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
@@ -2918,6 +2925,12 @@ function targetLabel(k) {
       sp.sort((x, y) => x - y);
       const cad = sp.length ? ` · a picture every ${fmtDur(sp[sp.length >> 1])}` : "";
       const obs = catalog.obs[k] || catalog.target[k] || "";
+      // PROTOTYPE B: the strip's row is about time (the count between its arrows, the pass and its pace, the camera's
+      // state at its end); the caption under it is about the picture
+      film.querySelector(".fscount").textContent = n > 1 ? `${p - first + 1} / ${n}` : "1 / 1";
+      film.querySelector(".fscount").title = n > 1 ? `Picture ${p - first + 1} of ${n} in this pass` : "The only picture in this pass";
+      fspass.textContent = `${obs}${cad ? `${obs ? "," : ""} ${cad.slice(3)}` : ""}`.trim();
+      fspass.title = fspass.textContent;
       film.querySelector(".fsline").textContent = n > 1 ? `Picture ${p - first + 1} of ${n} in this pass${cad}${obs ? ` · ${obs}` : ""}` : `The only picture in this pass${obs ? ` · ${obs}` : ""}`;
     }
     // moving through the strip: the mission clock goes to the picture picked (and stops there); the strip moves at
@@ -2990,7 +3003,12 @@ function targetLabel(k) {
       }, { passive: false });
       film.addEventListener("pointerdown", e => e.stopPropagation());
       // PROTOTYPE B: the filter frames sit in the strip's own row, after where the picture is in its pass
-      const placeChans = () => { const row = film.querySelector(".fsrow"), b = document.body.dataset.proto === "b"; if (b && chans.parentNode !== row) row.append(chans); else if (!b && chans.parentNode === row) film.before(chans); };
+      const placeChans = () => {
+        const row = film.querySelector(".fsrow"), b = document.body.dataset.proto === "b", stat = card.querySelector(".capline .capstat"), cap1 = card.querySelector(".capline .cap1");
+        if (b && chans.parentNode !== row) row.append(chans); else if (!b && chans.parentNode === row) film.before(chans);
+        // the camera's state (imaging now, last frame ...) is about time too: it ends the strip's row
+        if (stat && b && stat.parentNode !== row) row.append(stat); else if (stat && !b && stat.parentNode === row) cap1.append(stat);
+      };
       window.addEventListener("cassini-proto", placeChans); placeChans();
       // one picture back or on: the arrows beside the count, or the arrow keys while this window has the full view
       film.querySelectorAll(".pstep").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); if (stripAt.ks) filmGo(stripAt.p + +b.dataset.d); }));
