@@ -1,0 +1,7 @@
+443177 frames, 124723 WAC; 21 focal lengths: [(200.77, 35973), (200.85, 11680), (200.74, 11207), (200.82, 10042), (201.22, 9831), (200.86, 8863), (200.71, 8832), (201.04, 7804), (201.09, 7528), (200.8
+cache of  6: one process  34435 misses (27.6% of WAC frames); 16 processes  37244 (29.9%)
+cache of  8: one process  16532 misses (13.3% of WAC frames); 16 processes  20789 (16.7%)
+cache of 10: one process   8542 misses ( 6.8% of WAC frames); 16 processes  11842 ( 9.5%)
+cache of 12: one process   3846 misses ( 3.1% of WAC frames); 16 processes   7478 ( 6.0%)
+cache of 16: one process    803 misses ( 0.6% of WAC frames); 16 processes   2407 ( 1.9%)
+cache of 21: one process     21 misses ( 0.0% of WAC frames); 16 processes    325 ( 0.3%)

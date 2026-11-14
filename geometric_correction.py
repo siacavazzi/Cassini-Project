@@ -28,7 +28,9 @@ The pipeline step is "geom" (calibration.STEPS; Settings > Processing), on with 
 (calibration.calibrate) are resampled, and the masks of their pixels (label_handler.valid_mask, calibration.saturated)
 are moved the same way, so they still fall on the same pixels.
 """
+import collections
 import functools
+import threading
 
 import numpy as np
 
@@ -89,7 +91,25 @@ def active(info):
     return cal.step("calibrate") and cal.step("geom")
 
 
-@functools.lru_cache(maxsize=8)
+# Kept per frame size and focal length. A process meets up to 21 focal lengths (FOCAL_LENGTHS and F_DEFAULT) and a WAC
+# sequence cycles through more filters than the plans kept: with 6, the plan was worked out again for 30% of the
+# mission's 124,723 WAC frames, each time a frame was calibrated (168 ms at 1024 px on the M5, as much again as the
+# 80 ms correction; 6% of the pre-build's processed phase on days of many-filter WAC sequences, 2026-11-14). A plan
+# is 43 MB at 1024 px, so not every one can stay; what can:
+#   _edges   the mask of the pixels past the edge alone (a byte a pixel, every size and focal length met): all a
+#            mask's correction (correct_mask) asks of a plan, and 69 ms of working a plan out
+#   _plan    8 plans instead of 6 (17% of the WAC frames then work one out, without their edge mask)
+#   _map     2 maps instead of 8 (17 MB each, 4 ms to work out, used once a plan and once a mask), which pays for the
+#            two more plans: 399 MB at most at 1024 px with every focal length's edge mask, 392 MB before
+# Every value is worked out exactly as before; only how long it is kept changed.
+PLANS_KEEP = 8
+MAPS_KEEP = 2
+EDGES_KEEP = 96
+_edges = collections.OrderedDict()   # (npix, f) -> the mask of the pixels the resampling reaches past the edge
+_edges_lock = threading.Lock()
+
+
+@functools.lru_cache(maxsize=MAPS_KEEP)
 def _map(npix, f):
     """Where each output pixel of an npix x npix frame comes from, in the buffered array (cassimg__geomcorr.pro):
     (b, arrsize, Xobspx, Yobspx) for the output pixels only (the IDL's array truncated to the frame), b the margin's
@@ -157,7 +177,7 @@ def _smooth_nan(image, width):
         return np.where(count > 0.5, total / np.maximum(count, 1e-12), np.nan)
 
 
-@functools.lru_cache(maxsize=6)
+@functools.lru_cache(maxsize=PLANS_KEEP)
 def _plan(npix, f):
     """What geomcorr needs for every frame of size npix at focal length f, worked out once: the map, its cubic
     weights (float32) and the mask of the pixels the resampling reaches past the edge."""
@@ -166,12 +186,28 @@ def _plan(npix, f):
     by, wy = _keys(Yobspx)
     weights = (bx.astype(np.int32), [w.astype(np.float32) for w in wx], by.astype(np.int32),
                [w.astype(np.float32) for w in wy])
-    # bad outer pixels: CISSCAL fills the margin with -1e38 and calls what comes out negative bad; here the margin's
-    # share of each stencil (its weights sum) is what would have made it negative (see the module's notes)
-    margin = np.ones((arrsize, arrsize), np.float32)
-    margin[b:arrsize - b, b:arrsize - b] = 0.0
-    bad = _interpolate(margin, Xobspx, Yobspx, weights) > 1e-6
+    with _edges_lock:
+        bad = _edges.get((npix, f))
+    if bad is None:
+        # bad outer pixels: CISSCAL fills the margin with -1e38 and calls what comes out negative bad; here the margin's
+        # share of each stencil (its weights sum) is what would have made it negative (see the module's notes)
+        margin = np.ones((arrsize, arrsize), np.float32)
+        margin[b:arrsize - b, b:arrsize - b] = 0.0
+        bad = _interpolate(margin, Xobspx, Yobspx, weights) > 1e-6
+        bad.setflags(write=False)   # (kept, and handed to every plan and mask of this size and focal length)
+        with _edges_lock:
+            _edges[(npix, f)] = bad
+            while len(_edges) > EDGES_KEEP:
+                _edges.popitem(last=False)
     return b, arrsize, weights, bad
+
+
+def _edge(npix, f):
+    """The mask of the pixels the resampling of an npix frame at focal length f reaches past the edge (_plan's):
+    the one kept (_edges), or from the plan, worked out when this size and focal length are met for the first time."""
+    with _edges_lock:
+        bad = _edges.get((npix, f))
+    return _plan(npix, f)[3] if bad is None else bad
 
 
 def geomcorr(image, f):
@@ -221,5 +257,5 @@ def correct_mask(mask, info, outside=False):
     out = mask[np.clip(iy, 0, npix - 1), np.clip(ix, 0, npix - 1)]
     out = np.where(inside, out, outside)
     if not outside:
-        out = out & ~_plan(npix, float(focal_length(info)))[3]
+        out = out & ~_edge(npix, float(focal_length(info)))
     return out.astype(mask.dtype, copy=False)
