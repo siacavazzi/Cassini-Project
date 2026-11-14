@@ -185,6 +185,70 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
 
 
 """
+A frame's merge handed on from a pass's plan to its tile. The plan measures the pass's display scale on its frames
+merged in I/F (obs_mosaic.pass_scale: every frame of a pass of up to 96 a filter), and each tile then merges its frame
+again (color_image.load_aligned): the same frames read, calibrated and merged twice, minutes apart in one process.
+pass_scale now asks for the merge as the tile will (valid, clipped) and hands it on (hand_on); the tile's load_hdr call,
+the same path, window and display model, takes it (once: it is the tile's own from then on) instead of working it
+out. Up to HANDED_MB of them wait at a time (CASSINI_HDR_HANDED_MB; a 1024 px frame is 6 MB: the first 21 frames of
+a pass at 128), and a new pass's plan lets go of what the last one's tiles did not take (handing). The merge is the
+one load_hdr returns, so every tile is the same to the bit.
+"""
+HANDED_MB = int(os.environ.get("CASSINI_HDR_HANDED_MB", "128"))
+_handed, _handed_lock = {}, threading.Lock()
+_handed_state = {"bytes": 0, "pass": None}
+
+
+def _handed_key(path, window, max_frames):
+    # (the display model and the steps turned off, calibration.mode, and sky smoothing's slope guard where there is
+    # one: all that calibrate reads of the request)
+    slopes = getattr(cal, "_slopes", None)
+    return path, window, max_frames, cal.mode(), None if slopes is None else slopes.get()
+
+
+def _handed_size(result):
+    return sum(a.nbytes for a in result if isinstance(a, np.ndarray))
+
+
+def handing(key):
+    """A pass's plan begins (key: the pass's): what an earlier pass handed on and no tile took is let go."""
+    with _handed_lock:
+        if _handed_state["pass"] != key:
+            _handed.clear()
+            _handed_state.update(bytes=0)
+            _handed_state["pass"] = key
+
+
+def hand_room():
+    """True while another frame's merge can wait for its tile."""
+    with _handed_lock:
+        return _handed_state["bytes"] < HANDED_MB * 2 ** 20
+
+
+def hand_on(path, window, result, max_frames=8):
+    """Keeps result, load_hdr(path, window, max_frames, valid=True, clipped=True)'s answer in this display model, for
+    the next such call (the tile's), while there is room; False when there is none."""
+    key, size = _handed_key(path, window, max_frames), _handed_size(result)
+    with _handed_lock:
+        if key in _handed or _handed_state["bytes"] + size > HANDED_MB * 2 ** 20:
+            return False
+        _handed[key] = result
+        _handed_state["bytes"] += size
+        return True
+
+
+def _handed_take(path, window, max_frames):
+    if not _handed:
+        return None
+    key = _handed_key(path, window, max_frames)
+    with _handed_lock:
+        result = _handed.pop(key, None)
+        if result is not None:
+            _handed_state["bytes"] -= _handed_size(result)
+    return result
+
+
+"""
 Loads the frame at path with every repeat exposure of it, whatever their exposure times, summing
 modes or gains, and merges them in I/F (calibration.calibrate): an exposure bracket (a short
 exposure for the bright parts, a long one for the faint ones) becomes one picture with the range
@@ -204,8 +268,15 @@ shorter exposure measured them), which keep the first frame's clipped value: the
 white (calibration.load_channels); None with the None image
 Settings > Processing (calibration.step): with "hdr" off only the exposures identical to the frame at path are merged
 (a plain stack, in I/F), with "stack" off the frame at path alone.
+note = a dict that gets "differ": True when the frames merged lost different pixels, so that with valid the merge
+leaves each frame's lost pixels out and is another picture than without it (the same picture otherwise)
+A call with valid and clipped, and no note, takes the answer a pass's plan handed on for it (hand_on), when one waits.
 """
-def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False):
+def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=None):
+    if valid and clipped and note is None:   # (a call with a note is the plan's own: it works the merge out)
+        handed = _handed_take(path, window, max_frames)
+        if handed is not None:
+            return handed
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
@@ -255,6 +326,8 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False):
         full = cal.saturated(codes, info, gray)
         good = ~cv2.dilate(full.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
         merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1), full))
+    if note is not None:
+        note["differ"] = bool(differ)
     for iof, good, mask, exposure, _ in merging:
         if differ:
             good = good & mask
