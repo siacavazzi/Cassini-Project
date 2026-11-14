@@ -6199,13 +6199,24 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
         sigma = TINT_LOCAL * side
         # (normalized convolution: the ratio of the blurred frame to the blurred set over where both are measured, at
         # two reaches, the wide one where the near one has nothing to go on deep inside the clipped part)
-        local = np.ones(g.shape, np.float32)
-        for reach in (4 * sigma, sigma):
+        def reached(reach):
             num = cv2.GaussianBlur(g * match * valid, (0, 0), reach)
             den = cv2.GaussianBlur(y * valid, (0, 0), reach)
             cover = cv2.GaussianBlur(valid, (0, 0), reach)
-            known = np.clip(cover / 0.05, 0, 1)
-            local = local * (1 - known) + np.where(den > 1e-9, num / np.maximum(den, 1e-9), 1.0) * known
+            return np.where(den > 1e-9, num / np.maximum(den, 1e-9), 1.0), np.clip(cover / 0.05, 0, 1)
+        # (the near reach first: wherever it has something to go on (known 1) the wide reach's ratio is multiplied
+        # by 0, and the wide one's three blurs are 4 times as wide, 1,969 taps on a 1024 px picture, most of this
+        # fill's time. So when the near reach knows everywhere the fill is drawn (clip over 0: clipped spots with lit
+        # picture round them) the wide one is not worked out: local is the same there to the bit, and anywhere else
+        # the fill made of it is multiplied by clip's 0. On the color movie frames of eight days of the mission
+        # that left it out of 310 of the 630 frames with anything clipped, 32% of tinted_frame's time, each frame the
+        # same bytes as with both reaches (2026-11-14; web/test_tint_reach.py holds the form this replaced))
+        ratio, known = reached(sigma)
+        local = np.ones(g.shape, np.float32)
+        if (known[clip > 0] < 1).any():
+            wide, far = reached(4 * sigma)
+            local = local * (1 - far) + wide * far
+        local = local * (1 - known) + ratio * known
         local = np.clip(local, *TINT_MATCH).astype(np.float32)
         # (the set's brightness there in the trusted hue, h: its own colors as they are carried the set's limb
         # misregistration in, a lime rim round Epimetheus' clipped clear frames, 259EP EPIMETHEU001)
