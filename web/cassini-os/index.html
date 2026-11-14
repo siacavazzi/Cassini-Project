@@ -7994,7 +7994,9 @@ function targetLabel(k) {
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if ((e.key === "m" || e.key === "M") && e.target === document.body) toggle();
     else if (!M.on) return;
-    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+    // a full camera window's strip steps its own picture with the arrows (head-quiet.html) and says so by
+    // preventDefault: one key press, one step
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { if (e.defaultPrevented) return; e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
     else if (e.key === "Escape" && !document.querySelector(".menu.open, .win.full")) stop();
   });
   const go = $("gomenu");
@@ -14028,7 +14030,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"e980bbdbdb67";
+  const BUILD = /*BUILD*/"6476595212d4";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

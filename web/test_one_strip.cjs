@@ -42,6 +42,19 @@ if (!base) { console.error("usage: node test_one_strip.cjs BASE [UTC ...]"); pro
     await p.click(`${W} .pstep[data-d="-1"]`); await p.waitForTimeout(1500);
     s = await st();
     check(t, "picture arrow steps back", s.count !== c2, [c2, s.count]);
+    // movie mode steps a picture with the arrows too: in full view one key press is still one picture
+    await p.evaluate(() => window.cassiniMovie && window.cassiniMovie.start && window.cassiniMovie.start());
+    await p.waitForTimeout(1500);
+    if (await p.evaluate(() => window.cassiniMovie && window.cassiniMovie.on)) {
+      await p.evaluate(() => { if (window.cassiniMovie.on && document.getElementById("play").textContent !== "▶") document.getElementById("play").click(); });
+      await p.waitForTimeout(800);
+      const n0 = parseInt((await st()).count);
+      await p.keyboard.press("ArrowRight"); await p.waitForTimeout(2000);
+      const n1 = parseInt((await st()).count);
+      check(t, "movie mode: one arrow press steps one picture", n1 - n0 === 1, [n0, n1]);
+      await p.evaluate(() => window.cassiniMovie.stop());
+      await p.waitForTimeout(1500);
+    } else check(t, "movie mode starts", false, null);
     // a double click (two clicks in place) on a tagged picture opens it on its own
     const im = await p.$(`${W} .thumbs img.chan`);
     const r = await im.boundingBox(), x = r.x + r.width / 2, y = r.y + r.height / 2;
