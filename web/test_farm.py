@@ -101,6 +101,14 @@ def test_slots(tmp):
     assert "--procs 8" in open(os.path.join(logdir, "processed-2017-08.log")).read()
     log = shared.read("logs", "mbp", "phases.log").splitlines()
     assert len(log) == 4 and log[0].startswith("2017-08 composites start"), log
+    # the slots still building share the machine's processes: 16 over 3 slots, then over the 2 and the 1 left
+    assert [farm.slot_procs(16, n) for n in (3, 2, 1, 0)] == [6, 8, 16, 16]
+    assert [farm.slot_procs(9, n) for n in (2, 1)] == [5, 9] and farm.slot_procs(1, 3) == 1
+    # ... asked as each phase starts: a slot that ran out of units between this unit's phases leaves it more
+    left = iter([6, 8])
+    farm.build_unit(shared, {}, plan, "mbp", dict(mach, procs=16), b, fake, dict(os.environ), logdir, procs=lambda: next(left))
+    assert "--procs 6 " in open(os.path.join(logdir, "composites-2017-04.log")).read()
+    assert "--procs 8 " in open(os.path.join(logdir, "processed-2017-04.log")).read()
     return 1
 
 

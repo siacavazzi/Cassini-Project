@@ -65,6 +65,8 @@ import time
 import traceback
 import urllib.request
 
+import numpy as np
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import frame_server  # noqa: E402  (puts the repo on the path, loads the pipeline)
 import calibration  # noqa: E402
@@ -98,16 +100,49 @@ def mosaic_passes():
     return [u for u in all_passes() if u["mosaic"] or u.get("kind") == "mosaic_movie"]
 
 
+_scope = [None]   # (stretches, frames file) of a run cut to a stretch or to some frames (main), or None: the whole mission
+
+
+def scoped(spans, only_path):
+    """The observations (target, observation, camera) a run cut to the stretches spans (--years, --from/--until; None
+    for none) and to the frames listed in only_path (--only; None for none) can take a pass from: those with a frame
+    in a stretch, and one among the frames. within and only keep a pass for a frame of its own, and a pass's frames
+    are frames of its observation (obs_mosaic.units works each observation out from its own rows of the index alone),
+    so no pass of another observation is ever kept: all_passes lists these observations' passes alone, the same passes
+    in the same order as the whole list cut down. Listing every pass of the mission took each process 29 s on the M5
+    before its first picture (20,656 observations through units and _judge): the process that deals the work out,
+    then each of its --procs, in each of a farm unit's four pass phases, about a minute of every such phase
+    (2026-11-14; a half-year unit's own observations take 1 to 3 s)."""
+    idx, rows = obs_mosaic._observations()
+    marks = []
+    if spans:
+        t = idx["seconds_1970"].to_numpy(dtype=float)
+        hit = np.zeros(len(idx), bool)
+        for a, b in spans:   # (the stretches as within cuts them: from a, before b)
+            hit |= (t >= (slices.seconds(a) if a else -float("inf"))) & (t < (slices.seconds(b) if b else float("inf")))
+        marks.append(hit)
+    if only_path:
+        with open(only_path) as fh:   # (read as only reads it)
+            ids = {line.replace(",", " ").split()[0] for line in fh if line.strip() and not line.startswith("#")}
+        marks.append(idx["id"].isin(ids).to_numpy())
+    return {(target, obs, "N" if inst == "ISSNA" else "W") for (target, obs, inst), at in rows.items()
+            if all(m[at].any() for m in marks)}
+
+
 @functools.lru_cache(None)
 def all_passes():
-    """Every pass of every observation (obs_mosaic.units), in time order."""
+    """Every pass of every observation (obs_mosaic.units), in time order; in a run cut to a stretch or to some frames
+    (main's _scope), every pass of the observations it can take one from (scoped)."""
     idx, _ = reel.load_index()
+    wanted = scoped(*_scope[0]) if _scope[0] else None
     seen, out = set(), []
     for r in idx[["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"]].itertuples(index=False):
         key = (r.TARGET_NAME, r.OBSERVATION_ID, "N" if r.INSTRUMENT_ID == "ISSNA" else "W")
         if key in seen or not isinstance(key[1], str):
             continue
         seen.add(key)
+        if wanted is not None and key not in wanted:
+            continue
         out += [u for u in obs_mosaic.units(*key) if u["frames"]]
     return out
 
@@ -556,7 +591,14 @@ def make(args, todo, status, errors, holds):
 
 
 PASS_PHASES = ("mosaics", "movies", "strips", "chains")
-BALANCE = 8   # stretches per process (procs --balanced): enough small ones that the processes run out together
+# stretches per process (procs --balanced): enough small ones that the processes run out together. A process out of
+# stretches waits for the one that holds the last, about half a stretch each: 1 / (2 x BALANCE) of the phase's process
+# time, 6% at 8. The overnight build's own status files show 2 to 9% of a phase idle that way, and far more in a
+# small unit's pass phases. Dealt out over the full build's 28 units at 6 processes each, with a pass's frames as its
+# work, the movie phases take 1.065 times the even share at 8, 1.019 at 32 and 1.011 at 64, and the mosaics 1.105,
+# 1.065 and 1.062: what is left is single passes longer than a process's share (2026-11-14). A stretch is still
+# whole items in the order run takes them, each made by one process, so the same pictures are made.
+BALANCE = 64
 
 
 def stretches(args):
@@ -1086,6 +1128,8 @@ def main():
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
     args = ap.parse_args()
+    if spans_of(args) or args.only:   # before any pass is listed: a slice's run lists its own observations' passes
+        _scope[0] = (spans_of(args), args.only)
     if args.phase == "count":
         ids, sets, passes, movies = frame_ids(), page_sets(), mosaic_passes(), movie_passes()
         spans = spans_of(args)
