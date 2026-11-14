@@ -8,4 +8,4 @@ Before is #466 + #467 merged (990775be). After is this branch. Both were shot at
 - Video, `one-strip.mp4` in the project files: full view, play and pause, three picture steps, a double click on a red-channel frame that opens it on its own, As taken and back, then Esc twice.
 - `phone-full-after.jpg`: on a phone (iPhone 13 emulation) in full view, the controls wrap onto rows of their own above the count.
 
-Checks: `node web/test_one_strip.cjs BASE` passes 18 of 18 checks at both moments. `node web/test_channel_frames.cjs BASE` still opens 23 frames with 0 failures, because the filter row's frames still open when the strip is off.
+Checks: `node web/test_one_strip.cjs BASE` passes 22 of 22 checks at both moments (11 each, including one arrow press in movie mode being one step). `node web/test_channel_frames.cjs BASE` still opens 23 frames with 0 failures, because the filter row's frames still open when the strip is off.
