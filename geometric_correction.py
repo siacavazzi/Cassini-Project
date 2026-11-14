@@ -100,7 +100,7 @@ def active(info):
 #            mask's correction (correct_mask) asks of a plan, and 69 ms of working a plan out
 #   _plan    8 plans instead of 6 (17% of the WAC frames then work one out, without their edge mask)
 #   _map     2 maps instead of 8 (17 MB each, 4 ms to work out, used once a plan and once a mask), which pays for the
-#            two more plans: no more memory in all
+#            two more plans: 399 MB at most at 1024 px with every focal length's edge mask, 392 MB before
 # Every value is worked out exactly as before; only how long it is kept changed.
 PLANS_KEEP = 8
 MAPS_KEEP = 2
