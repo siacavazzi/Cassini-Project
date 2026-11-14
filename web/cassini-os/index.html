@@ -516,6 +516,9 @@ body.idle .camwin .filmstrip { opacity: .8; }
 #protopill button[aria-pressed="true"] { color: #fff; background: rgba(138,182,255,.26); }
 body.fulldock .win.full { bottom: calc(var(--fulldockh, 180px) + 16px) !important; }
 body.fulldock #dock { position: fixed !important; left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important; width: auto !important; transform: none !important; z-index: 2147482000 !important; opacity: 1 !important; pointer-events: auto !important; }
+body[data-proto="b"] .chans, body[data-proto="b"] .camwin.full .chans { display: none !important; }
+body[data-proto="b"] .filmstrip .thumbs img.chan { border-bottom: 3px solid var(--ch); }
+body[data-proto="b"] .filmstrip .thumbs img.chan.now { border-bottom-color: var(--ch); }
 body[data-proto="b"] .filmstrip .fsrow .chans { display: flex; gap: 3px; align-items: center; margin-left: 10px; flex: none; }
 body[data-proto="b"] .filmstrip .fsrow .chans:not(.on) { display: none; }
 body[data-proto="b"] .filmstrip .fsrow .chans figure { width: 30px; }
@@ -4672,8 +4675,8 @@ function targetLabel(k) {
   {
     const PROTOS = { a: "Controls move in", b: "One strip", c: "Replay docked" };
     let pr = (new URLSearchParams(location.search).get("proto") || "").toLowerCase();
-    if (!PROTOS[pr]) { try { pr = localStorage.getItem("cassini-proto") || "a"; } catch (e) { pr = "a"; } }
-    if (!PROTOS[pr]) pr = "a";
+    if (!PROTOS[pr]) { try { pr = localStorage.getItem("cassini-proto") || "b"; } catch (e) { pr = "b"; } }
+    if (!PROTOS[pr]) pr = "b";
     const pill = document.createElement("div"); pill.id = "protopill"; pill.setAttribute("role", "group"); pill.setAttribute("aria-label", "Prototype direction");
     pill.innerHTML = "<span>Prototype</span>" + Object.entries(PROTOS).map(([k, v]) => `<button type="button" data-p="${k}" title="${v}">${k.toUpperCase()} <i>${v}</i></button>`).join("");
     document.body.append(pill);
@@ -6400,7 +6403,12 @@ function targetLabel(k) {
         im.classList.toggle("now", j === 0);
         im.classList.toggle("away", pp < first || pp > last);   // another pass: dimmer, so the pass in view reads as one
         im.classList.toggle("passstart", pp === first && j !== -(m >> 1));
-        im.title = `${id} · ${catalog.f1[q]}/${catalog.f2[q]} · ${new Date(etToMs(catalog.et[q])).toISOString().slice(11, 19)} UTC${pp < first || pp > last ? ` · ${catalog.target[q] || ""} ${catalog.obs[q] || ""}`.trimEnd() : ""}`;
+        // PROTOTYPE B: a frame that went into a color picture carries its channel's color along its bottom edge
+        // (the separate filter-frame tiles are gone: Sam, 2026-11-14, "tag those in the black and white frames")
+        const si = catalog.setOf ? catalog.setOf[q] : -1, set = si >= 0 ? catalog.sets[si] : null, cj = set ? set.use.indexOf(q) : -1;
+        const slot = cj < 0 ? -1 : set.use.length === 2 ? [0, 2][cj] : cj;
+        if (slot >= 0) { im.style.setProperty("--ch", CH_COLOUR[slot]); im.classList.add("chan"); } else { im.style.removeProperty("--ch"); im.classList.remove("chan"); }
+        im.title = `${slot >= 0 ? `${["Red", "Green", "Blue"][slot]} channel of a ${(KIND[set.kind] || "color").toLowerCase()} picture · ` : ""}${id} · ${catalog.f1[q]}/${catalog.f2[q]} · ${new Date(etToMs(catalog.et[q])).toISOString().slice(11, 19)} UTC${pp < first || pp > last ? ` · ${catalog.target[q] || ""} ${catalog.obs[q] || ""}`.trimEnd() : ""}`;
         row.push(im);
       }
       thumbs.replaceChildren(...row);
@@ -6461,7 +6469,7 @@ function targetLabel(k) {
         e.stopPropagation(); e.preventDefault();
         thumbs.setPointerCapture(e.pointerId);
         const im = e.target.closest("img"), one = thumbs.firstElementChild;
-        drag = { x: e.clientX, p: stripAt.p, moved: false, to: im ? +im.dataset.p : null, step: one ? one.getBoundingClientRect().width + 3 : 50 };
+        drag = { x: e.clientX, y: e.clientY, p: stripAt.p, moved: false, to: im ? +im.dataset.p : null, step: one ? one.getBoundingClientRect().width + 3 : 50 };
       });
       thumbs.addEventListener("pointermove", e => {
         if (!drag || !thumbs.hasPointerCapture(e.pointerId)) return;
@@ -6471,8 +6479,25 @@ function targetLabel(k) {
         const pp = drag.p - Math.round(dx / drag.step);
         if (pp !== stripAt.p) filmGo(pp);
       });
-      const end = () => { if (drag && !drag.moved && drag.to !== null) filmGo(drag.to); drag = null; thumbs.classList.remove("dragging"); };
+      let tap = { p: null, at: 0 };
+      const end = () => {
+        if (drag && !drag.moved && drag.to !== null) {
+          // PROTOTYPE B: a second click on the same picture within 0.4 s opens it on its own (pointer capture keeps
+          // the browser's own dblclick off the picture, so the two clicks are counted here)
+          // the first click already brought that picture to the middle, so the second lands where the first did on
+          // screen, not on the same picture: it counts by place and time, and opens the picture the first one picked
+          const now = performance.now(), again = tap.p !== null && now - tap.at < 450 && Math.hypot(drag.x - tap.x, drag.y - tap.y) < 8;
+          const first = tap.p;
+          tap = again ? { p: null, at: 0 } : { p: drag.to, at: now, x: drag.x, y: drag.y };
+          if (again) { const q = stripAt.ks && stripAt.ks[first]; if (q !== undefined) openPic(q); }
+          else filmGo(drag.to);
+        }
+        drag = null; thumbs.classList.remove("dragging");
+      };
       thumbs.addEventListener("pointerup", end);
+      // PROTOTYPE B: a double click opens that frame on its own in this window (processed, with Processed / As taken,
+      // save and gallery like any picture); Esc or the breadcrumb goes back to live
+
       thumbs.addEventListener("pointercancel", () => { drag = null; thumbs.classList.remove("dragging"); });
       // the wheel or a trackpad's swipe over the pictures: a picture per notch
       let wheel = 0;
@@ -6791,6 +6816,22 @@ function targetLabel(k) {
         tag: `FRAME · ${fname(q)} · ON ITS OWN`, shot: id,
         lines: { frame: pdsLinks(`${targetLabel(q)} · ${id}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
           colour: `One frame of the ${KIND[s.kind] ? KIND[s.kind].toLowerCase() : "color"} set, on its own scale`, details: `${hhmm(unix(q))} UTC` } };
+      takenable(lv, id);
+      hold1(levels.concat([lv]));
+    }
+    // PROTOTYPE B: any picture of the strip opened on its own (openFrame's level, for a frame in or out of a color set)
+    function openPic(q) {
+      const id = catalog.id[q]; if (!(q >= 0) || !id) return;
+      const si = catalog.setOf ? catalog.setOf[q] : -1, s = si >= 0 ? catalog.sets[si] : { kind: null, use: [] };
+      const t = top(), levels = hold ? hold.levels.slice() : [];
+      while (levels.length && (levels[levels.length - 1].kind === "channel" || (levels[levels.length - 1].kind === "frame" && levels[levels.length - 1].strip))) levels.pop();
+      if (t && t.kind === "frame" && t.strip && t.k === q) { if (!levels.length) return release(); hold.levels = levels; return showLevel(); }
+      const inSet = s.use.includes(q);
+      const lv = { kind: "frame", strip: s, k: q, fall: 0, label: `${fname(q)}${nmOf(q) ? ` ${Math.round(nmOf(q))} nm` : ""} · ${id}`,
+        url(sz) { const u = frameChain(q, sz); return u[Math.min(this.fall, u.length - 1)]; },
+        tag: `FRAME · ${fname(q)} · ON ITS OWN`, shot: id,
+        lines: { frame: pdsLinks(`${targetLabel(q)} · ${id}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
+          colour: inSet ? `One frame of the ${KIND[s.kind] ? KIND[s.kind].toLowerCase() : "color"} set, on its own scale` : "A single frame", details: `${hhmm(unix(q))} UTC` } };
       takenable(lv, id);
       hold1(levels.concat([lv]));
     }
@@ -14004,7 +14045,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"9d4ce83d9cdb";
+  const BUILD = /*BUILD*/"a30f4ea9a073";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
