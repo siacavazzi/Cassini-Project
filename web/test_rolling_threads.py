@@ -3,6 +3,11 @@ keep each other's last pictures (obs_mosaic._rolled, ROLLED_PASSES): every frame
 the one before (one tile's compose), none is drawn whole again because another thread's pass pushed its picture
 out. Run: python web/test_rolling_threads.py"""
 import os, sys, json, tempfile, threading, collections
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import numpy as np
 from PIL import Image
