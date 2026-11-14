@@ -551,7 +551,7 @@ def calibrate(png, info, image=None, smooth=True):
         if sky is not None and step("skysmooth"):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
-            per_second = smooth_sky(per_second, png, sky)
+            per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -613,6 +613,12 @@ SKY_RAMP = 60              # ... and over SKY_GLOW where its level rises half a 
 SKY_GLOW = 16              # ... (sigma, at full resolution): a glow's own slope
 SKY_LEVEL = 20             # ... that level the stored codes blurred over this many pixels (sigma, at full resolution)
 SKY_GLOW_TOP = 24          # ... and beyond the dark sky, where that glow is up to this many codes over the sky (fading out by twice it)
+SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move further than this many codes from its own (from the
+                           # first, none from the second) keeps its own: the glow's one-code steps move a code at most, a
+                           # crescent's terminator, too steep for the blur, was pulled down to the edge of the smoothing and
+                           # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14). Only on the
+SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets: every other frame keeps the smoothing as it was (on all of them,
+                           # the change moved Jupiter's approach movie's evening and ring movies' registration)
 
 
 """
@@ -626,7 +632,7 @@ detail, more codes apart, stay as they were), here only on the dark sky the 2 Hz
 (cisscal_noise.dark_sky, its edge feathered over the same blur), and blurred over the steps alone. iof = the frame
 calibrated, png = its stored codes, sky = that dark sky, all the same size.
 """
-def smooth_sky(iof, png, sky):
+def smooth_sky(iof, png, sky, slopes=False):
     pixels = np.asarray(png)
     if pixels.shape != iof.shape or np.shape(sky) != iof.shape:
         return iof
@@ -664,13 +670,17 @@ def smooth_sky(iof, png, sky):
             spread = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
             near = step * np.clip(1 - (np.abs(codes - spread) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
         spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        # the codes that smoothing would give, against the pixel's own: past SKY_GLOW_MOVE it is a slope, not a step
+        smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        if slopes:
+            moved = np.abs(smoothed - codes)
+            near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
         blur = blur + glow * near * (spread - blur)
         # and on past the dark sky into the glow's bright part, up to SKY_GLOW_TOP codes over the sky: a plume's root
         # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
         # fan was a hard grainy ring (Sam, 11-04: "hard looking artifacts"); a moon's lit side, far brighter, and its
         # texture (more than a code off the wider blur, near) stay as they are
-        over = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6) \
-            - np.median(codes, axis=1, keepdims=True)
+        over = smoothed - np.median(codes, axis=1, keepdims=True)
         faint = np.clip(2.0 - over / SKY_GLOW_TOP, 0, 1).astype(np.float32)
         weight = np.maximum(weight, glow * near * faint)
     return iof + weight * (blur - iof)
@@ -867,6 +877,23 @@ left out of variant (a mosaic with them off draws the same tiles) and the mosaic
 """
 STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
+_slopes = contextvars.ContextVar("slopes", default=True)
+
+
+"""Sky smoothing's slope guard (SKY_SLOPE_BODIES) on or off for this request (on by default)."""
+@contextlib.contextmanager
+def slope_guard(on):
+    token = _slopes.set(bool(on))
+    try:
+        yield
+    finally:
+        _slopes.reset(token)
+
+
+"""Whether sky smoothing's slope guard changes how any of the frames of labels is calibrated (SKY_SLOPE_BODIES)."""
+def slope_guarded(labels):
+    return _slopes.get() and step("skysmooth") and any(
+        _value(lbl.get_info(), "TARGET_NAME", "") in SKY_SLOPE_BODIES for lbl in labels)
 
 
 def step(name):

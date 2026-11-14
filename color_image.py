@@ -291,6 +291,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     dropped = []
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
+        own = list(iofs)   # (as given: the guide below calibrates them again without the slope guard)
         iofs = cal.calibrated_each(lbls, imgs, iofs)
         keep = [j for j, iof in enumerate(iofs) if iof is not None]
         # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
@@ -304,7 +305,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
-            lbls, imgs, iofs, masks, stacked, clips = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips))
+            lbls, imgs, iofs, masks, stacked, clips, own = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own))
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
@@ -332,8 +333,15 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if linear is not None and len(lbls) > 1:
             # the channels are aligned on their classic display whatever the look, so a look changes only how
             # the picture is drawn, never where its channels land
-            with cal.looking("classic"):
-                guide = cal.load_channels(lbls, imgs, iofs=iofs)
+            # (and on the frames as sky smoothing drew them before its slope guard, calibration.SKY_SLOPE_BODIES: the
+            # guard takes a hard line off a Titan crescent's terminator, and the channels matched on its new slope came
+            # out several pixels apart on some sets, h229/h230 ISS_229TI/230TI, fringes round the limb)
+            if cal.slope_guarded(lbls):
+                with cal.looking("classic"), cal.slope_guard(False):
+                    guide = cal.load_channels(lbls, imgs, iofs=cal.calibrated_each(lbls, imgs, own))
+            else:
+                with cal.looking("classic"):
+                    guide = cal.load_channels(lbls, imgs, iofs=iofs)
             # what the camera saturated in each channel (merged in I/F: what every exposure saturated), moved with
             # its channel below: filled from the channels that did not saturate there (calibration.tone, fill_saturated)
             # (on the channels' grid: a summed frame's own mask is 512 px, and one with nothing saturated comes back
