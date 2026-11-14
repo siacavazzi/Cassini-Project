@@ -613,6 +613,10 @@ SKY_RAMP = 60              # ... and over SKY_GLOW where its level rises half a 
 SKY_GLOW = 16              # ... (sigma, at full resolution): a glow's own slope
 SKY_LEVEL = 20             # ... that level the stored codes blurred over this many pixels (sigma, at full resolution)
 SKY_GLOW_TOP = 24          # ... and beyond the dark sky, where that glow is up to this many codes over the sky (fading out by twice it)
+SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move further than this many codes from its own (from the
+                           # first, none from the second) keeps its own: the glow's one-code steps move a code at most, a
+                           # crescent's terminator, too steep for the blur, was pulled down to the edge of the smoothing and
+                           # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14)
 
 
 """
@@ -664,13 +668,16 @@ def smooth_sky(iof, png, sky):
             spread = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
             near = step * np.clip(1 - (np.abs(codes - spread) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
         spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        # the codes that smoothing would give, against the pixel's own: past SKY_GLOW_MOVE it is a slope, not a step
+        smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        moved = np.abs(smoothed - codes)
+        near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
         blur = blur + glow * near * (spread - blur)
         # and on past the dark sky into the glow's bright part, up to SKY_GLOW_TOP codes over the sky: a plume's root
         # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
         # fan was a hard grainy ring (Sam, 11-04: "hard looking artifacts"); a moon's lit side, far brighter, and its
         # texture (more than a code off the wider blur, near) stay as they are
-        over = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6) \
-            - np.median(codes, axis=1, keepdims=True)
+        over = smoothed - np.median(codes, axis=1, keepdims=True)
         faint = np.clip(2.0 - over / SKY_GLOW_TOP, 0, 1).astype(np.float32)
         weight = np.maximum(weight, glow * near * faint)
     return iof + weight * (blur - iof)
