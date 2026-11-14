@@ -539,8 +539,10 @@ def machine_env(machine):
                 **{k: os.path.expanduser(str(v)) for k, v in machine.get("env", {}).items()})
 
 
-def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_run=False):
-    """Every phase of one unit, in order, each retried once; its result written to done/<unit>.json."""
+def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_run=False, procs=None):
+    """Every phase of one unit, in order, each retried once; its result written to done/<unit>.json. procs(): the
+    processes each phase starts with, asked as it starts (cmd_run's slots share the machine's between those still
+    building); the machine's own "procs" without it."""
     result = {"unit": unit["unit"], "machine": me, "started": now(), "phases": {}}
     phases = unit.get("phases", plan.get("phases", PHASES))
     name = f"farm-{me}-{unit['unit']}"
@@ -553,7 +555,7 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
     for k, phase in enumerate(phases):
         if not dry_run:
             job(shared, farm, "update", name, f"{phase} ({k + 1}/{len(phases)})", "--pct", int(100 * k / len(phases)))
-        cmd = prebuild_cmd(machine, unit, phase, python)
+        cmd = prebuild_cmd(dict(machine, procs=procs()) if procs else machine, unit, phase, python)
         if dry_run:
             print(" ".join(map(shlex.quote, cmd)))
             continue
@@ -581,11 +583,19 @@ def build_unit(shared, farm, plan, me, machine, unit, python, env, logdir, dry_r
         job(shared, farm, "done", name, f"all {len(phases)} phases in {secs / 3600:.1f} h")
 
 
+def slot_procs(procs, building):
+    """The processes each of a machine's slots still building starts its next phase with: the machine's "procs" shared
+    between them, rounded up (16 over 3 slots: 6 each; over the 2 left when one runs out of units: 8; the last: 16)."""
+    return max(1, -(-int(procs) // max(1, int(building))))
+
+
 def cmd_run(args):
     """Takes units and builds them. With slots > 1 (--slots or the machine's "slots") it builds that many units at once,
     each with procs / slots processes and its own status folder, so one unit's single-process tail (its biggest mosaic or
-    movie pass) leaves the other cores to the next unit. Several slots never free the disk while shipping: a unit still
-    building may need files a finished one shares."""
+    movie pass) leaves the other cores to the next unit. A slot that finds no unit left stops, and the slots still
+    building share the machine's processes between them from their next phase on (a unit's last phases on all the
+    cores, not a third of them while the rest of the machine waits). Several slots never free the disk while shipping:
+    a unit still building may need files a finished one shares."""
     shared = Shared(args.shared)
     farm, plan = load_json(shared, "farm.json"), load_json(shared, "plan.json")
     me = args.machine
@@ -615,25 +625,31 @@ def cmd_run(args):
     if slots > 1:
         machine["free"] = False
     shipper = Shipper(machine, os.path.join(logdir, "ship.log"))
-    lock, busy = threading.Lock(), set()
+    lock, busy, building = threading.Lock(), set(), [slots]
+
+    def share():
+        """The processes a phase starting now gets: the machine's, shared between the slots still building."""
+        return slot_procs(machine.get("procs", 1), building[0])
 
     def worker(k):
         m = dict(machine)
         if slots > 1:
-            m["procs"] = max(1, -(-int(machine.get("procs", 1)) // slots))
             m["status"] = os.path.join(machine.get("status") or os.path.join(machine["cache"], "..", "status-" + me), f"slot{k}")
         while True:
             if shared.exists(f"stop-{me}"):
                 print(f"slot {k}: stop-{me} is there: stopping")
+                with lock:
+                    building[0] -= 1
                 return
             with lock:
                 unit = next_unit(shared, plan, me, machine, busy) if not args.dry_run else \
                     (candidates(plan, me, machine) or [None])[0]
                 if unit is None:
                     print(f"slot {k}: no unit left")
+                    building[0] -= 1
                     return
                 busy.add(unit["unit"])
-            build_unit(shared, farm, plan, me, m, unit, python, env, logdir, args.dry_run)
+            build_unit(shared, farm, plan, me, m, unit, python, env, logdir, args.dry_run, procs=share if slots > 1 else None)
             if args.dry_run:
                 return
             with lock:
