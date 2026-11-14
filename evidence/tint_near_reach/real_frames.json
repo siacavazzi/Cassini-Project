@@ -1,0 +1,13 @@
+{
+ "what": "obs_mosaic.tinted_frame, the form at 2bdee523 against this PR's, on every color movie frame of 8 mission days (2000-12-30, 2005-02-05, 2006-09-07, 2007-02-20, 2008-10-09, 2011-02-25, 2015-09-08, 2017-02-07): 56 movie passes, each frame drawn by movie_frame as the pre-build's make_pass asks, MacBook Pro M5, 14 processes, 2026-11-14",
+ "movie_frames_drawn": 1343,
+ "tinted_frame_calls": 729,
+ "same_bytes": 729,
+ "differ": 0,
+ "calls_with_nothing_clipped": 99,
+ "calls_with_clipping": 630,
+ "wide_reach_skipped": 310,
+ "seconds_before": 926.5,
+ "seconds_after": 626.8,
+ "errors": 0
+}
