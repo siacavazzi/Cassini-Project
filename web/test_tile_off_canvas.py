@@ -4,6 +4,11 @@ skips the rest, instead of failing with "could not broadcast input array" (four 
 e.g. SATURN ISS_033RI_LPHRDFMOV001_PRIME N 0). Tiles inside the view come out as before.
 Run: python web/test_tile_off_canvas.py"""
 import os, sys, json, tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import numpy as np
 from PIL import Image

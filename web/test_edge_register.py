@@ -14,6 +14,11 @@ edge against the dark (the limb, a ring's edge) and lines the pointings up acros
 - A pass of a moon still takes #169's detail registration (test_panel_register.py), and its files and names.
 Run: python web/test_edge_register.py"""
 import os, sys, json, tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 # the one-pointing-at-a-time edge rule this test is about (global_places, the default, solves the same edge matches
 # together: test_global_scene.py)
 os.environ["CASSINI_GLOBAL_PANELS"] = "0"
