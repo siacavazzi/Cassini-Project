@@ -505,8 +505,39 @@ body.idle .camwin .chans { opacity: .8; }
 .filmstrip .thumbs img.now { opacity: 1; border-color: rgba(255,255,255,.85); box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
 .filmstrip canvas { width: 100%; height: 16px; display: block; cursor: pointer; touch-action: none; }
 .filmstrip canvas[hidden] { display: none; }
-.filmstrip .fsline { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.idle .camwin .filmstrip { opacity: .8; }
+/* one strip (Sam, 2026-11-14): under a picture there is one row of thumbnails, the picture strip. The frames that went
+   into a color picture carry their channel's color along their bottom edge in place of a separate row of filter
+   tiles (the channel strip shows only when the picture strip is off). The strip's last row is about time: the
+   Replay window's transport and speed while the window is full (camCtl), a picture back, the count, a picture on,
+   the pass and its pace, the camera's state; the caption under it is about the picture */
+.chans:has(~ .filmstrip.on) { display: none !important; }
+.filmstrip .thumbs img.chan { border-bottom: 3px solid var(--ch); }
+.filmstrip .fscount { font-size: 10.5px; color: var(--q-text); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: center; }
+.filmstrip .fspass { font-size: 10.5px; color: var(--q-dim); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; margin-left: 6px; }
+.filmstrip .fsrow .capstat { margin-left: auto; flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; }
+.filmstrip .fsrow .capstat .led { flex: none; align-self: center; }
+/* a full window whose picture has no strip leaves the Replay window in view under it instead (camCtl) */
+body.fulldock .win.full { bottom: calc(var(--fulldockh, 180px) + 16px) !important; }
+body.fulldock #dock { position: fixed !important; left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important; width: auto !important; transform: none !important; z-index: 2147482000 !important; opacity: 1 !important; pointer-events: auto !important; }
+.filmstrip .fsrow { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.filmstrip .camctl { display: none; }
+.win.full .filmstrip .camctl:not(:empty) { display: flex; align-items: center; gap: 8px; margin-right: 10px; }
+.filmstrip .camctl .transport { flex: none; gap: 1px; padding: 2px; border: 1px solid var(--q-line); border-radius: 16px; }
+.filmstrip .camctl .transport .round { border: 0; background: none; }
+.filmstrip .camctl .transport .round:hover { background: rgba(255,255,255,.1); }
+.filmstrip .camctl #play { width: 30px; height: 30px; font-size: 11px; background: rgba(255,255,255,.08); }
+.filmstrip .camctl .skip { width: 26px; height: 26px; font-size: 8px; }
+.filmstrip .camctl .skip svg { width: 13px !important; height: 13px !important; }
+.filmstrip .pstep { all: unset; flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 3px; font-size: 14px; line-height: 1; color: var(--q-dim); cursor: default; }
+.filmstrip .pstep:hover { color: #fff; background: rgba(255,255,255,.1); }
+.filmstrip .pstep:focus-visible { outline: 1px solid var(--q-accent); }
+.win.full .filmstrip :is(.fscount, .fspass, .capstat) { font-size: 11px; }
+/* a phone is too narrow for the controls and the count in one row: the controls take a row of their own */
+body.phone .filmstrip .fsrow { flex-wrap: wrap; row-gap: 4px; }
+body.phone .win.full .filmstrip .camctl:not(:empty) { flex: 1 0 100%; margin-right: 0; flex-wrap: wrap; gap: 4px; }
+body.phone .filmstrip .camctl .speedtool { min-width: 0; max-width: 100%; }
+body.phone .filmstrip .fspass { flex: 1 1 0; }
 .well.has-frame:is(.movie, .steadying) .kindtag { display: block; }
 .well.steadying .kindtag { color: var(--q-dim); }
 /* steady size (Settings > Cameras, cameras.steady): the picture keeps its size while a color set or a mosaic builds.
@@ -4627,6 +4658,22 @@ function targetLabel(k) {
     if (on) front(w);
     const fb = w.querySelector(".fullbtn"); if (fb) fb.setAttribute("aria-label", on ? "Leave full view" : "Full view");
     document.body.classList.toggle("hasfull", !!document.querySelector(".win.full"));
+    camCtl();
+  }
+  // a picture window in full view covers the Replay window, so the Replay window's own transport (play, the moment
+  // arrows) and speed (slider and time warp) move into the window's picture strip while it is full, and back after:
+  // the same controls, never a second copy (Sam, 2026-11-13: everything is controllable from the camera view)
+  const CTL = { t: document.querySelector("#dock .lcdhead .transport"), s: $("speedtool") };
+  new ResizeObserver(() => { if (document.body.classList.contains("fulldock")) document.body.style.setProperty("--fulldockh", $("dock").offsetHeight + "px"); }).observe($("dock"));
+  function camCtl() {
+    const f = document.querySelector(".win.full"), dock = $("dock"), slot = f && f.querySelector(".filmstrip.on .camctl");
+    const docked = !!f && !slot && !dock.hidden && !dock.dataset.min;
+    document.body.classList.toggle("fulldock", !!docked);
+    if (docked) document.body.style.setProperty("--fulldockh", dock.offsetHeight + "px");
+    if (!CTL.t || !CTL.s) return;
+    if (slot) { if (CTL.t.parentNode !== slot) slot.append(CTL.t, CTL.s); }
+    else if (CTL.t.parentNode !== CTL.s.parentNode || !CTL.t.closest("#dock")) { const box = document.querySelector("#dock .lcdhead .clockbox"); box.before(CTL.t, CTL.s); }
+    document.body.classList.toggle("camctl", !!slot);
   }
   // the picture size a window asks for: the picture's true resolution (1024, the cameras' full frame; smaller frames
   // come at their own size), or small (512) on a phone or when the picture fills no more than that many screen
@@ -4646,7 +4693,7 @@ function targetLabel(k) {
   });
   document.querySelectorAll(".win").forEach(wire);
   front($("dock"));
-  window.cassiniWM = { wire, front, minimize, restore, zoom, full, sized, syncMenu: () => syncMenu() };
+  window.cassiniWM = { wire, front, minimize, restore, zoom, full, sized, camCtl: () => camCtl(), syncMenu: () => syncMenu() };
   // the WAC window starts where the NAC window ends, however wide that is
   new ResizeObserver(() => { const n = $("imgcard"); if (n.offsetWidth && (n.style.width || n.querySelector(".well.has-frame"))) $("app").style.setProperty("--nacw", n.offsetWidth + "px"); }).observe($("imgcard"));
 
@@ -5918,9 +5965,10 @@ function targetLabel(k) {
     let film = card.querySelector(".filmstrip");
     if (!film) {
       film = document.createElement("div"); film.className = "filmstrip"; film.setAttribute("aria-label", "Filmstrip of the pass");
-      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsline"></div>';
+      film.innerHTML = '<div class="thumbs"></div><canvas height="28"></canvas><div class="fsrow"><span class="camctl"></span><button class="pstep" type="button" data-d="-1" aria-label="Previous picture" title="Previous picture (←)">‹</button><span class="fscount"></span><button class="pstep" type="button" data-d="1" aria-label="Next picture" title="Next picture (→)">›</button><span class="fspass"></span></div>';
       chans.after(film);
     }
+    const fspass = film.querySelector(".fspass");
     const fname = k => colourFilter(k) || `${catalog.f1[k]}/${catalog.f2[k]}`;
     // what the window should show for frame k at time et: the composite of its set when k is the frame that
     // completed it (or another of its channels); every other new frame shows itself, so a long run of filters
@@ -6295,15 +6343,24 @@ function targetLabel(k) {
     const thumbMin = () => document.body.classList.contains("phone") ? 52 : win.classList.contains("full") ? 84 : win.classList.contains("zoomed") ? 60 : 50;
     const thumbUrl = (q, rolling) => !rolling && playsMovie(q) ? (S.get("movies.stabilizeLocal") ? movieUrl(catalog.id[q], 128, 0, 0, undefined, 0) : movieUrl(catalog.id[q], 128))
       : shownFrameUrl(q, 128);
+    // the strip shown or not: the camera's state sits at the end of its last row while it is up, in the caption
+    // otherwise, and a full window takes the Replay window's controls only while it has a strip
+    const capstat = card.querySelector(".capline .capstat"), cap1 = card.querySelector(".capline .cap1");
+    function stripOn(on) {
+      if (film.classList.contains("on") === on && (!capstat || (capstat.parentNode === cap1) !== on)) return;
+      film.classList.toggle("on", on);
+      if (capstat) (on ? film.querySelector(".fsrow") : cap1).append(capstat);
+      if (win.classList.contains("full") && window.cassiniWM && cassiniWM.camCtl) cassiniWM.camCtl();
+    }
     function filmstrip(k, onScreen) {
-      if (k < 0 || !S.get("movies.filmstrip")) { film.classList.remove("on"); stripAt = { key: "", ks: null, p: -1, first: 0, last: -1, n: 0 }; return; }
+      if (k < 0 || !S.get("movies.filmstrip")) { stripOn(false); stripAt = { key: "", ks: null, p: -1, first: 0, last: -1, n: 0 }; return; }
       // a movie frame that comes up after the strip was moved on by hand stays where the hand put it
       if (onScreen && picked >= 0 && k !== picked && performance.now() - pickedAt < 2500) return;
       const F = framesOf(cam, body), ks = F.ks;
       let p = lastOfCam(cam, catalog.et[k], body);
       while (p > 0 && ks[p] !== k && catalog.et[ks[p - 1]] === catalog.et[k]) p--;
-      if (p < 0 || ks[p] !== k) { film.classList.remove("on"); return; }
-      film.classList.add("on");
+      if (p < 0 || ks[p] !== k) { stripOn(false); return; }
+      stripOn(true);
       const [first, last] = passSpan(cam, body, p), n = last - first + 1;
       const thumbs = film.querySelector(".thumbs"), cv = film.querySelector("canvas");
       const w = thumbs.clientWidth || film.clientWidth, gap = 3, min = thumbMin();
@@ -6331,7 +6388,11 @@ function targetLabel(k) {
         im.classList.toggle("now", j === 0);
         im.classList.toggle("away", pp < first || pp > last);   // another pass: dimmer, so the pass in view reads as one
         im.classList.toggle("passstart", pp === first && j !== -(m >> 1));
-        im.title = `${id} · ${catalog.f1[q]}/${catalog.f2[q]} · ${new Date(etToMs(catalog.et[q])).toISOString().slice(11, 19)} UTC${pp < first || pp > last ? ` · ${catalog.target[q] || ""} ${catalog.obs[q] || ""}`.trimEnd() : ""}`;
+        // a frame that went into a color picture carries its channel's color along its bottom edge (one strip)
+        const si = catalog.setOf ? catalog.setOf[q] : -1, set = si >= 0 ? catalog.sets[si] : null, cj = set ? set.use.indexOf(q) : -1;
+        const slot = cj < 0 ? -1 : set.use.length === 2 ? [0, 2][cj] : cj;
+        if (slot >= 0) { im.style.setProperty("--ch", CH_COLOUR[slot]); im.classList.add("chan"); } else { im.style.removeProperty("--ch"); im.classList.remove("chan"); }
+        im.title = `${slot >= 0 ? `${["Red", "Green", "Blue"][slot]} channel of a ${(KIND[set.kind] || "color").toLowerCase()} picture · ` : ""}${id} · ${catalog.f1[q]}/${catalog.f2[q]} · ${new Date(etToMs(catalog.et[q])).toISOString().slice(11, 19)} UTC${pp < first || pp > last ? ` · ${catalog.target[q] || ""} ${catalog.obs[q] || ""}`.trimEnd() : ""}`;
         row.push(im);
       }
       thumbs.replaceChildren(...row);
@@ -6361,7 +6422,11 @@ function targetLabel(k) {
       sp.sort((x, y) => x - y);
       const cad = sp.length ? ` · a picture every ${fmtDur(sp[sp.length >> 1])}` : "";
       const obs = catalog.obs[k] || catalog.target[k] || "";
-      film.querySelector(".fsline").textContent = n > 1 ? `Picture ${p - first + 1} of ${n} in this pass${cad}${obs ? ` · ${obs}` : ""}` : `The only picture in this pass${obs ? ` · ${obs}` : ""}`;
+      // the last row: the count between the arrows, then the pass and its pace
+      film.querySelector(".fscount").textContent = n > 1 ? `${p - first + 1} / ${n}` : "1 / 1";
+      film.querySelector(".fscount").title = n > 1 ? `Picture ${p - first + 1} of ${n} in this pass` : "The only picture in this pass";
+      fspass.textContent = `${obs}${cad ? `${obs ? "," : ""} ${cad.slice(3)}` : ""}`.trim();
+      fspass.title = fspass.textContent;
     }
     // moving through the strip: the mission clock goes to the picture picked (and stops there); the strip moves at
     // once, without waiting for the picture to come up
@@ -6392,7 +6457,7 @@ function targetLabel(k) {
         e.stopPropagation(); e.preventDefault();
         thumbs.setPointerCapture(e.pointerId);
         const im = e.target.closest("img"), one = thumbs.firstElementChild;
-        drag = { x: e.clientX, p: stripAt.p, moved: false, to: im ? +im.dataset.p : null, step: one ? one.getBoundingClientRect().width + 3 : 50 };
+        drag = { x: e.clientX, y: e.clientY, p: stripAt.p, moved: false, to: im ? +im.dataset.p : null, step: one ? one.getBoundingClientRect().width + 3 : 50 };
       });
       thumbs.addEventListener("pointermove", e => {
         if (!drag || !thumbs.hasPointerCapture(e.pointerId)) return;
@@ -6402,7 +6467,22 @@ function targetLabel(k) {
         const pp = drag.p - Math.round(dx / drag.step);
         if (pp !== stripAt.p) filmGo(pp);
       });
-      const end = () => { if (drag && !drag.moved && drag.to !== null) filmGo(drag.to); drag = null; thumbs.classList.remove("dragging"); };
+      let tap = { p: null, at: 0 };
+      const end = e => {
+        if (drag && !drag.moved && drag.to !== null) {
+          // a second click on the same picture within 0.4 s opens it on its own (pointer capture keeps
+          // the browser's own dblclick off the picture, so the two clicks are counted here)
+          // the first click already brought that picture to the middle, so the second lands where the first did on
+          // screen, not on the same picture: it counts by place and time, and opens the picture the first one picked
+          // (timed by the events themselves: the first click's step can keep the page busy for a moment)
+          const now = e.timeStamp, again = tap.p !== null && now - tap.at < 500 && Math.hypot(drag.x - tap.x, drag.y - tap.y) < 8;
+          const first = tap.p;
+          tap = again ? { p: null, at: 0 } : { p: drag.to, at: now, x: drag.x, y: drag.y };
+          if (again) { const q = stripAt.ks && stripAt.ks[first]; if (q !== undefined) openPic(q); }
+          else filmGo(drag.to);
+        }
+        drag = null; thumbs.classList.remove("dragging");
+      };
       thumbs.addEventListener("pointerup", end);
       thumbs.addEventListener("pointercancel", () => { drag = null; thumbs.classList.remove("dragging"); });
       // the wheel or a trackpad's swipe over the pictures: a picture per notch
@@ -6415,6 +6495,13 @@ function targetLabel(k) {
         if (steps) { wheel -= steps * unit; filmGo(stripAt.p + Math.sign(steps)); }
       }, { passive: false });
       film.addEventListener("pointerdown", e => e.stopPropagation());
+      // one picture back or on: the arrows beside the count, or the arrow keys while this window has the full view
+      film.querySelectorAll(".pstep").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); if (stripAt.ks) filmGo(stripAt.p + +b.dataset.d); }));
+      window.addEventListener("keydown", e => {
+        if (!win.classList.contains("full") || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || !/^Arrow(Left|Right)$/.test(e.key)) return;
+        if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || document.querySelector(".menu.open") || !stripAt.ks) return;
+        e.preventDefault(); filmGo(stripAt.p + (e.key === "ArrowRight" ? 1 : -1));
+      });
       // the window resized: as many pictures as now fit
       new ResizeObserver(() => { if (lastK >= 0 && film.classList.contains("on")) { stripAt.key = ""; filmstrip(stripAt.ks ? stripAt.ks[stripAt.p] : lastK); } }).observe(film);
     }
@@ -6712,6 +6799,22 @@ function targetLabel(k) {
         tag: `FRAME · ${fname(q)} · ON ITS OWN`, shot: id,
         lines: { frame: pdsLinks(`${targetLabel(q)} · ${id}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
           colour: `One frame of the ${KIND[s.kind] ? KIND[s.kind].toLowerCase() : "color"} set, on its own scale`, details: `${hhmm(unix(q))} UTC` } };
+      takenable(lv, id);
+      hold1(levels.concat([lv]));
+    }
+    // any picture of the strip opened on its own (a double click on it) (openFrame's level, for a frame in or out of a color set)
+    function openPic(q) {
+      const id = catalog.id[q]; if (!(q >= 0) || !id) return;
+      const si = catalog.setOf ? catalog.setOf[q] : -1, s = si >= 0 ? catalog.sets[si] : { kind: null, use: [] };
+      const t = top(), levels = hold ? hold.levels.slice() : [];
+      while (levels.length && (levels[levels.length - 1].kind === "channel" || (levels[levels.length - 1].kind === "frame" && levels[levels.length - 1].strip))) levels.pop();
+      if (t && t.kind === "frame" && t.strip && t.k === q) { if (!levels.length) return release(); hold.levels = levels; return showLevel(); }
+      const inSet = s.use.includes(q);
+      const lv = { kind: "frame", strip: s, k: q, fall: 0, label: `${fname(q)}${nmOf(q) ? ` ${Math.round(nmOf(q))} nm` : ""} · ${id}`,
+        url(sz) { const u = frameChain(q, sz); return u[Math.min(this.fall, u.length - 1)]; },
+        tag: `FRAME · ${fname(q)} · ON ITS OWN`, shot: id,
+        lines: { frame: pdsLinks(`${targetLabel(q)} · ${id}`), filter: `${catalog.f1[q]}/${catalog.f2[q]}${nmOf(q) ? ` · ${Math.round(nmOf(q))} nm` : ""}`,
+          colour: inSet ? `One frame of the ${KIND[s.kind] ? KIND[s.kind].toLowerCase() : "color"} set, on its own scale` : "A single frame", details: `${hhmm(unix(q))} UTC` } };
       takenable(lv, id);
       hold1(levels.concat([lv]));
     }
@@ -13925,7 +14028,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"57159a52a8fb";
+  const BUILD = /*BUILD*/"e980bbdbdb67";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
