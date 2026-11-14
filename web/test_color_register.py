@@ -285,6 +285,22 @@ assert got == ["IR1", "GRN", "UV3"] and ju["set_colour"], got
 assert om.plays_colour(dict(ju, _sets=om.colour_sets(jan)), got, "CL1/CL2")
 assert om._filters(dict(ju, kind="mosaic"))[3] == ["RED", "GRN", "BL1"]   # mosaics: as before
 print("Janus: a movie plays the colours its sets take,", got)
+# a movie whose sets' colours would not play (one CB3, MT1, BL2 set among 31 CB3 frames) plays in its pair's color
+# when the pair's sets do play: Titan's 127TI_CLOUD001 (2010-03-05) takes CB3 with MT1 in 8 of its 9 sets (Sam 11-14)
+CNM = {"CB3": 937.9, "MT1": 619.0, "BL2": 440.0, "CB1": 619.5}
+cyc = [["CB3", "MT1"]] * 4 + [["CB3", "MT1", "BL2"], ["CB3", "CB1", "MT1"]] + [["CB3", "MT1"]] * 2
+cl = [(f, 2000.0 * k + 150.0 * j) for k, c in enumerate(cyc) for j, f in enumerate(c + ["", "", "CB3", "", "", "", "CB3"]) if f]
+cl = [(f"p{i}", f"N{1646512613 + i}_1", f, t, CNM[f], 0, 0, 1e6) for i, (f, t) in enumerate(cl)]
+cu = {"key": ("TITAN", "X", "N", 0), "frames": cl, "z": 1e6, "kind": "movie"}
+got = om._filters(cu)[3]
+assert cal.approximate_pair("N", ["CB3", "MT1"], "TITAN")
+assert got == ["CB3", "MT1"] and cu["set_colour"] and cu["played_pair"], got
+assert om.plays_colour(dict(cu, _sets=om.colour_sets(cl)), got, "CB3")
+assert om.folder(cu, "/c").endswith("_c2"), om.folder(cu, "/c")
+print("Titan cloud watch: a set colour that does not play gives way to the pair,", got)
+# ... a movie whose set colours do play keeps them (the wind stare above, Janus), and mosaics are as before
+assert om._filters(dict(cu, kind="mosaic"))[3] is None or om._filters(dict(cu, kind="mosaic"))[3] != ["CB3", "MT1", "BL2"]
+assert not ju.get("played_pair")
 # ... and the lone filters' cosmic rays (no frame of their filter either side to take them out against) are cleaned
 # from the set's planes as a still composite's channels are (_despiked): only the hits change, a star in every filter stays
 sp_rng = np.random.default_rng(1)

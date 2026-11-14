@@ -115,6 +115,8 @@ SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they h
 SCAN_TURN = 30       # degrees
 SET_COLOUR = "_c1"   # the folder suffix, after the others, of a movie that plays in its colour sets' filters where its
                      # tile counts alone made it grey (_set_colour), so its plan and frames are made again
+PLAYED_PAIR = "_c2"  # the folder suffix, in SET_COLOUR's place, of a movie whose colours would not play and that plays in
+                     # its pair's color instead (_filters, _pair_colour), so its plan and frames are made again
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
                      # (a scan that pauses is no time series) judges a pass otherwise than the time-series rule alone
 ISLAND_GAP = 0.75    # of a frame: the least empty sky between two islands of a mosaic, separate scans drawn apart
@@ -1419,7 +1421,7 @@ def folder(u, cache):
               + (LAID if u.get("laid") else STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
-              + (SET_COLOUR if _set_coloured(u) else ""))
+              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -1601,7 +1603,7 @@ def _filters(u):
     aside = _aside(frames, u)
     count = {f: c for f, c in count.items() if f not in aside} or count
     colour = colour_of(count, nms)
-    u["set_colour"] = False
+    u["set_colour"] = u["played_pair"] = False
     # a movie plays only a colour set holding every colour filter (set_of): colours that no set of its holds together
     # never play, and it stayed grey. Janus ISS_059JA_GEOLOG001_PRIME takes RED and BL1 once each, side by side, and
     # GRN only in its two UV3, GRN, IR1, IR3 sets: its counts made it true colour, and none of its 49 frames was in
@@ -1619,6 +1621,15 @@ def _filters(u):
         if pair is not None:
             colour = pair
             u["set_colour"] = u.get("kind") == "movie"
+    elif u.get("kind") == "movie" and not plays_colour(u, colour, max(count, key=count.get)):
+        # a movie whose colours above do not play (plays_colour: a set of three filters taken once among many frames
+        # of its grey filter) plays in its pair's color (_pair_colour), when that pair's sets do play. Titan's
+        # 127TI_CLOUD001 takes CB3 with MT1 in 8 of its 9 sets, and one CB3, MT1, BL2 set: that set's colours won,
+        # took only one set, and the movie played grey (Sam 11-14); 52 Titan movies in all
+        pair = _pair_colour(u, count, nms)
+        if pair is not None and plays_colour(u, pair, max(count, key=count.get)):
+            colour = pair
+            u["set_colour"] = u["played_pair"] = True
     return count, nms, aside, colour
 
 
