@@ -508,7 +508,7 @@ body.idle .camwin .chans { opacity: .8; }
 .filmstrip .fsline { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.idle .camwin .filmstrip { opacity: .8; }
 /* PROTOTYPE switcher and directions (camCtl) */
-#protopill { position: fixed; left: 50%; top: 2px; transform: translateX(-50%); z-index: 2147483000; display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--q-line); border-radius: 14px; background: rgba(12,13,16,.92); font-size: 10.5px; color: var(--q-dim); }
+#protopill { position: fixed; left: 400px; top: 2px; z-index: 2147483000; display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--q-line); border-radius: 14px; background: rgba(12,13,16,.92); font-size: 10.5px; color: var(--q-dim); }
 #protopill > span { padding: 0 6px 0 7px; letter-spacing: .06em; text-transform: uppercase; font-size: 9px; }
 #protopill button { all: unset; padding: 3px 9px; border-radius: 10px; color: var(--q-dim); cursor: default; }
 #protopill button i { font-style: normal; opacity: .75; }
@@ -14004,7 +14004,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"c05589260b8b";
+  const BUILD = /*BUILD*/"9d4ce83d9cdb";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
