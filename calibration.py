@@ -551,7 +551,7 @@ def calibrate(png, info, image=None, smooth=True):
         if sky is not None and step("skysmooth"):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
-            per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES)
+            per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -877,6 +877,23 @@ left out of variant (a mosaic with them off draws the same tiles) and the mosaic
 """
 STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "panels")
 _off = contextvars.ContextVar("off", default=frozenset())
+_slopes = contextvars.ContextVar("slopes", default=True)
+
+
+"""Sky smoothing's slope guard (SKY_SLOPE_BODIES) on or off for this request (on by default)."""
+@contextlib.contextmanager
+def slope_guard(on):
+    token = _slopes.set(bool(on))
+    try:
+        yield
+    finally:
+        _slopes.reset(token)
+
+
+"""Whether sky smoothing's slope guard changes how any of the frames of labels is calibrated (SKY_SLOPE_BODIES)."""
+def slope_guarded(labels):
+    return _slopes.get() and step("skysmooth") and any(
+        _value(lbl.get_info(), "TARGET_NAME", "") in SKY_SLOPE_BODIES for lbl in labels)
 
 
 def step(name):
