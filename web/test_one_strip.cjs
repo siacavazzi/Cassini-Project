@@ -48,10 +48,13 @@ if (!base) { console.error("usage: node test_one_strip.cjs BASE [UTC ...]"); pro
     if (await p.evaluate(() => window.cassiniMovie && window.cassiniMovie.on)) {
       await p.evaluate(() => { if (window.cassiniMovie.on && document.getElementById("play").textContent !== "▶") document.getElementById("play").click(); });
       await p.waitForTimeout(800);
-      const n0 = parseInt((await st()).count);
-      await p.keyboard.press("ArrowRight"); await p.waitForTimeout(2000);
-      const n1 = parseInt((await st()).count);
-      check(t, "movie mode: one arrow press steps one picture", n1 - n0 === 1, [n0, n1]);
+      // the clock must sit on the picture the strip stepped to (a second step by movie mode would move it on, often
+      // to the other camera's picture, which leaves this strip's count alone): compare the clock with the time in the
+      // strip's middle picture's title
+      await p.keyboard.press("ArrowRight"); await p.waitForTimeout(800);
+      const at = await p.evaluate(sel => { const im = document.querySelector(`${sel} .thumbs img.now`), m = im && im.title.match(/(\d\d:\d\d:\d\d) UTC/), c = document.getElementById("clock").textContent.match(/(\d\d:\d\d:\d\d)/);
+        return [m && m[1], c && c[1]]; }, W);
+      check(t, "movie mode: one arrow press steps one picture (clock on the strip's picture)", !!at[0] && at[0] === at[1], at);
       await p.evaluate(() => window.cassiniMovie.stop());
       await p.waitForTimeout(1500);
     } else check(t, "movie mode starts", false, null);
