@@ -485,6 +485,23 @@ body.idle .camwin .chans { opacity: .8; }
 .filmstrip canvas[hidden] { display: none; }
 .filmstrip .fsline { font-size: 9.5px; color: var(--q-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.idle .camwin .filmstrip { opacity: .8; }
+/* PROTOTYPE switcher and directions (camCtl) */
+#protopill { position: fixed; left: 50%; top: 2px; transform: translateX(-50%); z-index: 2147483000; display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--q-line); border-radius: 14px; background: rgba(12,13,16,.92); font-size: 10.5px; color: var(--q-dim); }
+#protopill > span { padding: 0 6px 0 7px; letter-spacing: .06em; text-transform: uppercase; font-size: 9px; }
+#protopill button { all: unset; padding: 3px 9px; border-radius: 10px; color: var(--q-dim); cursor: default; }
+#protopill button i { font-style: normal; opacity: .75; }
+#protopill button:hover { color: #fff; background: rgba(255,255,255,.08); }
+#protopill button[aria-pressed="true"] { color: #fff; background: rgba(138,182,255,.26); }
+body.fulldock .win.full { bottom: calc(var(--fulldockh, 180px) + 16px) !important; }
+body.fulldock #dock { position: fixed !important; left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important; width: auto !important; transform: none !important; z-index: 2147482000 !important; opacity: 1 !important; pointer-events: auto !important; }
+body[data-proto="b"] .filmstrip .fsrow .chans { display: flex; gap: 3px; align-items: center; margin-left: 10px; flex: none; }
+body[data-proto="b"] .filmstrip .fsrow .chans:not(.on) { display: none; }
+body[data-proto="b"] .filmstrip .fsrow .chans figure { width: 30px; }
+body[data-proto="b"] .win.full .filmstrip .fsrow .chans figure { width: 40px; }
+body[data-proto="b"] .filmstrip .fsrow .chans figcaption { font-size: 0; left: 2px; bottom: 1px; }
+body[data-proto="b"] .filmstrip .fsrow .chans figcaption i { margin: 0; }
+body[data-proto="b"] .filmstrip .fsrow .chans .more { display: none; }
+body[data-proto="b"] .camwin.full .body { grid-template-rows: minmax(0, 1fr) auto auto; }
 /* the strip's bottom row: the Replay window's transport and speed while the window is full (camCtl), then a picture
    back, where the picture is in its pass, a picture on */
 .filmstrip .fsrow { display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -1129,8 +1146,32 @@ function targetLabel(k) {
   // arrows) and speed (slider and time warp) move into the window's picture strip while it is full, and back after:
   // the same controls, never a second copy (Sam, 2026-11-13: everything is controllable from the camera view)
   const CTL = { t: document.querySelector("#dock .lcdhead .transport"), s: $("speedtool") };
+  // PROTOTYPE (claude/camera-view-proto): three directions for the camera view, switched by ?proto=a|b|c or the pill
+  // in the menu bar. A: the Replay window's controls move into a full camera window. B: A, and the filter frames
+  // join the picture strip's row (one strip under a picture). C: the Replay window stays, docked under the full view.
+  {
+    const PROTOS = { a: "Controls move in", b: "One strip", c: "Replay docked" };
+    let pr = (new URLSearchParams(location.search).get("proto") || "").toLowerCase();
+    if (!PROTOS[pr]) { try { pr = localStorage.getItem("cassini-proto") || "a"; } catch (e) { pr = "a"; } }
+    if (!PROTOS[pr]) pr = "a";
+    const pill = document.createElement("div"); pill.id = "protopill"; pill.setAttribute("role", "group"); pill.setAttribute("aria-label", "Prototype direction");
+    pill.innerHTML = "<span>Prototype</span>" + Object.entries(PROTOS).map(([k, v]) => `<button type="button" data-p="${k}" title="${v}">${k.toUpperCase()} <i>${v}</i></button>`).join("");
+    document.body.append(pill);
+    const set = k => {
+      document.body.dataset.proto = k; try { localStorage.setItem("cassini-proto", k); } catch (e) {}
+      pill.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.p === k)));
+      if (typeof camCtl === "function" && CTL.t) camCtl();
+      window.dispatchEvent(new CustomEvent("cassini-proto", { detail: k }));
+    };
+    pill.addEventListener("click", e => { const b = e.target.closest("button"); if (b) set(b.dataset.p); });
+    set(pr);
+    new ResizeObserver(() => { if (document.body.classList.contains("fulldock")) document.body.style.setProperty("--fulldockh", $("dock").offsetHeight + "px"); }).observe($("dock"));
+  }
   function camCtl() {
-    const f = document.querySelector(".win.full"), slot = f && f.querySelector(".filmstrip .camctl");
+    const f = document.querySelector(".win.full"), dock = $("dock"), docked = document.body.dataset.proto === "c" && f && !dock.hidden && !dock.dataset.min;
+    const slot = !docked && f && f.querySelector(".filmstrip .camctl");
+    document.body.classList.toggle("fulldock", !!docked);
+    if (docked) document.body.style.setProperty("--fulldockh", dock.offsetHeight + "px");
     if (!CTL.t || !CTL.s) return;
     if (slot) { if (CTL.t.parentNode !== slot) slot.append(CTL.t, CTL.s); }
     else if (CTL.t.parentNode !== CTL.s.parentNode || !CTL.t.closest("#dock")) { const box = document.querySelector("#dock .lcdhead .clockbox"); box.before(CTL.t, CTL.s); }
@@ -2923,6 +2964,9 @@ function targetLabel(k) {
         if (steps) { wheel -= steps * unit; filmGo(stripAt.p + Math.sign(steps)); }
       }, { passive: false });
       film.addEventListener("pointerdown", e => e.stopPropagation());
+      // PROTOTYPE B: the filter frames sit in the strip's own row, after where the picture is in its pass
+      const placeChans = () => { const row = film.querySelector(".fsrow"), b = document.body.dataset.proto === "b"; if (b && chans.parentNode !== row) row.append(chans); else if (!b && chans.parentNode === row) film.before(chans); };
+      window.addEventListener("cassini-proto", placeChans); placeChans();
       // one picture back or on: the arrows beside the count, or the arrow keys while this window has the full view
       film.querySelectorAll(".pstep").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); if (stripAt.ks) filmGo(stripAt.p + +b.dataset.d); }));
       window.addEventListener("keydown", e => {
