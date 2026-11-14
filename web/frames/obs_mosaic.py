@@ -2649,11 +2649,30 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # one frame after another (021TI REGMAPNA001: 67 frames, 28 s of a 100 s first movie frame)
     mode = calibration.mode()
 
+    gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
+    stacking.handing(tuple(u["key"]))
+
     def read(fr):
         with calibration.in_mode(mode):
-            lbl, iof, _ = stacking.load_hdr(fr[0], u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP))
-        # (only the quarter size picture kept, the frame's size and its exposure: pass_scale's long exposures)
-        return None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape, _exposure(lbl))
+            # the merge as the frame's tile will ask for it (valid, clipped), handed on to it below, so the tile merges
+            # nothing again (stacking.hand_on, while there is room). It is the picture the plain merge gives unless
+            # the frames merged lost different pixels (note["differ"]): then, or when it cannot be made (the tile
+            # meets that itself), the plain merge as before
+            whole, note = None, {}
+            if stacking.hand_room():
+                try:
+                    whole = stacking.load_hdr(fr[0], gap, valid=True, clipped=True, note=note)
+                except Exception:   # noqa: BLE001
+                    whole = None
+            if whole is not None and not note.get("differ"):
+                lbl, iof = whole[0], whole[1]
+            else:
+                lbl, iof, _ = stacking.load_hdr(fr[0], gap)
+            # (only the quarter size picture kept, the frame's size and its exposure: pass_scale's long exposures)
+            got = None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape, _exposure(lbl))
+            if whole is not None:
+                stacking.hand_on(fr[0], gap, whole)   # (after this look at it: the tile's own from here on)
+        return got
     with concurrent.futures.ThreadPoolExecutor(MOVIE_WORKERS) as pool:
         read_all = list(pool.map(read, frames))
     for fr, got in zip(frames, read_all):
