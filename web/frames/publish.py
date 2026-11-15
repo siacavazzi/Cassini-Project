@@ -17,6 +17,9 @@ server would send, found by resolve() (web/frames/resolve.py, WP1), and its key 
   ... --tables DIR                                                      WP2's tables output (default <cache>/public-tables)
   ... --jobs N                                                          processes (default: every core)
   ... --dry-run                                                         enumerate, resolve and count; write nothing
+  ... --uploads N                                                       upload threads per process (default 16 to R2)
+  ... --fresh                                                           a first upload to an empty bucket: no HEAD
+                                                                        before each put (the ledger is the truth)
 
 What it publishes, family by family (keys.json families; policy.json routes and the values each allows):
   frame       /frames/<ID>.webp at 128, 512 and 1024 for every frame of the stretch (prebuild phase frames)
@@ -38,7 +41,9 @@ reads, or a sidecar object <key>.h.json); a negative answer (Auto center's 404) 
 (manifest.schema.json) goes up last and its key is printed: WP8 points the Worker's MANIFEST_KEY at it.
 
 It goes year by year, in parallel; an object whose bytes (md5, R2's ETag) and metadata are already there is skipped,
-so a run stopped part way picks up where it was and a second run uploads nothing. The state folder (--state) keeps a
+so a run stopped part way picks up where it was and a second run uploads nothing. To R2 each thread keeps one connection open
+(no TLS handshake per object) and each process uploads from --uploads threads while it resolves the next pictures;
+--fresh drops the HEAD that asks R2 whether an object the ledger does not know is there already. The state folder (--state) keeps a
 ledger of what each target holds and published.json: objects and bytes per family and year, and every URL that was
 enumerated but not published, with the reason. The mirror holds each object at its key, its metadata beside it as
 <key>.meta.json in the shape of R2's put() options ({"httpMetadata": {"contentType"}, "customMetadata": {...}}), which
@@ -51,6 +56,7 @@ import concurrent.futures
 import datetime
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import sqlite3
@@ -197,6 +203,34 @@ class R2:
         self.access, self.secret = env["R2_ACCESS_KEY_ID"], env["R2_SECRET_ACCESS_KEY"]
         self.id = f"r2:{self.endpoint}/{self.bucket}"
         self.host = urllib.parse.urlsplit(self.endpoint).netloc
+        self._local = threading.local()   # one kept-alive connection per thread (a new TLS handshake per request
+        self.connections = 0              # was most of an upload's time); counted for the tests
+
+    def _conn(self):
+        c = getattr(self._local, "conn", None)
+        if c is None:
+            u = urllib.parse.urlsplit(self.endpoint)
+            cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+            c = self._local.conn = cls(u.netloc, timeout=120)
+            self._local.used = False
+            self.connections += 1
+        return c
+
+    def _drop(self):
+        c = getattr(self._local, "conn", None)
+        self._local.conn = None
+        if c is not None:
+            try:
+                c.close()
+            except OSError:
+                pass
+
+    def __getstate__(self):   # (a target travels to pool workers without its connections)
+        return {k: v for k, v in self.__dict__.items() if k != "_local"}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._local = threading.local()
 
     def _url_path(self, key):
         return "/" + urllib.parse.quote(self.bucket, safe="") + "/" + urllib.parse.quote(key, safe="/-_.~")
@@ -220,20 +254,33 @@ class R2:
 
     def _request(self, method, key, data=b"", headers=None, tries=5):
         path = self._url_path(key)
-        for attempt in range(tries):
+        attempt = 0
+        while attempt < tries:
             h = self._sign(method, path, headers or {}, hashlib.sha256(data).hexdigest())
-            req = urllib.request.Request(self.endpoint + path, data=data if method == "PUT" else None, method=method,
-                                         headers=h)
+            c = self._conn()
+            reused = self._local.used
             try:
-                with urllib.request.urlopen(req, timeout=120) as r:
-                    return r.status, dict(r.headers.items()), r.read()
-            except urllib.error.HTTPError as e:
-                if e.code == 404 and method == "HEAD":
-                    return 404, {}, b""
-                if e.code < 500 and e.code != 429:
-                    raise RuntimeError(f"R2 {method} {key}: {e.code} {e.read()[:300]!r}")
-            except (urllib.error.URLError, OSError):
-                pass
+                c.request(method, path, body=data if method == "PUT" else None, headers=h)
+                r = c.getresponse()
+                body = r.read()
+                status, got = r.status, dict(r.getheaders())
+                self._local.used = True
+                if r.will_close:
+                    self._drop()
+            except (http.client.HTTPException, OSError):
+                self._drop()
+                if reused:
+                    continue   # the server closed a kept-alive connection: once more on a new one, at once
+                attempt += 1
+                time.sleep(min(30, 2 ** attempt))
+                continue
+            if status == 404 and method == "HEAD":
+                return 404, {}, b""
+            if status < 400:
+                return status, got, body
+            if status < 500 and status != 429:
+                raise RuntimeError(f"R2 {method} {key}: {status} {body[:300]!r}")
+            attempt += 1
             time.sleep(min(30, 2 ** attempt))
         raise RuntimeError(f"R2 {method} {key}: gave up after {tries} tries")
 
@@ -287,19 +334,54 @@ class Ledger:
             self.db.commit()
 
 
-def store(target, ledger, objects, verify=False):
+class Uploader:
+    """Puts objects from a pool of threads, so a process keeps several uploads open while it resolves the next
+    pictures (an upload waits on the network, not the CPU). At most 2 x threads objects wait in memory. drain() waits
+    for every put and raises the first error, so a batch never reports an object written that was not."""
+
+    def __init__(self, threads):
+        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=threads, thread_name_prefix="upload")
+        self.room = threading.BoundedSemaphore(threads * 2)
+        self.pending = []
+
+    def submit(self, fn, *args):
+        self.room.acquire()
+        f = self.pool.submit(fn, *args)
+        f.add_done_callback(lambda _: self.room.release())
+        self.pending.append(f)
+
+    def drain(self):
+        pending, self.pending = self.pending, []
+        for f in pending:
+            f.result()
+
+
+def _put(target, ledger, key, data, ctype, custom, digest):
+    target.put(key, data, ctype, custom)
+    if ledger:
+        ledger.note(key, digest, ctype, custom)
+
+
+def store(target, ledger, objects, verify=False, fresh=False, uploader=None):
     """Puts each object unless the target holds it already (same md5, content type and metadata). Returns
-    [(key, bytes, role, written)]."""
+    [(key, bytes, role, written)].
+    fresh: the ledger is the whole truth about the target (a first upload to an empty bucket): a key the ledger does
+    not hold is put without asking the target first (no HEAD per object). Putting an object that is there already
+    writes the same bytes again, so a wrong guess costs one write, never a wrong object.
+    uploader: puts go through its threads (Uploader.drain() waits for them)."""
     out = []
     for key, data, ctype, custom, role in objects:
         digest = md5_hex(data)
         same = ledger.matches(key, digest, ctype, custom) if ledger and not verify else False
         if not same:
-            held = target.held(key)
+            held = None if fresh and ledger and not verify else target.held(key)
             same = held is not None and held[0] == digest and held[1] == ctype and held[2] == custom
             if not same:
-                target.put(key, data, ctype, custom)
-            if ledger:
+                if uploader is not None:
+                    uploader.submit(_put, target, ledger, key, data, ctype, custom, digest)
+                else:
+                    _put(target, ledger, key, data, ctype, custom, digest)
+            elif ledger:
                 ledger.note(key, digest, ctype, custom)
         out.append((key, len(data), role, not same))
     return out
@@ -482,7 +564,7 @@ def resolver():
     return importlib.import_module(os.environ.get("CASSINI_PUBLISH_RESOLVER") or "resolve")
 
 
-def _init(cache, target_spec, state, tags, verify, dry, budget=None):
+def _init(cache, target_spec, state, tags, verify, dry, budget=None, fresh=False, uploads=0):
     import faulthandler
     import signal
     resolve = resolver()
@@ -496,6 +578,8 @@ def _init(cache, target_spec, state, tags, verify, dry, budget=None):
     resolve.prepare()
     _W["target"] = make_target(target_spec)
     _W["ledger"] = Ledger(os.path.join(state, "ledger.sqlite")) if not dry else None
+    _W["fresh"] = fresh
+    _W["uploader"] = Uploader(uploads) if uploads and not dry else None
 
 
 def make_target(spec):
@@ -574,7 +658,7 @@ def one(u, tags=None, cache=None, resolve_fn=None, target=None, ledger=None, ver
         if dry:
             written = [(k, len(d), role, True) for k, d, _, _, role in objs]   # (what would be written)
         else:
-            written = store(target, ledger, objs, verify)
+            written = store(target, ledger, objs, verify, _W.get("fresh", False), _W.get("uploader"))
         rec["bytes"] = sum(n for _, n, _, _ in written)
         rec["objects"] = len(written)
         rec["role"] = written[0][2]
@@ -596,6 +680,8 @@ def _batch(us):
         took = time.monotonic() - t0
         if took > SLOW:
             print(f"slow unit ({took:.0f} s): {u['family']} {u['urls'][:1]}", file=sys.stderr, flush=True)
+    if _W.get("uploader") is not None:
+        _W["uploader"].drain()   # every put of the batch done (or its error raised) before its records go back
     return out
 
 
@@ -605,7 +691,7 @@ def tables_units(folder, tags):
     return [(f"table/{tag}/{rel}", full) for rel, full in table_files(folder)]
 
 
-def publish_tables(folder, tags, target, ledger, verify, dry):
+def publish_tables(folder, tags, target, ledger, verify, dry, fresh=False, uploader=None):
     recs = []
     files = tables_units(folder, tags) if os.path.isdir(os.path.join(folder, "table")) else None
     if files is None:
@@ -615,9 +701,11 @@ def publish_tables(folder, tags, target, ledger, verify, dry):
         with open(full, "rb") as fh:
             data = fh.read()
         objs = [(key, data, "application/json", {}, "whole")]
-        written = [(key, len(data), "whole", True)] if dry else store(target, ledger, objs, verify)
+        written = [(key, len(data), "whole", True)] if dry else store(target, ledger, objs, verify, fresh, uploader)
         recs.append({"url": None, "key": key, "family": "table", "year": 0, "bytes": len(data), "objects": 1,
                      "outcome": "published" if written[0][3] else "held"})
+    if uploader is not None:
+        uploader.drain()
     return recs
 
 
@@ -705,6 +793,10 @@ def main(argv=None):
     ap.add_argument("--manifest-only", action="store_true", help="write only the manifest, from the last finished "
                     "run's published.json in --state")
     ap.add_argument("--verify", action="store_true", help="ask the target for every object, past the ledger")
+    ap.add_argument("--fresh", action="store_true", help="the target holds only what the ledger in --state records (a "
+                    "first upload to an empty bucket): put what the ledger lacks without a HEAD first")
+    ap.add_argument("--uploads", type=int, default=None, help="upload threads per process (default 16 for R2, 0 for a "
+                    "mirror: puts run in the process itself)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="at most this many units per family (a quick look)")
     args = ap.parse_args(argv)
@@ -734,6 +826,8 @@ def main(argv=None):
         target_spec = "dir:" + os.path.abspath(args.to_dir)
         state = args.state or os.path.abspath(args.to_dir).rstrip("/") + ".state"
     os.makedirs(state, exist_ok=True)
+    if args.uploads is None:
+        args.uploads = 16 if args.to_r2 else 0
     commit = git_commit()
     publish_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + commit[:12]
     if args.manifest_only:
@@ -761,7 +855,8 @@ def main(argv=None):
     ledger = Ledger(os.path.join(state, "ledger.sqlite")) if not args.dry_run else None
     if "table" in families:
         recs += publish_tables(args.tables or os.path.join(cache, "public-tables"), tags, target, ledger,
-                               args.verify, args.dry_run)
+                               args.verify, args.dry_run, args.fresh,
+                               Uploader(max(1, args.uploads) * max(1, args.jobs)) if args.uploads and not args.dry_run else None)
 
     s = summary(recs)
     site = os.path.abspath(args.site) if args.site else None
@@ -849,7 +944,8 @@ def run_units(work, args, cache, target_spec, state, tags, publish_id, budget=No
         by_year[u["year"]].append(u)
     with concurrent.futures.ProcessPoolExecutor(max_workers=max(1, args.jobs), initializer=_init,
                                                 initargs=(cache, target_spec, state, tags, args.verify, args.dry_run,
-                                                          budget)) as pool:
+                                                          budget, getattr(args, "fresh", False),
+                                                          getattr(args, "uploads", 0) or 0)) as pool:
         for y in sorted(by_year):
             us = by_year[y]
             size = max(1, min(200, len(us) // (args.jobs * 4) or 1))
