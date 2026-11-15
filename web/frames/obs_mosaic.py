@@ -1626,8 +1626,13 @@ def _filters(u):
         # of its grey filter) plays in its pair's color (_pair_colour), when that pair's sets do play. Titan's
         # 127TI_CLOUD001 takes CB3 with MT1 in 8 of its 9 sets, and one CB3, MT1, BL2 set: that set's colours won,
         # took only one set, and the movie played grey (Sam 11-14); 52 Titan movies in all
+        # ... and only on sets whose pair frames can be shown: a frame that lost more than MOVIE_HOLD_LOST of its
+        # lines in downlink is held (unfit), so a pass whose pair frames all lost that much never shows a set, and
+        # played grey at the pair's scale, far darker than its grey plan: 046TI NIGHTWAC001's twelve CB3 frames lost
+        # 264 of 1024 lines each, 158TI FIRNADCMP501's 295 to 312 (Sam 11-15)
         pair = _pair_colour(u, count, nms)
-        if pair is not None and plays_colour(u, pair, max(count, key=count.get)):
+        if pair is not None and plays_colour(u, pair, max(count, key=count.get),
+                                             lambda j: lost_share(frames[j][1]) <= MOVIE_HOLD_LOST):
             colour = pair
             u["set_colour"] = u["played_pair"] = True
     return count, nms, aside, colour
@@ -8621,13 +8626,32 @@ def _pass_sets(u):
     return u["_sets"]
 
 
-def plays_colour(u, want, grey):
+_lost_lines = None
+FRAME_LINES = 1024   # a full frame's lines (a summed frame has fewer, so its share is taken low: kept, as before)
+
+
+def lost_share(frame_id):
+    """The share of frame frame_id's lines lost in downlink, as the archive's index has it (MISSING_LINES of
+    FRAME_LINES), before any tile is made; 0.0 for a frame the index does not have."""
+    global _lost_lines
+    if _lost_lines is None:
+        import pandas as pd
+        idx = pd.read_csv(os.path.join(reel.REPO, "Image_index.csv"), usecols=["path", "MISSING_LINES"], low_memory=False)
+        idx = idx[idx["path"].notna()]
+        _lost_lines = {p.rsplit("/", 1)[-1].replace(".png", ""): float(m) for p, m in
+                       zip(idx["path"].tolist(), pd.to_numeric(idx["MISSING_LINES"], errors="coerce").fillna(0).tolist())}
+    return _lost_lines.get(frame_id, 0.0) / FRAME_LINES
+
+
+def plays_colour(u, want, grey, shown=None):
     """True when a movie of pass u with colour filters want plays in colour (movie_frame, colour on): it takes
     COLOUR_STEPS sets of them, or one and under STEP_FRAMES frames of its grey filter. A set is one of the camera
-    windows' (colour_sets) holding every filter of want."""
+    windows' (colour_sets) holding every filter of want; shown(j): whether frame j can be shown, when given, so a
+    set counts only with a frame of each filter of want that can."""
     if not want:
         return False
-    sets = sum(1 for run in _pass_sets(u) if set(want) <= {f for f, _ in run})
+    sets = sum(1 for run in _pass_sets(u)
+               if set(want) <= {f for f, j in run if shown is None or shown(j)})
     return sets >= COLOUR_STEPS or (sets >= 1 and sum(fr[2] == grey for fr in u["frames"]) < STEP_FRAMES)
 
 
