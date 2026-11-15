@@ -301,6 +301,16 @@ print("Titan cloud watch: a set colour that does not play gives way to the pair,
 # ... a movie whose set colours do play keeps them (the wind stare above, Janus), and mosaics are as before
 assert om._filters(dict(cu, kind="mosaic"))[3] is None or om._filters(dict(cu, kind="mosaic"))[3] != ["CB3", "MT1", "BL2"]
 assert not ju.get("played_pair")
+# ... but not when the pair's frames can never be shown: CB3 frames that each lost a quarter of their lines in downlink
+# are held (MOVIE_HOLD_LOST), no set plays, and the movie keeps its grey plan (046TI NIGHTWAC001, Sam 11-15)
+om.lost_share("")   # (the index's lost lines, loaded once)
+was = dict(om._lost_lines)
+om._lost_lines.update({fr[1]: 264.0 for fr in cl if fr[2] == "CB3"})
+lu = {"key": ("TITAN", "X", "N", 0), "frames": cl, "z": 1e6, "kind": "movie"}
+got = om._filters(lu)[3]
+assert not lu["played_pair"] and got == ["CB3", "MT1", "BL2"], (got, lu["played_pair"])
+assert not om.folder(lu, "/c").endswith("_c2")
+om._lost_lines.clear(); om._lost_lines.update(was)
 # ... and the lone filters' cosmic rays (no frame of their filter either side to take them out against) are cleaned
 # from the set's planes as a still composite's channels are (_despiked): only the hits change, a star in every filter stays
 sp_rng = np.random.default_rng(1)
