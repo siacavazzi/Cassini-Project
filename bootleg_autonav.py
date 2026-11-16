@@ -745,7 +745,7 @@ its cloud tops and RING_KM: the main rings, the F ring), else nothing (a star fi
 places any frame on its target; shown_targets then makes it a picture of that body, when every frame of its
 observation's archive target and camera sees the same one (a pass is never split).
 """
-SEEN_VERSION = 1
+SEEN_VERSION = 2       # 2: each frame's place on its body kept (place), written only for relabelled groups
 RING_KM = 140500.0     # km from Saturn's centre: the F ring's outer edge, the furthest the seen rule counts as rings
 SATURN_EQ_KM = 60268.0
 SEEN_GRID = 9          # rays a side through the frame, looked at for the rings
@@ -756,6 +756,9 @@ def _seen_db():
     # place: the target row (JSON) find_target gives the frame on that body, written to the target table only for the
     # groups that are relabelled (_place_seen)
     db.execute("CREATE TABLE IF NOT EXISTS seen (frame TEXT PRIMARY KEY, version INTEGER, body TEXT, place TEXT)")
+    if "place" not in {row[1] for row in db.execute("PRAGMA table_info(seen)")}:
+        # (a seen table from before places were kept: its rows have none, and are worked out again, SEEN_VERSION)
+        db.execute("ALTER TABLE seen ADD COLUMN place TEXT")
     return db
 
 
