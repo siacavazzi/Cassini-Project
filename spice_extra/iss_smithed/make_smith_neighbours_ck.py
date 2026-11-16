@@ -1,8 +1,8 @@
 """JPL's C-smithed pointing (*_ISS.bc, one segment per image) carried over to every frame of the same observation that
 has none, so no observation mixes corrected and raw pointing (Sam 11-16: a sequence must never switch pointing
 source). As make_neighbours_ck.py carries USGS's: E = C_iss(t0) C_raw(t0)^T at the observation's smithed frames,
-applied to the raw attitude at the frame's own time, faded with time distance (HOLD, FADE) and blended (slerp)
-between the smithed frames either side. Frames USGS or its neighbours CK cover are left out.
+applied to the raw attitude at the frame's own time: the median of the nearest smithed frames' corrections
+(local_error), faded with time distance (HOLD, FADE). Frames USGS or its neighbours CK cover are left out.
 Writes one CK (type 3, a second round each mid-exposure time) and its frame list (.lis).
 
     python spice_extra/iss_smithed/make_smith_neighbours_ck.py spice_extra/iss_smithed/ISS_smithed_neighbours_ck.bc [years]
@@ -67,17 +67,25 @@ def _faded(E, dt):
     return _toward(ONE, np.array(sp.m2q(E)), w)
 
 
-def slerp_error(refs, t):
-    """The error rotation at t from an observation's (time, E) list: each C-smithed frame's correction faded by its
-    distance in time (_faded), then the two either side of t blended by where t falls between them (slerp); before
-    the first or after the last, the nearest one's alone. Smooth in time: no frame switches basis abruptly."""
-    times = [a for a, b in refs]
-    k = bisect.bisect_left(times, t)
-    if k == 0 or k == len(refs):
-        ta, ea = refs[0 if k == 0 else -1]
-        return sp.q2m(_faded(ea, abs(t - ta)))
-    (ta, ea), (tb, eb) = refs[k - 1], refs[k]
-    return sp.q2m(_toward(_faded(ea, t - ta), _faded(eb, tb - t), (t - ta) / (tb - ta)))
+NEAREST = 5   # a carried frame takes the median correction of this many C-smithed frames nearest it in time
+
+
+def _rotvec(E):
+    axis, angle = sp.raxisa(np.asarray(E))
+    return np.asarray(axis) * angle
+
+
+def local_error(refs, t):
+    """The error rotation at t from an observation's (time, E) list: the component-wise median of the NEAREST
+    C-smithed frames' corrections (as rotation vectors), faded by the time to the nearest of them (_faded). JPL
+    navigated each image on its own, and on a ring mosaic the corrections of one pointing's frames scatter by tens of
+    pixels and sometimes hundreds (ISS_260RI_HIPHASEFA001: 2 to 76 px, one 482 px); a median of the nearby ones is
+    what they agree on, where carrying the nearest one (or blending the two either side) copied its own error."""
+    near = sorted(refs, key=lambda r: abs(r[0] - t))[:NEAREST]
+    v = np.median(np.array([_rotvec(E) for _, E in near]), axis=0)
+    a = float(np.linalg.norm(v))
+    E = sp.axisar(v / a, a) if a > 0 else np.eye(3)
+    return sp.q2m(_faded(E, abs(near[0][0] - t)))
 
 
 # pass 1: the error rotation at every smithed frame, by observation, over the whole mission (an observation can run
@@ -150,7 +158,7 @@ for year, rows in index.groupby("year"):
         near = sorted(near.items())
         if not near: continue
         t = ets[f]
-        E = slerp_error(near, t)
+        E = local_error(near, t)
         try: cs = [E @ sp.pxform("J2000", BODY, t + d) for d in (-PAD, 0.0, PAD)]
         except Exception: continue
         records.append((f, t, cs))
