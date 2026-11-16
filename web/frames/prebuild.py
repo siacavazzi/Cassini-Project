@@ -40,6 +40,10 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
               them (since 2026-11-16) it finds every one made; on an older cache it draws them (1.4 to 3.3
               core-seconds a picture)
 
+  lightning   the lightning passes' enhanced pictures and lightning.json (lightning.py: the published flashes, night
+              side stretched on the storm, day side tinted where brighter than the pictures before and after), about
+              70 pictures, a few minutes. Needs only the data and kernels, not the other phases
+
 tables, fullview and evened add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
 picture phases left it).
 
@@ -259,8 +263,8 @@ WATCH_PAD = 3 * 3600   # s around a watched observation: what a window plays aro
 
 
 def watched_first(todo):
-    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv and
-    plume_moments.csv, and
+    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv,
+    plume_moments.csv and lightning_moments.csv, and
     Highlights, web/replay/highlights.csv: each observation's frames, WATCH_PAD either side), in time order, then
     the rest in time order. A Moment plays every frame of its stretch, its neighbours' too: by observation alone,
     most of what played on 8790 was still made on demand (2026-10-26). An item's time is its frame's (a set's last
@@ -269,7 +273,7 @@ def watched_first(todo):
     import csv
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
     watched = set()
-    for name in ("moments.csv", "plume_moments.csv", "highlights.csv"):
+    for name in ("moments.csv", "plume_moments.csv", "lightning_moments.csv", "highlights.csv"):
         try:
             with open(os.path.join(here, name)) as fh:
                 for row in csv.DictReader(fh):
@@ -1228,7 +1232,7 @@ class Segments:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("phase", choices=PHASES + ("count",))
+    ap.add_argument("phase", choices=PHASES + ("lightning", "count"))   # lightning: no items, lightning.build makes it
     ap.add_argument("--cache", required=True, help="the frame server's --cache folder to fill")
     ap.add_argument("--status", help="folder for status.json and the progress page (e.g. web/cassini-os/prebuild)")
     ap.add_argument("--threads", type=int, default=3)
@@ -1285,6 +1289,10 @@ def main():
     if args.until and args.until[5:10] in ("01-01", "") and until > since:
         until -= 1
     data_source.check_kernels(range(since, until + 1))
+    if args.phase == "lightning":
+        import lightning
+        lightning.build(args.cache)
+        return
     (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 

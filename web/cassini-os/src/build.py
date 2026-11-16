@@ -768,10 +768,11 @@ for name in CUTSCENES:
         assert os.path.exists(cdata), cdata
         cscript = cscript.replace(marker, json.dumps(json.load(open(cdata)), ensure_ascii=False, separators=(",", ":")))
     script += cscript + "\n"
-# what Cassini is doing (activity.html) and what it had seen of each moon (coverage.html): each one's style joins the
+# what Cassini is doing (activity.html), what it had seen of each moon (coverage.html) and the Lightning window
+# (lightning.html): each one's style joins the
 # head's and its script runs after the viewer's and the cutscenes' (they read the viewer's pointing, tracks and moons,
 # and wrap the attitude, read-out and timeline hooks)
-for part in ("activity.html", "coverage.html"):
+for part in ("activity.html", "coverage.html", "lightning.html"):
     act = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), part)).read()
     apart = lambda tag: act[act.index(f"<{tag}"):act.index(f"</{tag}>") + len(tag) + 3]
     assert study.count("</style>\n</head>") == 1

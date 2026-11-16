@@ -27,6 +27,15 @@ def main():
     assert len(labels) == len(set(labels))
     assert '{ key: "plume"' in open(os.path.join(HERE, "cassini-os", "src", "moments.html")).read()
     ok += 1
+    # the lightning moments (web/frames/lightning.py moments): of type lightning, on Saturn, on no observation another
+    # file lists, labels unique across all three files, and a chip for the type
+    light = list(csv.DictReader(open(build_data.LIGHTNING, newline="")))
+    assert light and all(r["type"] == "lightning" and r["body"] == "SATURN" for r in light)
+    assert not {o for r in light for o in r["obs"].split()} & {o for r in rows + plumes for o in r["obs"].split()}
+    labels = [r["label"].strip().lower() for r in rows + plumes + light]
+    assert len(labels) == len(set(labels))
+    assert '{ key: "lightning"' in open(os.path.join(HERE, "cassini-os", "src", "moments.html")).read()
+    ok += 1
     cands = list(csv.DictReader(open(build_data.CANDIDATES, newline="")))
     assert all(c["type"] in build_data.CANDIDATE_TYPES for c in cands)
     assert all(c["start_utc"] <= (c["end_utc"] or c["start_utc"]) for c in cands)
