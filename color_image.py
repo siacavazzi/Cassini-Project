@@ -247,12 +247,29 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     finally:
         cal.still_look.reset(token)
     if look.get("detail") and len(imgs) in (1, 2, 3):
-        imgs = _still_detail(imgs, valid, look)
+        imgs = _still_detail(imgs, valid, look, _still_disk(lbl, imgs[0].shape[:2]))
         report["saturn_look"] = look
     return imgs, valid, lbl, report
 
 
-def _still_detail(imgs, valid, look):
+def _still_disk(lbl, shape):
+    """(x, y, radius) px of the target's disk on a picture of this shape where SPICE puts it for label lbl, or None"""
+    try:
+        import obs_mosaic as om
+        loc = (_spice_locs([lbl]) or [None])[0]
+        target = str(lbl.info.get("TARGET_NAME", "")).strip('" ')
+        if loc is None or len(loc) < 3 or not loc[2] or target not in om.RADIUS:
+            return None
+        k = shape[0] / 1024
+        cam = "W" if lbl.info.get("INSTRUMENT_ID") == "ISSWA" else "N"
+        radius = om.RADIUS[target] / (float(loc[2]) * om.IFOV[cam])
+        return ((ba.CCD_CENTER - float(loc[0])) * k, (ba.CCD_CENTER - float(loc[1])) * k, radius * k)
+    except Exception as e:   # noqa: BLE001  (no disk: the lit pixels only, as a movie frame following the frame)
+        print(f"No disk for the Saturn look: {e}")
+        return None
+
+
+def _still_detail(imgs, valid, look, disk=None):
     """load_aligned's channels (BGR, each a grey picture) with obs_mosaic.detail's local contrast on the lit pixels
     (detail_how), the same change on every channel"""
     import obs_mosaic as om
@@ -262,7 +279,7 @@ def _still_detail(imgs, valid, look):
     rgba = np.dstack(three + [np.where(valid, 255, 0).astype(np.uint8)])
     sigma = om.DETAIL_SIGMA * om.FRAME * rgba.shape[1] / 1024
     how = {"strength": look["detail"], "lit": True, "sigma": look.get("sigma", 1.0)}
-    out = om.detail(rgba, sigma, {"detail_how": how})
+    out = om.detail(rgba, sigma, dict({"detail_how": how}, **({"disk": disk} if disk else {})))
     picked = [out[..., 0]] if len(chans) == 1 else [out[..., 0], out[..., 2]] if len(chans) == 2 else [out[..., i] for i in range(3)]
     return [cv2.cvtColor(np.ascontiguousarray(c), cv2.COLOR_GRAY2BGR) if img.ndim == 3 else np.ascontiguousarray(c)
             for c, img in zip(picked, imgs)]
