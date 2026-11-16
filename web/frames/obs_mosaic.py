@@ -3665,6 +3665,9 @@ RING_FIT_NCC = 0.6      # the least a tile's profile, moved, must agree with the
 RING_FIT_GAIN = 0.02    # ... and how much better than where it was placed, for a move of over half a pixel
 RING_FIT_LEAST = 3000   # samples on the rings a tile needs
 RING_FIT_ROUNDS = 2     # the reference profile is made again from the tiles as moved this many times
+# (ring_places) each tile's profiles kept from one round for the next, up to this much of them (a profile over the
+# tile's own bins is 12 bytes a bin; a tile's ~1,100 places 0.5 to 9 MB)
+RING_PROFILES_MB = int(os.environ.get("CASSINI_RING_PROFILES_MB", "192"))
 
 
 def _tile_ring_samples(u, t, im, rings, reach):
@@ -3749,9 +3752,22 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
     # fine one, the parabola, RING_FIT_ROUNDS times): the bin of every point of its radius grid is worked out once
     # (_ring_bins) and a place tried only reads its samples' bins there, where it worked the bins out again from the
     # radii each time (half of a ring pass's time, 2026-11-16). The same bins, sums and counts: _ring_profile's.
-    # (the radius grid itself, 9.5 MB a tile, is let go for its bins' 2.4)
-    data = {n: (v,) + _ring_bins(radius) + (sy.astype(np.int64) * radius.shape[1] + sx, radius.shape[1])
+    # (the radius grid itself, 9.5 MB a tile, is let go for its bins' 2.4; the values as the doubles bincount sums)
+    data = {n: (v.astype(np.float64),) + _ring_bins(radius) + (sy.astype(np.int64) * radius.shape[1] + sx, radius.shape[1])
             for n, (v, radius, on, sy, sx) in data.items()}
+    given = ref is not None
+    # A tile's profile at a place does not depend on the reference, only what it is matched to does: the rounds after
+    # the first try the same ~1,100 places of every tile against a new reference, so each profile made is kept (over
+    # the bins the tile's radius grid holds at all, zeros elsewhere as bincount leaves them) and a later round reads
+    # it back instead of binning the tile's samples again: the same sums and counts, a round of two for a whole
+    # pass's fit (2026-11-16: 519 s of a 132 tile toss-up ring pass, 116RI EQXSHADOW018). Up to RING_PROFILES_MB of
+    # them; past that a profile is made again as before
+    keep = not given and RING_FIT_ROUNDS > 1
+    span = {}
+    for n, (_, bins, nb, _, _) in data.items():
+        there = bins[bins < nb]
+        span[n] = (int(there.min()), int(there.max()) + 1) if there.size else (0, 0)
+    kept, room = {}, [RING_PROFILES_MB << 20]
 
     def prof(n, d):
         v, bins, nb, at, width = data[n]
@@ -3759,11 +3775,20 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
         # (never past the margin the samples were taken with, reach: there the flat index would read another row's
         # bins without a word, where the 2-D index it replaces raised or wrapped)
         assert abs(dx) <= reach and abs(dy) <= reach, (n, dx, dy, reach)
+        lo, hi = span[n]
+        got = kept.get((n, dx, dy))
+        if got is not None:
+            tot, cnt = np.zeros(nb), np.zeros(nb, np.intp)
+            tot[lo:hi], cnt[lo:hi] = got
+            return tot, cnt
         b = bins.take(at + (dy * width + dx))
-        return np.bincount(b, weights=v, minlength=nb + 1)[:nb], np.bincount(b, minlength=nb + 1)[:nb]
+        tot, cnt = np.bincount(b, weights=v, minlength=nb + 1)[:nb], np.bincount(b, minlength=nb + 1)[:nb]
+        if keep and room[0] >= (hi - lo) * 12:
+            kept[(n, dx, dy)] = (tot[lo:hi].copy(), cnt[lo:hi].astype(np.int32))
+            room[0] -= (hi - lo) * 12
+        return tot, cnt
 
     out = {}
-    given = ref is not None
     for _ in range(1 if given else RING_FIT_ROUNDS):
         if not given:
             details = []
@@ -3774,8 +3799,16 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
                 details.append(dd)
             ref = np.nanmedian(np.vstack(details), axis=0)
         new = dict(moves)
+        # a reference of under 30 bins matches nothing (_profile_ncc: -1 at every place, whatever the tile), so the
+        # search's answer is known without making a profile: no match, found at the first place tried, as the search
+        # leaves it (a scan along one ring radius: 033RI AZSCNLOPH001's 316 tiles were each searched to learn it)
+        thin = np.count_nonzero(~np.isnan(ref)) < 30
         for n in data:
             if n in fixed:
+                continue
+            if thin:
+                out[n] = {"move": [0, 0], "ncc": [-1.0, -1.0], "found": [-reach, -reach], "ok": False}
+                new[n] = (0, 0)
                 continue
             score = lambda d: _profile_ncc(*prof(n, d), ref)
             before = score((0, 0))
