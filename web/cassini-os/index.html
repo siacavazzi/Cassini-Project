@@ -5723,11 +5723,15 @@ function targetLabel(k) {
     // a frame's 1024, a mosaic's full view) drawn on a canvas and saved losslessly; false when it could not be fetched
     async function pngInBrowser(href, name) {
       try {
-        const r = await fetch(href.replace(/[?&]format=png/, "").replace(/[?&]download=1/, ""));
+        // (the same address as WebP: format and download taken out wherever they stand among the parameters)
+        const u0 = new URL(href, location.href);
+        u0.searchParams.delete("format"); u0.searchParams.delete("download");
+        const r = await fetch(u0.href);
         if (!r.ok) return false;
-        const bm = await createImageBitmap(await r.blob());
+        // (no premultiplied alpha and no colour conversion: a mosaic's semi-transparent edge keeps its exact levels)
+        const bm = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
         const c = document.createElement("canvas"); c.width = bm.width; c.height = bm.height;
-        c.getContext("2d").drawImage(bm, 0, 0);
+        c.getContext("2d", { colorSpace: "srgb" }).drawImage(bm, 0, 0);
         const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
         if (!blob) return false;
         const u = URL.createObjectURL(blob), go = document.createElement("a");
@@ -5754,7 +5758,7 @@ function targetLabel(k) {
       // a PNG is made here in the browser from the stored picture (the same address as WebP), so the server only sends
       // a file it has: it drew each PNG on request before, 2.6 s and 0.3 GB for a processed frame, 5 s for a color set
       // (Sam's rule: nothing drawn at request time; call 19)
-      if (a && /[?&]format=png/.test(a.href) && !(a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit)) {
+      if (a && new URL(a.href, location.href).searchParams.get("format") === "png" && !(a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit)) {
         e.preventDefault();
         const ids = a.href.match(/[NW]\d{10}_\d+/g) || [], ch = (a.href.match(/[?&]channel=(\d)/) || [])[1];
         const span = a.querySelector("span"), was = span ? span.textContent : "";
@@ -13824,7 +13828,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"f526e8d6af74";
+  const BUILD = /*BUILD*/"a24e7665ba1e";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
