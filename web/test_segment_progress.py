@@ -19,6 +19,7 @@ om.keep_reports = lambda u, cache, p: None
 om.solve_places = lambda u, cache: None
 om.tile_map = lambda fid, cache: None
 om._mosaic_made = lambda u, j, size, cache: False
+om.rolling_restart = lambda u, size, cache, *a, **k: 0   # (#524: a part-made pass check, which lays out real tiles)
 
 
 def unit(kind, mosaic):
