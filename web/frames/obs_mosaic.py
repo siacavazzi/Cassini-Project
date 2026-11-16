@@ -8057,16 +8057,19 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     tile_of = lambda j: tiles.get(j) or {}
     not_shown = lambda j: unfit(u["frames"], j, tile_of)
     # (colour on: the frames a pass playing its grey filter shows another frame of that filter for, step_frame)
-    step, tint = {}, []
+    step, tint, server = {}, [], []
+    others = other_bodies(u, names=True) if colour and p.get("colour") else {}
     for m in ns if colour else ():
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
         if tinted:
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
+        elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
+            server.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
-            "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "server": server, "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
@@ -8092,7 +8095,23 @@ def page_evens(u, cache, colour=True, centre=True):
     t = _steady_table(u, 0, cache, centre, colour)
     return bool(t.get("local") and (t.get("exposure") or {}).get("local")
                 and not (colour and t.get("colour") and not t.get("sets"))
-                and not (colour and t.get("tint")))
+                and not (colour and (t.get("tint") or t.get("server"))))
+
+
+def _set_drawn_apart(u, js, others, k):
+    """Whether movie_frame draws colour set js (its tiles) with more than the page's mix (steady-local.html): another
+    body SPICE puts on every one of its tiles drawn big enough to be moved per filter (PER_BODY_LEAST canvas px of
+    radius at the table's scale k: _per_body_planes, which also keeps the clipped-band fill off it, colour_picture's
+    away), or a filter the pass takes once, cleaned of cosmic rays (_despiked). The steady table lists such frames
+    ("server"), which the page leaves to the server as it does a tinted one. (Not a set with only specks on every tile,
+    the ring moons on nearly every Saturn movie: none is moved, and the page keeps evening those passes; there
+    _per_body_planes may still line a plane's target limb up by a pixel or two, which the page does not.)"""
+    if any(_around(u, j) == [None, None] for j in js):
+        return True
+    if len(js) < 2 or not all(others.get(j) for j in js):
+        return False
+    big = [{b[0] for b in others[j] if b[3] * k >= PER_BODY_LEAST} for j in js]
+    return bool(set.intersection(*big))
 
 
 def one_white(tiles, scale):
@@ -8121,7 +8140,14 @@ def _colour_recipes(u, p, cache, ns, tiles):
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles, p["grey"])}
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "clip": _clip_fill(),
+            "by": _colour_by(u, want, ns, tiles, p["grey"])}
+
+
+def _clip_fill():
+    """colour_picture's clipped-band fill, as the page does it (steady-local.html fillClipped): [CLIP_FROM, CLIP_REACH,
+    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST]"""
+    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST]
 
 
 def _colour_by(u, want, ns, tiles, grey):
@@ -8159,7 +8185,7 @@ def _eye_recipes(u, p, ns, tiles):
     if len(want) == 2:
         by = {n: [a, a, b] for n, (a, b) in by.items()}
     return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
-            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "clip": _clip_fill(), "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
