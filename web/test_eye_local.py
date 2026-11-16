@@ -12,6 +12,11 @@ import os as _os; _os.environ["CASSINI_SUBPIXEL"] = "0"
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, subprocess, tempfile  # noqa: E402
 import numpy as np  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every scratch folder this test makes (the pass caches, node's planes and pictures: gigabytes a run) under one root,
+# removed when it ends, failed or not
+tempfile.tempdir = tempfile.mkdtemp(prefix=os.path.splitext(os.path.basename(__file__))[0] + "_")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
 import calibration  # noqa: E402
