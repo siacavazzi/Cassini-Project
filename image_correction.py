@@ -256,10 +256,13 @@ def spikes(img, neighbours):
     small = np.r_[False, (stats[1:, cv2.CC_STAT_WIDTH] <= SPIKE_SIZE) & (stats[1:, cv2.CC_STAT_HEIGHT] <= SPIKE_SIZE)]
     found = small[runs]
     near = np.ones((2 * SPIKE_REACH + 1, 2 * SPIKE_REACH + 1), np.uint8)
+    mine = None
     for other in neighbours:
         if not found.any():
             break
-        shift = find_shift(_bgr(img), _bgr(other))
+        if mine is None:
+            mine = _bgr(img)   # (the frame as find_shift takes it, once for both neighbours)
+        shift = find_shift(mine, _bgr(other))
         if shift is not None:
             other = shift_image(other, *shift)
         theirs, their_noise = peaks(other)
