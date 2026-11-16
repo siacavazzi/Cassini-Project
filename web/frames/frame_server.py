@@ -260,6 +260,19 @@ SIZES = (128, 256, 384, 512, 768, 1024)
 # size=full: the picture at full resolution, capped so a whole-pass mosaic cannot run away with the bandwidth
 FULL = "full"
 FULL_MAX = int(os.environ.get("CASSINI_FULL_MAX", "2048"))
+
+
+def full_out(frame_id, cache):
+    """The longest side of a mosaic's or mosaic movie's picture at size=full (the mosaic route's ?size=full and
+    mode=rolling&size=full, an "up to 2048" film's (export.Pictures.canvas), and the prebuild's fullview phase, which
+    stores it under the same name): the biggest size the pass has detail for (export.bucket of its native size, 1024,
+    1536 or 2048), never the canvas enlarged past it. One size per pass, so a full view and a film find the same
+    stored picture (2026-11-16: the mosaic route drew every pass at 2048 and a film at its bucket, two pictures, the
+    film's never stored)."""
+    try:
+        return export.bucket(mosaic_native.native_side(frame_id, cache) or obs_mosaic.OUT, min(obs_mosaic.CANVAS, FULL_MAX))
+    except (FileNotFoundError, ValueError, KeyError):
+        return min(obs_mosaic.CANVAS, FULL_MAX)
 # the sizes the camera windows ask for (head-quiet.html size()): true resolution, or full in full view
 WINDOW_SIZES = (1024, FULL)
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
@@ -1930,13 +1943,7 @@ def make_handler(site, cache, flags=None):
                         full = size_of(query, 512) == FULL
                         # full: the biggest size the pass has detail for (export.bucket of its native size), never
                         # the canvas enlarged past it
-                        out = obs_mosaic.OUT
-                        if full:
-                            try:
-                                out = export.bucket(mosaic_native.native_side(m.group(1), cache) or obs_mosaic.OUT,
-                                                    min(obs_mosaic.CANVAS, FULL_MAX))
-                            except (FileNotFoundError, ValueError, KeyError):
-                                out = min(obs_mosaic.CANVAS, FULL_MAX)
+                        out = full_out(m.group(1), cache) if full else obs_mosaic.OUT
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
                                                        out=out,
                                                        fade=fade, wait=query.get("whole", ["0"])[0] == "1")
@@ -2001,7 +2008,7 @@ def make_handler(site, cache, flags=None):
                     try:
                         # force=1: the window's Mosaic switch, the pass's mosaic whatever obs_mosaic calls it
                         made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _mosaic_slots, fmt=fmt,
-                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT,
+                                                      out=full_out(m.group(1), cache) if size == FULL else obs_mosaic.OUT,
                                                       force=bool(query.get("force")), tune=tune)
                     except FileNotFoundError:
                         made = None
