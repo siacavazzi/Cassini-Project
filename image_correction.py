@@ -306,7 +306,7 @@ tiles, already at SPICE's places (obs_mosaic._register)
 Three frames (a colour set) are also matched with one another and solved together (_loop).
 returns (imgs, masks)
 """
-def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, guess=None, within=None):
+def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, guess=None, within=None, on_disk=None):
     # the frames as they came, for matching the channels with one another (the loop check below)
     orig, omasks = list(imgs), [m.copy() for m in masks]
     shifts, hows = [None] * len(imgs), [None] * len(imgs)
@@ -320,9 +320,10 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, gues
                 masks[i] = shift_image(masks[i].astype(np.float32), *use[i]) > 0.99
             continue
         g = guess[i] if guess is not None else None
-        shifts[i], hows[i] = _match(orig[ref], orig[i], g, omasks[ref], omasks[i], within)
+        filled = bool(on_disk is not None and on_disk[ref] and on_disk[i])
+        shifts[i], hows[i] = _match(orig[ref], orig[i], g, omasks[ref], omasks[i], within, filled)
     if use is None and within is None and len(imgs) == 3:
-        _loop(orig, omasks, ref, shifts, hows, guess)
+        _loop(orig, omasks, ref, shifts, hows, guess, on_disk)
     for i in range(0, len(imgs)):
         if i == ref:
             if report is not None:
@@ -350,7 +351,7 @@ edges, then by the lit area's centroid; then SPICE's offset alone where it lines
 within = only near g (or no shift) within that many px (guided_shift's search alone): a mosaic tile already at
 SPICE's place, where a larger move is a false match (obs_mosaic._register). ((dx, dy) or None, how)
 """
-def _match(im1, im2, g, mask1, mask2, within=None):
+def _match(im1, im2, g, mask1, mask2, within=None, filled=False):
     if within is not None:
         found, how = guided_shift(im1, im2, g if g is not None else (0.0, 0.0), window=within)
         return found, how
@@ -380,6 +381,9 @@ def _match(im1, im2, g, mask1, mask2, within=None):
     if shift is None:
         # a limb or terminator through filters that look nothing alike inside it: matched on the lit area's outline
         shift, how = limb_shift(im1, im2, mask1, mask2)
+    if shift is None:
+        # one straight feature (a ring's edge across cloud tops): pinned across it, SPICE's place along it (ridge_shift)
+        shift, how = ridge_shift(im1, im2, mask1, mask2, g)
     if shift is None and g is not None:
         # nothing matched anywhere (or only wild fits): SPICE's offset, where it lines the frames up better than none
         shift, how = spice_shift(im1, im2, mask1, mask2, g)
@@ -388,7 +392,7 @@ def _match(im1, im2, g, mask1, mask2, within=None):
         here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
         if here >= AS_TAKEN_SURE:
             shift, how = (0.0, 0.0), f"as taken (edges agree {here:.2f})"
-    if shift is None and _flat(im1, im2, mask1, mask2):
+    if shift is None and _flat(im1, im2, mask1, mask2, filled):
         # nothing to match, and nothing a few pixels' error would show as a fringe: SPICE's place (or as taken)
         # rather than a gray picture
         # (SPICE's offset only within FIT_REACH: a larger move only cuts the picture down to where the channels
@@ -507,6 +511,117 @@ def limb_shift(im1, im2, mask1, mask2):
     return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
 
 
+
+"""
+Two frames whose only shared detail runs one way: Saturn's cloud tops through CB2 and MT2 with a ring's straight edge
+across them, or a terminator's long straight run (N1506890157_1 onto N1506890110_1: phase correlation's peak 0.07,
+nothing else matched). How well the edges line up (their normalized correlation, _agreement's measure) is worked out
+for every move within RIDGE_REACH px of SPICE's offset g (of no move without g, or past RIDGE_GUESS): round the best move
+it falls off steeply across the edge and hardly at all along it, a ridge. Across the ridge the frames pin the move; along
+it they cannot, and there it is SPICE's (or none). That is believed only when it cannot show: along the ridge at least one
+of the two frames changes by no more than _flat allows when moved FLAT_PROBE px (so a channel placed off along it puts no
+color fringe anywhere), the ridge stands at least RIDGE_LEAST, falls RIDGE_SHARP across RIDGE_STEP px on either side
+and under RIDGE_FLAT along it, and no other ridge parallel to it (a ringlet's neighbour) comes within RIDGE_SECOND of it.
+Against 245 channel pairs phase correlation lines up surely, a ridge's move across it is 0.26 px from theirs (median),
+none 2 px. ((dx, dy), how) or (None, "not aligned")
+"""
+RIDGE_REACH = 40      # px searched round SPICE's offset
+RIDGE_GUESS = 64.0    # px: a larger SPICE offset is searched round no move
+RIDGE_STEP = 6.0      # px either side of the best move where the fall is measured
+RIDGE_SHARP = 0.05    # the least fall across the ridge ...
+RIDGE_FLAT = 0.02     # ... and the most along it
+RIDGE_LEAST = 0.5     # the least agreement on the ridge
+RIDGE_SECOND = 0.1    # how much lower a parallel ridge must stand
+
+
+def _bilinear(S, x, y):
+    x0, y0 = int(np.floor(x)), int(np.floor(y))
+    if x0 < 0 or y0 < 0 or x0 + 1 >= S.shape[1] or y0 + 1 >= S.shape[0]:
+        return np.nan
+    fx, fy = x - x0, y - y0
+    return float(S[y0, x0] * (1 - fx) * (1 - fy) + S[y0, x0 + 1] * fx * (1 - fy) + S[y0 + 1, x0] * (1 - fx) * fy
+                 + S[y0 + 1, x0 + 1] * fx * fy)
+
+
+def _edge_surface(im1, im2, mask1, mask2, c, reach):
+    """The edges' normalized correlation for every whole px move (c[0] - reach .. c[0] + reach, likewise y), as
+    S[j, i] for the move (cx - reach + i, cy - reach + j); None when the frames are too small for it"""
+    e1, e2 = edges(im1)[..., 0].astype(np.float32), edges(im2)[..., 0].astype(np.float32)
+    k = np.ones((9, 9), np.uint8)
+    e1[cv2.erode(mask1.astype(np.uint8), k, borderValue=0) == 0] = 0
+    e2[cv2.erode(mask2.astype(np.uint8), k, borderValue=0) == 0] = 0
+    h, w = e1.shape
+    cx, cy = int(round(c[0])), int(round(c[1]))
+    m = reach + max(abs(cx), abs(cy)) + 12
+    if 2 * m > min(h, w) - 128:
+        return None
+    t = e2[m:h - m, m:w - m]
+    x0, y0 = m - cx - reach, m - cy - reach
+    S = cv2.matchTemplate(e1[y0:y0 + t.shape[0] + 2 * reach, x0:x0 + t.shape[1] + 2 * reach], t, cv2.TM_CCOEFF_NORMED)
+    return S[::-1, ::-1], (cx - reach, cy - reach)
+
+
+def _flat_along(im, mask, v):
+    """Whether frame im changes by no more than _flat allows when moved FLAT_PROBE px along v"""
+    gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+    blurred = cv2.GaussianBlur(gray, (0, 0), 1.5)
+    moved = cv2.warpAffine(blurred, np.float32([[1, 0, FLAT_PROBE * v[0]], [0, 1, FLAT_PROBE * v[1]]]),
+                           blurred.shape[::-1], borderMode=cv2.BORDER_REFLECT)
+    k = 2 * int(FLAT_PROBE) + 9
+    both = cv2.erode(mask.astype(np.uint8), np.ones((k, k), np.uint8), borderValue=0) > 0
+    # over the lit part of the frame only: a frame mostly black sky is not flat where its one lit arc is
+    # (N1567830862_1's ring arc: 99 % of the frame unchanged, the arc placed 22 px off along itself)
+    if both.sum() < 1000:
+        return False
+    lit = both & (blurred > max(FLAT_LEAST_DN, 0.1 * float(np.percentile(blurred[both], 99.9))))
+    if lit.sum() < 1000:
+        return False
+    d = np.abs(blurred - moved)[lit]
+    return np.percentile(d, 99) <= FLAT_DN and np.percentile(d, 99.9) <= FLAT_PEAK_DN
+
+
+def ridge_shift(im1, im2, mask1, mask2, g=None):
+    c = (0.0, 0.0) if g is None or np.hypot(g[0], g[1]) > RIDGE_GUESS else (float(g[0]), float(g[1]))
+    got = _edge_surface(im1, im2, mask1, mask2, c, RIDGE_REACH)
+    if got is None:
+        return None, "not aligned"
+    S, org = got
+    S = cv2.GaussianBlur(S, (0, 0), 1.0)   # (the camera's fixed pattern matching itself is a one px spike at no move)
+    j, i = np.unravel_index(int(np.argmax(S)), S.shape)
+    angles = np.radians(np.arange(0, 180, 5))
+    falls = []
+    for a in angles:
+        ends = [_bilinear(S, i + s * RIDGE_STEP * np.cos(a), j + s * RIDGE_STEP * np.sin(a)) for s in (-1, 1)]
+        falls.append(np.nan if np.isnan(ends).any() else float(S[j, i]) - float(np.mean(ends)))
+    falls = np.array(falls)
+    if np.isnan(falls).any():
+        return None, "not aligned"
+    n = int(np.argmin(falls))
+    along = np.array([np.cos(angles[n]), np.sin(angles[n])])
+    across = np.array([-along[1], along[0]])
+    if falls[n] > RIDGE_FLAT or falls[(n + len(angles) // 2) % len(angles)] < RIDGE_SHARP:
+        return None, "not aligned"
+    # the line through c along the ridge: where across it the edges line up best
+    ts = np.arange(-RIDGE_REACH + 2, RIDGE_REACH - 2 + 0.01, 0.25)
+    cx, cy = c[0] - org[0], c[1] - org[1]
+    prof = np.array([_bilinear(S, cx + t * across[0], cy + t * across[1]) for t in ts])
+    if np.isnan(prof).all():
+        return None, "not aligned"
+    m = int(np.nanargmax(prof))
+    top = float(prof[m])
+    if m == 0 or m == len(ts) - 1 or top < RIDGE_LEAST:
+        return None, "not aligned"
+    far = np.abs(ts - ts[m]) > 2 * RIDGE_STEP
+    second = float(np.nanmax(prof[far])) if far.any() and not np.isnan(prof[far]).all() else -1.0
+    if second > top - RIDGE_SECOND:
+        return None, "not aligned"
+    if not (_flat_along(im1, mask1, along) or _flat_along(im2, mask2, along)):
+        return None, "not aligned"
+    t = float(ts[m])
+    shift = (c[0] + t * across[0], c[1] + t * across[1])
+    angle = (float(np.degrees(np.arctan2(along[1], along[0]))) + 180) % 180
+    return shift, f"ridge at {angle:.0f} deg (edges agree {top:.2f}, next {second:.2f}, {'SPICE' if g is not None and c != (0.0, 0.0) else 'as taken'} along it)"
+
 """
 Whether two frames that matched nothing show nothing a misplacement would fringe: frame-filling cloud tops of Saturn
 or Titan, a black sky. Each frame, blurred as edges() sees it, is compared with itself moved FLAT_PROBE px on both
@@ -523,7 +638,7 @@ FLAT_PEAK_DN = 16.0  # of 255, at the 99.9th percentile
 FLAT_LEAST_DN = 6.0  # of 255: a frame spanning less than this (1st to 99th percentile) is blank, not flat
 
 
-def _flat(im1, im2, mask1, mask2):
+def _flat(im1, im2, mask1, mask2, filled=False):
     both = mask1 & mask2
     k = 2 * int(FLAT_PROBE) + 9
     both = cv2.erode(both.astype(np.uint8), np.ones((k, k), np.uint8), borderValue=0) > 0
@@ -532,8 +647,10 @@ def _flat(im1, im2, mask1, mask2):
     for im in (im1, im2):
         gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
         lo, hi = np.percentile(gray[both], (1, 99))
-        if hi - lo < FLAT_LEAST_DN:
+        if hi - lo < FLAT_LEAST_DN and not filled:
             return False   # a blank frame (a black sky stretched to gray): its color says nothing (W1448930891_1 white)
+            # (... unless SPICE puts both frames wholly on their target's disk, filled: a close-up of Titan's haze with
+            # a 3-level spread, N1664053405_1, is the haze's own color)
         blurred = cv2.GaussianBlur(gray, (0, 0), 1.5)
         moved = cv2.warpAffine(blurred, np.float32([[1, 0, FLAT_PROBE], [0, 1, FLAT_PROBE]]), blurred.shape[::-1],
                                borderMode=cv2.BORDER_REFLECT)
@@ -581,7 +698,7 @@ LOOP_CLOSE = 1.0   # px
 AS_TAKEN = 0.6     # edge agreement (_agreement) a channel as the camera took it needs to stand unshifted
 
 
-def _loop(orig, masks, ref, shifts, hows, guess):
+def _loop(orig, masks, ref, shifts, hows, guess, on_disk=None):
     a, b = [i for i in range(3) if i != ref]
     sa, sb = shifts[a], shifts[b]
     g = None
@@ -589,7 +706,7 @@ def _loop(orig, masks, ref, shifts, hows, guess):
         g = (guess[b][0] - guess[a][0], guess[b][1] - guess[a][1])
     if sa is None and sb is None:
         return
-    sab, how = _match(orig[a], orig[b], g, masks[a], masks[b])
+    sab, how = _match(orig[a], orig[b], g, masks[a], masks[b], filled=bool(on_disk is not None and on_disk[a] and on_disk[b]))
     if sab is None:
         return
     if sa is None or sb is None:

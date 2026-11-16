@@ -382,6 +382,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         else:
             imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
 
+    # which frames SPICE puts wholly on their target's disk: a blank pair of them is the body's own even color, not a
+    # black sky stretched to gray (image_correction._flat)
+    filled = disk_filled(lbls) if align and len(lbls) > 1 else None
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
     why = region = bodies = None
@@ -396,7 +399,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             shifts = []
             # the channels before alignment, for per_body
             before = (list(guide), list(linear[0]), list(masks), None if full is None else list(full))
-            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
+            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess, on_disk=filled)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
             if full is not None:
                 full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
@@ -419,7 +422,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 imgs = neutral(imgs, region)
         else:
             before, shifts = (list(imgs), list(imgs), list(masks)), []
-            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess)
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess, on_disk=filled)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
             if why == "moved":
                 got = per_body(lbls, ref, *before, bands, None, shifts, warps)
@@ -1216,6 +1219,14 @@ def spice_warps(lbls, ref):
         else:
             out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
     return out
+
+
+def disk_filled(lbls):
+    """Per frame, whether SPICE puts it wholly on its target's disk (_on_disk); None without the geometry cache"""
+    locs = _spice_locs(lbls)
+    if locs is None:
+        return None
+    return [_on_disk(lbl, loc) for lbl, loc in zip(lbls, locs)]
 
 
 def _on_disk(lbl, loc):
