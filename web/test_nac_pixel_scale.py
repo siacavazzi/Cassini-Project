@@ -2,6 +2,9 @@
 over its focal length, the scale bootleg_autonav.pixel_scale places a body's center with (the geometry cache's
 target.scale for the camera: 166,953.33 pixels per unit of tan(angle)), so a body's radius in pixels and its center
 are on one scale. With the kernels unpacked (CASSINI_SPICE_CACHE) the kernel's own text is read too.
+The wide-angle camera's is not the kernel's (200.77 mm) on purpose: its frames are drawn after CISSCAL's geometric
+correction, a pinhole camera of geometric_correction.F_LINEAR (200.956 mm), and bootleg_autonav.linear_ratio grows
+SPICE's shifts to that scale, so IFOV["W"] is the corrected frame's.
 Run: python web/test_nac_pixel_scale.py"""
 import glob
 import os
@@ -18,6 +21,9 @@ assert abs(1 / per_px - 166953.33) < 0.01, 1 / per_px          # as bootleg_auto
 assert abs(per_px - 5.98970e-6) < 1e-11, per_px
 # a disk 1,000 px in radius on the kernel's scale: the nominal 6.0 microradians drew it 1.7 px small
 assert 1.6 < 1000 * (1 - per_px / 6.0e-6) < 1.8
+import geometric_correction as gc  # noqa: E402
+assert obs_mosaic.IFOV["W"] == gc.PIXEL_MM / gc.F_LINEAR, obs_mosaic.IFOV["W"]   # 59.71 microradians, as drawn
+assert abs(1 / obs_mosaic.IFOV["W"] - gc.LINEAR_SCALE) < 1e-6
 read = 0
 cache = os.environ.get("CASSINI_SPICE_CACHE")
 for path in glob.glob(os.path.join(cache, "**", "cas_iss_v*.ti"), recursive=True) if cache else []:
