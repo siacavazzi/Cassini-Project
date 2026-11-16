@@ -22,19 +22,21 @@ movie jumped 24 to 54 px between frames 40 s apart, and the 2005-04-13 ring movi
 - On each side of t, the C-smithed frame nearest it stands for the median of the 5 corrections nearest that
   frame. The two sides are faded with their time distance (whole to 10 min, then gone over ~3 h) and blended by
   where t falls between them, so the correction is smooth through a movie's gaps.
-- Only where JPL's own corrections agree: their median distance from that median is at most 5 NAC px
-  (30 urad) or 2.5 WAC px (150 urad). JPL navigated each image on its own. On the WAC ring mosaics, one
-  pointing's corrections scatter by tens of pixels, and sometimes hundreds (ISS_260RI_HIPHASEFA001: 2 to 76 px,
-  one 482 px). There, no carried value beats raw: carrying them drew those mosaics' tiles out of line. Such
-  frames keep their raw pointing, and the mosaic's joint solve places them.
+- Only where JPL agrees with itself: at least 3 corrections, and all of them but one within 5 NAC px (30 urad)
+  or 2.5 WAC px (150 urad) of their median. JPL navigated each image on its own, and on the WAC ring
+  mosaics one tile's corrections scatter by tens of pixels, sometimes hundreds (ISS_260RI_HIPHASEFA001: 2 to
+  76 px, one 482 px). In Day the Earth Smiled, one tile's GRN, BL1 and IR3 corrections sat 25 to 40 px from its
+  RED frame's 7 px. A median-only test passed them, so the carried RED frame landed 20 px from its own filter's
+  and Saturn's limb doubled. There no carried value beats raw: those frames keep their raw pointing, and the
+  mosaic's joint solve places them.
 
-So 54,070 frames are carried over. 1,408 observations still hold a raw frame in a pointing with a corrected one
-(26,635 frames, where JPL's own corrections disagree), down from 4,590 (84,954 frames).
+So 27,245 frames are carried over. 3,383 observations still hold a raw frame in a pointing with a corrected
+one (52,004 frames, where JPL's own corrections disagree), down from 4,590 (84,954 frames).
 
 | file | what |
 |---|---|
 | `ISS_smithed_neighbours_ck.bc` | CK of Cassini's attitude (-82000, J2000), one type 3 segment per frame (a second round its mid-exposure time), segment id = frame id |
-| `ISS_smithed_neighbours_ck.lis` | the frames it covers (54,070) |
+| `ISS_smithed_neighbours_ck.lis` | the frames it covers (27,245) |
 | `ISS_smithed_frames.lis` | the frames JPL's own C-smithed CKs cover (98,692) |
 | `make_smith_neighbours_ck.py` | makes all three |
 | `check_mixed.py` | lists observations with a raw frame in the same pointing as a corrected one |
@@ -51,4 +53,4 @@ Remake it after the mission kernels or the index change:
 
     CASSINI_KERNELS=... CASSINI_KEEP_SPICE_CACHE=1 python spice_extra/usgs_titan/make_neighbours_ck.py
     CASSINI_KERNELS=... CASSINI_KEEP_SPICE_CACHE=1 python spice_extra/iss_smithed/make_smith_neighbours_ck.py spice_extra/iss_smithed/ISS_smithed_neighbours_ck.bc
-    CASSINI_KERNELS=... python spice_extra/iss_smithed/check_mixed.py      # 1,408 observations
+    CASSINI_KERNELS=... python spice_extra/iss_smithed/check_mixed.py      # 3,383 observations
