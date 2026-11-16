@@ -1441,7 +1441,8 @@ def folder(u, cache):
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
               + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else "")
-              + (REPOINTED if _repointed(u) else ""))
+              + (REPOINTED if _repointed(u) else "")
+              + (SATURN_TAG if saturn_look(u) and calibration.look() == "balanced" else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -5906,27 +5907,44 @@ def sharpens(scale):
     return bool(scale.get("detail", scale.get("filled")))
 
 
-SATDEF = os.environ.get("CASSINI_SATDEF", "")   # prototype: Saturn atmosphere definition options (thread)
-SATDEF_OPTIONS = {
+SATURN_LOOK = {"headroom": 1.25, "detail": 2.0, "sigma": 0.6}
+                    # Saturn's atmosphere (saturn_look): its pictures' white this many times its own (the disk's bright half
+                    # had been rolled off by the shoulder into a few levels: the 2007 apoapsis movie's disk at 220-228 of
+                    # 255), then local contrast this strong (detail) on its lit pixels only, over sigma times DETAIL_SIGMA,
+                    # so belts, storms and vortices show (Sam 11-16 chose this, option C, among A-H)
+SATURN_TAG = "_sl1"   # the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
+                      # single picture with it, so only Saturn's own pictures are made again
+SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown on 11-16; "off" none
+    "off": {},
     "A": {"headroom": 1.25},
     "B": {"headroom": 1.25, "detail": 1.0, "sigma": 0.6},
-    "C": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6},
+    "C": SATURN_LOOK,
     "D": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6},
-    "E": {"headroom": 1.3, "detail": 3.0, "sigma": 1.2},
     "F": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6, "chroma": 1.4},
-    "G": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6, "chroma": 1.7},
-    "H": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6, "chroma": 1.7, "grain": 1.2},
 }
+SATDEF = os.environ.get("CASSINI_SATDEF", "")
 DETAIL_LIT = (0.04, 0.12)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
                             # from this share of white to the second (its luminance), so the sky round a planet neither
                             # pulls its limb up into a bright rim nor gets texture of its own
 
 
 def saturn_look(u):
-    """{"gamma", "detail", "sigma"} of the Saturn definition option on (CASSINI_SATDEF), for Saturn's passes; {}"""
+    """The Saturn look (SATURN_LOOK: "headroom", "detail", "sigma") for a pass u (or {"key": (target, observation)})
+    of Saturn's atmosphere: Saturn its target and not a ring observation (_ring: the rings keep their own scale); {}"""
     if u["key"][0] != "SATURN" or _ring(u):
         return {}
-    return dict(SATDEF_OPTIONS.get(SATDEF, {}))
+    return dict(SATDEF_OPTIONS.get(SATDEF, SATURN_LOOK) if SATDEF else SATURN_LOOK)
+
+
+def saturn_frames(ids):
+    """saturn_look of a single picture of frames ids (a frame, a colour set), by the index's target and observation of
+    its last frame (the reference color_image.load_aligned centres on); {}"""
+    idx, row = _row_of()
+    q = row.get(ids[-1]) if ids else None
+    if q is None:
+        return {}
+    r = idx.iloc[q]
+    return saturn_look({"key": (str(r["TARGET_NAME"]), str(r["OBSERVATION_ID"]))})
 
 
 def chroma(rgb, k):

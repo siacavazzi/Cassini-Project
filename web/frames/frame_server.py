@@ -777,12 +777,19 @@ def processed_folder(cache, centre):
     return centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
 
 
+def saturn_name(ids):
+    """A single picture's cached name suffix: obs_mosaic.SATURN_TAG when it has the Saturn look (color_image.load_aligned
+    draws it so), so only Saturn's pictures are made again"""
+    return obs_mosaic.SATURN_TAG if calibration.look() == "balanced" and obs_mosaic.saturn_frames(list(ids)) else ""
+
+
 def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     """The composite (or one of its channels) as WebP (or PNG), and its report (also kept in the cache, next to
     the image). centre: centred on the body (composite)."""
     # bumped whenever the way composites are made changes, so older ones are not served again
     folder = centre_folder(os.path.join(cache, COLOR_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre)
-    base = os.path.join(folder, size_dir(size, fmt), "_".join(ids) + ("" if channel is None else f"_c{channel}"))
+    name = "_".join(ids) + saturn_name(ids)
+    base = os.path.join(folder, size_dir(size, fmt), name + ("" if channel is None else f"_c{channel}"))
     report = {}
     def make():
         with _color_slots:
@@ -795,11 +802,11 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
         # goes to full view gets the composite at once instead of making it again; a size encoded like another (a
         # 1024 px composite's 1024 and full) is the same bytes, made once
         if channel is None:
-            keep_hdr(im, folder, "_".join(ids))
+            keep_hdr(im, folder, name)
         enc = encoder(im)
         for other in WINDOW_SIZES if channel is None else ():   # a channel is asked for at the size it is shown
             if other != size:
-                path = os.path.join(folder, size_dir(other, "webp"), "_".join(ids))
+                path = os.path.join(folder, size_dir(other, "webp"), name)
                 if not os.path.exists(path + ".webp"):
                     _make_file(path + ".webp", lambda: enc(other))
                     if not os.path.exists(path + ".json"):
@@ -809,8 +816,8 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     if not report:
         report = reel.report_of(base + ".json", {})
     if channel is None:
-        calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), "_".join(ids) + ".webp"),
-                                    os.path.join(folder, HDR_DIR, "_".join(ids) + ".webp"))
+        calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), name + ".webp"),
+                                    os.path.join(folder, HDR_DIR, name + ".webp"))
     return data, report
 
 
@@ -818,14 +825,15 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), frame_id)
+    name = frame_id + saturn_name([frame_id])
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), name)
     report = {}
     def make():
         with _movie_slots:
             # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
             # made once, not once a size
             im, made = _recent_composite([frame_id], centre)
-        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), frame_id)
+        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), name)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         reel.keep_report(base + ".json", made)
@@ -1703,7 +1711,7 @@ def make_handler(site, cache, flags=None):
                 try:
                     data, report = color_webp(ids, size, cache, fmt, channel, centre)
                     if query.get("hdr", ["0"])[0] == "1" and fmt == "webp" and channel is None:
-                        return self.send_hdr(color_folder(cache, centre), "_".join(ids), size, data, query, name, report)
+                        return self.send_hdr(color_folder(cache, centre), "_".join(ids) + saturn_name(ids), size, data, query, name, report)
                     return self.send_picture(data, fmt, query, name, {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
                     return self.send_error(404, "Frame not in the archive")
@@ -1747,7 +1755,7 @@ def make_handler(site, cache, flags=None):
                 try:
                     data, report = processed_webp(m.group(1), size, cache, fmt, centre)
                     if query.get("hdr", ["0"])[0] == "1" and fmt == "webp":
-                        return self.send_hdr(processed_folder(cache, centre), m.group(1), size, data, query,
+                        return self.send_hdr(processed_folder(cache, centre), m.group(1) + saturn_name([m.group(1)]), size, data, query,
                                              f"Cassini_{m.group(1)}_processed", report)
                     return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_processed", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:

@@ -293,9 +293,8 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     if look is not None and scale is None and lbls:
         try:
             import obs_mosaic as om
-            info = lbls[0].info
-            target = str(info.get("TARGET_NAME", "")).strip('" ')
-            look.update(om.saturn_look({"key": (target, str(info.get("OBSERVATION_ID", "")).strip('" '))}))
+            # (by the index, as the frame server names the cached picture: frame_server.saturn_name)
+            look.update(om.saturn_frames([os.path.basename(p).replace(".png", "") for p in paths]))
         except Exception as e:   # noqa: BLE001  (no Saturn look: drawn as before)
             print(f"No Saturn look: {e}")
     if around and fill and len(paths) == 1:
