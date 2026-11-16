@@ -158,9 +158,26 @@ def test_terminator_and_smooth_bodies():
         om.DISK_DETAIL_TERMINATOR = keep
     assert soft[term].mean() < 0.6 * hard[term].mean(), (soft[term].mean(), hard[term].mean())
     assert soft[bright].mean() > 0.8 * hard[bright].mean(), (soft[bright].mean(), hard[bright].mean())
+    # frame_server.centred: Titan's haze skips the disk filter, a CB3 (surface window) frame of Titan and a moon take it
     import frame_server as fs
-    src = open(fs.__file__).read().split("def centred(")[1].split("\ndef ")[0]
-    assert "DISK_DETAIL_HAZE" in src and "SURFACE_WINDOW" in src and "TITAN" in om.DISK_DETAIL_HAZE
+
+    class Lbl:
+        def __init__(self, target):
+            self.info = {"TARGET_NAME": target}
+    called = []
+    real = (fs.color_image.processed_frame, fs.body_radius, fs._filters, om.detail_on_disk, fs._sharpened)
+    try:
+        for target, filters, want in (("TITAN", ["CL1", "GRN"], False), ("TITAN", ["CL1", "CB3"], True), ("RHEA", ["CL1", "GRN"], True)):
+            fs.color_image.processed_frame = lambda paths, turn=0.0, t=target: (px.copy(), Lbl(t), {"frame_offset": [0.0, 0.0]})
+            fs.body_radius = lambda lbl: r
+            fs._filters = lambda frame_id, f=filters: f
+            om.detail_on_disk = lambda *a, **k: called.append(k.get("target")) or a[0]
+            fs._sharpened = lambda out, ids, report: out
+            called.clear()
+            fs.centred(["N1500000000_1"], {"centre": True, "side": h})
+            assert bool(called) == want, (target, filters, called)
+    finally:
+        fs.color_image.processed_frame, fs.body_radius, fs._filters, om.detail_on_disk, fs._sharpened = real
     print("disk detail eased off across the terminator (%.1f vs %.1f levels), kept on the lit body; Titan's haze skipped"
           % (soft[term].mean(), hard[term].mean()))
 
