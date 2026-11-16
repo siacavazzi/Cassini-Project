@@ -1,0 +1,17 @@
+tracemalloc in _mosaic_at at its highest traced size (1499 MB traced, footprint 2989 MB):
+     166.1 MB in    32  obs_mosaic.py:5479 < obs_mosaic.py:5774 < reel.py:342 < obs_mosaic.py:5808 < obs_mosaic.py:6717 < obs_mosaic.py:6687 < obs_mosaic.py:10622
+     117.4 MB in    98  geometric_correction.py:188 < geometric_correction.py:188 < geometric_correction.py:219 < geometric_correction.py:241 < calibration.py:574 < stacking.py:296 < color_image.py:247
+     117.4 MB in    70  geometric_correction.py:187 < geometric_correction.py:187 < geometric_correction.py:219 < geometric_correction.py:241 < calibration.py:574 < stacking.py:296 < color_image.py:247
+      98.5 MB in    65  mosaic.py:449 < mosaic.py:673 < mosaic.py:703 < mosaic.py:703 < mosaic.py:85 < obs_mosaic.py:5564 < obs_mosaic.py:5789
+      67.2 MB in     2  dark_current.py:354 < dark_current.py:318 < dark_current.py:376 < dark_current.py:370 < calibration.py:500 < stacking.py:296 < obs_mosaic.py:2680
+      58.7 MB in    35  geometric_correction.py:187 < geometric_correction.py:219 < geometric_correction.py:241 < calibration.py:574 < stacking.py:296 < color_image.py:247 < color_image.py:1278
+      54.5 MB in    13  Image.py:905 < Image.py:818 < obs_mosaic.py:2934 < obs_mosaic.py:3039 < obs_mosaic.py:2965 < obs_mosaic.py:2949 < prebuild.py:368
+      49.3 MB in    50  mosaic.py:1143 < mosaic.py:1143 < mosaic.py:717 < mosaic.py:85 < obs_mosaic.py:5564 < obs_mosaic.py:5789 < reel.py:342
+      49.3 MB in    44  mosaic.py:415 < mosaic.py:421 < mosaic.py:673 < mosaic.py:703 < mosaic.py:703 < mosaic.py:85 < obs_mosaic.py:5564
+      49.3 MB in    32  mosaic.py:1082 < mosaic.py:1134 < mosaic.py:1134 < mosaic.py:717 < mosaic.py:85 < obs_mosaic.py:5564 < obs_mosaic.py:5789
+      49.3 MB in    32  mosaic.py:450 < mosaic.py:673 < mosaic.py:703 < mosaic.py:703 < mosaic.py:85 < obs_mosaic.py:5564 < obs_mosaic.py:5789
+      49.3 MB in    32  mosaic.py:485 < mosaic.py:450 < mosaic.py:673 < mosaic.py:703 < mosaic.py:703 < mosaic.py:85 < obs_mosaic.py:5564
+      44.0 MB in    30  flat_field.py:255 < flat_field.py:218 < flat_field.py:283 < calibration.py:542 < stacking.py:296 < obs_mosaic.py:2680 < thread.py:58
+      44.0 MB in    30  flat_field.py:90 < flat_field.py:194 < flat_field.py:244 < flat_field.py:218 < flat_field.py:283 < calibration.py:542 < stacking.py:296
+      34.1 MB in 454626  c_parser_wrapper.py:235 < readers.py:1778 < readers.py:611 < readers.py:950 < _decorators.py:331 < _decorators.py:211 < stacking.py:99
+      33.6 MB in    16  dark_current.py:399 < dark_current.py:370 < calibration.py:500 < stacking.py:296 < color_image.py:247 < color_image.py:1278 < obs_mosaic.py:2992

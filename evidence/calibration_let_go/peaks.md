@@ -1,0 +1,14 @@
+| pass | main | this branch alone | #520 alone | the memory changes together | together against main |
+|---|---|---|---|---|---|
+| TARQEQ_ISS_258OT_TAQROTB048_PRIME_N_0 | 1,974 | 1,974 | 1,883 | 1,854 | -120 |
+| JUPITER_ISS_C24JU_2X2ATM001_PRIME_W_0 | 2,551 | 2,584 | 2,265 | 1,910 | -641 |
+| IAPETUS_ISS_00AIA_GLOBCOLA001_PRIME_N_0 | 2,352 | 2,436 | 2,032 | 2,077 | -275 |
+| SATURN_ISS_030RI_HIPHAMOVE001_PRIME_N_0 | 2,539 | 2,642 | 2,463 | 1,949 | -590 |
+| TITAN_ISS_131TI_FIRNADCMP001_CIRS_W_0 | 1,893 | 1,903 | 1,768 | 1,776 | -117 |
+| SATURN_ISS_108RI_MNRNGSHAD005_PRIME_N_0 | 2,542 | 2,624 | 1,958 | 1,999 | -543 |
+| SATURN_ISS_003SA_3X3MOVIEA001_PRIME_N_0 | 2,547 | 2,579 | 1,891 | 1,894 | -653 |
+| SATURN_ISS_024SA_HALOSRCHE001_PRIME_N_0 | 2,610 | 2,588 | 1,850 | 1,847 | -763 |
+| SATURN_ISS_009SA_1X2WPH120003_PRIME_W_0 | 2,879 | 2,528 | 2,948 | 2,107 | -772 |
+| SATURN_ISS_282RI_HIRESAFRG001_PRIME_N_1 | 2,598 | 2,608 | 2,083 | 1,803 | -795 |
+| **mean** | **2,448** | **2,447** | **2,114** | **1,922** | **-526** |
+| **highest** | **2,879** | **2,642** | **2,948** | **2,107** | **-772** |
