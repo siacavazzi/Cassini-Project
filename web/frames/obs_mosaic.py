@@ -7549,9 +7549,9 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     step, tint = {}, []
     for m in ns if colour else ():
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
-        if tinted or (not got and grey_match(u, cache, p).get(u["frames"][s][2], 1.0) != 1.0):
+        if tinted or (not got and _grey_orphans(u, p) and u["frames"][s][2] in p["colour"]):
             # (a frame drawn in its set's colour, set_shown, or in gray at the brightness of the pass's colour pictures,
-            # grey_match: the server draws it, steady-local.html want)
+            # grey_near: the server draws it, steady-local.html want)
             tint.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
@@ -8890,69 +8890,76 @@ def shown_of(u, p, n, not_shown, tile_of):
     return s, None, False
 
 
-GREY_MATCH_FILE = "greymatch1-" + PLAN_FILE   # grey_match's factors, kept with the pass; renamed when its rule changes
-GREY_MATCH_SETS = 6      # colour sets of a pass, spread through it, the factors are measured on
+GREY_NEAR_FILE = "greynear1-" + PLAN_FILE   # grey_near's factors, kept with the pass; renamed when its rule changes
+GREY_NEAR = 8            # frames either side of a gray frame its nearest colour picture is looked for in
 _grey_matching = threading.local()
 
 
-def grey_match(u, cache, p=None):
-    """{filter: factor} for a movie pass that plays in colour (plays_colour; {} for any other): how bright a frame through
-    one of its colour filters is in the pass's colour pictures, against the frame drawn on its own in gray. A frame of
-    the pass left with no colour set to show (its own set never complete, a channel of it lost in downlink, and the
-    sets either side not covering its place: set_of) is drawn in gray, and at its filter's own brightness it sat 20
-    to 28% above the colour pictures round it (257DA DAPHNIS001's frames 7 to 9: 208 against 163 to 189, 2026-11-16).
-    movie_frame draws such a frame times its filter's factor.
-    Measured once per pass and kept with it: on up to GREY_MATCH_SETS of its complete sets, spread through the pass, each
-    of a set's frames drawn as the movie shows it in colour (the windows' picture, so its tint is the windows': see
-    exposure_chain) and on its own in gray, the ratio of their lit levels (_lit_level) over what both show; a filter's
-    factor is the median over the sets, within TINT_MATCH. A filter no set holds has none (1)."""
-    p = p or plan(u, cache)
+def _grey_orphans(u, p):
+    """Whether the pass plays in colour, so a frame of it through one of its colour filters with no set to show is
+    drawn toward the colour pictures either side (grey_near)."""
     want = p.get("colour")
-    if not want or getattr(_grey_matching, "on", False) or not plays_colour(u, want, p["grey"]):
-        return {}
-    rec = _kept_tiles(u, cache, p["display_scale"])
-    kept = rec.get("grey_match") if rec is not None else None
-    if kept is not None:
-        return kept
-    path = os.path.join(folder(u, cache), GREY_MATCH_FILE)
+    return bool(want) and plays_colour(u, want, p["grey"])
+
+
+def grey_near(u, n, cache, p=None):
+    """The factor frame n of a pass that plays in colour is drawn at when it is left with no colour set to show (its own
+    set never complete, a channel of it lost in downlink, and the sets either side not covering its place: set_of) and
+    is through one of the pass's colour filters; 1.0 for any other. Such a frame is drawn in gray, and at its filter's
+    own brightness it sat 20 to 28% above the colour pictures round it (257DA DAPHNIS001's frames 7 to 9: 208 against
+    163 to 189, 2026-11-16).
+    The factor brings the frame to the level between the colour picture before it and the one after it in time: the
+    nearest frame each side, within GREY_NEAR frames, that the movie shows in colour, each drawn as the movie shows it
+    (the windows' picture) and compared with frame n on its own over what both show (_lit_level); the two ratios are
+    mixed by time (in log), one alone stands when the other side has none, and the result is held within TINT_MATCH.
+    (A factor per filter for the whole pass, measured on its complete sets, was tried first: it fixed Daphnis and
+    made 272RI HIPHASEP001 worse, since a frame differs from its neighbours for more than its filter; taste call 22.)
+    Measured once per frame and kept with the pass."""
+    p = p or plan(u, cache)
+    if getattr(_grey_matching, "on", False) or not _grey_orphans(u, p) or u["frames"][n][2] not in p["colour"]:
+        return 1.0
+    path = os.path.join(folder(u, cache), GREY_NEAR_FILE)
     with _ulock(u):
-        if not os.path.exists(path):
-            frames, gamma = u["frames"], p["display_scale"].get("gamma", 2.2)
-            tile_of = lambda j: tile(u, j, cache, p["display_scale"])
-            not_shown = lambda j: unfit(frames, j, tile_of)
-            whole = []
-            for run in _pass_sets(u):
-                got = {f: j for f, j in run if f in want and not not_shown(j)}
-                if len(got) == len(want) and all("offset" in tile_of(j) for j in got.values()):
-                    whole.append(got)
-            picked = [whole[i] for i in sorted({round(x) for x in np.linspace(0, len(whole) - 1, min(len(whole), GREY_MATCH_SETS))})] if whole else []
-            ratios = collections.defaultdict(list)
-            _grey_matching.on = True   # (the frames drawn here are never themselves matched)
-            try:
-                for got in picked:
-                    for f, j in got.items():
-                        col, rep = movie_frame(u, j, cache, 0, True, out=OUT, per_body=False)
-                        if col is None or not rep.get("color"):
+        kept = {}
+        if os.path.exists(path):
+            with open(path) as fh:
+                kept = json.load(fh)
+        if str(n) in kept:
+            return kept[str(n)]["factor"]
+        frames, gamma = u["frames"], p["display_scale"].get("gamma", 2.2)
+        sides = {}
+        _grey_matching.on = True   # (the frames drawn here are never themselves matched)
+        try:
+            own, rep = movie_frame(u, n, cache, 0, True, out=OUT, per_body=False)
+            if own is not None and not rep.get("color"):
+                b = np.asarray(own)
+                for side, step in (("before", -1), ("after", 1)):
+                    for j in range(n + step, n + step * (GREY_NEAR + 1), step):
+                        if not 0 <= j < len(frames):
+                            break
+                        col, r = movie_frame(u, j, cache, 0, True, out=OUT, per_body=False)
+                        if col is None or not r.get("color") or col.size != own.size:
                             continue
-                        own, _ = movie_frame(u, j, cache, 0, False, out=OUT, per_body=False)
-                        if own is None or own.size != col.size:
-                            continue
-                        a, b = np.asarray(col), np.asarray(own)
+                        a = np.asarray(col)
                         both = (a[..., 3] > 0) & (b[..., 3] > 0)
                         la, lb = (_lit_level(np.where(both[..., None], q, 0), gamma) for q in (a, b))
                         if la and lb:
-                            ratios[f].append(la / lb)
-            finally:
-                _grey_matching.on = False
-            factors = {f: round(float(np.clip(np.median(v), *TINT_MATCH)), 3) for f, v in ratios.items() if v}
-            data = json.dumps({"factors": factors, "sets": len(picked), "ratios": {f: [round(x, 4) for x in v] for f, v in ratios.items()}})
-            reel._cached(path, data.encode)
-        with open(path) as fh:
-            kept = json.load(fh)["factors"]
-        if rec is not None:
-            with _lock:
-                rec["grey_match"] = kept
-        return kept
+                            sides[side] = {"n": j, "ratio": round(la / lb, 4), "dt": abs(frames[j][3] - frames[n][3])}
+                            break
+        finally:
+            _grey_matching.on = False
+        if len(sides) == 2:
+            span = sides["before"]["dt"] + sides["after"]["dt"]
+            w = sides["before"]["dt"] / span if span > 0 else 0.5
+            raw = math.exp((1 - w) * math.log(sides["before"]["ratio"]) + w * math.log(sides["after"]["ratio"]))
+        else:
+            raw = next(iter(sides.values()))["ratio"] if sides else 1.0
+        kept[str(n)] = {"factor": round(float(np.clip(raw, *TINT_MATCH)), 3), "sides": sides}
+        tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        with open(tmp, "w") as fh:
+            json.dump(kept, fh)
+        os.replace(tmp, path)
+        return kept[str(n)]["factor"]
 
 
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True):
@@ -9123,8 +9130,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if colour and not trail:
             # a frame left with no colour set to show in a pass that plays in colour (its own set never complete, the
             # sets either side not covering its place): in gray, at the brightness its filter's frames take in the
-            # pass's colour pictures (grey_match), not at its filter's own
-            match = grey_match(u, cache, p).get(t["filter"], 1.0)
+            # colour pictures either side of it (grey_near), not at its filter's own
+            match = grey_near(u, s, cache, p)
             if match != 1.0:
                 t = dict(t, gain=round(t.get("gain", 1.0) * match, 3), gamma=t.get("gamma", gamma))
                 rep["matched"] = match
