@@ -1,8 +1,8 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `07136f16` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `e04f252b` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 72 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547 and #548), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 13 follow-up merges of reviewed new heads (#546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**In it:** 73 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548 and #549), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
 **Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
@@ -12,7 +12,7 @@
 4. Smaller mechanical merges (both functions kept, both inputs kept, suffix order `_p1` then `_sp1`, CLAUDE.md's limiter section replacing "Use every free core" as #540 intends) are listed per row in the last column.
 
 ### Tests (cloud run of all 196 test files at fb4c4a6b, then test_processing_steps again after #542)
-- **All tests the branch's PRs touch pass.** The 10 failures left all fail on main too (cloud environment or older failures, not this branch): test_farm (no rsync here), test_cisscal_noise, test_mosaic_layout, test_pass_once, test_prebuild_planes, test_prebuild_procs, test_prebuild_slices, test_film_steady, test_tossup_both, test_steady_local (the cloud disk filled). The other 186 pass.
+- **All tests the branch's PRs touch pass.** The 9 failures left all fail on main too (test_prebuild_planes passes since #549) (cloud environment or older failures, not this branch): test_farm (no rsync here), test_cisscal_noise, test_mosaic_layout, test_pass_once, test_prebuild_procs, test_prebuild_slices, test_film_steady, test_tossup_both, test_steady_local (the cloud disk filled). The other 186 pass.
 - test_steady_local's KeyError 'sets' (from #543's wider auto_steady) is fixed by #548, which keeps auto-stabilized passes on the page.
 - Fixed along the way by the PRs' reviewed new heads, merged on top: #524 test_segment_progress, #488 test_contracts, #483 test_sets_passes (pandas 3), #508 test_set_matching, #506 test_color_register; #542 fixes test_processing_steps (which failed on main from #525).
 - Merge interactions fixed with test-only integration commits: test_repeat_range (#497 x #491) and test_calibration_let_go (#533 x #481/#524).
@@ -30,7 +30,7 @@ How to read this:
 - Base: main 85d2a2a9 (the full cache was built at f9ab1b4; main since then adds #475, #477, #478, #485 and #525).
 
 ## No-pixel PRs (rule these out first)
-#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, #548, and the five integration commits
+#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, #548, #549, and the five integration commits
 
 ## PRs that change pictures (in merge order)
 #476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547
@@ -156,4 +156,9 @@ How to read this:
 | 106 | [#547](https://github.com/siacavazzi/Cassini-Project/pull/547) Ring-movie stabilization on ring profiles
  | `48ead699` | **YES (ring movies)** | Ring movies are stabilized on ring profiles: across the rings the chain matches radial profiles (binned at the movie's own scale), the picture match only when profiles say nothing; passes with rings beside a moon (Daphnis in the Keeler gap) match pictures first, profiles as fallback. Ring links count for #543's auto_steady, so ring movies like the D ring movie are now stabilized by default. STEADY_FILE steady5 to steady6: every chain is remade. Benchmark 51/51 identical (no item reaches it). | Every pass's steady chain (steady6), and the ring movies' frames. | none | - | clean |
 | 107 | [#548](https://github.com/siacavazzi/Cassini-Project/pull/548) Auto-stabilized passes stay on the page: the steady table says what smoothing their frames are served at
- | `07136f16` | no | Auto-stabilized passes (#543) stay drawn on the page: the steady table carries auto = STEADY_SMOOTH and the page moves the served frames from those places for any other smoothing, never asking the server to draw one (compute on viewer). Served pictures unchanged. Fixes test_steady_local's KeyError 'sets' from #543. | Nothing. | none | - | resolved: obs_mosaic._steady_table: the branch's dhow line and server key kept, 548's auto key added; test_steady_local: 548's auto-pass block before the branch's page_gains/node_mix; index.html rebuilt from src (build.py) |
+ | `07136f16` | no | Auto-stabilized passes (#543) stay drawn on the page: the steady table carries auto = STEADY_SMOOTH and the page moves the served frames from those places for any other smoothing, never asking the server to draw one (compute on viewer). Served pictures unchanged. Fixes test_steady_local's KeyError 'sets' from #543. | Nothing. | none | - | clean (new head): follow-up merge of the PR's reviewed new head (docstring only) |
+| 108 | Picture-change map (docs) | `6737e5ab` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 109 | [#549](https://github.com/siacavazzi/Cassini-Project/pull/549) test_prebuild_planes: evened frames are pre-built for every pass (#487), not only the false colour one
+ | `a8e5fc7d` | no | Test only: test_prebuild_planes expects #487's evened frames for every pass. With it the whole test passes on the branch. | Nothing. | none | - | clean |
+| 110 | [#548](https://github.com/siacavazzi/Cassini-Project/pull/548) Auto-stabilized passes stay on the page: the steady table says what smoothing their frames are served at
+ (new head) | `e04f252b` | no | #548's reviewed new head: a docstring in prebuild.make_planes. No picture change. | Nothing. | none | - | integration commit |
