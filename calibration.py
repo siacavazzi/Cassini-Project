@@ -450,7 +450,10 @@ def depth_image(codes, info, scale=None):
     codes = np.asarray(codes)
     if codes.ndim == 3:
         codes = codes[..., 0]
-    small = int(_value(info, "LINES", "1024") or 1024) < 1024
+    # (as label.resize_image sizes the display copy: by the label, and by the picture stored, smaller than its label
+    # says on N1855753770_1, NASA's own IMG 256 x 256 under a 1024 line label: kept at 256, its I/F met the 1024 line
+    # valid mask in load_aligned's line fill)
+    small = int(_value(info, "LINES", "1024") or 1024) < 1024 or codes.shape[0] in (256, 512)   # (the camera's summed sizes)
     original = original_values(codes, info)
     if not ds.lut8() or (_value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT") and original is None):
         image = display_stretch(codes, info) if ds.lut8() else codes
