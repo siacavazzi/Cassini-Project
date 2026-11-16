@@ -11,7 +11,8 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   composites  /frames/color.webp?ids=R,G,B for every filter set the page makes (its findSets rule), at 1024 (which
               also writes full) and 512, in the default look (balanced, natural colors)
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
-              1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
+              1024 and 512: its mosaic so far, or a mosaic movie's rolling picture (and a toss-up pass's frames as a
+              movie, evened too, make_evened)
   movies      the same for every movie pass: its steadied frames (movie_webp), then the planes the page's own steps
               start from (make_planes: each frame alone, color=0, at 1024; a filled pass's also before detail, _d0),
               and its frames with Exposure normalization at its default smoothing (make_evened, _e8r8), which the
@@ -206,7 +207,10 @@ def items(phase):
         return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512, 256)])
                 for i in frame_ids()]
     if phase == "mosaics":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
+        # (a toss-up mosaic pass plays as a movie too, make_pass's movie(): its evened frames with it, as the evened
+        # phase adds them to a cache built before)
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + (
+            make_evened(u, c, every=True) if u.get("tossup") and u.get("kind") == "mosaic" else 0)) for u in mosaic_passes()]
     if phase == "chains":
         # a movie pass's stabilization and exposure chains (steady2-, exposure6-c11s0-plan4.json), which the page
         # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made

@@ -48,4 +48,10 @@ prebuild.make_planes = lambda u, c, *a, **k: 0
 for name, work in prebuild.items("movies"):
     work("/nowhere")
 assert len(made) == 6 and {m[4]["exposure"] for m in made} == {om.EXPOSURE_SMOOTH}, made
+
+# and the mosaics phase a toss-up pass's (its frames play as a movie too), none for a plain mosaic or a mosaic movie
+made.clear()
+for name, work in prebuild.items("mosaics"):
+    work("/nowhere")
+assert len(made) == 4 and {m[0] for m in made} == {f[1] for f in tossup["frames"]}, made
 print("ok")
