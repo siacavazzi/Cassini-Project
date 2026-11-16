@@ -532,8 +532,17 @@ def remote_build(host, sha, names, log=print):
     subprocess.run(["ssh", ssh, f"git -C {shlex.quote(repo)} cat-file -e {sha}^{{commit}} 2>/dev/null || "
                                 f"git -C {shlex.quote(repo)} fetch -q origin {sha}"], check=True)
     env = " ".join(f"{k}={shlex.quote(v)}" for k, v in cfg.get("env", {}).items())
-    cmd = (f"cd {shlex.quote(repo)} && {env} CASSINI_BENCH_CONFIG=/nonexistent CASSINI_BENCH_REPO={shlex.quote(repo)} "
-           f"{shlex.quote(py)} {tool}/image_bench.py build --rev {sha} --root {shlex.quote(root)} --items {','.join(names)} --python {shlex.quote(py)}")
+    # (on the host's own slot limiter when it has one (~/agents/bin/heavy), under this job's thread, at this job's slots
+    # (at most 3): a build started over ssh outside it ran free_slots() processes at 2 workers each, 20+ on the 24 GB
+    # Mini, the fan-out that crashed the MacBook on 11-16)
+    slots = min(3, max(1, int(os.environ.get("HEAVY_SLOTS", "0") or 0) or 2))
+    owner = (os.environ.get("HEAVY_NAME") or "bench").split(":")[0]
+    build = (f"{shlex.quote(py)} {tool}/image_bench.py build --rev {sha} --root {shlex.quote(root)} --items {','.join(names)} "
+             f"--python {shlex.quote(py)} --slots {slots}")
+    limited = (f"if [ -x ~/agents/bin/heavy ]; then ~/agents/bin/heavy -n {slots} --name {shlex.quote(owner + ': image bench ' + sha[:8])} "
+               f"-- env {env} CASSINI_BENCH_CONFIG=/nonexistent CASSINI_BENCH_REPO={shlex.quote(repo)} {build}; "
+               f"else {env} CASSINI_BENCH_CONFIG=/nonexistent CASSINI_BENCH_REPO={shlex.quote(repo)} {build}; fi")
+    cmd = f"cd {shlex.quote(repo)} && {limited}"
     log(f"{host}: building {len(names)} items of {sha[:12]}")
     p = subprocess.run(["ssh", ssh, cmd], capture_output=True, text=True)
     for line in (p.stdout + p.stderr).strip().splitlines()[-40:]:
