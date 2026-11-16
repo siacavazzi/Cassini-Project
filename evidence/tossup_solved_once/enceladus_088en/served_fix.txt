@@ -1,0 +1,3 @@
+ENCELADUS_ISS_088EN_SECLNX001_CIRS_N_1 kind movie tossup True mosaic False frames 22
+22 mosaic pictures at 1024 in the cache
+asked by a fresh process: 22 found, 0 not made, 0 with no mosaic yet
