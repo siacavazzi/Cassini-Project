@@ -349,11 +349,19 @@ class Builder:
         self.cfg = {**self.cfg, "env": {**self.cfg["env"], "CASSINI_GEOMETRY_CACHE": dst}}
 
     def done_items(self):
+        """Items build.json lists AND whose folder still holds meta.json.
+        A listed item whose folder was moved or deleted is rebuilt rather
+        than crashing the compare later."""
         try:
             with open(os.path.join(self.result, "build.json")) as fh:
-                return set(json.load(fh).get("built", []))
+                listed = set(json.load(fh).get("built", []))
         except OSError:
             return set()
+        have = {n for n in listed
+                if os.path.exists(os.path.join(self.result, n, "meta.json"))}
+        for n in sorted(listed - have):
+            self.log(f"  {n}: listed as built but its folder is missing; rebuilding it")
+        return have
 
     def worktree(self):
         if not os.path.exists(os.path.join(self.wt, "web", "frames", "prebuild.py")):
