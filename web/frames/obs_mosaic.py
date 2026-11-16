@@ -5902,13 +5902,18 @@ def detail(rgba, sigma):
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
 
-DISK_DETAIL_MARGIN = 1.4    # stills (detail_on_disk): the body's mean is taken inside this times its SPICE (mean) radius (Hyperion's long axis is 1.33 x it) ...
+DISK_DETAIL_MARGIN = 1.15   # stills (detail_on_disk): the body's mean is taken inside this times its SPICE radius ...
+DISK_DETAIL_REACH = (1.02, 1.4)   # ... and its change reaches this times it: a round body's limb, or an irregular one's
+                                  # (DISK_DETAIL_IRREGULAR) far ends (Hyperion's long axis is 1.33 x its mean radius) ...
+DISK_DETAIL_OPEN = 0.4      # ... and the filter runs only where under this share of the ring past 1.15 x the radius is lit (sky
+                            # round it, not Saturn's disk or rings behind it: Pan and Daphnis in their gaps)
 DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
 DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
+DISK_DETAIL_IRREGULAR = set(SMALL_RADIUS) | {"HYPERION", "PHOEBE"}   # bodies whose ends lie past their mean radius
 
 
-def detail_on_disk(rgba, cx, cy, radius, sigma=None):
+def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
     """detail() on a still or composite whose body SPICE places (frame_server.centred): the same raise of the local
     contrast (DETAIL, DETAIL_EDGE, DETAIL_KNEE), its neighbourhood mean taken over the body's lit pixels only (inside
     DISK_DETAIL_MARGIN x radius of (cx, cy), DISK_DETAIL_LIT over the sky) and its change only on those lit pixels,
@@ -5931,14 +5936,26 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None):
         return rgba
     sky = float(np.percentile(lum[alpha], 5))
     floor = sky + max(6.0, DISK_DETAIL_LIT * (float(np.percentile(body, 90)) - sky))
-    lit = ((cv2.GaussianBlur(lum, (0, 0), 2) > floor) & circle & alpha).astype(np.uint8)
+    bright = (cv2.GaussianBlur(lum, (0, 0), 2) > floor) & alpha
+    reach = DISK_DETAIL_REACH[0]
+    ring = (rr > DISK_DETAIL_MARGIN * radius) & (rr <= DISK_DETAIL_REACH[1] * radius) & alpha
+    open_sky = not ring.any() or bright[ring].mean() < DISK_DETAIL_OPEN
+    if not open_sky:
+        # a lit backdrop round the body (a moon in front of Saturn's disk, among the rings): left as it is. SPICE's
+        # limb is a few pixels off the body's, and a mean or change that strays onto the backdrop draws a dark arc on
+        # it (Rhea before Saturn, N1648105861_1); the picture still takes the fine sharpening
+        return rgba
+    elif str(target or "").upper() in DISK_DETAIL_IRREGULAR:
+        # an irregular moon's far ends lie past its mean radius: reached over open sky
+        reach = DISK_DETAIL_REACH[1]
+        circle = rr <= reach * radius
+    lit = (bright & circle).astype(np.uint8)
     lit = cv2.erode(lit, np.ones((3, 3), np.uint8)).astype(np.float32)
     if lit.sum() < 50:
         return rgba
-    # (the change follows the lit body out to DISK_DETAIL_MARGIN x the mean radius, so an elongated moon's far ends,
-    # past its mean radius, are raised too and no soft boundary crosses its surface: Hyperion, Telesto, Prometheus;
-    # the lit mask, eroded and faded in, keeps it off the sky; review of #495)
-    inside = np.clip((radius * DISK_DETAIL_MARGIN - rr) / max(2.0, 0.03 * radius), 0, 1)
+    # (the change follows the lit body out to reach x the radius; the lit mask, eroded and faded in, keeps it off the
+    # sky; review of #495)
+    inside = np.clip((radius * reach - rr) / max(2.0, 0.03 * radius), 0, 1)
     fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit * inside
     weight = cv2.GaussianBlur(lit, (0, 0), sigma)
     mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)

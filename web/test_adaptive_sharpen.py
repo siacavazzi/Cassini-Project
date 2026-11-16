@@ -88,6 +88,21 @@ def test_detail_on_disk():
     assert out[..., 0][inner].mean() < 200 and abs(float(out[..., 0][inner].mean()) - float(px[..., 0][inner].mean())) < 15
     assert out[..., 0][inner].std() > 1.05 * px[..., 0][inner].std()
     assert (out[r2 > (1.1 * r) ** 2] == px[r2 > (1.1 * r) ** 2]).all()
+    # a moon in front of a lit backdrop (Saturn's banded disk, the rings round Pan): the backdrop past the limb is
+    # never changed, irregular moon or not (review of #495)
+    back = np.where(disk, lum, 90 + 30 * np.sin(yy[:h, :w] / 6.0))
+    pb = np.dstack([np.clip(back, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    for target in ("DIONE", "PAN"):
+        ob = om.detail_on_disk(pb, cx, cy, r, target=target)
+        far = r2 > (1.05 * r) ** 2
+        assert np.abs(ob[..., 0][far].astype(int) - pb[..., 0][far]).max() == 0, target
+    # an elongated moon over black sky: its far ends (past 1.15 x its mean radius) are raised too
+    ell = ((xx[:h, :w] - cx) / (1.33 * r)) ** 2 + ((yy[:h, :w] - cy) / (0.75 * r)) ** 2 <= 1
+    le = np.where(ell, 120 + 10 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3), 4.0)
+    pe = np.dstack([np.clip(le, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    oe = om.detail_on_disk(pe, cx, cy, r, target="HYPERION")
+    ends = ell & (r2 > (1.2 * r) ** 2) & (r2 < (1.25 * r) ** 2)
+    assert (oe[..., 0][ends] != pe[..., 0][ends]).mean() > 0.3
     print("detail on a small disk: shading kept (%.0f vs %.0f), craters raised, the sky untouched" % (out[..., 0][inner].mean(), px[..., 0][inner].mean()))
 
 
