@@ -127,6 +127,15 @@ assert n == 2 and not valid_s[512, 2] and not valid_s[512, 1021] and not clip_s[
 assert valid_s[512, 512] and valid_s[512, 40] and abs(merged_s[512, 512] - 0.2) < 1e-3
 edge = (~valid_s).sum(axis=1)[512]
 assert 35 < edge < 48, edge   # 3.8% of the way from the body centre to each edge: about 20 px a side
+# ... but where another repeat measured the ground and saturated too, it is saturated ground: clipped (white), kept
+places["same"] = places["far"]
+pngs["same.png"] = disk(200, (40.0, -30.0))
+stacking.find_repeats = lambda p, window=120, max_frames=5: ["far.png", "near.png", "same.png"]
+stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool) if info["path"] == "near.png" \
+    else np.ones(codes.shape, bool)
+_, _, n, valid_t, clip_t = stacking.load_hdr("far.png", valid=True, clipped=True)
+assert n == 3 and valid_t.all() and clip_t[512, 2] and clip_t[512, 1021] and not clip_t[512, 512], clip_t.sum()
+stacking.find_repeats = lambda p, window=120, max_frames=5: ["far.png", "near.png"]
 stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 print("load_hdr ok")
 print("ok")

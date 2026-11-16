@@ -392,7 +392,7 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
-    merging, own, differ, unseen = [], None, False, None
+    merging, own, differ, seen, ranged_any = [], None, False, None, False
     plain = not cal.step("hdr")
     repeats = find_repeats(path, window, max_frames if cal.step("stack") else 1)
     where = places([frame_id(p) for p in repeats], reach=True) if len(repeats) > 1 else {}
@@ -455,8 +455,12 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             if shift is not None:
                 inside = ic.shift_image(inside.astype(np.float32), *shift) > 0.99
             full = full | ~inside
-            unseen = ~inside if unseen is None else unseen | ~inside
+            ranged_any = True
         good = ~cv2.dilate(full.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+        if ref is not image:
+            # (where a repeat measured, saturated or not: all of a plain one, what a resized one still reaches)
+            reach = inside if ranged else np.ones(full.shape, bool)
+            seen = reach if seen is None else seen | reach
         merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1), full))
     if note is not None:
         note["differ"] = bool(differ)
@@ -489,7 +493,8 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
     # size, so it is not drawn white as saturated ground but left out as unmeasured, for the next tile of a mosaic
     # (or the fill of lost pixels) to take, as a frame's lost lines are (Phoebe's closest approach: a white strip
     # a few px wide along a tile's edge)
-    blank = clip & merging[0][4] & unseen if unseen is not None and n > 1 else None
+    # (only where no repeat measured it: one that did and saturated there too says it is saturated ground, white)
+    blank = clip & merging[0][4] & ~seen if ranged_any and seen is not None and n > 1 else None
     if valid:
         # valid where some exposure went in, or where every one saturated but the frame at path has its (clipped) pixel
         mask = own | (weight > 0) if differ else own
