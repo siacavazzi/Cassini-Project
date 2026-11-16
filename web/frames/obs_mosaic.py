@@ -2447,26 +2447,29 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
 
-    def black_of(iof, full=None):
+    def black_of(iof, valid=None):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
-        # its brightest (the 99.9th percentile the sky is under 5% of) measured on what the camera did not saturate
-        # (full: the frame's saturated pixels, load_channels'): the merge rebuilds a saturated patch from a shorter
-        # exposure beside it, far over anything this frame measured, and where that patch passed 0.1% of the frame
-        # the brightest tripled, three times as much of the body's haze counted as sky, and the sky's spread and the
-        # frame's black went up with it, in that frame and channel alone (133TI CLOUD002's CB3: every second or
-        # third frame's black 8% of white over its neighbours'; 207SA NHEMMOV001's N frame 56, 47% of white, drawn
-        # near black). pass_scale's frames, merged plain, never held the rebuilt values
-        seen_by = q[~full[::4, ::4]] if full is not None and full.any() and not full[::4, ::4].all() else q
-        brightest = float(np.percentile(seen_by, 99.9))
-        top_of_sky = 0.05 * brightest
+        if valid is not None and not valid.all():
+            # the frame's lost pixels (valid False: lines lost in downlink that nothing filled, load_aligned's masks)
+            # are not picture: they hold whatever the fill left there, up to 5 times the pass's white in 133TI
+            # CLOUD002's N1655966473_1, four lost lines. On the quarter size picture one such row is 0.4% of the
+            # frame, so the frame's brightest (its 99.9th percentile, which the sky is under 5% of) tripled, three
+            # times as much of Titan's haze counted as sky, and the sky's spread and the frame's black went up with
+            # it: every second or third CB3 frame of that movie on a black 8% of white over its neighbours', and
+            # 207SA NHEMMOV001's frames on one 44% of white over theirs, drawn near black. They take the median of the
+            # frame's own pixels, so they are neither its brightest nor its sky's spread
+            ok = valid[::4, ::4]
+            if ok.any():
+                q = np.where(ok, q, np.float32(np.median(q[ok])))
+        top_of_sky = 0.05 * np.percentile(q, 99.9)
         if glow_only and not codes and float(np.median(q)) > calibration.GLOW_IOF[1]:
             # (a ring pass's frame as bright as a sunlit surface, GLOW_IOF, is the rings filling it, real light, never a
             # glow: the pass's black. Its flat floor read as a glow's, and black over its median took half the ring
             # under it: 124RI RDHRCOMP001's frames, median 0.016-0.05 I/F, went to their brightest ringlets on black,
             # 53% of each frame black, from #279. A dim ring frame's veil, 051RG G20PHASE002's 3e-5, keeps the rule)
             return None
-        m = _dark_sky(q, brightest)
+        m = _dark_sky(q)
         veiled = glow = False
         if speck and disk is not None and disk[2] < SPECK_PX:
             # a body from beyond Saturn's system under a pixel across (Earth from Saturn, SPECKS): the frame is all sky,
@@ -2643,7 +2646,7 @@ def on_disk(u, frame):
 SKY_OFFSET_MOST = 0.25   # _dark_sky: a frame's floor up to this share of its 99.9th percentile is an offset in its sky
 
 
-def _dark_sky(q, top=None):
+def _dark_sky(q):
     """pass_scale's dark sky of a frame (quarter size, I/F): under 5% of the way from its floor (1st percentile, at
     least 0) to its 99.9th percentile. Measured from 0, a sky the calibration left a small even offset in failed the
     test wherever the body was too small to set the 99.9th percentile far above that offset: Phoebe in 2004
@@ -2652,8 +2655,7 @@ def _dark_sky(q, top=None):
     the gamma 3 scale the offsets came out as a blue-grey sky behind the moon (RED 2, GRN 18, BL1 32 levels). A floor
     over SKY_OFFSET_MOST of the 99.9th percentile is a lit body, not an offset sky (a moon or Titan's haze filling the
     frame, whose darkest part is no sky): measured from 0 then, as before."""
-    # (top: the frame's brightest when the caller measured it, tile_scale's black_of on its unsaturated pixels)
-    top = float(np.percentile(q, 99.9)) if top is None else top
+    top = float(np.percentile(q, 99.9))
     floor = float(np.percentile(q, 1))
     floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
     return q - floor < 0.05 * (top - floor)
