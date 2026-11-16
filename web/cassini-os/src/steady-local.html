@@ -333,6 +333,18 @@
       }
       return px;
     }
+    // obs_mosaic.detail's blend: before off the disk, after on it, eased over soft of its radius (disk_weight); rounded
+    function diskBlend(before, after, W, disk, soft = 0.03) {
+      const f = Math.fround, out = new Uint8ClampedArray(after.length), dr = f(disk[2] * (1 + soft)), dw = f(2 * soft * disk[2]);
+      for (let p = 0, i = 0; i < after.length; p++, i += 4) {
+        const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+        let u = Math.min(1, Math.max(0, f(f(dr - d) / dw)));
+        u = f(f(u * u) * f(3 - f(2 * u)));
+        for (let c = 0; c < 3; c++) out[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(before[i + c] + f(f(after[i + c] - before[i + c]) * u)) + 0.5))));
+        out[i + 3] = after[i + 3];
+      }
+      return out;
+    }
     // cv2's separable float32 blur (BORDER_REFLECT_101), on the processor: rows summed tap by tap, then columns
     // centre first and each pair of taps together, as cv2's RowFilter and SymmColumnFilter (the reference the GPU's
     // version is tested against; slow for a whole picture)
@@ -352,7 +364,7 @@
       return out;
     }
     return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
-      gaussKernel, detailInputs, detailFinish, blurCPU, ringWhite };
+      gaussKernel, detailInputs, detailFinish, blurCPU, ringWhite, diskBlend };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
@@ -432,9 +444,16 @@ void main() {
 let blur;   // the GPU blur, made when a filled pass first needs it
 const sharpen = (px, W, H, t) => {
   if (blur === undefined) blur = (${STEADY_GPU.toString()})();
-  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px, t.lit, t.disk ? [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W] : null, W);
-  const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
-  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge, d.w);
+  const disk = t.disk ? [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W] : null;
+  const one = (p, sigma, amount, lit, dk) => {
+    const k = M.gaussKernel(sigma), d = M.detailInputs(p, lit, dk, W);
+    const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
+    return M.detailFinish(p, d.lum, ga, gla, amount, t.knee, t.edge, d.w);
+  };
+  if (!(t.base && disk && t.lit)) return one(px, t.sigma, t.amount, t.lit, disk);
+  // obs_mosaic.detail: today's detail off the disk (the rings as drawn before the Saturn look), the look's on it
+  const before = one(new Uint8ClampedArray(px), t.base.sigma, t.base.amount, null, null), after = one(px, t.sigma, t.amount, t.lit, disk);
+  return M.diskBlend(before, after, W, disk);
 };
 const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {

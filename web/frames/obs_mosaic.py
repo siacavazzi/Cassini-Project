@@ -2846,6 +2846,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     if sat.get("chroma"):
         out["chroma"] = sat["chroma"]
     if sat.get("detail"):
+        # (a pass that had detail() already keeps it off the disk: its rings as they are drawn today, detail_base)
+        out["detail_base"] = out["detail"]
         out["detail"], out["detail_how"] = True, {"strength": sat["detail"], "lit": True,
                                                   "sigma": sat.get("sigma", 1.0), "grain": sat.get("grain", 0)}
     long = _long_white(each, blacks, white) if u.get("movie") and not filled else None
@@ -6039,6 +6041,18 @@ def chroma(rgb, k):
 
 
 def detail(rgba, sigma, scale=None):
+    """detail_core, and for a Saturn look scale on a pass that had detail() before (detail_base) with the body's disk
+    known: today's detail off the disk (the rings as they are drawn today), the Saturn look's on it, eased over the
+    disk's edge (disk_weight)"""
+    if scale and scale.get("detail_base") and scale.get("disk") and (scale.get("detail_how") or {}).get("lit"):
+        before = detail_core(rgba, sigma, None).astype(np.float32)
+        after = detail_core(rgba, sigma, scale).astype(np.float32)
+        w = disk_weight(rgba.shape[:2], *scale["disk"])[..., None]
+        return np.clip(before + (after - before) * w + 0.5, 0, 255).astype(np.uint8)
+    return detail_core(rgba, sigma, scale)
+
+
+def detail_core(rgba, sigma, scale=None):
     """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
     against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
     over the mosaic's own pixels only, so the empty canvas does not darken its edges) by DETAIL times the
@@ -7755,6 +7769,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
             "amount": dhow.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
             **({"lit": list(DETAIL_LIT)} if dhow.get("lit") else {}),
+            **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
+               if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
                if dhow.get("lit") and radius and not follows(fp, rect) else {}),
             **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2),
