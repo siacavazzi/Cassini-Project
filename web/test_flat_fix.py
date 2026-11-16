@@ -26,6 +26,14 @@ with tempfile.TemporaryDirectory() as fix:
     ff.FIX = fix
     ff._map.cache_clear()
     assert np.array_equal(ff._map("flat129", "full"), maps["full"])
+    # the build's guard: CISSCAL's files without the repaired maps is no build
+    try:
+        ff.check_flat_fix(); raise AssertionError("a build without the repaired flat129 was let through")
+    except ff.FlatFixMissing:
+        pass
+    for mode in ("full", "sum2", "sum4"):
+        np.save(os.path.join(fix, "flat", f"flat129.{mode}.npy"), maps[mode])
+    assert ff.check_flat_fix() == fix
 
 # fallbacks, on a slope table of a few rows
 rows = [["ISSWA", "p5", "CL1", "IRP90", "2", "OFF", "512", "SLOPE080.IMG"],
@@ -35,7 +43,7 @@ rows = [["ISSWA", "p5", "CL1", "IRP90", "2", "OFF", "512", "SLOPE080.IMG"],
 ff._slope_db = lambda: rows
 info = lambda cam, filt, temp="5.0": {"INSTRUMENT_ID": cam, "FILTER_NAME": filt, "OPTICS_TEMPERATURE": f"({temp},-999)"}
 assert ff.flat_name(info("ISSWA", "(CL1,IRP0)")) == "flat080"             # the polarizer's other angle
-assert ff.flat_name(info("ISSNA", "(CL1,UV3)", "-999.0")) == "flat120"     # unknown temperature: p5
+assert ff.flat_name(info("ISSNA", "(CL1,UV3)", "-999.0")) == "flat120"     # unknown temperature: m10 as cisscal, then p5
 assert ff.flat_name(info("ISSNA", "(IRP0,MT1)", "0.7")) == "flat140"       # no IRP0/MT1: its clear filter, another temperature
 assert ff.flat_name(info("ISSNA", "(P120,MT2)", "0.7")) == "flat158"       # P120 -> P0 of the same family
 assert ff.flat_name(info("ISSWA", "(CB3,HAL)")) is None                    # no rule reaches it: none, as cisscal

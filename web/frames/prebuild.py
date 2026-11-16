@@ -1219,6 +1219,9 @@ def main():
     if args.until and args.until[5:10] in ("01-01", "") and until > since:
         until -= 1
     data_source.check_kernels(range(since, until + 1))
+    # ... and the flat fields repaired from the PDS's slope files (flat_field.check_flat_fix)
+    import flat_field
+    flat_field.check_flat_fix()
     (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 
