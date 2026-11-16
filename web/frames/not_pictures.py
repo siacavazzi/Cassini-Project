@@ -56,7 +56,7 @@ def main():
                 out.append((os.path.splitext(os.path.basename(p))[0], w))
     out.sort()
     with open(LIST, "w", newline="") as fh:
-        wr = csv.writer(fh)
+        wr = csv.writer(fh, lineterminator="\n")
         wr.writerow(["id", "why"])
         wr.writerows(out)
     print(f"{len(out)} frames hold no picture ({sum(w == 'dark' for _, w in out)} dark, {sum(w == 'lamp' for _, w in out)} lamp) of {len(paths)}")
