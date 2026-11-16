@@ -19,7 +19,7 @@ observation goes on, so the pass builds without its other frames flashing in bet
             spells linger, and longer gaps are cut (the caption says what was skipped)
 The video is always FPS frames a second; holds are rounded to whole frames with the rounding carried forward.
 
-Picture sizes 1536 and 2048 ("up to"): each mosaic and mosaic movie picture is drawn on the windows' own canvas
+Picture size 2048 ("up to"; "up to 1536" went 2026-11-16): each mosaic and mosaic movie picture is drawn on the windows' own canvas
 (obs_mosaic, CANVAS px) at the biggest of BUCKETS its pass has detail for (its native size, never more: a pass 1,400
 px across stays at 1024), and the panes are the stretch's biggest such bucket; about the same work as 1024.
 
@@ -485,7 +485,7 @@ NATIVE_KINDS = ("mosaic", "rolling")   # the tries drawn at native resolution at
 
 
 def big(opt):
-    """Whether the film's mosaics are drawn bigger than 1024: Full, or an "up to" size (1536, 2048)."""
+    """Whether the film's mosaics are drawn bigger than 1024: Full, or an "up to" size (2048)."""
     return opt["size"] == FULL or opt["size"] > max(SIZES)
 
 
@@ -495,7 +495,7 @@ def bucket(native, cap):
 
 
 def full_size(opt, pics, cache, work=False):
-    """Picture size Full or up to 1536 / 2048: the panes' side (opt["pane"]) and what it is made of: {pane, native
+    """Picture size Full or up to 2048: the panes' side (opt["pane"]) and what it is made of: {pane, native
     (the biggest pass's own side, px), passes [{obs, cam, side, drawn}], mosaic_pictures (pictures drawn bigger than
     1024 can hold), pending (passes whose size is not known yet: not pre-processed, work False)}. At Full the pane
     is the biggest pass at native resolution (at least 1024, at most FULL_MAX, even for the video's colour planes);

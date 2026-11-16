@@ -28,5 +28,7 @@ for page in ("cassini-os/src/export.html", "cassini-os/index.html"):
     assert [s.strip() for s in sizes.split(",")] == ["512", "1024", "2048", '"full"'], (page, sizes)
     assert re.search(r'id="exsize" min="0" max="3" step="1"', src), page
     # a size kept before 768 went: the larger of the two as near, one rule for the label, the slider and the request
+    # Settings > Export lists the same sizes (a range by 512 still offered 1536 there, which made a 2048 film)
+    assert 'key: "export.size", label: "Picture size", type: "choice", value: 1024, options: [[512, "512 px"], [1024, "1024 px"], [2048, "Up to 2048 px"]]' in src, page
     assert "Math.abs(v - sz) <= Math.abs(m - sz) ? v : m" in src and "String(sizeOf())" in src and "SIZES.indexOf(sizeOf())" in src, page
 print("ok")

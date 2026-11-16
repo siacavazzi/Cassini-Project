@@ -8808,8 +8808,9 @@ function targetLabel(k) {
         hint: "Pictures stay on screen for their real gap to the next one, sped up: bursts flip fast, quiet spells linger (1/30 to 1/2 s each)." });
     D({ key: "export.fps", label: "Fixed frame rate", type: "range", value: 12, min: 2, max: 30, step: 1, unit: "fps",
         hint: "Pictures per second when the frame rate is not adaptive." });
-    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: 2048, step: 512, unit: "px",
-        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Above 1024, mosaics are drawn up to that size, each only as big as its pass has detail for." });
+    // (the sizes the picker offers, SIZES: a size kept here before it went, 768 or 1536, is not one of them and reads as 1024)
+    D({ key: "export.size", label: "Picture size", type: "choice", value: 1024, options: [[512, "512 px"], [1024, "1024 px"], [2048, "Up to 2048 px"]],
+        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Up to 2048, mosaics are drawn up to that size, each only as big as its pass has detail for." });
     D({ key: "export.full", label: "Mosaics at full resolution", type: "toggle", value: false,
         hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
     D({ key: "export.sound", label: "Sound", type: "toggle", value: false, was: [true], hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
@@ -13797,7 +13798,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"a7eb3d829788";
+  const BUILD = /*BUILD*/"a71da95e86fa";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
