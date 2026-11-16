@@ -3698,11 +3698,11 @@ def _tile_ring_samples(u, t, im, rings, reach):
     return px[use, :3].astype(np.float32).mean(axis=1), radius, on, sy[use], sx[use]
 
 
-def _ring_profile(values, radius):
-    """(ring_places) values binned by radius (RING_BIN km, from RING_INNER): (sums, counts) over the rings' bins."""
+def _ring_profile(values, radius, bin_km=RING_BIN):
+    """(ring_places) values binned by radius (bin_km, RING_BIN by default, from RING_INNER): (sums, counts) over the rings' bins."""
     import reproject as rp
-    nb = int((rp.RING_OUTER - rp.RING_INNER) / RING_BIN) + 1
-    b = ((radius - rp.RING_INNER) / RING_BIN).astype(int)
+    nb = int((rp.RING_OUTER - rp.RING_INNER) / bin_km) + 1
+    b = ((radius - rp.RING_INNER) / bin_km).astype(int)
     ok = (b >= 0) & (b < nb)
     return (np.bincount(b[ok], weights=values[ok], minlength=nb), np.bincount(b[ok], minlength=nb))
 
@@ -3912,7 +3912,7 @@ RING_FILTER_REDRAWN = 16.0
 RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
 
 
-def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
+def ring_pair_shift(u, rings, s, ref, t, mine, check=True, bin_km=RING_BIN):
     """Ring registration of two overlapping tiles of one filter, each where SPICE puts it: the radial profiles (SPICE's
     ring plane at each tile's own time, _ring_profile, detail only) of the part of the view both cover, and the radial
     lag that lines them up. Unlike a match of the pictures, a profile slides only across the rings, never along them
@@ -3943,7 +3943,7 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     ins = [(S[0] >= bx0) & (S[0] <= bx1) & (S[1] >= by0) & (S[1] <= by1) for S in (A, B)]
     if min(int(m.sum()) for m in ins) < 300:
         return None, "little ring overlap"
-    pa, pb = (_ring_profile(S[3][m], S[2][m]) for S, m in zip((A, B), ins))
+    pa, pb = (_ring_profile(S[3][m], S[2][m], bin_km) for S, m in zip((A, B), ins))
     both = (pa[1] >= 3) & (pb[1] >= 3)
     if both.sum() < RING_PAIR_BINS:
         return None, "narrow ring overlap"
@@ -3984,18 +3984,18 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     if len(step) >= 100:
         g = float(np.median(step))
     # (t's ringlets sit lag bins in from s's: t moves out by that much, across the rings)
-    move = lag * RING_BIN / g
+    move = lag * bin_km / g
     if check and abs(lag) > 1:
         # believed only when it holds: t moved by it, its profile must then line up with s's at no lag (within a bin
         # and a quarter of the lag). Tiles of one place seen at very different times or lighting can match the wrong
         # ringlets as well as their own (118RI's first and last laps, 1700 km apart that moved to 1000 km the other way)
         moved = dict(t, offset=[t["offset"][0] + float(n[0] * move), t["offset"][1] + float(n[1] * move)])
-        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False)
-        if again is None or abs(how["lag_km"]) > RING_BIN + 0.25 * abs(lag) * RING_BIN:
-            return None, f"ring match does not hold ({lag * RING_BIN:+.0f} km, then {how['lag_km'] if again is not None else how})"
+        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False, bin_km=bin_km)
+        if again is None or abs(how["lag_km"]) > bin_km + 0.25 * abs(lag) * bin_km:
+            return None, f"ring match does not hold ({lag * bin_km:+.0f} km, then {how['lag_km'] if again is not None else how})"
     return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
                                                       "normal": [round(float(n[0]), 4), round(float(n[1]), 4)],
-                                                      "lag_km": round(lag * RING_BIN, 1)}
+                                                      "lag_km": round(lag * bin_km, 1)}
 
 
 RING_PAIR_PARTS = 4     # (ring_pair_parts) pieces the overlap of two tiles is cut in along its length
@@ -6970,11 +6970,19 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
         g = guide(spice, j, n, None) if guide else {}
         reach = g.get("reach", reach)
+        if ring is not None and getattr(ring, "first", False):
+            # (a pass of the rings themselves: their profiles first, the picture match sliding along the ringlets)
+            move, rhow = ring(by[j], own[j], t, own[n])
+            if move is not None and math.hypot(*move) <= believed:
+                d = (rel[0] + move[0], rel[1] + move[1])
+                if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
+                    return pr, None, "past reach"
+                return pr, d, f"rings {rhow['lag_km']:+.0f} km"
         shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                  around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is not None and math.hypot(*shift) <= believed:
             d = (rel[0] - shift[0], rel[1] - shift[1])
-        elif ring is not None:
+        elif ring is not None and not getattr(ring, "first", False):
             # (frames of the rings the pictures cannot be matched on, the ringlets repeating along the ring: their
             # radial profiles on SPICE's ring plane, matched across the rings only (ring_pair_shift), and along the
             # rings SPICE's step, under which the picture hardly changes)
@@ -7154,7 +7162,16 @@ def steady_rings(u, made):
     for t in made:
         if "offset" in t:
             rings(np.zeros(1), np.zeros(1), _ring_id(t))
-    return lambda s, ref, t, mine: ring_pair_shift(u, rings, s, ref, t, mine)
+    # (profiles binned at a pixel's width at the pass's range, not the mosaics' RING_BIN of 100 km: a close ring movie's
+    # frame spans a few thousand km of ring, and a movie is steadied to a pixel)
+    km_px = IFOV[u["key"][2]] * u["z"]
+
+    def match(s, ref, t, mine):
+        return ring_pair_shift(u, rings, s, ref, t, mine, bin_km=min(RING_BIN, km_px))
+    # (a pass of the rings themselves, _ring: matched on the rings first, the pictures where the profiles say nothing; a
+    # moon's pass with rings behind it, Daphnis in the Keeler gap: on the pictures first, as before)
+    match.first = _ring(u)
+    return match
 
 
 def steady_chain(u, cache, p=None):
