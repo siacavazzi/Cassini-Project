@@ -6069,6 +6069,7 @@ def _despiked(planes, gamma):
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
 CLIP_EDGE = 2   # (colour_picture) px round a clipped band left out of the floor its fill keeps (fill_saturated's edge)
+SAT_EXCESS = 0.02   # (colour_picture) linear: a band whose saturation excess (sat) is over this is clipped there
 
 
 TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
@@ -6619,8 +6620,9 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
     body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame).
-    sat: one saturation-level map per plane (_place_sat) or None: where a band the camera saturated is drawn white,
-    the light it saturated on, which its fill is floored at in place of that white."""
+    sat: one saturation excess map per plane (_place_sat, _mosaic_sat: linear, float32) or None: how much of the band's
+    value there is the white its saturated pixels were drawn over the light they saturated on; the band is filled there
+    and floored at what it read less that, not at its white."""
     scale = p["display_scale"]
     if len(planes) == 2:
         # two filters: green their mean in linear light, as a two-filter composite draws it (calibration.two_bands)
@@ -6636,7 +6638,15 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     alpha = np.min([a[..., 3] for a in planes], axis=0)
-    clipped = [(rgb[..., i] >= CLIP_FROM) & (alpha > 0) for i in range(3)]
+    # (sat: each band's saturation excess, _place_sat / _mosaic_sat: how much of its linear value is the white the camera's
+    # saturated pixels were drawn, over the light they saturated on; a band with any is clipped there too, even drawn
+    # under CLIP_FROM: a thin saturated ring blended into a mosaic's canvas, 269RI HIPHASEFB001's F ring and A ring edge)
+    excess = list(sat) if sat is not None else []
+    if len(excess) == 2:
+        excess = [excess[0], None, excess[1]]
+    excess = [e if e is not None and e.shape == rgb.shape[:2] else None for e in excess] + [None] * (3 - len(excess))
+    clipped = [((rgb[..., i] >= CLIP_FROM) | (excess[i] > SAT_EXCESS if excess[i] is not None else False)) & (alpha > 0)
+               for i in range(3)]
     if any(c.any() for c in clipped) and not all(np.array_equal(clipped[0], c) for c in clipped[1:]):
         # a band clipped where another is not (the camera saturated in it, or it is past the scale's white): filled
         # from the bands that are not, as a colour set's camera window draws it (calibration.tone's fill_saturated),
@@ -6657,27 +6667,19 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
         # Not for a band clipped over most of the picture (calibration.mostly_saturated), whose fill keeps the others'
         # colour, as the camera window's fill does.
         lit = calibration.lit_of(x)
-        # (but where the band is white because the camera saturated, on light its saturation map, sat, says is under
-        # white, what it read there is the white it was drawn, not light: it is floored at that light. GRN saturated
-        # over a fifth of Rhea in 154RH MUTUALEVE002, on light RED read 230, was kept white and the set drew a lime
-        # green patch; the still of the same set is neutral)
-        bands = list(sat) if sat is not None else []
-        if len(bands) == 2:
-            bands = [bands[0], None, bands[1]]
-        reads = []
-        for i, c in enumerate(x):
-            s_ = bands[i] if i < len(bands) else None
-            if s_ is not None and s_.shape == c.shape:
-                at = (rgb[..., i] >= 255) & (s_ > 0) & (s_ < 255)
-                if at.any():
-                    light = calibration.decode(s_.astype(np.float32) / 255, g).astype(np.float32)
-                    c = np.where(at, light, c)
-            reads.append(c)
+        # (less its saturation excess: where the band is white because the camera saturated, what it read is the
+        # white it was drawn, not light; floored at that, GRN saturated over a fifth of Rhea in 154RH MUTUALEVE002, on
+        # light RED read 230, stayed white and the set drew a lime-green patch, though the still of the same set,
+        # filled from the camera's own saturated pixels, is neutral)
+        reads = [c if e is None else np.maximum(c - e, 0) for c, e in zip(x, excess)]
         filled = [f if calibration.mostly_saturated(m, lit) else np.maximum(f, c) for f, c, m in zip(filled, reads, clipped)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
-        # few levels under 255 along its edges)
+        # few levels under 255 along its edges; and wholly where its saturation excess is twice SAT_EXCESS)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
         w = np.moveaxis(w * w * (3 - 2 * w), -1, 0)
+        for i, e in enumerate(excess):
+            if e is not None:
+                w[i] = np.maximum(w[i], np.clip(e / (2 * SAT_EXCESS), 0, 1))
         x = x + w * (np.stack(filled) - x)
         if every is not None:
             every &= np.logical_and.reduce([c >= 255 for c in np.moveaxis(rgb, -1, 0)])
@@ -6735,7 +6737,9 @@ def so_far(u, n, cache, made=None, out=OUT):
     if len(used) > 1:
         colour = used
         acc = colour_planes(u, p, colour, tiles, rect, cache, ref, tag)
-        rgba, used = colour_picture(u, p, colour, acc), colour
+        # (where a filter's camera saturated, how much of its mosaic is the white that was drawn: colour_picture's sat)
+        sats = [_mosaic_sat(u, p, f, visit_tiles(u, tiles, colour), rect, cache, a.shape) for f, a in zip(colour, acc)]
+        rgba, used = colour_picture(u, p, colour, acc, sat=sats if any(m is not None for m in sats) else None), colour
         if base:
             grey = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
             if mixes(u, p, tiles, colour):
@@ -6763,6 +6767,35 @@ def so_far(u, n, cache, made=None, out=OUT):
     return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "luminance": bool(base), "width": im.width, "height": im.height}
+
+
+def _mosaic_sat(u, p, f, tiles, rect, cache, shape):
+    """Filter f's saturation excess on its mosaic's canvas (shape): each of its tiles' (_sat_excess) placed as _over
+    places them, the ones drawn under the picture first, a tile drawn later covering an earlier one's where it has
+    any alpha (a tile with no map leaves 0 there); None when none of its tiles has a map. colour_picture's sat for a
+    mosaic: 269RI HIPHASEFB001's thin F ring and A ring edge, saturated in BL1 and GRN, blended into the canvas
+    under CLIP_FROM, drew cyan and yellow-green."""
+    mine = _mine(u, p, tiles, f)
+    if not any(t.get("sat") for t in mine):
+        return None
+    k, scale = p["k"], p["display_scale"]
+    H, W = shape[:2]
+    out = np.zeros((H, W), np.float32)
+    under = lambda t: partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill"))
+    for t in [t for t in mine if under(t)] + [t for t in mine if not under(t)]:
+        if "offset" not in t:
+            continue
+        bx, by, bw, bh = t["box"]
+        left, top = round((t["offset"][0] + bx - rect[0]) * k), round((t["offset"][1] + by - rect[1]) * k)
+        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+        x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+        if x0 >= x1 or y0 >= y1:
+            continue
+        a = _part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh)[..., 3][y0 - top:y1 - top, x0 - left:x1 - left] > 0
+        ex = _sat_excess(u, t, cache, scale, sw, sh)
+        part = out[y0:y1, x0:x1]
+        part[a] = 0.0 if ex is None else ex[y0 - top:y1 - top, x0 - left:x1 - left][a]
+    return out if out.any() else None
 
 
 def _mosaic_map(u, p, tiles, rect, used, base, shape, cache):
@@ -8382,31 +8415,40 @@ def _place(u, t, rect, k, W, H, cache, scale):
     return frame
 
 
-def _place_sat(u, t, rect, k, W, H, cache, scale):
-    """Tile t's saturation-level map (<n>.sat.webp, _keep_tile_sat) placed as _place places its picture (nearest, so a
-    patch keeps its level to its edge), with the tile's gain on linear brightness: a W x H uint8 map, 0 where the
-    camera did not saturate; None when the tile has none."""
+def _sat_excess(u, t, cache, scale, sw, sh):
+    """Tile t's saturation excess at sw x sh (float32, linear on the display scale, its gain on it): where the camera
+    saturated (<n>.sat.webp, _keep_tile_sat), how much brighter the tile is drawn than the light it saturated on (a
+    patch with an edge is drawn white, saturated_code); 0 elsewhere. None when the tile has no map."""
     if not t.get("sat") or "offset" not in t:
         return None
     path = os.path.join(_tiles(u, cache, scale), f"{t['n']}.sat.webp")
     if not os.path.exists(path):
         return None
-    bx, by, bw, bh = t["box"]
+    gamma = t.get("gamma", scale.get("gamma", 2.2))
+    level = np.asarray(Image.open(path).convert("L"))
+    pic = _part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), level.shape[1], level.shape[0])
+    drawn = _shade(pic, t)[..., 0].astype(np.float32)
+    light = calibration.decode(level.astype(np.float32) / 255, gamma).astype(np.float32) * np.float32(t.get("gain") or 1.0)
+    ex = np.where(level > 0, np.maximum(calibration.decode(drawn / 255, gamma).astype(np.float32) - light, 0), 0).astype(np.float32)
+    if (sw, sh) != (ex.shape[1], ex.shape[0]):
+        ex = cv2.resize(ex, (sw, sh), interpolation=cv2.INTER_AREA if sw < ex.shape[1] else cv2.INTER_LINEAR)
+    return ex
+
+
+def _place_sat(u, t, rect, k, W, H, cache, scale):
+    """Tile t's saturation excess (_sat_excess) placed as _place places its picture: W x H float32, 0 where the camera
+    did not saturate; None when the tile has no map."""
+    bx, by, bw, bh = t.get("box", (0, 0, 0, 0))
+    sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    ex = _sat_excess(u, t, cache, scale, sw, sh)
+    if ex is None:
+        return None
     left = round((t["offset"][0] + bx - rect[0]) * k)
     top = round((t["offset"][1] + by - rect[1]) * k)
-    sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-    out = np.zeros((H, W), np.uint8)
+    out = np.zeros((H, W), np.float32)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
-        part = np.asarray(Image.open(path).convert("L").resize((sw, sh), Image.NEAREST))
-        g = t.get("gain")
-        if g and g != 1.0:
-            gamma = t.get("gamma", 2.2)
-            v = np.arange(256, dtype=np.float64) / 255
-            lut = np.clip(calibration.encode(np.clip(calibration.decode(v, gamma) * g, 0, 1), gamma) * 255 + 0.5, 1, 255).astype(np.uint8)
-            lut[0] = 0
-            part = lut[part]
-        out[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+        out[y0:y1, x0:x1] = ex[y0 - top:y1 - top, x0 - left:x1 - left]
     return out
 
 
@@ -9150,8 +9192,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 onto = [_onto_frame(plane, shown, with_shift=True) for plane in planes]
                 planes = [a for a, _ in onto]
                 if sats is not None:
-                    # (each saturation map moved as its plane was: nearest, so a patch keeps its level)
-                    sats = [m if m is None or mv is None else cv2.warpAffine(m, mv, (m.shape[1], m.shape[0]), flags=cv2.INTER_NEAREST,
+                    # (each saturation excess moved as its plane was)
+                    sats = [m if m is None or mv is None else cv2.warpAffine(m, mv, (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR,
                                                                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
                             for m, (_, mv) in zip(sats, onto)]
             rgba = colour_picture(u, p, used, planes, away, sats)
