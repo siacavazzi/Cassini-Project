@@ -14,8 +14,14 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
               1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
   movies      the same for every movie pass: its steadied frames (movie_webp), then the planes the page's own steps
               start from (make_planes: each frame alone, color=0, at 1024; a filled pass's also before detail, _d0),
-              and for a pass the page cannot even itself (false colour, feature tracks), its frames with Exposure
-              normalization at its default smoothing (make_evened, _e8)
+              and its frames with Exposure normalization at its default smoothing (make_evened, _e8r8), which the
+              Movie Editor, a Pre-process and a film ask the server for
+  evened      every movie pass's frames with Exposure normalization at its default smoothing (make_evened every=True,
+              files _e8r8), at 1024 and 512, and the same for a toss-up mosaic pass's movie frames: the pictures the
+              Movie Editor, a Pre-process and a film ask the server for (the camera windows even the plain frames
+              themselves). The movies phase makes them in a new build; this adds them to a cache built before it
+              did (only for the passes the page cannot even), and the toss-up passes', so no such request draws a
+              frame (the server reads a stored file). Run after movies and mosaics
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
   chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
@@ -29,7 +35,7 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   fullview    the full view of every mosaic pass (decision D3): its mosaic at its last frame at size=full (CANVAS up to
               FULL_MAX, 2048 px), as the mosaic route makes it. Run after mosaics
 
-tables and fullview add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
+tables, fullview and evened add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
 picture phases left it).
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
@@ -86,8 +92,8 @@ import reel  # noqa: E402
 import slices  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview")
-ADDED = ("tables", "fullview")   # phases run on a finished cache, not recorded in slices.json
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened")
+ADDED = ("tables", "fullview", "evened")   # phases run on a finished cache, not recorded in slices.json
 
 
 @functools.lru_cache(None)
@@ -165,6 +171,13 @@ def movie_passes():
     return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
 
 
+def evened_passes():
+    """Every pass a Pre-process asks movie frames of (segment_items, make_pass's movie()), in time order: the movie
+    passes, and the toss-up mosaic passes, whose frames it makes as a movie too."""
+    return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])
+            or (u.get("tossup") and u.get("kind") == "mosaic")]
+
+
 def centred(frame_id):
     """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
     pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
@@ -202,7 +215,7 @@ def items(phase):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         if phase == "strips":
             return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c))
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c, every=True))
                 for u in movie_passes()]
     if phase == "tables":
         movies = {tuple(u["key"]) for u in movie_passes()}
@@ -210,6 +223,8 @@ def items(phase):
                 for u in all_passes()]
     if phase == "fullview":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes() if u["mosaic"]]
+    if phase == "evened":
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)) for u in evened_passes()]
     raise ValueError(phase)
 
 
@@ -462,13 +477,17 @@ def make_planes(u, cache, centre=True):
     return 0
 
 
-def make_evened(u, cache, sizes=(1024, 512), centre=True):
+def make_evened(u, cache, sizes=(1024, 512), centre=True, every=False):
     """A movie pass's frames with Exposure normalization at its default smoothing (exposure=EXPOSURE_SMOOTH, on by
     default since 2026-10-29), as the window asks the server for them, for a pass the page cannot even itself
     (obs_mosaic.page_evens: a false colour pass, a feature track, a pass whose view follows its frames); nothing for
-    the rest, which the page evens on the frames make_pass and make_planes made. Returns 0: make_pass has counted
-    the pass's frames."""
-    if obs_mosaic.page_evens(u, cache, True, centre):
+    the rest, which the page evens on the frames make_pass and make_planes made.
+    every: for every pass (the evened phase). The camera windows even those passes themselves, but the Movie Editor's
+    pictures, a Pre-process (make_pass with the page's style) and a film ask the server for the evened frame, and
+    with none kept it drew each on the request: opening a stretch of 999 frames in the editor took 131 s on a finished
+    cache (2026-11-15). The same pictures by the same maker, kept ahead. Returns 0: make_pass has counted the pass's
+    frames."""
+    if not every and obs_mosaic.page_evens(u, cache, True, centre):
         return 0
     for f in u["frames"]:
         for size in sizes:
@@ -649,7 +668,7 @@ def make(args, todo, status, errors, holds):
                 status.update(last=name)
 
 
-PASS_PHASES = ("mosaics", "movies", "strips", "chains", "tables", "fullview")
+PASS_PHASES = ("mosaics", "movies", "strips", "chains", "tables", "fullview", "evened")
 # stretches per process (procs --balanced): enough small ones that the processes run out together. A process out of
 # stretches waits for the one that holds the last, about half a stretch each: 1 / (2 x BALANCE) of the phase's process
 # time, 6% at 8. The overnight build's own status files show 2 to 9% of a phase idle that way, and far more in a
