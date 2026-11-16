@@ -6189,7 +6189,13 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     g = lin(grey[..., 0])
     # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
     near = np.clip((grey[..., 0].astype(np.float32) - TINT_CLIP) / max(1.0, CLIP_FROM - TINT_CLIP), 0, 1)
-    clipped = near > 0
+    # (clipped: at CLIP_FROM, where the fill is wholly the set's. From TINT_CLIP the frame only starts easing over to
+    # the set and its pixels are still its own brightness: left out of the match as well, a bright body lost the
+    # brightest of its disk from it (Jupiter's approach movie, its disk at 185 to 225: a third of it at its own
+    # exposure and more with every step of gain), and what was matched was its limb and haze against the set's. The
+    # frame's brightness then did not follow its exposure gain: 187 at gain 1.055, 208 at 1.06, 240 at 1.08, 242 at 1.4
+    # (C23RI RMOV001 frame 59, 2026-11-16))
+    clipped = near >= 1
     both = (ca > 0.99) & (ga > 0.99) & ~clipped
     top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
     top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
