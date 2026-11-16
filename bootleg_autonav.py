@@ -724,6 +724,14 @@ def _seen_db():
     return db
 
 
+def _tracks_star(observation):
+    """Whether an observation follows a star (its name's target code ST: a stellar occultation, the camera riding on
+    UVIS or VIMS as the star crosses the rings): its frames keep their archive target, the star, though they look at
+    the rings (098ST URBETCRU001 drawn as Saturn's made a mosaic of a thin streak, one sliver of ring a frame)."""
+    import re
+    return bool(re.match(r"^[A-Z]+_(?:C\d+|\d{3}|\d{2}[A-Z]|000)ST_", str(observation or "")))
+
+
 def _rings_in_frame(et, frame):
     """Whether a ray through the frame (SEEN_GRID x SEEN_GRID of them, corners and middle included) meets Saturn's
     equatorial plane in front of the camera between SATURN_EQ_KM and RING_KM from its centre. Kernels for et loaded."""
@@ -914,6 +922,8 @@ def shown_targets():
                 members.setdefault(g, []).append(f)
             for g in {group.get(f) for f in seen}:
                 frames = members.get(g, ())
+                if g and _tracks_star(g[1]):
+                    continue
                 if frames and all(f in seen for f in frames) and len({seen[f][0] for f in frames}) == 1:
                     out.update((f, seen[f]) for f in frames)
         if found:
