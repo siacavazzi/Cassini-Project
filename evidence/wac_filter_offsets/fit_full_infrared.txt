@@ -1,0 +1,44 @@
+matches 13492 modes Counter({'FULL': 13492})
+filter combos seen: [('CL1,GRN', 6580), ('CL1,RED', 5925), ('CB2,CL2', 5263), ('CL1,BL1', 2841), ('MT2,CL2', 2459), ('CL1,VIO', 1490), ('CB3,CL2', 811), ('MT3,CL2', 799), ('CL1,IR1', 442), ('IR2,IR1', 219), ('IR3,CL2', 60), ('IR2,CL2', 44), ('IR4,CL2', 23), ('IR5,CL2', 16), ('CL1,HAL', 12)]
+combo table (min 150), held-out: n=6586 before 2.37 after 1.15 p90 3.67
+combo table (min 40), held-out: n=6672 before 2.37 after 1.16 p90 3.67
+combo table (min 15), held-out: n=6716 before 2.37 after 1.16 p90 3.67
+wheel model, held-out: n=6716 before 2.37 after 1.16 p90 3.67
+on the 150-table's pairs: combo n=6586 before 2.37 after 1.15 p90 3.67  wheel n=6586 before 2.37 after 1.15 p90 3.66
+
+full combo table (min 15):
+  CL1,GRN    n= 6580  (+0.00, +0.00)   wheel model (+0.00, +0.00)
+  CL1,RED    n= 5925  (+2.04, +1.16)   wheel model (+2.04, +1.16)
+  CB2,CL2    n= 5263  (+2.45, -0.87)   wheel model (+2.45, -0.86)
+  CL1,BL1    n= 2841  (+2.14, -1.38)   wheel model (+2.14, -1.38)
+  MT2,CL2    n= 2459  (+2.57, -0.30)   wheel model (+2.57, -0.30)
+  CL1,VIO    n= 1490  (+2.16, -1.75)   wheel model (+2.16, -1.75)
+  CB3,CL2    n=  811  (+2.78, -0.74)   wheel model (+2.78, -0.74)
+  MT3,CL2    n=  799  (+3.18, -0.06)   wheel model (+3.18, -0.06)
+  CL1,IR1    n=  442  (+2.13, +1.42)   wheel model (+2.13, +1.42)
+  IR2,IR1    n=  219  (+0.07, +0.15)   wheel model (+0.07, +0.15)
+  IR3,CL2    n=   60  (+2.73, -0.73)   wheel model (+2.74, -0.71)
+  IR2,CL2    n=   44  (-0.42, -1.48)   wheel model (-0.42, -1.48)
+  IR4,CL2    n=   23  (+2.36, -1.18)   wheel model (+2.47, -1.03)
+  IR5,CL2    n=   16  (+2.53, -1.34)
+
+wheel terms:
+  1CB2   n= 5263 (+0.81, -0.66)
+  1CB3   n=  811 (+1.14, -0.53)
+  1CL1   n=17290 (+0.00, +0.00)
+  1IR2   n=  263 (-2.06, -1.27)
+  1IR3   n=   60 (+1.10, -0.50)
+  1IR4   n=   23 (+0.83, -0.83)
+  1MT2   n= 2459 (+0.93, -0.09)
+  1MT3   n=  799 (+1.54, +0.15)
+  2BL1   n= 2841 (+2.14, -1.38)
+  2CL2   n= 9475 (+1.64, -0.20)
+  2GRN   n= 6580 (+0.00, +0.00)
+  2IR1   n=  661 (+2.13, +1.42)
+  2RED   n= 5925 (+2.04, +1.16)
+  2VIO   n= 1490 (+2.16, -1.75)
+2000-2001 n=2592 before 2.68 after 0.36 p90 2.59
+2004-2008 n=7972 before 2.10 after 1.40 p90 3.63
+2009-2012 n=1588 before 2.44 after 1.59 p90 4.39
+2013-2017 n=1320 before 2.42 after 1.74 p90 5.50
+FULL n=13480 before 2.36 after 1.16 p90 3.74
