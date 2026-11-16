@@ -1292,6 +1292,9 @@ def main():
     # ... and the 12-bit originals (data_source.check_originals): a cache built partly on the squeezed codes would keep
     # those pictures under the same names
     data_source.check_originals()
+    # ... and the flat fields repaired from the PDS's slope files (flat_field.check_flat_fix)
+    import flat_field
+    flat_field.check_flat_fix()
     if args.phase == "lightning":
         import lightning
         lightning.build(args.cache)

@@ -118,13 +118,15 @@ def test_preflight(tmp):
     write(os.path.join(d, "data.zip"), "x" * 10)
     write(os.path.join(d, "kernels.zip"), "k" * 20)
     write(os.path.join(d, "cisscal", "a.dat"), "c" * 5)
+    write(os.path.join(d, "cisscal-fix", "flat", "flat129.full.npy"), "f" * 3)
     write(os.path.join(d, "geometry.sqlite"), "g")
     os.makedirs(os.path.join(d, "spice"))
     env = {"CASSINI_DATA": os.path.join(d, "data.zip"), "CASSINI_KERNELS": os.path.join(d, "kernels.zip"),
            "CASSINI_CISSCAL": os.path.join(d, "cisscal"), "CASSINI_GEOMETRY_CACHE": os.path.join(d, "geometry.sqlite"),
-           "CASSINI_SPICE_CACHE": os.path.join(d, "spice"), "CASSINI_ORIGINALS": os.path.join(d, "spice")}
+           "CASSINI_SPICE_CACHE": os.path.join(d, "spice"), "CASSINI_ORIGINALS": os.path.join(d, "spice"),
+           "CASSINI_CISSCAL_FIX": os.path.join(d, "cisscal-fix")}
     want = farm.fingerprint(env)
-    assert want == {"CASSINI_DATA": 10, "CASSINI_KERNELS": 20, "CASSINI_CISSCAL": [1, 5]}, want
+    assert want == {"CASSINI_DATA": 10, "CASSINI_KERNELS": 20, "CASSINI_CISSCAL": [1, 5], "CASSINI_CISSCAL_FIX": [1, 3]}, want
     assert farm.preflight_problems(env, want, {2017: 109}) == []
     no_k = dict(env)
     del no_k["CASSINI_KERNELS"]

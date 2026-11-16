@@ -153,14 +153,47 @@ def temperature_name(info):
     return "m10" if t < -5.0 else "p5" if t < 25.0 else "p25"
 
 
+POLARIZERS = (("P0", "P60", "P120"), ("IRP0", "IRP90"))   # a polarizer's other angles, nearest first (flat_name)
+TEMPERATURES = ("p5", "m10", "p25")
+FIXED = ("flat129",)   # the maps the fix folder must hold (helper programs/fetch_flat_fix.py)                       # the slope files' temperatures, the usual one first
+
+
+def _flat_row(camera, temps, f1, f2):
+    for temp in temps:
+        for cols in _slope_db():
+            if cols[0] == camera and (cols[1] == temp or camera == "ISSWA") and cols[2] == f1 and cols[3] == f2:
+                # SLOPE113.IMG -> flat113
+                return "flat" + cols[7][5:].split(".")[0]
+    return None
+
+
+"""
+The flat field for the frame's camera, optics temperature and filter pair (slope_db_2.tab), or None. A pair the ground
+calibration has no slope file for (429 frames, mostly the WAC's CL1/IRP0 polarizer frames, 2005-2010) takes, in this
+order: the same pair at the other temperatures (p5 first: a frame whose optics temperature is unknown, -999, reads as
+m10 as in cisscal, and m10 lacks some pairs), the same pair with
+the polarizer at its other angle (the same glass: WAC CL1/IRP90 for CL1/IRP0), then the polarizer's clear filter, as
+calibrate takes its calibration (CL1 on the NAC, CL2 on the WAC). Beyond that, none (as cisscal).
+"""
 def flat_name(info):
-    """The flat field for the frame's camera, optics temperature and filter pair (slope_db_2.tab), or None."""
     camera, (f1, f2) = _value(info, "INSTRUMENT_ID"), (_filters(info) + [""])[:2]
     temp = temperature_name(info)
-    for cols in _slope_db():
-        if cols[0] == camera and (cols[1] == temp or camera == "ISSWA") and cols[2] == f1 and cols[3] == f2:
-            # SLOPE113.IMG -> flat113
-            return "flat" + cols[7][5:].split(".")[0]
+    got = _flat_row(camera, (temp,), f1, f2)
+    if got:
+        return got
+    temps = (temp,) + tuple(t for t in TEMPERATURES if t != temp)
+    got = _flat_row(camera, temps, f1, f2)
+    if got:
+        return got
+    for k, f in enumerate((f1, f2)):
+        family = next((fam for fam in POLARIZERS if f in fam), None)
+        if family is None:
+            continue
+        for other in [g for g in family if g != f] + ["CL1" if camera == "ISSNA" else "CL2"]:
+            pair = (other, f2) if k == 0 else (f1, other)
+            got = _flat_row(camera, temps, *pair)
+            if got:
+                return got
     return None
 
 
@@ -185,8 +218,34 @@ def mottle_strength(info):
     return STRENGTH_SECOND.get(i2, 1.0)
 
 
+"""
+Flat field maps made again from the PDS's own slope files where the USGS mirror's copy is broken (flat129, the NAC's
+UV2/CL2: helper programs/fetch_flat_fix.py), in a folder of their own (CASSINI_CISSCAL_FIX, default cisscal-fix beside
+CASSINI_CISSCAL; never written into CISSCAL's folder): <name>.<mode>.npy, read in place of the mirror's cube.
+"""
+FIX = os.environ.get("CASSINI_CISSCAL_FIX", os.path.join(os.path.dirname(os.path.abspath(ROOT)), "cisscal-fix"))
+
+
+class FlatFixMissing(RuntimeError):
+    pass
+
+
+def check_flat_fix():
+    """The pre-build's guard, as data_source.check_kernels: with CISSCAL's files there, the repaired maps must be too, or
+    the NAC's UV2 frames (2,257) are built with no flat field under the same picture names. Returns the folder."""
+    if not _slope_db():
+        return None
+    lacking = [f"{n}.{m}.npy" for n in FIXED for m in MODES.values() if not os.path.exists(os.path.join(FIX, "flat", f"{n}.{m}.npy"))]
+    if lacking:
+        raise FlatFixMissing(f"{FIX} lacks {', '.join(lacking)}: run helper programs/fetch_flat_fix.py (or set CASSINI_CISSCAL_FIX)")
+    return FIX
+
+
 @functools.lru_cache(maxsize=24)
 def _map(name, mode):
+    fixed = os.path.join(FIX, "flat", f"{name}.{mode}.npy")
+    if name.startswith("flat") and os.path.exists(fixed):
+        return np.load(fixed)
     folder = "slope/flat" if name.startswith("flat") else "dustring"
     path = os.path.join(ROOT, folder, f"{name}.{mode}.cub")
     if not os.path.exists(path):

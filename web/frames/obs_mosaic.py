@@ -70,7 +70,8 @@ import label_handler  # noqa: E402
 # obs-v120/v103/v89: a tinted movie frame is matched to its set over every pixel it did not clip (tinted_frame: from TINT_CLIP up was left out, and a bright body's frame did not follow its exposure gain); 
 # obs-v121/v104/v90: every picture calibrated from full-depth data (#491, calibration.depth_image: stored values, true 12-bit originals when present; renumbered past #507 on the integration branch)
 # obs-v122/v105/v91: CISSCAL's bit weight step (#532, calibration.bitweighted)
-VERSIONS = {"balanced": "obs-v122", "raw": "obs-v105", "eye": "obs-v122-eye", "false": "obs-v122-false", "classic": "obs-v91-classic"}
+# obs-v123/v106/v92: flat fields for NAC UV2/CL2 from the PDS slope file and fallback flats for pairs with no slope file (#493; renumbered on the integration branch)
+VERSIONS = {"balanced": "obs-v123", "raw": "obs-v106", "eye": "obs-v123-eye", "false": "obs-v123-false", "classic": "obs-v92-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
