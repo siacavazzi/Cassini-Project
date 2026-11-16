@@ -2202,7 +2202,28 @@ function targetLabel(k) {
     const shownFrameUrl = (k, sz) => centres(k)
       ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`
       : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
-    // a picture at full resolution as a PNG to save (the frame server names the file)
+    // a PNG of a stored picture, made in the browser: the WebP at the same address (size=full: the stored full picture,
+    // a frame's 1024, a mosaic's full view) drawn on a canvas and saved losslessly; false when it could not be fetched
+    async function pngInBrowser(href, name) {
+      try {
+        // (the same address as WebP: format and download taken out wherever they stand among the parameters)
+        const u0 = new URL(href, location.href);
+        u0.searchParams.delete("format"); u0.searchParams.delete("download");
+        const r = await fetch(u0.href);
+        if (!r.ok) return false;
+        // (no premultiplied alpha and no colour conversion: a mosaic's semi-transparent edge keeps its exact levels)
+        const bm = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+        const c = document.createElement("canvas"); c.width = bm.width; c.height = bm.height;
+        c.getContext("2d", { colorSpace: "srgb" }).drawImage(bm, 0, 0);
+        const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
+        if (!blob) return false;
+        const u = URL.createObjectURL(blob), go = document.createElement("a");
+        go.href = u; go.download = name; document.body.appendChild(go); go.click(); go.remove();
+        setTimeout(() => URL.revokeObjectURL(u), 60000);
+        return true;
+      } catch (err) { return false; }
+    }
+    // a picture at full resolution as a PNG to save (made in the browser from the stored picture: pngInBrowser)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
     let saveWrap = well.querySelector(".savewrap");
@@ -2217,6 +2238,19 @@ function targetLabel(k) {
     saveMenu.addEventListener("click", e => {
       const a = e.target.closest("a");
       if (a && a.dataset.native && nativeSave(a, e)) return;
+      // a PNG is made here in the browser from the stored picture (the same address as WebP), so the server only sends
+      // a file it has: it drew each PNG on request before, 2.6 s and 0.3 GB for a processed frame, 5 s for a color set
+      // (Sam's rule: nothing drawn at request time; call 19)
+      if (a && new URL(a.href, location.href).searchParams.get("format") === "png" && !(a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit)) {
+        e.preventDefault();
+        const ids = a.href.match(/[NW]\d{10}_\d+/g) || [], ch = (a.href.match(/[?&]channel=(\d)/) || [])[1];
+        const span = a.querySelector("span"), was = span ? span.textContent : "";
+        if (span) span.textContent = "PNG · making it…";
+        pngInBrowser(a.href, `Cassini_${ids.join("_") || "picture"}${ch !== undefined ? `_c${ch}` : ""}.png`)
+          .then(ok => { if (span && a.isConnected) span.textContent = ok ? was : "could not be saved"; });
+        setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0);
+        return;
+      }
       // the Orbit graphic box: a picture comes as a JPEG with the orbit graphic in its corner (cassiniOrbit.download)
       if (a && a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit) {
         e.preventDefault();
