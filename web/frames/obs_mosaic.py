@@ -8902,7 +8902,7 @@ def _grey_orphans(u, p):
     return bool(want) and plays_colour(u, want, p["grey"])
 
 
-def grey_near(u, n, cache, p=None):
+def grey_near(u, n, cache, p=None, shown=None):
     """The factor frame n of a pass that plays in colour is drawn at when it is left with no colour set to show (its own
     set never complete, a channel of it lost in downlink, and the sets either side not covering its place: set_of) and
     is through one of the pass's colour filters; 1.0 for any other. Such a frame is drawn in gray, and at its filter's
@@ -8914,9 +8914,9 @@ def grey_near(u, n, cache, p=None):
     mixed by time (in log), one alone stands when the other side has none, and the result is held within TINT_MATCH.
     (A factor per filter for the whole pass, measured on its complete sets, was tried first: it fixed Daphnis and
     made 272RI HIPHASEP001 worse, since a frame differs from its neighbours for more than its filter; taste call 22.)
-    Measured once per frame and kept with the pass."""
+    shown: the filter of the frame drawn for n (a held frame's). Measured once per frame and kept with the pass."""
     p = p or plan(u, cache)
-    if getattr(_grey_matching, "on", False) or not _grey_orphans(u, p) or u["frames"][n][2] not in p["colour"]:
+    if getattr(_grey_matching, "on", False) or not _grey_orphans(u, p) or (shown or u["frames"][n][2]) not in p["colour"]:
         return 1.0
     path = os.path.join(folder(u, cache), GREY_NEAR_FILE)
     with _ulock(u):
@@ -9131,7 +9131,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             # a frame left with no colour set to show in a pass that plays in colour (its own set never complete, the
             # sets either side not covering its place): in gray, at the brightness its filter's frames take in the
             # colour pictures either side of it (grey_near), not at its filter's own
-            match = grey_near(u, s, cache, p)
+            match = grey_near(u, n, cache, p, t["filter"])
             if match != 1.0:
                 t = dict(t, gain=round(t.get("gain", 1.0) * match, 3), gamma=t.get("gamma", gamma))
                 rep["matched"] = match
