@@ -61,6 +61,21 @@ def test_nac_and_unknown_filters_unchanged():
     assert offsets(w, 1)[0] is None
 
 
+def test_spice_sure_net_of_the_filters():
+    import numpy as np
+    import image_correction as ic
+    a, b = Lbl("ISSWA", "(CL1,GRN)", [5.0, 5.0, 1e6, 0.0]), Lbl("ISSWA", "(CL1,BL1)", [5.3, 5.2, 1e6, 0.0])
+    g = offsets([a, b], 0)[1]
+    assert np.hypot(*g) > ic.SPICE_SURE and g.fixed == ci.WAC_FILTER_OFFSETS[("CL1", "BL1")]
+    # SPICE says the frames moved 0.4 px: taken as it is, filters and all, as a 0.4 px offset was before
+    blank = np.zeros((64, 64), np.float32)
+    mask = np.ones((64, 64), bool)
+    shift, how = ic.spice_shift(blank, blank, mask, mask, g)
+    assert how == "SPICE" and shift == (float(g[0]), float(g[1])), (shift, how)
+    # a bare 3.5 px offset is still checked on the frames (here: nothing to check on, so not taken)
+    assert ic.spice_shift(blank, blank, mask, mask, (float(g[0]), float(g[1])))[0] is None
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

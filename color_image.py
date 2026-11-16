@@ -1169,7 +1169,8 @@ def spice_offsets(lbls, ref):
             out.append(None)
             continue
         fx, fy = filter_offset(lbl, lbls[ref])
-        out.append((locs[ref][0] - loc[0] + fx, locs[ref][1] - loc[1] + fy))
+        # (the filters' part known apart, for image_correction.spice_shift's SPICE_SURE)
+        out.append(ic.Guess(locs[ref][0] - loc[0] + fx, locs[ref][1] - loc[1] + fy, (fx, fy)))
     return out
 
 
