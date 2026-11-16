@@ -5902,7 +5902,7 @@ def detail(rgba, sigma):
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
 
-DISK_DETAIL_MARGIN = 1.15   # stills (detail_on_disk): the body's mean is taken inside this times its SPICE radius ...
+DISK_DETAIL_MARGIN = 1.4    # stills (detail_on_disk): the body's mean is taken inside this times its SPICE (mean) radius (Hyperion's long axis is 1.33 x it) ...
 DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
 DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
@@ -5911,8 +5911,8 @@ DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross
 def detail_on_disk(rgba, cx, cy, radius, sigma=None):
     """detail() on a still or composite whose body SPICE places (frame_server.centred): the same raise of the local
     contrast (DETAIL, DETAIL_EDGE, DETAIL_KNEE), its neighbourhood mean taken over the body's lit pixels only (inside
-    DISK_DETAIL_MARGIN x radius of (cx, cy), DISK_DETAIL_LIT over the sky) and its change only inside the limb,
-    feathered, so a moon smaller than the filter's patch is not raised to flat white against the black sky (why #304
+    DISK_DETAIL_MARGIN x radius of (cx, cy), DISK_DETAIL_LIT over the sky) and its change only on those lit pixels,
+    faded in from their edge, so a moon smaller than the filter's patch is not raised to flat white against the black sky (why #304
     kept small centred moons out of it) and no dark ring is drawn round it. rgba: H x W x 2 (LA) or 4, uint8."""
     import cv2
     h, w = rgba.shape[:2]
@@ -5935,7 +5935,10 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None):
     lit = cv2.erode(lit, np.ones((3, 3), np.uint8)).astype(np.float32)
     if lit.sum() < 50:
         return rgba
-    inside = np.clip((radius * 1.02 - rr) / max(2.0, 0.03 * radius), 0, 1)
+    # (the change follows the lit body out to DISK_DETAIL_MARGIN x the mean radius, so an elongated moon's far ends,
+    # past its mean radius, are raised too and no soft boundary crosses its surface: Hyperion, Telesto, Prometheus;
+    # the lit mask, eroded and faded in, keeps it off the sky; review of #495)
+    inside = np.clip((radius * DISK_DETAIL_MARGIN - rr) / max(2.0, 0.03 * radius), 0, 1)
     fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit * inside
     weight = cv2.GaussianBlur(lit, (0, 0), sigma)
     mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)

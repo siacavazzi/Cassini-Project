@@ -39,6 +39,7 @@ WIENER = 1.5        # w = 1 - WIENER x noise / E (none where E is under WIENER x
 EDGE = 24.0         # levels: a change of this size or more is eased off (x / (1 + |x| / EDGE))
 OVERSHOOT = 0.15    # past the 3x3 neighbours' range by at most this share of it ...
 OVERSHOOT_MAX = 6.0  # ... and at most this many levels
+OVERSHOOT_DARK = 32.0  # levels: under a darkest neighbour this dim, the room to go darker shrinks with its level (none at black)
 SAT_LEVEL = 253     # a pixel with a color at or over this is saturated; none within SAT_PX of it changes
 SAT_PX = 2
 SPIKE = 5.0         # a pixel this many noise sigmas (and SPIKE_MIN levels) off its 3x3 median is a spike
@@ -195,7 +196,10 @@ def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, gra
     lo = cv2.erode(lum, np.ones((3, 3), np.uint8))
     hi = cv2.dilate(lum, np.ones((3, 3), np.uint8))
     m = np.minimum(OVERSHOOT * (hi - lo), OVERSHOOT_MAX)
-    new = np.clip(new, lo - m, hi + m)
+    # (below a dim darkest neighbour only in proportion to its level: dim sky beside a hard limb is not pushed
+    # darker into a rim; review of #495)
+    m_dark = m * np.clip(lo / np.float32(OVERSHOOT_DARK), 0, 1)
+    new = np.clip(new, lo - m_dark, hi + m)
     x = new - lum
     # room: the same change on every color, rolled off as it nears 0 or 255 (no clipped colors)
     room = np.where(x > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))

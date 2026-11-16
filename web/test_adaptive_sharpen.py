@@ -33,6 +33,8 @@ def test_guards():
     e = np.full((64, 64), 20, np.uint8); e[:, 32:] = 200
     o = S.adaptive_sharpen(e, 2.4).astype(int)
     assert o.min() >= 20 - S.OVERSHOOT_MAX and o.max() <= 200 + S.OVERSHOOT_MAX    # a limb: at most a few levels past
+    k = np.full((64, 64), 8, np.uint8); k[:, 32:] = 200                           # dim sky by a hard limb: no dark rim
+    assert S.adaptive_sharpen(k, 2.4)[:, :32].min() >= 6
     s = textured(24); s[100:200, 300:400] = 255
     o = S.adaptive_sharpen(s)
     assert (o[100:200, 300:400] == 255).all()                                     # saturated: kept
