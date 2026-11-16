@@ -575,9 +575,12 @@ def calibrate(png, info, image=None, smooth=True):
     return per_second
 
 
-LOSSY_RATIO = (6.0, 20.0)  # a lossy frame compressed more than LOSSY_RATIO[0] times has its compression blocks smoothed, all of
+LOSSY_RATIO = (6.0, 10.0)  # a lossy frame compressed more than LOSSY_RATIO[0] times has its compression blocks smoothed, all of
                      # LOSSY_SMOOTH from LOSSY_RATIO[1]: at 52 to 1 (the 2005-11-27 Enceladus plumes, 0.22 s) a faint glow is
-                     # a staircase of flat 8 px blocks one code apart, which a picture stretched to show it draws as terraces
+                     # a staircase of flat 8 px blocks one code apart, which a picture stretched to show it draws as terraces.
+                     # Full from 10 to 1 (20 until 11-16): at 10.7 to 1 a third of it left the dim rings of 103RI
+                     # TDIFN45HP001 (W1613182176_1) in blocks a few codes apart, the darkest under the black, so they were
+                     # drawn as ragged dark patches
 LOSSY_SMOOTH = 4.0   # ... towards the frame blurred over this many pixels (sigma, at full resolution),
 LOSSY_STEP = 2.5     # ... only where the stored codes are within this many of that blur, so the blocks' one-code steps go
                      # and edges, stars and real detail (more codes apart) stay as they were
