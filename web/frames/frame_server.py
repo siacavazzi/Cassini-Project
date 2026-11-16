@@ -2189,7 +2189,7 @@ def main():
     # squeezed-code pictures under the same names a build with them makes, so it says so loudly (and goes on: a preview)
     try:
         data_source.check_originals()
-    except data_source.OriginalsMissing as e:
+    except Exception as e:   # (OriginalsMissing, or a manifest it can't read: a preview starts all the same)
         print(f"WARNING: {e}. Pictures drawn here are not the rebuild's: keep this cache apart from it", flush=True)
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of), and Pre-process its filter sets (warm_prebuild); made now rather than on
