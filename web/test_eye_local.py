@@ -19,7 +19,7 @@ import atexit, glob, shutil  # noqa: E402
 _name = os.path.splitext(os.path.basename(__file__))[0]
 for _old in glob.glob(os.path.join(tempfile.gettempdir(), f"{_name}_*_*")):
     try:
-        os.kill(int(os.path.basename(_old).split("_")[-2]), 0)
+        os.kill(int(os.path.basename(_old)[len(_name) + 1:].split("_")[0]), 0)
     except ProcessLookupError:
         shutil.rmtree(_old, True)
     except (ValueError, IndexError, PermissionError):
