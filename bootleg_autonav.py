@@ -415,6 +415,14 @@ def _store_rows(rows):
     db.execute("COMMIT")
 
 
+def _store_seen(rows):
+    if rows:
+        db = _seen_db()
+        db.execute("BEGIN")
+        db.executemany("INSERT OR REPLACE INTO seen VALUES (?, ?, ?)", rows)
+        db.execute("COMMIT")
+
+
 def _row(frame, target_loc=None, geometry=None, error=None):
     if error is not None:
         return (frame, GEOMETRY_VERSION, None, None, None, None, None, None, None, None, str(error)[:300])
@@ -529,6 +537,9 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
     # can be the next year for a frame taken in the last seconds of a year; those are left to it
     index = index[~((index["day"] >= 365) & (index["IMAGE_MID_TIME"].str[9:11] == "23"))]
     cached = list(_geometry_db().execute("SELECT frame, error FROM target WHERE version = ?", (GEOMETRY_VERSION,)))
+    # frames whose archive target SPICE cannot name, not yet worked out by the seen rule (seen_body)
+    seen = {f for f, in _seen_db().execute("SELECT frame FROM seen WHERE version = ?", (SEEN_VERSION,))}
+    unnamed = {frame for frame, error in cached if error and UNKNOWN_NAME in error} - seen
     # frames that failed because SPICE didn't know their target's name, which is registered now (CATALOG_NAMES)
     retry = set(index.loc[index["TARGET_NAME"].isin(CATALOG_NAMES), "frame"]) & {
         frame for frame, error in cached if error and UNKNOWN_NAME in error}
@@ -538,7 +549,7 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
                                                                (USGS_TITAN_TAG,))}
     if usgs_only:
         index = index[index["frame"].isin(usgs)]
-    done = {frame for frame, _ in cached} - retry
+    done = {frame for frame, _ in cached} - retry - unnamed
     for year, rows in index.groupby("year"):
         if years and year not in years:
             continue
@@ -550,7 +561,7 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
             unload_kernels()
             load_kernels(year, year)
         loaded = time.time() - start
-        out = []
+        out, seen_rows = [], []
         for frame, mid, camera, name in zip(rows["frame"], rows["IMAGE_MID_TIME"], rows["INSTRUMENT_ID"], rows["TARGET_NAME"]):
             label = types.SimpleNamespace(info={"path": frame + ".png", "IMAGE_MID_TIME": mid, "TARGET_NAME": name,
                                                 "INSTRUMENT_NAME": "WIDE ANGLE CAMERA" if camera == "ISSWA" else "NARROW ANGLE CAMERA"})
@@ -558,11 +569,27 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
                 with contextlib.redirect_stdout(io.StringIO()):
                     out.append(_row(frame, find_target(label, False, "graphs"), label.geometry))
             except Exception as e:
-                out.append(_row(frame, error=f"{type(e).__name__}: {e}"))
+                error = f"{type(e).__name__}: {e}"
+                body = None
+                if UNKNOWN_NAME in error:
+                    # an archive target SPICE cannot name: the body the frame shows, placed on it (seen_body)
+                    try:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            body = seen_body(label)
+                            if body:
+                                label.info["TARGET_NAME"] = body
+                                out.append(_row(frame, find_target(label, False, "graphs"), label.geometry))
+                    except Exception as e2:   # noqa: BLE001
+                        body, error = None, f"{error}; seen: {type(e2).__name__}: {e2}"
+                    seen_rows.append((frame, SEEN_VERSION, body or ""))
+                if not body:
+                    out.append(_row(frame, error=error))
             if len(out) >= 5000:
                 _store_rows(out)
                 out = []
         _store_rows(out)
+        _store_seen(seen_rows)
+        seen_rows = []
         print(f"{year}: {len(rows)} frames in {time.time() - start:.0f} s (kernels {loaded:.0f} s)", flush=True)
     unload_kernels()
 
@@ -671,6 +698,67 @@ def bodies_in_frame(et, frame, target):
         if max(abs(x), abs(y)) - r <= reach:
             out.append((name, float(x), float(y), float(r), float(sp.vnorm(position))))
     return out
+
+
+"""
+The body a frame whose archive target SPICE cannot name looks at (Sam 2026-11-16): 33,773 frames of the mission are
+filed under SKY (28,196), UNK (4,336), NONE, DARKSKY or a star, so find_target cannot place them, and they were never
+grouped into passes, centred, or played as movies and mosaics, though many look at Saturn's rings, Saturn or a moon
+(a VIMS ring stare, ISS_237RI_0PHASEC001_VIMS, all UNK). seen_body works out what such a frame shows, from where
+SPICE points the camera: the body shown_body would take (the biggest disk at least SHOWN_RADIUS px that the frame has
+whole), else Saturn when the frame looks at its rings (a ray through the frame meets Saturn's equatorial plane between
+its cloud tops and RING_KM: the main rings, the F ring), else nothing (a star field, a calibration). The fill
+(build_geometry_cache) keeps the answer in the seen table and places the frame on that body in the target table, as it
+places any frame on its target; shown_targets then makes it a picture of that body, when every frame of its
+observation's archive target and camera sees the same one (a pass is never split).
+"""
+SEEN_VERSION = 1
+RING_KM = 140500.0     # km from Saturn's centre: the F ring's outer edge, the furthest the seen rule counts as rings
+SATURN_EQ_KM = 60268.0
+SEEN_GRID = 9          # rays a side through the frame, looked at for the rings
+
+
+def _seen_db():
+    db = _geometry_db()
+    db.execute("CREATE TABLE IF NOT EXISTS seen (frame TEXT PRIMARY KEY, version INTEGER, body TEXT)")
+    return db
+
+
+def _rings_in_frame(et, frame):
+    """Whether a ray through the frame (SEEN_GRID x SEEN_GRID of them, corners and middle included) meets Saturn's
+    equatorial plane in front of the camera between SATURN_EQ_KM and RING_KM from its centre. Kernels for et loaded."""
+    position, _ = sp.spkpos("CASSINI", et, "IAU_SATURN", "NONE", "SATURN")
+    rotate = sp.pxform(frame, "IAU_SATURN", et)
+    scale = pixel_scale(frame)
+    steps = np.linspace(0, FULL_FRAME - 1, SEEN_GRID)
+    for sample in steps:
+        for line in steps:
+            ray = sp.mxv(rotate, [(CCD_CENTER - sample) / scale, (CCD_CENTER - line) / scale, 1.0])
+            if abs(ray[2]) < 1e-12:
+                continue
+            t = -position[2] / ray[2]
+            if t <= 0:
+                continue
+            if SATURN_EQ_KM < math.hypot(position[0] + t * ray[0], position[1] + t * ray[1]) <= RING_KM:
+                return True
+    return False
+
+
+def seen_body(label):
+    """The body a frame whose archive target SPICE cannot name shows (the rule above), or None. Kernels for its
+    year loaded."""
+    et, frame = image_et(label), camera_frame(label)
+    try:
+        sp.pxform("J2000", frame, et)
+    except Exception:   # noqa: BLE001  (no pointing at the middle: the exposure's, as find_target looks for it)
+        found = exposure_pointing(et, frame, exposure_s(label))
+        if found is None:
+            return None
+        et = found[0]
+    hit = shown_body(0.0, bodies_in_frame(et, frame, None))
+    if hit:
+        return hit[0]
+    return "SATURN" if _rings_in_frame(et, frame) else None
 
 
 def bodies_of(ids):
@@ -790,7 +878,9 @@ def shown_targets():
         if not GEOMETRY_CACHE or not os.path.exists(GEOMETRY_CACHE):
             return {}
         db = _bodies_db()
-        size = db.execute("SELECT max(rowid) FROM bodies").fetchone()[0] or 0
+        _seen_db()
+        size = (db.execute("SELECT max(rowid) FROM bodies").fetchone()[0] or 0,
+                db.execute("SELECT max(rowid) FROM seen").fetchone()[0] or 0)
         _shown_checked = time.monotonic()
         if _shown is not None and _shown[0] == size:
             return _shown[1]
@@ -808,7 +898,24 @@ def shown_targets():
             hit = shown_body(km / z * scale if km and z and scale else None, others)
             if hit:
                 found[frame] = (hit[0], -hit[1], -hit[2], hit[4])
+        # frames whose archive target SPICE cannot name, placed on the body they show (seen_body): relabelled when
+        # every frame of their observation's archive target and camera shows the same body
+        seen = {}
+        for frame, body, x, y, z in db.execute(
+                "SELECT s.frame, s.body, t.x, t.y, t.z FROM seen s JOIN target t ON t.frame = s.frame AND t.version = ? "
+                "WHERE s.version = ? AND s.body != '' AND t.error IS NULL AND t.target = s.body",
+                (GEOMETRY_VERSION, SEEN_VERSION)):
+            seen[frame] = (body, -x, -y, z)
         out = {}
+        if seen:
+            group = _index_groups()
+            members = {}
+            for f, g in group.items():
+                members.setdefault(g, []).append(f)
+            for g in {group.get(f) for f in seen}:
+                frames = members.get(g, ())
+                if frames and all(f in seen for f in frames) and len({seen[f][0] for f in frames}) == 1:
+                    out.update((f, seen[f]) for f in frames)
         if found:
             group = _index_groups()
             placed = {f for f, in db.execute("SELECT frame FROM target WHERE version = ? AND error IS NULL",
