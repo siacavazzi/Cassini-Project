@@ -372,6 +372,12 @@ def built(args, total, errors):
     slices.record(args.cache, args.phase, spans_of(args), frame_server.picture_versions(), total, errors)
 
 
+# the pre-build making one pass at a time (main, --threads 1: a farm's processes) lets the calibration's kept tables go
+# once a pass's tiles are made (calibration.let_go). Not a server (a stretch pre-processed there shares its tables
+# with the windows' own requests), nor several passes at once (one pass's end would take them from another's tiles)
+_let_go = [False]
+
+
 def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, stopped=None, full=False):
     """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
     every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
@@ -396,6 +402,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         if stopped and stopped():
             return 0
         obs_mosaic.tile(u, j, cache, p["display_scale"])
+    if _let_go[0]:
+        # (every tile is made: what follows, the solve and the pictures drawn of the tiles, calibrates no frame, and
+        # the calibration's kept tables were held beside the mosaic it composes)
+        calibration.let_go()
     if u["mosaic"] and last == len(u["frames"]) - 1:
         # (every tile made: their reports in one file too, which a server's first look at the pass reads instead of
         # a file a tile, obs_mosaic.REPORTS_FILE)
@@ -1287,6 +1297,7 @@ def main():
         return
     obs_mosaic.tiles_ahead = lambda *a, **k: None      # everything is made here, in order (warm_pass.py)
     obs_mosaic.rolling_ahead = lambda *a, **k: None
+    _let_go[0] = args.threads == 1
     if args.phase == "tables":
         obs_mosaic.warm_movie = lambda *a, **k: None   # (a steady table's chains are made in order, tables._steady)
     if args.phase in PASS_PHASES and not os.environ.get("CASSINI_HDR_HANDED_DIR") and args.handed != "none":
