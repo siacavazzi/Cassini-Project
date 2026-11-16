@@ -396,6 +396,114 @@ def imread(path, flags=cv2.IMREAD_COLOR):
 
 
 """
+The camera's original values of a frame the lean archive could not keep at full depth, where CASSINI_ORIGINALS names
+a folder of them: the PDS IMG files re-downloaded (helper programs/convert_archive.py read the same files when it made
+the archive, and squeezed every 12BIT frame to 256 square-root codes, calibration.stored_values; 8LSB frames it copied
+from the old stretched PNGs). The folder holds zips (one per PDS volume) and/or plain files, each frame as
+<frame id>.IMG, optionally xz-compressed (<frame id>.IMG.xz), anywhere inside; read_img_bytes reads its VICAR layout.
+calibration.full_values reads these in place of the stored codes.
+path = the frame's path in the archive (nac_data/<ID>.png or its label), shape = its stored codes' shape: an original
+of another shape is not the frame's and is left unread. Returns the image as the IMG stores it (int32: DN for 12BIT,
+the low 8 bits for 8LSB, codes for TABLE), or None when there is none (no CASSINI_ORIGINALS, or not in it).
+The last ORIGINALS_KEEP read are kept decoded (calibrate asks for a frame's values more than once).
+"""
+ORIGINALS = os.environ.get("CASSINI_ORIGINALS") or None
+ORIGINALS_KEEP = 8
+_originals = None
+_originals_lock = threading.Lock()
+_original_zips = {}
+_original_kept = collections.OrderedDict()
+_ORIGINAL_NAME = re.compile(r"([NW]\d{10}_\d+)\.IMG(\.XZ)?$")
+
+
+def _originals_index():
+    global _originals
+    with _originals_lock:
+        if _originals is None:
+            found = {}
+            for root, _, files in os.walk(ORIGINALS):
+                for name in sorted(files):
+                    full = os.path.join(root, name)
+                    if name.lower().endswith(".zip"):
+                        try:
+                            with zipfile.ZipFile(full) as z:
+                                for member in z.namelist():
+                                    m = _ORIGINAL_NAME.search(os.path.basename(member).upper())
+                                    if m:
+                                        found.setdefault(m.group(1), (full, member))
+                        except (zipfile.BadZipFile, OSError):
+                            continue   # (a volume still being written)
+                    else:
+                        m = _ORIGINAL_NAME.search(name.upper())
+                        if m:
+                            found.setdefault(m.group(1), (None, full))
+            _originals = found
+    return _originals
+
+
+"""
+A raw ISS IMG (bytes, as the PDS has it): its image as stored, int32 (lines x samples), after its VICAR label and
+binary header, each line's prefix (NBB bytes) left off. As convert_archive.read_img.
+"""
+def read_img_bytes(data):
+    raw = np.frombuffer(data, dtype=np.uint8)
+    head = raw[:4096].tobytes().decode("latin-1")
+    g = lambda key: re.search(rf"\b{key}=\s*'?([^\s']+)", head).group(1)
+    label_size, record = int(g("LBLSIZE")), int(g("RECSIZE"))
+    lines, samples = int(g("NL")), int(g("NS"))
+    prefix, header_records = int(g("NBB")), int(g("NLB"))
+    sample_bytes = 2 if g("FORMAT") == "HALF" else 1
+    if record != prefix + samples * sample_bytes:
+        return None
+    start = label_size + header_records * record
+    rows = raw[start:start + lines * record].reshape(lines, record)
+    dtype = ">i2" if sample_bytes == 2 else "u1"
+    return rows[:, prefix:].copy().view(dtype).reshape(lines, samples).astype(np.int32)
+
+
+def original_dn(path, shape=None):
+    if not ORIGINALS or not path:
+        return None
+    frame = os.path.basename(str(path)).split(".")[0].upper()
+    with _originals_lock:
+        dn = _original_kept.get(frame)
+        if dn is not None:
+            _original_kept.move_to_end(frame)
+    if dn is None:
+        where = _originals_index().get(frame)
+        if where is None:
+            return None
+        archive, member = where
+        try:
+            if archive is None:
+                with open(member, "rb") as f:
+                    data = f.read()
+            else:
+                with _originals_lock:
+                    z = _original_zips.get(archive)
+                    if z is None:
+                        z = _original_zips[archive] = zipfile.ZipFile(archive)
+                    data = z.read(member)
+            if member.upper().endswith(".XZ"):
+                import lzma
+                data = lzma.decompress(data)
+            dn = read_img_bytes(data)
+        except Exception as e:
+            print(f"Can't read the original of {frame}: {e}")
+            return None
+        if dn is None:
+            return None
+        dn.flags.writeable = False
+        with _originals_lock:
+            _original_kept[frame] = dn
+            while len(_original_kept) > ORIGINALS_KEEP:
+                _original_kept.popitem(last=False)
+    if shape is not None and tuple(dn.shape) != tuple(shape[:2]):
+        return None
+    return dn
+
+
+"""
 Lists the file names directly inside a folder of the data (like os.listdir)
 """
 def listdir(path):
