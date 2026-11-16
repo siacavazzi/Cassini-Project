@@ -354,7 +354,12 @@ def original_values(codes, info):
     if not ds.lut8() or _value(info, "DATA_CONVERSION_TYPE", "") not in ORIGINAL_CONVERSIONS:
         return None
     original = ds.original_dn(info.get("path"), np.shape(codes))
-    return None if original is None else original.astype(np.float64)
+    if original is None:
+        return None
+    top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
+    if original.min() < 0 or original.max() > top:
+        return None   # (garbled at the source, N1517057759_9: -30277..25243; the stored codes are what there is)
+    return original.astype(np.float64)
 
 
 """
