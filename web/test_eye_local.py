@@ -85,6 +85,7 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
     eye = table["eye"]
     assert eye and eye["by"], table.get("eye")
     assert not table["tint"], table["tint"]
+    assert not table["server"], table["server"]
     want_mix = calibration.eye_mix("W", filters, "SATURN")
     assert np.allclose(eye["mix"], want_mix)
     # Natural color, the default, draws a set with a methane band as Natural color (emulated) does (fix plan group
@@ -130,4 +131,20 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
     lit = lit[lit.max(axis=1) > 40]
     print(f"{'+'.join(filters)}: {len(cases)} colour pictures, the page's eye mix equals the server's colors=eye picture "
           f"but for {off} of {total} values a level apart; median lit color {np.median(lit, axis=0).astype(int).tolist()}")
+# a set the server draws with more than the page's mix is listed as server-drawn (the table's "server",
+# obs_mosaic._set_drawn_apart): a filter the pass takes once (its cosmic rays cleaned, _despiked), another body on
+# every one of its tiles (moved per filter, _per_body_planes)
+cyc = {"frames": [(f"p{n}", f"N{n}", "RGB"[n % 3], 30.0 * n) for n in range(9)]}
+once = {"frames": cyc["frames"][:8] + [("p8", "N8", "MT1", 240.0)]}
+titan = lambda n: [("TITAN", 1.0, 2.0, 30.0, True)]
+speck = lambda n: [("PAN", 1.0, 2.0, 3.0, True)]
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {}, 1.0)
+assert om._set_drawn_apart(once, [6, 7, 8], {}, 1.0)
+assert om._set_drawn_apart(cyc, [3, 4, 5], {n: titan(n) for n in (3, 4, 5)}, 1.0)
+# (a speck on every tile is not moved: the page mixes the set; nor a body drawn under PER_BODY_LEAST at a small scale)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {n: speck(n) for n in (3, 4, 5)}, 1.0)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {n: titan(n) for n in (3, 4, 5)}, 0.2)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {3: titan(3), 4: titan(4)}, 1.0)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {3: titan(3), 4: titan(4), 5: [("RHEA", 1.0, 2.0, 30.0, True)]}, 1.0)
+print("server-drawn sets: lone filter and per-body sets listed, others mixed here")
 print("ok")

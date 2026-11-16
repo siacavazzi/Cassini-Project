@@ -13,7 +13,7 @@ Run: python web/test_steady_local.py"""
 # picture is at most half a pixel from the server's)
 import os as _os; _os.environ["CASSINI_SUBPIXEL"] = "0"
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
-import io, json, re, subprocess, tempfile  # noqa: E402
+import io, json, math, re, subprocess, tempfile  # noqa: E402
 import numpy as np  # noqa: E402
 import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
@@ -234,6 +234,7 @@ with calibration.looking("balanced"):
     table = om._steady_table(u2, 0, cache, True, True)
     assert table["sets"] and table["sets"]["mix"] and table["exposure"]["local"], table.get("sets")
     assert not table["tint"], table["tint"]
+    assert not table["server"], table["server"]
     got = in_node(table)
     cases, wants, alone, labels, case_gains = [], [], 0, [], []
     for s, x in ((12, 0), (12, 8)):
@@ -418,6 +419,12 @@ with calibration.looking("balanced"):
         # (as above: where a move uncovers a strip along the view's edge the page has none of that frame, and its detail
         # filter's mean, a blur, sees that within its reach of the strip; everywhere else it is the server's)
         reach = (len(calibration_kernel(table["sigma"])) - 1) // 2
+        # (a colour set: numpy's 3x3 mix runs through BLAS, which may put a pixel's channel a level from the page's on
+        # another machine (the colour check above, Linux's OpenBLAS against the Mac's Accelerate), and detail() then moves
+        # the pixel by DETAIL times its luminance's change, a third of that level: up to 1 + DETAIL / 3 levels, 2. Seen
+        # on Linux, frame 15 of the unmoved case: blue 50 against 48, its set mixed and dimmed (gain 0.52) the same on
+        # the Mac to the level and no clipped-band fill in it)
+        tol = math.ceil(1 + om.DETAIL / 3) if colour else 1
         for out, B, lab in zip(node_filled(table, cases), wants, labels):
             lab, strip = lab[:-1], lab[-1]
             near = cv2.dilate(strip.astype(np.uint8), np.ones((2 * reach + 1, 2 * reach + 1), np.uint8)) > 0 if strip.any() else strip
@@ -426,7 +433,7 @@ with calibration.looking("balanced"):
             if diff.max() > 1:
                 w = np.argwhere(diff > 1)
                 print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
-            assert diff.max() <= 1, int(diff.max())
+            assert diff.max() <= tol, int(diff.max())
             off += int((diff > 0).sum())
             total += diff.size
         assert off <= total * 1e-4, (off, total)

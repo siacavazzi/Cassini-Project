@@ -701,6 +701,9 @@ onmessage = async e => {
       if (o.color && e.table.colour && !recipes) return null;
       // a frame drawn in its colour set's colour (obs_mosaic.set_shown, the table's "tint"): the server draws it
       if (o.color && (e.table.tint || []).includes(e.n)) return null;
+      // and one whose set the server draws with more than this mix (another body moved per filter, a lone filter's
+      // cosmic rays cleaned: obs_mosaic._set_drawn_apart, the table's "server")
+      if (o.color && (e.table.server || []).includes(e.n)) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
       const tr = set ? 0 : Math.min(trail, e.table.trail_most);
       if (!steady && !exposure && !tr && !set) return null;
