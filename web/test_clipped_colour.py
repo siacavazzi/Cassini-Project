@@ -90,19 +90,3 @@ assert (inside[:, 1] <= inside[:, 0] + 1).all(), inside[::5]
 assert (old[100, 170:195, 1] > old[100, 170:195, 0] + 1).any(), old[100, 170:195:5, :3]
 print("a band saturated on a body's bright part, floored at the light it saturated on, keeps the body's colour (%s, "
       "red over green as round it %s; floored at its white: %s); ok" % (inside[10], outside[20], old[100, 180, :3]))
-
-# ... and a thin saturated ring blended into a mosaic's canvas under CLIP_FROM (269RI HIPHASEFB001's F ring: BL1 and
-# GRN saturated, RED not): its excess marks it clipped, and it takes the colour round it, not cyan
-r6 = np.full((200, 200), 120.0); g6 = np.full((200, 200), 118.0); b6 = np.full((200, 200), 110.0)
-ring = slice(98, 101)
-r6[ring] = 177; g6[ring] = 225; b6[ring] = 230        # GRN, BL1 half white (saturated, blended), RED its light
-light = lambda v: dec(np.full((200, 200), v))
-ex_g = np.zeros((200, 200), np.float32); ex_b = np.zeros((200, 200), np.float32)
-ex_g[ring] = (dec(np.full((3, 200), 225.0)) - light(176)[ring])
-ex_b[ring] = (dec(np.full((3, 200), 230.0)) - light(166)[ring])
-a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r6, g6, b6), sat=[None, ex_g, ex_b]).astype(int)
-old = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r6, g6, b6)).astype(int)
-c, o, rest = a[99, 100, :3], old[99, 100, :3], a[50, 100, :3]
-assert c[0] >= c[1] - 2 and c[1] >= c[2] - 2, (c, rest)
-assert o[2] > o[0] + 20, o
-print("a thin saturated ring under CLIP_FROM keeps the colour round it (%s, round it %s; before %s); ok" % (c, rest, o))

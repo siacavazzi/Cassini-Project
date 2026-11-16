@@ -6069,7 +6069,6 @@ def _despiked(planes, gamma):
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
 CLIP_EDGE = 2   # (colour_picture, with saturation maps) px round a clipped band left out of the floor its fill keeps (fill_saturated's edge)
-SAT_EXCESS = 0.02   # (colour_picture) linear: a band whose saturation excess (sat) is over this is clipped there
 
 
 TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
@@ -6639,14 +6638,14 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     alpha = np.min([a[..., 3] for a in planes], axis=0)
     # (sat: each band's saturation excess, _place_sat: how much of its linear value is the white the camera's
-    # saturated pixels were drawn, over the light they saturated on; a band with any is clipped there too, even drawn
-    # under CLIP_FROM: a thin saturated ring blended into a mosaic's canvas, 269RI HIPHASEFB001's F ring and A ring edge)
+    # saturated pixels were drawn, over the light they saturated on)
     excess = list(sat) if sat is not None else []
     if len(excess) == 2:
         excess = [excess[0], None, excess[1]]
     excess = [e if e is not None and e.shape == rgb.shape[:2] else None for e in excess] + [None] * (3 - len(excess))
-    clipped = [((rgb[..., i] >= CLIP_FROM) | (excess[i] > SAT_EXCESS if excess[i] is not None else False)) & (alpha > 0)
-               for i in range(3)]
+    # (only a band drawn CLIP_FROM and up is clipped: the excess, resampled with the picture, spreads a pixel or two past
+    # it, and marking those sky pixels clipped floored them bright: a ring's edge grew 1-3 px, 003SA 3X3MOVIEA002)
+    clipped = [(rgb[..., i] >= CLIP_FROM) & (alpha > 0) for i in range(3)]
     if any(c.any() for c in clipped) and not all(np.array_equal(clipped[0], c) for c in clipped[1:]):
         # a band clipped where another is not (the camera saturated in it, or it is past the scale's white): filled
         # from the bands that are not, as a colour set's camera window draws it (calibration.tone's fill_saturated),
@@ -6674,12 +6673,9 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
         reads = [c if e is None else np.maximum(c - e, 0) for c, e in zip(x, excess)]
         filled = [f if calibration.mostly_saturated(m, lit) else np.maximum(f, c) for f, c, m in zip(filled, reads, clipped)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
-        # few levels under 255 along its edges; and wholly where its saturation excess is twice SAT_EXCESS)
+        # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
         w = np.moveaxis(w * w * (3 - 2 * w), -1, 0)
-        for i, e in enumerate(excess):
-            if e is not None:
-                w[i] = np.maximum(w[i], np.clip(e / (2 * SAT_EXCESS), 0, 1))
         x = x + w * (np.stack(filled) - x)
         if every is not None:
             every &= np.logical_and.reduce([c >= 255 for c in np.moveaxis(rgb, -1, 0)])
