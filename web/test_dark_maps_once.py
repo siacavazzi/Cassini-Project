@@ -97,6 +97,10 @@ with tempfile.TemporaryDirectory() as root:
         [t.join() for t in threads]
         assert len(reads) == 1 and got[0][0] is got[1][0] and got[0][1] is got[1][1], len(reads)
         assert dc._parameters("ISSNA", 1024, "") is got[0] and len(reads) == 1
+        # (cleared through the name the callers and the other tests know)
+        assert dc._parameters.cache_info().currsize == 1
+        dc._parameters.cache_clear()
+        assert dc._parameters.cache_info().currsize == 0 and dc._parameters("ISSNA", 1024, "") is not got[0] and len(reads) == 2
         print("two threads at once: made once")
 
         # the memory making them takes (Python's and numpy's own allocations), against the old form's

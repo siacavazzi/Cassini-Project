@@ -357,6 +357,10 @@ def _parameters_made(camera, lines, hot):
     return p[0].astype(np.float32), spectra
 
 
+# (as when _parameters was the cached function itself: what keeps the maps is cleared and read through it)
+_parameters.cache_clear, _parameters.cache_info = _parameters_made.cache_clear, _parameters_made.cache_info
+
+
 """
 The frame's dark current in DN, (lines, samples) at the camera's resolution for its summing mode, float32; or None
 when the label lacks what the model needs or the maps aren't there.
