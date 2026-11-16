@@ -36,7 +36,10 @@ commits, the base (usually `origin/main`) and the candidate (the PR's head). The
   - the long pole is the 290-tile Grand Finale mosaic (about 10 minutes even with its tiles spread over the cores);
   - with `--hosts local,mini` the Mini takes a third of the items;
   - comparing two commits takes about 30 seconds. The base is built once per commit and kept (`~/cassini-build/image-bench/results`),
-  so a PR usually waits only for its own build. The scratch cache is removed once the pictures are taken out.
+  so a PR usually waits only for its own build. The scratch cache is removed once the pictures are taken out. The commit's
+  worktree and the tool copy go too when a build ends (`--keep-worktree` keeps the worktree), so only results and
+  reports stay on disk, and a build will not start with less than 60 GB free on its drive (`CASSINI_BENCH_MIN_FREE_GB`):
+  a Mac needs that room for swap (the MacBook went down on 2026-11-16 with a full disk and no room to swap).
 
 ## Running it
 
