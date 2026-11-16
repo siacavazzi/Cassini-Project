@@ -13,12 +13,13 @@ import stacking  # noqa: E402
 # every step on: no variant, and the cache folders keep their names (the pre-built cache stays valid)
 assert cal.variant() == "" and all(cal.step(s) for s in cal.STEPS)
 assert reel.version() == reel.VERSIONS["balanced"] + "-q95"
+# (a Saturn pass that is not a ring observation has the Saturn look: SATURN_TAG after its name, #527)
 u = {"key": ("SATURN", "ISS_OBS", "N"), "repeat_gap": obs_mosaic.mosaic_benchmark.REPEAT_GAP}
-assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N"
+assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N" + obs_mosaic.SATURN_TAG
 # steps off: one name per set of steps whatever the order asked, unknown names ignored
 with cal.stepping("align,stack,bogus"):
     assert cal.variant() == "-off-stack-align" and not cal.step("stack") and cal.step("hdr")
-    assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-off-stack-align-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N"
+    assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-off-stack-align-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N" + obs_mosaic.SATURN_TAG
     assert reel.version() == reel.VERSIONS["balanced"] + "-off-stack-align-q95"
     m = cal.mode()
 assert cal.variant() == ""
