@@ -15,12 +15,21 @@ import obs_mosaic as om  # noqa: E402
 tmp = tempfile.mkdtemp()
 
 
-def run(spice, chain, track=False, keep_chain=True):
+import bootleg_autonav as ba  # noqa: E402
+OWN = {f"N{i}_1" for i in range(20)}
+ba._own_frames = OWN   # every frame of these passes has its own measured pointing, unless raw= says otherwise
+
+
+def run(spice, chain, track=False, keep_chain=True, raw=False, linked=1.0):
     d = tempfile.mkdtemp(dir=tmp)
     if keep_chain:
+        hows = {"0": "first"}
+        hows.update({str(n): "linked to [%d]" % (n - 1) if n <= linked * (len(chain) - 1) else "SPICE (no link)"
+                     for n in range(1, len(chain))})
         with open(os.path.join(d, om.STEADY_FILE), "w") as fh:
-            json.dump({"places": {str(n): xy for n, xy in enumerate(chain)}}, fh)
-    u = {"key": ("TITAN", "X", "N", 0), "frames": [None] * len(spice), **({"track": True} if track else {})}
+            json.dump({"places": {str(n): xy for n, xy in enumerate(chain)}, "how": hows}, fh)
+    ids = [f"N{i}_1" if not (raw and i == 3) else "N999_1" for i in range(len(spice))]
+    u = {"key": ("TITAN", "X", "N", 0), "frames": [("p", f) for f in ids], **({"track": True} if track else {})}
     was = om.folder, om._plan_if_made, om.tile
     om.folder = lambda u, cache: d
     om._plan_if_made = lambda u, cache: {"display_scale": {}}
@@ -41,6 +50,15 @@ assert run(drift, still) == (0, 4, 0)                                      # a s
 assert run(jumpy, still, keep_chain=False) == (0, 4, 0)                    # no chain kept: SPICE's places
 assert run(jumpy, still, track=True) == (0, 0, 0)                          # a feature track: as before
 print("auto stabilization of passes SPICE places jump in: ok")
+
+# a pass holding a frame on the reconstructed attitude shakes ~5 px a frame (audit finding 4), under the jump: it is
+# stabilized whenever its chain follows the pictures; a pass on its own measured pointing alone is not
+shake = [[0.0, 40.0 + 0.3 * n + (2.5 if n % 2 else -2.5)] for n in range(20)]
+assert run(shake, still) == (0, 4, 0)                                      # own pointing throughout: as before
+assert run(shake, still, raw=True) == (om.STEADY_SMOOTH, 4, 0)             # one raw frame: steady by default
+assert run(shake, still, raw=True, linked=0.5) == (0, 4, 0)                # a chain mostly unlinked is not trusted
+assert run(shake, still, raw=True, track=True) == (0, 0, 0)                # a feature track: as before
+print("auto stabilization of passes on the reconstructed attitude: ok")
 
 # prebuild.make_pass works out a movie's chain before its first frame, so auto_steady is decided for every frame
 import prebuild  # noqa: E402

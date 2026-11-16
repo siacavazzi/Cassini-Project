@@ -9759,13 +9759,28 @@ STEADY_AUTO_JUMP = 10.0   # px (on the pass's canvas): a pass whose SPICE places
 #                           by more than this is stabilized even with stabilization off (steady_of): 133TI CLOUD002's
 #                           SPICE places jumped 24 to 54 px between frames 40 s apart while Titan held still in the
 #                           pictures (median 12.9 px), and the movie jolted (Sam 11-16); 215 movie passes of the mission
+STEADY_AUTO_LINKED = 0.8  # of a pass's tiles after its first: and a pass holding a frame without the camera's own
+#                           measured pointing (bootleg_autonav.own_pointing_frames) is stabilized whenever its chain
+#                           follows the pictures on at least this share (linked, not held at SPICE's step or past the
+#                           reach): the spacecraft's reconstructed attitude shakes about 5 NAC px from one frame to the
+#                           next (audit finding 4: median 4.9, p90 9.5 against moons in the pictures; JPL's per-image
+#                           pointing 0.26), under STEADY_AUTO_JUMP, and no pointing kernel removes a per-frame shake.
+#                           The chain stays within STEADY_REACH of SPICE (the guard against a match on something else)
 _auto_steady = {}         # folder -> True/False, once the pass's chain is kept
+
+
+def _raw_pointing(u):
+    """True when pass u holds a frame whose pointing was not measured on a picture (bootleg_autonav.own_pointing_frames)."""
+    import bootleg_autonav as ba
+    own = ba.own_pointing_frames()
+    return any(fr[1] not in own for fr in u["frames"])
 
 
 def auto_steady(u, cache):
     """True when pass u's SPICE places jump against its stabilization chain by more than STEADY_AUTO_JUMP (median, frame
-    to frame), measured on the chain kept in the cache (never worked out here: a pass whose chain is not made yet is
-    drawn at SPICE's places, as before). Feature tracks are steady anyway."""
+    to frame), or when it holds a frame on the reconstructed attitude (_raw_pointing) and its chain follows the
+    pictures (STEADY_AUTO_LINKED); measured on the chain kept in the cache (never worked out here: a pass whose chain is
+    not made yet is drawn at SPICE's places, as before). Feature tracks are steady anyway."""
     if cache is None or u.get("track") or not calibration.step("align"):
         return False
     key = folder(u, cache)
@@ -9776,14 +9791,18 @@ def auto_steady(u, cache):
     if p is None or not os.path.exists(path):
         return False
     with open(path) as fh:
-        chain = {int(n): xy for n, xy in (json.load(fh).get("places") or {}).items()}
+        kept = json.load(fh)
+    chain = {int(n): xy for n, xy in (kept.get("places") or {}).items()}
     d = {}
     for n in sorted(chain):
         place = tile(u, n, cache, p["display_scale"]).get("offset")
         if place:
             d[n] = (place[0] - chain[n][0], place[1] - chain[n][1])
     jumps = [max(abs(d[n][0] - d[n - 1][0]), abs(d[n][1] - d[n - 1][1])) for n in d if n - 1 in d]
-    got = len(jumps) >= 5 and float(np.median(jumps)) > STEADY_AUTO_JUMP
+    hows = [str(h) for h in (kept.get("how") or {}).values() if h != "first"]
+    linked = sum(h.startswith("linked") for h in hows) / len(hows) if hows else 0.0
+    got = len(jumps) >= 5 and (float(np.median(jumps)) > STEADY_AUTO_JUMP or
+                               (linked >= STEADY_AUTO_LINKED and _raw_pointing(u)))
     _auto_steady[key] = got
     return got
 
