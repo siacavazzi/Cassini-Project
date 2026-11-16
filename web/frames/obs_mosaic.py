@@ -1500,7 +1500,8 @@ def _repointed(u):
         if _repointed_frames is None:
             import bootleg_autonav as ba
             _repointed_frames = ba.iss_neighbours_frames() | ba.usgs_neighbours_frames()
-        u["_repointed"] = any(fr[1] in _repointed_frames for fr in u["frames"])
+        # (folder() also names passes given by key alone, without their frames, as its other suffixes allow)
+        u["_repointed"] = any(fr and fr[1] in _repointed_frames for fr in u.get("frames") or ())
     return u["_repointed"]
 
 
