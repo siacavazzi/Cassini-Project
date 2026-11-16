@@ -3756,6 +3756,9 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
     def prof(n, d):
         v, bins, nb, at, width = data[n]
         dx, dy = int(round(d[0])), int(round(d[1]))
+        # (never past the margin the samples were taken with, reach: there the flat index would read another row's
+        # bins without a word, where the 2-D index it replaces raised or wrapped)
+        assert abs(dx) <= reach and abs(dy) <= reach, (n, dx, dy, reach)
         b = bins.take(at + (dy * width + dx))
         return np.bincount(b, weights=v, minlength=nb + 1)[:nb], np.bincount(b, minlength=nb + 1)[:nb]
 
