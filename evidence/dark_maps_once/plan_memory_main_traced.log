@@ -1,0 +1,295 @@
+SATURN_ISS_030RI_HIPHAMOVE001_PRIME_N_0: footprint before the plan 893 MB, when pass_scale returned 1741 MB, highest 2499 MB; 1074 samples
+traced when pass_scale returned 453 MB, highest traced 1261 MB
+growth by the innermost repo function running (MB):
+       711  pass_scale:2693
+       513  _parameters:334
+       150  _parameters:319
+       118  load_index:97
+        86  plan:1710
+        78  load_index:99
+        36  read_cube:91
+        36  read_cube:90
+        31  <listcomp>:324
+        31  _parameters:324
+        27  dark_sky:423
+        27  frame_id:43
+        26  line_time:155
+        26  _box_truncate:341
+        25  _row_of:215
+        25  read_cube:70
+        25  read_cube:69
+        24  line_time:173
+        22  _auto_star_level:333
+        18  lit_median:2002
+        18  <dictcomp>:2789
+        18  <listcomp>:2394
+        14  _dark:370
+        13  load_index:107
+        13  _auto_star_level:331
+growth by the innermost three (MB):
+       711  pass_scale:2693<plan:1710<make_pass:363
+       513  _parameters:334<_dark:350<dark_dn:344
+       150  _parameters:319<_dark:350<dark_dn:344
+       118  load_index:97<find_repeats:121<load_hdr:285
+        86  plan:1710<make_pass:363<<lambda>:205
+        78  load_index:99<find_repeats:121<load_hdr:285
+        36  read_cube:91<_parameters:319<_dark:350
+        36  read_cube:90<_parameters:319<_dark:350
+        31  <listcomp>:324<_parameters:324<_dark:350
+        31  _parameters:324<_dark:350<dark_dn:344
+        27  dark_sky:423<image_hum:388<calibrate:500
+        27  frame_id:43<<listcomp>:104<load_index:104
+        26  line_time:155<<listcomp>:355<_dark:355
+        25  _row_of:215<colour_sets:8588<_set_colour:1675
+        25  read_cube:70<_parameters:319<_dark:350
+        25  read_cube:69<_parameters:319<_dark:350
+        24  line_time:173<<listcomp>:355<_dark:355
+        22  _box_truncate:341<image_mask:367<image_hum:382
+        22  _auto_star_level:333<image_mask:364<image_hum:382
+        18  lit_median:2002<<genexpr>:2802<pass_scale:2802
+        18  <dictcomp>:2789<pass_scale:2789<plan:1710
+        18  <listcomp>:2394<_sky_fine:2394<<dictcomp>:2773
+        14  _dark:370<dark_dn:344<calibrate:500
+        13  load_index:107<find_repeats:121<load_hdr:285
+        13  _auto_star_level:331<image_mask:364<image_hum:382
+over the plan:
+      0.00 s     893 MB  traced      0  
+      3.67 s    1134 MB  traced     94  frame_id:43 | load_index:97 | pass_scale:2693
+      4.70 s    1183 MB  traced    104  frame_id:43 | load_index:97 | pass_scale:2693
+      5.75 s    1198 MB  traced    114  frame_id:43 | load_index:97 | pass_scale:2693
+      6.86 s     776 MB  traced    171  load_index:107 | load_index:97 | pass_scale:2693
+      7.92 s     787 MB  traced    181  load_index:107 | load_index:97 | pass_scale:2693
+      9.38 s    2134 MB  traced    330  line_time:155 | line_time:173 | pass_scale:2693
+     10.31 s    2241 MB  traced    363  <dictcomp>:452 | <dictcomp>:452 | pass_scale:2693
+     11.04 s    2242 MB  traced    365  <dictcomp>:452 | <dictcomp>:452 | pass_scale:2693
+     11.77 s    2246 MB  traced    371  <dictcomp>:452 | <dictcomp>:452 | pass_scale:2693
+     12.49 s    2248 MB  traced    376  <dictcomp>:452 | <dictcomp>:452 | pass_scale:2693
+     13.42 s    2249 MB  traced    378  <dictcomp>:452 | <dictcomp>:452 | pass_scale:2693
+     14.20 s    2281 MB  traced    366  sky_mask:651 | sky_mask:651 | pass_scale:2693
+     15.01 s    2332 MB  traced    357  _read_at:230 | sky_residual:666 | pass_scale:2693
+     15.85 s    2407 MB  traced    379  _dark:371 | filter_hum:238 | pass_scale:2693
+     16.59 s    2415 MB  traced    446  sky_mask:651 | bright_dark:447 | pass_scale:2693
+     17.53 s    2426 MB  traced    470  line_time:183 | _box_truncate:341 | pass_scale:2693
+     18.36 s    2451 MB  traced    481  filter_hum:238 | sky_mask:648 | pass_scale:2693
+     19.21 s    2467 MB  traced    511  sky_mask:655 | _basis:240 | pass_scale:2693
+     20.02 s    2497 MB  traced    539  _dark:367 | dark_sky:418 | pass_scale:2693
+     20.90 s    2167 MB  traced    581  dark_sky:423 | sky_mask:651 | pass_scale:2693
+     21.67 s    2167 MB  traced    576  sky_mask:651 | repair_hot:547 | pass_scale:2693
+     22.41 s    2168 MB  traced    550  calibrate:532 | _median5:401 | pass_scale:2693
+     23.20 s    2178 MB  traced    572  _box_truncate:341 | sky_mask:651 | pass_scale:2693
+     24.07 s    2181 MB  traced    542  sky_mask:655 | flat_lines:102 | pass_scale:2693
+     24.81 s    2181 MB  traced    534  bright_dark:447 | <listcomp>:355 | pass_scale:2693
+     25.64 s    2181 MB  traced    542  valid_mask:405 | _auto_star_level:333 | pass_scale:2693
+     26.51 s    2181 MB  traced    509  _dark:367 | filter_hum:238 | pass_scale:2693
+     27.34 s    2181 MB  traced    561  sky_mask:651 | calibrate:532 | pass_scale:2693
+     28.20 s    2181 MB  traced    523  dark_spots:523 | line_time:155 | pass_scale:2693
+     28.99 s    2183 MB  traced    512  imread:384 | _dark:374 | pass_scale:2693
+     29.77 s    2185 MB  traced    561  _dark:367 | _box_truncate:341 | pass_scale:2693
+     30.60 s    1632 MB  traced    563  sky_mask:648 | sky_mask:651 | pass_scale:2693
+     31.35 s    1669 MB  traced    538  sky_mask:648 | line_time:135 | pass_scale:2693
+     32.22 s    1686 MB  traced    515  flat_lines:102 | image_mask:351 | pass_scale:2693
+     32.98 s    1686 MB  traced    607  _box_truncate:341 | dark_sky:424 | pass_scale:2693
+     33.74 s    1686 MB  traced    566  sky_mask:646 | sky_mask:651 | pass_scale:2693
+     34.59 s    1686 MB  traced    558  sky_mask:655 | line_time:173 | pass_scale:2693
+     35.36 s    1686 MB  traced    543  calibrate:532 | line_time:155 | pass_scale:2693
+     36.07 s    1687 MB  traced    474  _dark_sky:2627
+     36.77 s    1704 MB  traced    515  <listcomp>:2394
+     37.46 s    1741 MB  traced    481  <listcomp>:2884
+tracemalloc at the highest traced size:
+     537.1 MB in 8 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 344
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 350
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 334
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/fft/_pocketfft.py", line 409
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/fft/_pocketfft.py", line 73
+     268.4 MB in 4 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 344
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 350
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 334
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/fft/_pocketfft.py", line 409
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/fft/_pocketfft.py", line 65
+     134.2 MB in 4 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 344
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 350
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 324
+     134.2 MB in 4 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 344
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 350
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 319
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/lib/type_check.py", line 497
+      34.1 MB in 454647 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/util/_decorators.py", line 211
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/util/_decorators.py", line 331
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/readers.py", line 950
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/readers.py", line 611
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/readers.py", line 1778
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/c_parser_wrapper.py", line 235
+      29.6 MB in 442922 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1424
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1663
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1612
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1675
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 8588
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 215
+      21.3 MB in 4 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/util/_decorators.py", line 331
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 6017
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/generic.py", line 6368
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py", line 649
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py", line 352
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py", line 549
+      16.9 MB in 5 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 285
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 125
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/indexes/base.py", line 3802
+      16.8 MB in 4 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/threading.py", line 982
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      16.8 MB in 4 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/threading.py", line 982
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 493
+      15.4 MB in 208014 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 285
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 121
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 107
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/groupby/groupby.py", line 685
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/groupby/ops.py", line 865
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/sorting.py", line 632
+      14.2 MB in 2 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4187
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4146
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4136
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py", line 1268
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py", line 1921
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/lib/function_base.py", line 5336
+       6.3 MB in 6 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 293
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../label_handler.py", line 366
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 340
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 315
+       3.5 MB in 2 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 3980
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4174
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4916
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/construction.py", line 642
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/dtypes/cast.py", line 127
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/dtypes/cast.py", line 1783
+tracemalloc when pass_scale returned:
+      88.1 MB in 68 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/threading.py", line 1045
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/threading.py", line 982
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 342
+      67.2 MB in 2 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 344
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 350
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 334
+      67.1 MB in 32 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 500
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 344
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 373
+      34.1 MB in 454640 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/util/_decorators.py", line 211
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/util/_decorators.py", line 331
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/readers.py", line 950
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/readers.py", line 611
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/readers.py", line 1778
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/io/parsers/c_parser_wrapper.py", line 235
+      29.6 MB in 442922 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1424
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1663
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1612
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 1675
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 8588
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 215
+      22.0 MB in 59 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/threading.py", line 1045
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/threading.py", line 982
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 359
+      22.0 MB in 42 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 313
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../label_handler.py", line 388
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/core/numeric.py", line 191
+      21.3 MB in 4 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/util/_decorators.py", line 331
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 6017
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/generic.py", line 6368
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py", line 649
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py", line 352
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py", line 549
+      16.9 MB in 5 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 285
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 125
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/indexes/base.py", line 3802
+      16.8 MB in 32 blocks
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 83
+      File "/Users/samiacavazzi/.local/share/uv/python/cpython-3.11.17-macos-aarch64-none/lib/python3.11/concurrent/futures/thread.py", line 58
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 293
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../label_handler.py", line 363
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/data_source.py", line 384
+      15.4 MB in 208014 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 285
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 121
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 107
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/groupby/groupby.py", line 685
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/groupby/ops.py", line 865
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/sorting.py", line 632
+      14.2 MB in 2 blocks
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4187
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4146
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/frame.py", line 4136
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py", line 1268
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py", line 1921
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/lib/function_base.py", line 5336
+       7.1 MB in 2376 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 536
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 474
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 452
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/dark_current.py", line 452
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/lib/npyio.py", line 256
+      File "/Users/samiacavazzi/Development/Cassini-Project/.venv/lib/python3.11/site-packages/numpy/lib/format.py", line 822
+       4.2 MB in 2 blocks
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/obs_mosaic.py", line 2680
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/web/frames/../../stacking.py", line 296
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/calibration.py", line 542
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/flat_field.py", line 283
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/flat_field.py", line 218
+      File "/Users/samiacavazzi/cassini-build/deepopt/dev/flat_field.py", line 255
