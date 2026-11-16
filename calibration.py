@@ -1736,12 +1736,14 @@ saturated = with scale, optional list, one per label: the pixels the camera satu
 saturated_of), drawn white, or None
 off_disk = without scale, for a color set drawn in the classic look (color_image.load_aligned): as load_linear's, the
 sky its blacks are measured on when _sky finds too little, so that sky is black in every channel (fix plan D)
+valid = with scale, optional list, one per label: False where the frame lost a pixel in downlink that nothing filled;
+a picture's own black (the scale's black_of) is measured without them
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
 """
 def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None,
-                  saturated=None, off_disk=None, deep=None):
+                  saturated=None, off_disk=None, deep=None, valid=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
     iofs = _calibrated(labels, images, iofs, deep)
@@ -1751,9 +1753,11 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
         out, drawn_at = [], []
-        for iof, black in zip(iofs, scale["blacks"]):
-            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
-            own = scale["black_of"](iof) if scale.get("black_of") else None
+        for i, (iof, black) in enumerate(zip(iofs, scale["blacks"])):
+            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale), on its valid pixels
+            # (valid: one mask per label, False where the frame lost a pixel in downlink that nothing filled)
+            mask = valid[i] if valid is not None and i < len(valid) else None
+            own = (scale["black_of"](iof, mask) if mask is not None else scale["black_of"](iof)) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
             out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe, hdr=len(iofs) == 1))
             drawn_at.append((black, toe))
