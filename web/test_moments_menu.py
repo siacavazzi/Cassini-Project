@@ -18,6 +18,15 @@ def main():
     rows = list(csv.DictReader(open(build_data.MOMENTS, newline="")))
     assert rows and all(r["type"] in build_data.MOMENT_TYPES for r in rows), {r["type"] for r in rows}
     ok += 1
+    # the plume moments (plume_moments.py): all of type plume, none on an observation moments.csv already lists, no
+    # label used twice across both files (build_data refuses that), and the window has a chip for the type
+    plumes = list(csv.DictReader(open(build_data.PLUMES, newline="")))
+    assert plumes and all(r["type"] == "plume" and r["body"] == "ENCELADUS" for r in plumes)
+    assert not {o for r in plumes for o in r["obs"].split()} & {o for r in rows for o in r["obs"].split()}
+    labels = [r["label"].strip().lower() for r in rows + plumes]
+    assert len(labels) == len(set(labels))
+    assert '{ key: "plume"' in open(os.path.join(HERE, "cassini-os", "src", "moments.html")).read()
+    ok += 1
     cands = list(csv.DictReader(open(build_data.CANDIDATES, newline="")))
     assert all(c["type"] in build_data.CANDIDATE_TYPES for c in cands)
     assert all(c["start_utc"] <= (c["end_utc"] or c["start_utc"]) for c in cands)

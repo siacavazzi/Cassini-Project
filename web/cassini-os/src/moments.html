@@ -3,8 +3,9 @@
   every entry has a type, and a bar over the list sorts and filters by it.
 
   Types: milestones, special moments (hand-picked), closest views, finds (poster and geometry sweeps), transits
-  (transits, mutual events, eclipses), flybys, and movies. The first five come from encounters.json (a moments.csv row's
-  "type" column; milestones and flybys by their kind); movies and the potential moments come from candidates.json
+  (transits, mutual events, eclipses), Enceladus plumes (plume_moments.py's rule), flybys, and movies. The first six
+  come from encounters.json (a moments.csv or plume_moments.csv row's "type" column; milestones and flybys by their
+  kind); movies and the potential moments come from candidates.json
   (make_candidates.py, build_data.py): moments the searches found that nobody has picked, the whole movie catalog among
   them. Those load only when asked for: Potential movies (off by default) shows every catalog movie, Potential
   moments the unpicked finds, transits and closest views.
@@ -76,6 +77,7 @@ body.phone #mbar .mrow.mlenrow { grid-template-columns: 40px minmax(0, 1fr) 48px
     { key: "closest", label: "Closest views", c: "#ef8f6b" },
     { key: "find", label: "Finds", c: "#9fd38a" },
     { key: "transit", label: "Transits", c: "#c49cf0" },
+    { key: "plume", label: "Plumes", c: "#f3f0e2" },
     { key: "flyby", label: "Flybys", c: "#8ab6ff" },
     { key: "movie", label: "Movies", c: "#6fd6d0" },
   ];
