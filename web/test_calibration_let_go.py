@@ -55,6 +55,10 @@ obs_mosaic._mosaic_at = lambda u, j, size, cache: did.append("mosaic")
 obs_mosaic.movie_webp = lambda fid, size, cache, *a, **k: did.append("movie")
 obs_mosaic.rolling_webp = lambda fid, size, cache, *a, **k: did.append("rolling")
 obs_mosaic.tile_map = lambda fid, cache: None
+# (on the integration branch make_pass also keeps a movie's stabilization chain, #481, and restarts a part-made mosaic
+# movie, #524: stood in for here too)
+obs_mosaic.steady_chain = lambda u, cache, p: did.append("steady")
+obs_mosaic.rolling_restart = lambda *a, **k: 0
 calibration.let_go, let_go = (lambda: did.append("let go")), calibration.let_go
 
 
