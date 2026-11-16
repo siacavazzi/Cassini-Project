@@ -1,0 +1,7 @@
+colour sets by camera and summing mode: {('W', 'FULL'): 9455, ('W', 'SUM2'): 1644, ('N', 'FULL'): 9938, ('N', 'SUM2'): 5570, ('W', 'SUM4'): 1210, ('N', 'SUM4'): 93}
+  N FULL: 25064 shift components; within a tenth of a camera pixel of a whole one: 11% (20% if evenly spread); exactly a multiple of 1 px to 0.1 px: 11%
+  N SUM2: 7873 shift components; within a tenth of a camera pixel of a whole one: 22% (20% if evenly spread); exactly a multiple of 2 px to 0.1 px: 6%
+  N SUM4: 28 shift components; within a tenth of a camera pixel of a whole one: 68% (20% if evenly spread); exactly a multiple of 4 px to 0.1 px: 0%
+  W FULL: 27296 shift components; within a tenth of a camera pixel of a whole one: 12% (20% if evenly spread); exactly a multiple of 1 px to 0.1 px: 12%
+  W SUM2: 4730 shift components; within a tenth of a camera pixel of a whole one: 24% (20% if evenly spread); exactly a multiple of 2 px to 0.1 px: 6%
+  W SUM4: 2265 shift components; within a tenth of a camera pixel of a whole one: 90% (20% if evenly spread); exactly a multiple of 4 px to 0.1 px: 32%

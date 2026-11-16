@@ -1163,7 +1163,55 @@ def spice_offsets(lbls, ref):
     locs = _spice_locs(lbls)
     if locs is None or locs[ref] is None:
         return None
-    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
+    out = []
+    for lbl, loc in zip(lbls, locs):
+        if loc is None:
+            out.append(None)
+            continue
+        fx, fy = filter_offset(lbl, lbls[ref])
+        out.append((locs[ref][0] - loc[0] + fx, locs[ref][1] - loc[1] + fy))
+    return out
+
+
+"""
+Where each wide-angle filter pair puts the picture, (x, y) in full resolution pixels of the frame as the pipeline
+draws it, against CL1/GRN's. SPICE has one boresight for the camera whatever the filter, but each WAC filter moves the
+picture a fixed two or three pixels (the filters are not quite parallel plates), so SPICE's offset between two channels
+of a WAC colour set was that far from where the pictures match: RED sat (+2.0, +1.2) px from GRN in 6,301 matches,
+BL1 (+2.1, -1.4), VIO (+2.2, -1.8). Measured on the full cache f9ab1b4 (2026-11-16): for every channel of a WAC colour
+set of full resolution frames that phase correlation matched (14,894 matches), the match less SPICE's offset, one
+offset per filter fitted to them all (evidence/wac_filter_offsets/fit.py). Held-out sets: SPICE's offset is a median
+2.36 px from the picture match without the table and 1.25 px with it (0.37 px on the Jupiter flyby's frames, whose
+pointing JPL corrected; the rest is the raw pointing's own frame to frame error). The same from 2000 to 2017 for RED
+and BL1 to 0.3 px; VIO, CB2 and MT2 to about 1 px. Summed frames are left out of the fit, not of the table: their
+matches lock to whole camera pixels (2 or 4 px), but the filters move their pictures as much. The narrow-angle
+camera's filters show no such offset (under 0.2 px between its visible filters) and have no table.
+"""
+WAC_FILTER_OFFSETS = {
+    ("CL1", "GRN"): (0.00, 0.00), ("CL1", "RED"): (2.03, 1.16), ("CL1", "BL1"): (2.10, -1.35), ("CL1", "VIO"): (2.16, -1.75),
+    ("CL1", "IR1"): (2.13, 1.35), ("CB2", "CL2"): (2.42, -0.85), ("MT2", "CL2"): (2.51, -0.32), ("CB3", "CL2"): (2.79, -0.65),
+    ("MT3", "CL2"): (3.08, -0.11), ("IR2", "IR1"): (0.44, -0.06),
+    # the infrared filters of wheel 1 behind CL2, from fewer matches (60, 44, 23 and 16 full resolution matches; a
+    # model with one offset per wheel position predicts each to 0.15 px): evidence/wac_filter_offsets/fit_full_infrared.py
+    ("IR3", "CL2"): (2.73, -0.73), ("IR2", "CL2"): (-0.42, -1.48), ("IR4", "CL2"): (2.36, -1.18), ("IR5", "CL2"): (2.53, -1.34),
+}
+
+
+def _filter_pair(lbl):
+    names = str(lbl.info.get("FILTER_NAME", "")).strip("()").replace('"', "").split(",")
+    return tuple(n.strip().upper() for n in names)
+
+
+def filter_offset(lbl, ref):
+    """How far frame lbl's filter puts its picture from frame ref's, (dx, dy) in full resolution pixels as
+    image_correction.align_with_masks takes a guess (spice_offsets adds it to SPICE's offset): the difference of the two
+    filters' WAC_FILTER_OFFSETS. (0, 0) for the narrow-angle camera, and when the table lacks either filter."""
+    if lbl.info.get("INSTRUMENT_ID") != "ISSWA" or ref.info.get("INSTRUMENT_ID") != "ISSWA":
+        return 0.0, 0.0
+    a, b = WAC_FILTER_OFFSETS.get(_filter_pair(lbl)), WAC_FILTER_OFFSETS.get(_filter_pair(ref))
+    if a is None or b is None:
+        return 0.0, 0.0
+    return a[0] - b[0], a[1] - b[1]
 
 
 def _spice_locs(lbls):

@@ -1,0 +1,9 @@
+colour sets: 34226  with every channel JPL-corrected: 8103
+grey for failed alignment: 2146  of them with every channel JPL-corrected: 38
+channels the pipeline matched by phase correlation: how far SPICE's offset between the two frames is from the picture match (frame px)
+  N both JPL-corrected   n=  8970  median  0.97  p75  3.03  p90   5.76  within 1 px   51%  within 2 px   65%
+  N both raw             n=  9552  median  5.27  p75  8.03  p90  11.80  within 1 px    4%  within 2 px   12%
+  N mixed                n=  2096  median 15.76  p75 32.70  p90  43.39  within 1 px    0%  within 2 px    2%
+  W both JPL-corrected   n=  5225  median  2.26  p75  2.83  p90   3.73  within 1 px   21%  within 2 px   40%
+  W both raw             n= 10439  median  2.27  p75  3.09  p90   4.58  within 1 px   23%  within 2 px   42%
+  W mixed                n=  4557  median  3.45  p75  4.93  p90   7.01  within 1 px    5%  within 2 px   20%
