@@ -4,12 +4,12 @@ Finds repeat exposures of a frame so they can be stacked into one lower-noise im
 
 A repeat is a frame from the same camera, target, observation and exact filter pair,
 taken within a short window of the original, that SPICE (the geometry cache) puts at the
-same pointing: within REPEAT_PLACE of a frame of it, and at the same range: within REPEAT_GROW of it in
-size. A frame taken seconds later at another pointing (the next panel of a mosaic; Phoebe 2004-06-11
-goes back and forth between two pointings a minute apart) is not a repeat, however close in time, nor
-is one taken from nearer or further, on a close flyby (Phoebe's closest approach, 2004-06-11: frames
-18 s apart from 100 km closer, the body 4% bigger and its craters 30 px apart at the frame's edge).
-Where SPICE can't place a frame, the repeat must line up with it (image_correction.find_shift) to be merged.
+same pointing: within REPEAT_PLACE of a frame of it. A frame taken seconds later at another
+pointing (the next panel of a mosaic; Phoebe 2004-06-11 goes back and forth between two
+pointings a minute apart) is not a repeat, however close in time. Where SPICE can't place a
+frame, the repeat must line up with it (image_correction.find_shift) to be merged. A repeat taken
+from nearer or further (a close flyby: Phoebe's closest approach, 2004-06-11, frames 18 s apart from
+100 km nearer, the body 4% bigger) is brought to the frame's range before it is merged (to_range).
 """
 
 import math
@@ -39,12 +39,13 @@ same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
 # find_shift lines a repeat up by at most 20 px, the same.
 REPEAT_PLACE = 0.02
 FRAME = 1024
-# full resolution pixels: two frames SPICE puts at ranges this far apart in size are not repeats. Lining a repeat up
-# shifts it; it can't make the body bigger or smaller, so a frame taken nearer or further than this is merged as two
-# pictures of different sizes laid over each other (Phoebe N1465674377_2: crater shadows with three edges). The size
-# that counts is how far the body reaches from its centre within the frame (its limb, or the frame's farthest corner on
-# a body that fills it): that far out the range change moves the ground most. Over the mission (the geometry cache,
-# 2026-11-16) 6,790 of 91,117 frames that merged a repeat differed by over a pixel, 3,701 of those over 2 px Titan's.
+# full resolution pixels: a repeat SPICE puts at a range that makes the body bigger or smaller than this (grown) is
+# brought to the frame's range before it is lined up and merged (to_range). Lining up only shifts a frame, so one taken
+# nearer or further was merged as two pictures of different sizes laid over each other (Phoebe N1465674377_2: crater
+# shadows with three edges). The size that counts is how far the body reaches from its centre within the frame (its
+# limb, or the frame's farthest corner on a body that fills it): that far out the range change moves the ground most.
+# Over the mission (the geometry cache, 2026-11-16) 6,790 of 91,117 frames that merged a repeat differed by over a
+# pixel, 3,701 of those Titan's. Under it a repeat is merged as before, to the bit.
 REPEAT_GROW = 1.0
 
 
@@ -57,7 +58,7 @@ Where SPICE puts the body in each of the frames ids (its target, or the body it 
 from the geometry cache (bootleg_autonav, CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
 the distance in km. Frames that are not cached, or that SPICE could not place, are left out.
 reach = also give, fourth, how far the body reaches from its centre within the frame (full resolution pixels, as
-drawn: reach), None for a body of no known size; same_place's range test asks for it
+drawn: _reach), None for a body of no known size; load_hdr's range test (grown) asks for it
 """
 def places(ids, reach=False):
     if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
@@ -103,23 +104,21 @@ def _reach(target, at, scale):
 
 """
 Whether SPICE puts two frames at one pointing: a, b = their places ((x, y, ...) as places gives, or None);
-True within REPEAT_PLACE of a frame, False further apart, None when either has no place. With their ranges and
-reaches ((x, y, z, reach) as places(reach=True) gives) also False when the range change grows or shrinks the body by
-over REPEAT_GROW where it reaches furthest (grown): lining up can't undo that.
+True within REPEAT_PLACE of a frame, False further apart, None when either has no place.
 """
 def same_place(a, b):
     if a is None or b is None or a[0] is None or b[0] is None:
         return None
-    if math.hypot(a[0] - b[0], a[1] - b[1]) > REPEAT_PLACE * FRAME:
-        return False
-    return grown(a, b) <= REPEAT_GROW
+    return math.hypot(a[0] - b[0], a[1] - b[1]) <= REPEAT_PLACE * FRAME
 
 
 def grown(a, b):
     """How far, full resolution pixels, the change of range between places a and b ((x, y, z, reach)) moves the ground
     where the body reaches furthest in the frame (a limb, or the farthest corner of a body filling it): its size seen
     from the nearer over its size from the further, less one, times the nearer's reach. 0 without both ranges and a
-    reach."""
+    reach (and 0 for either None)."""
+    if a is None or b is None:
+        return 0.0
     za, zb = (a[2] if len(a) > 2 else None), (b[2] if len(b) > 2 else None)
     reach = max((r for r in (a[3] if len(a) > 3 else None, b[3] if len(b) > 3 else None) if r is not None), default=None)
     if not za or not zb or reach is None:
@@ -140,6 +139,19 @@ def repeat_of(kept, t, place, window):
         if same_place(at, place) is not False:
             return picture
     return None
+
+
+def to_range(image, place, ref_place, inter=None):
+    """image (a frame's picture, I/F or mask, 1024 px as label.resize_image), taken at place (x, y, z as places gives),
+    as seen from ref_place's range: grown or shrunk by its range over ref_place's about the body's centre (find_target's
+    shift: ba.CCD_CENTER less x, y), where it stays; lining up then takes up the rest. What falls outside the frame is
+    0 (to_range of a frame of ones: the part it covers)."""
+    k = place[2] / ref_place[2]
+    centre = (ba.CCD_CENTER - float(place[0]), ba.CCD_CENTER - float(place[1]))
+    m = cv2.getRotationMatrix2D(centre, 0, k)
+    h, w = image.shape[:2]
+    return cv2.warpAffine(image, m, (w, h), flags=cv2.INTER_CUBIC if inter is None else inter,
+                          borderMode=cv2.BORDER_CONSTANT)
 
 
 def load_index():
@@ -310,10 +322,12 @@ and the few around them (charge bleeds out of a full pixel), so where a long exp
 short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
 correlation finds nothing; and half the repeats of a random 6,000 frames, 2026-11-16: smooth disks
 and ring frames that look the same) is taken as it is only where SPICE puts it at the frame's
-pointing and range (same_place); otherwise it is left out, as a frame of another pointing would put
-its scene over this one (Phoebe's black blotches: the other pointing's shadow where this frame
-saturated), and one taken nearer or further its scene at another size (Phoebe's closest approach:
-crater shadows with three edges).
+pointing (same_place); otherwise it is left out, as a frame of another pointing would put its scene
+over this one (Phoebe's black blotches: the other pointing's shadow where this frame saturated).
+A repeat SPICE puts at another range, the body over REPEAT_GROW bigger or smaller (grown), is first
+brought to the frame's range (to_range): on a close flyby the frames of a bracket seconds apart are
+taken from tens or hundreds of km nearer (Phoebe's closest approach: crater shadows with three edges
+where a 2 s frame was merged with 0.82 s ones 4% bigger).
 returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
 frames went in), or the label, None and 1 when the frame at path can't be calibrated.
 valid = also return, last, the mask of pixels valid in any frame merged (label.valid_mask): what a frame lost in
@@ -356,17 +370,25 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             if p == path:
                 return (lbl, None, 1) + ((None,) if valid else ()) + ((None,) if clipped else ())
             continue
-        shift = None
+        shift, ranged = None, False
         if ref is not None:
-            # a frame SPICE puts at another pointing or range is never merged, one that doesn't line up only where SPICE
-            # puts it at this one, at this range (same_place: a nearer or further frame can't be laid over it as taken)
+            # a frame SPICE puts at another pointing is never merged, one that doesn't line up only where SPICE puts it
+            # at this one
             here = same_place(where.get(frame_id(path)), where.get(frame_id(p)))
+            # one taken nearer or further, brought to this frame's range first (to_range)
+            ranged = here is not False and grown(where.get(frame_id(path)), where.get(frame_id(p))) > REPEAT_GROW
+            if ranged:
+                at, ref_at = where[frame_id(p)], where[frame_id(path)]
+                image, iof = to_range(image, at, ref_at), to_range(iof.astype(np.float32), at, ref_at)
+                gray, codes = to_range(gray, at, ref_at), to_range(codes, at, ref_at, cv2.INTER_NEAREST)
+                inside = to_range(np.ones(iof.shape[:2], np.float32), at, ref_at, cv2.INTER_LINEAR) > 0.99
             shift = ic.find_shift(ref, image, 20) if here is not False else None
             if not here and shift is None:
-                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing"
-                      f" and range")
+                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing")
                 continue
         mask = l.valid_mask() if valid else None
+        if valid and ranged:
+            mask = to_range(mask.astype(np.float32), at, ref_at, cv2.INTER_LINEAR) > 0.99
         if valid:
             own = mask if own is None else own
             # a frame that lost other pixels than the frame at path: then every frame's lost ones are left out, so
@@ -380,6 +402,12 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             if valid:
                 mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
         full = cal.saturated(codes, info, gray)
+        if ranged:
+            # the edge a shrunk frame no longer covers measured nothing: left out as a saturated pixel is (and never
+            # taken for one the first frame saturated)
+            if shift is not None:
+                inside = ic.shift_image(inside.astype(np.float32), *shift) > 0.99
+            full = full | ~inside
         good = ~cv2.dilate(full.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
         merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1), full))
     if note is not None:

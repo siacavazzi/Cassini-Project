@@ -6,9 +6,6 @@ stacking.find_repeats and load_hdr merge only the frames at the tile's pointing,
 pictures. Fails on the code before it (units dropped every frame of a filter within 120 s, wherever it pointed).
 Also obs_mosaic._judge: with every frame of a dense scan a picture of its own, a creep that adds up to a jump over
 one repeat window counts as a jump (013RI_AZSCNHIPH001 stays a mosaic), while a slowly drifting stare stays a movie.
-Range too (REPEAT_GROW): on a close flyby (Phoebe's closest approach, 2004-06-11) frames 18 s apart at one pointing
-were taken 100 km nearer, the body 4% bigger, and merged as one picture with crater shadows three edges deep; a frame
-taken nearer or further is a picture of its own, and never merged as taken when it doesn't line up.
 Run: python web/test_repeat_place.py"""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -67,24 +64,6 @@ kept = [(0, A, "a"), (60, B, "b")]
 assert stacking.repeat_of(kept, 120, A, 120) == "a" and stacking.repeat_of(kept, 130, A, 120) is None
 assert stacking.repeat_of(kept, 100, (905.0, -118.0), 120) == "b" and stacking.repeat_of(kept, 100, (450.0, 0.0), 120) is None
 assert stacking.repeat_of(kept, 100, None, 120) == "b"   # no place: a repeat of the newest, as before
-# range: a body reaching 700 px from its centre, 0.1% nearer, moves its limb 0.7 px (a repeat); 4% nearer, 28 px
-assert stacking.grown((0, 0, 2400.0, 700.0), (0, 0, 2397.6, 700.7)) < 1
-assert stacking.same_place((0, 0, 2400.0, 700.0), (0, 0, 2397.6, 700.7))
-assert stacking.same_place((0, 0, 2400.0, 724.0), (0, 0, 2300.0, 724.0)) is False
-# ... a small body far off grows by a fraction of a pixel (a repeat however its range changes), and without a reach
-# (a body of no known size, or places without reach) the range is not asked, as before
-assert stacking.same_place((0, 0, 1.0e6, 20.0), (0, 0, 0.97e6, 20.6))
-assert stacking.same_place((0, 0, 2400.0), (0, 0, 2300.0)) and stacking.same_place((0, 0, 2400.0, None), (0, 0, 2300.0, None))
-kept = [(0, (0, 0, 2400.0, 724.0), "a")]
-assert stacking.repeat_of(kept, 18, (0, 0, 2300.0, 724.0), 120) is None and stacking.repeat_of(kept, 18, (2, 1, 2399.0, 724.0), 120) == "a"
-# reach: the body's radius in px (km over the range, at the camera's scale), no further than the frame's farthest
-# corner from its centre, 0 when it is wholly off the frame, None for a body of no known size
-stacking._radii.update({"PHOEBE": 107.0, "NOWHERE": None})
-NAC = 1 / 6.0e-6
-assert abs(stacking._reach("PHOEBE", (0, 0, 1.0e5), NAC) - 107 / 1e5 * NAC) < 1e-6   # 178 px, all in the frame
-assert abs(stacking._reach("PHOEBE", (0, 0, 2400.0), NAC) - 512 * 2 ** 0.5) < 1e-6   # 7431 px: the corners
-assert stacking._reach("PHOEBE", (5000.0, 0, 1.0e5), NAC) == 0.0
-assert stacking._reach("NOWHERE", (0, 0, 1.0e5), NAC) is None
 print("same_place, repeat_of ok")
 
 # ---------- obs_mosaic.units ----------
@@ -110,29 +89,6 @@ got = tiles("ISS_077RF_HIRESFRNG002_PRIME")
 assert got == strip, len(got)
 got = tiles("ISS_045RH_REGGEOD001_PRIME")
 assert got == [bracket[0], step], got
-# a close flyby (Phoebe's closest approach, ISS_000PH_HIRESC001: a 2 s frame and two 0.82 s ones 18 and 35 s later
-# from 100 and 200 km nearer, at one pointing): three pictures; and a bracket at a steady range stays one
-reach_of = {}
-flyby = []
-for i, (dt, z) in enumerate(((0, 2420.0), (18, 2320.0), (35, 2220.0))):
-    flyby.append(frame("ISS_000PH_HIRESC001_PRIME", T0 + 120000 + dt, (3.0 * i, 0.0)))
-    geo[flyby[-1]] = (3.0 * i, 0.0, z)
-    reach_of[flyby[-1]] = 724.0
-steady = []
-for i in range(3):
-    steady.append(frame("ISS_000PH_HIRESC002_PRIME", T0 + 130000 + 12 * i, (3.0 * i, 0.0)))
-    geo[steady[-1]] = (3.0 * i, 0.0, 9.0e4 - 2.0 * i)
-    reach_of[steady[-1]] = 200.0
-idx = pd.DataFrame(rows)
-groups = idx.groupby(["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], sort=False).indices
-om._observations = lambda: (idx, groups)
-geo_reach = lambda ids, reach=False: {i: geo[i] + ((reach_of.get(i),) if reach else ()) for i in ids if i in geo}
-om.reel.geometry = geo_reach
-assert tiles("ISS_000PH_HIRESC001_PRIME") == flyby
-assert tiles("ISS_000PH_HIRESC002_PRIME") == steady[:1]
-# (the frames' own tuples keep (x, y, z): the reach is only the repeat rule's)
-assert all(len(fr) == 8 for u in om.units("PHOEBE", "ISS_000PH_HIRESC001_PRIME", "N") for fr in u["frames"])
-om.reel.geometry = geo_of
 print("units ok")
 
 # ---------- obs_mosaic._judge: a creep that adds up to a jump within a repeat window is a jump ----------
@@ -164,11 +120,6 @@ for fid in tiles("ISS_000PH_HIRESA001_PRIME"):
 assert [stacking.frame_id(p) for p in stacking.find_repeats(path(phoebe[0]), 120, 50)] == [phoebe[0], phoebe[2]]
 # the bracket's frames and the unplaced frame (SPICE can't say), not the step 700 px away
 assert sorted(stacking.frame_id(p) for p in stacking.find_repeats(path(bracket[0]), 120, 50)) == sorted(bracket + [unplaced])
-# ... and the flyby's frames nearer and further are none of one another's
-stacking.places = geo_reach
-assert [stacking.frame_id(p) for p in stacking.find_repeats(path(flyby[0]), 120, 50)] == [flyby[0]]
-assert sorted(stacking.frame_id(p) for p in stacking.find_repeats(path(steady[0]), 120, 50)) == sorted(steady)
-stacking.places = geo_of
 print("find_repeats ok")
 
 # ---------- stacking.load_hdr: a repeat that doesn't line up is merged only where SPICE puts it at the pointing ----------

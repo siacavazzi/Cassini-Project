@@ -153,7 +153,7 @@ def test_quarter_snap():
         far = dict(rings, frames=[(None, "S0", "CL1", 0.0, 650, 3 * k, 0.0, Z)])
         assert om.pass_turn(far) == 100.0
         # a frame in no pass: its own turn, snapped when its body is on it
-        geometry, om.reel.geometry = om.reel.geometry, lambda ids, reach=False: {"R0": (0.0, 0.0, Z)}
+        geometry, om.reel.geometry = om.reel.geometry, lambda ids: {"R0": (0.0, 0.0, Z)}
         angles["R0"] = 100.0
         assert om.pass_turn(frame_id="R0", target="RHEA", cam="N") == 10.0
         assert om.pass_turn(frame_id="R0", target="", cam="N") == 100.0   # no body known
