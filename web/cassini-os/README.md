@@ -94,10 +94,12 @@ brings them back dimmed, so they can be put back.
 
 The Moments window (`src/moments.html`) lists the mission's moments by type: milestones, special moments (hand-picked),
 closest views, finds (from the poster threads and the whole-mission geometry sweep), transits (moon transits, mutual
-events, eclipses) and flybys. A bar over the list sorts them by date, type, body, length or photo score (click the
+events, eclipses), plumes (passes where Enceladus' south polar plumes show clearly, `web/replay/plume_moments.py`) and
+flybys. A bar over the list sorts them by date, type, body, length or photo score (click the
 active sort again to turn it around; each sort heads its groups), shows or hides each type, keeps only the entries
 that last at least as long as the At least slider, and searches titles, bodies and descriptions. A moment's type is
-the `type` column of `web/replay/moments.csv` (special, find, transit or closest); milestones and flybys go by their kind.
+the `type` column of `web/replay/moments.csv` (special, find, transit or closest) or `web/replay/plume_moments.csv`
+(plume); milestones and flybys go by their kind.
 
 Potential moments, found by searches but not picked, stay out of sight until asked for: **Potential movies** shows
 every sequence in the movie catalog (10 or more steps of one camera, view and target, and the sky stares; clicking one

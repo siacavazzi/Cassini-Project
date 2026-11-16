@@ -1414,6 +1414,25 @@ def _plan_if_made(u, cache):
         return None
 
 
+REPOINTED = "_sp1"   # the folder suffix, after the others, of a pass holding a frame whose pointing the carried-over
+#                      corrections changed (bootleg_autonav ISS_NEIGHBOURS_CK, USGS's neighbours: no observation mixes
+#                      corrected and raw pointing, Sam 11-16), so its plan, tiles and frames are made again; every other
+#                      pass keeps its folder
+_repointed_frames = None
+
+
+def _repointed(u):
+    """True when pass u holds a frame the carried-over pointing kernels cover (bootleg_autonav.pointing_tag); worked
+    out once and kept in u (folder asks it for every picture)."""
+    global _repointed_frames
+    if "_repointed" not in u:
+        if _repointed_frames is None:
+            import bootleg_autonav as ba
+            _repointed_frames = ba.iss_neighbours_frames() | ba.usgs_neighbours_frames()
+        u["_repointed"] = any(fr[1] in _repointed_frames for fr in u["frames"])
+    return u["_repointed"]
+
+
 def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
@@ -1421,7 +1440,8 @@ def folder(u, cache):
               + (LAID if u.get("laid") else STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
-              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else ""))
+              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else "")
+              + (REPOINTED if _repointed(u) else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
