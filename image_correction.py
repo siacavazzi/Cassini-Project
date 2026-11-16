@@ -580,6 +580,55 @@ def _flat_along(im, mask, v):
     return np.percentile(d, 99) <= FLAT_DN and np.percentile(d, 99.9) <= FLAT_PEAK_DN
 
 
+RIDGE_AGREE = 1.0     # px: how near each third's own match across the ridge must land
+RIDGE_PART = 6        # px searched either side across the ridge by each third
+RIDGE_FINE = 6.0      # px: detail finer than this is matched alone too (_fine)
+
+
+def _fine(im):
+    """The frame's detail finer than RIDGE_FINE px (broad bands taken out), on the 8-bit scale round mid gray"""
+    g = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+    return np.clip(g - cv2.GaussianBlur(g, (0, 0), RIDGE_FINE) + 128, 0, 255).astype(np.uint8)
+
+
+def _across_peak(im1, im2, mask1, mask2, shift, across):
+    """Where across the ridge (px from shift) the edges line up best within RIDGE_PART, None when they say too little"""
+    got = _edge_surface(im1, im2, mask1, mask2, shift, RIDGE_PART)
+    if got is None:
+        return None
+    S, org = got
+    S = cv2.GaussianBlur(S, (0, 0), 1.0)
+    cx, cy = shift[0] - org[0], shift[1] - org[1]
+    ts = np.arange(-RIDGE_PART + 1, RIDGE_PART - 1 + 0.01, 0.25)
+    prof = np.array([_bilinear(S, cx + t * across[0], cy + t * across[1]) for t in ts])
+    if np.isnan(prof).all() or np.nanmax(prof) < RIDGE_LEAST:
+        return None
+    m = int(np.nanargmax(prof))
+    return float("inf") if m == 0 or m == len(ts) - 1 else float(ts[m])
+
+
+def _ridge_holds(im1, im2, mask1, mask2, shift, along, across):
+    # the fine detail alone (thin shadow lines without the broad cloud bands round them, which differ between the
+    # filters and pulled N1481722996_2's match 1 to 2 px off its lines) must line up there too
+    fine = _across_peak(_fine(im1), _fine(im2), mask1, mask2, shift, across)
+    if fine is not None and abs(fine) > RIDGE_AGREE:
+        return False
+    h, w = mask1.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    pos = (xx - w / 2) * along[0] + (yy - h / 2) * along[1]
+    edges_ = np.percentile(pos, (0, 100 / 3, 200 / 3, 100))
+    found = 0
+    for k in range(3):
+        part = (pos >= edges_[k]) & (pos <= edges_[k + 1])
+        t = _across_peak(im1, im2, mask1 & part, mask2 & part, shift, across)
+        if t is None:
+            continue   # (too little of the ridge in this third to say)
+        if abs(t) > RIDGE_AGREE:
+            return False
+        found += 1
+    return found >= 2
+
+
 def ridge_shift(im1, im2, mask1, mask2, g=None, placed_flat=False):
     c = (0.0, 0.0) if g is None or np.hypot(g[0], g[1]) > RIDGE_GUESS else (float(g[0]), float(g[1]))
     got = _edge_surface(im1, im2, mask1, mask2, c, RIDGE_REACH)
@@ -621,6 +670,11 @@ def ridge_shift(im1, im2, mask1, mask2, g=None, placed_flat=False):
         return None, "not aligned"
     t = float(ts[m])
     shift = (c[0] + t * across[0], c[1] + t * across[1])
+    # a rigid move lines the ridge up all along it: each third of the frame along the ridge, matched on its own across
+    # it, must land within RIDGE_AGREE px of the whole's (two shadow lines a degree apart lined up on average, one 4 px
+    # off each way: N1481722996_2)
+    if not _ridge_holds(im1, im2, mask1, mask2, shift, along, across):
+        return None, "not aligned"
     angle = (float(np.degrees(np.arctan2(along[1], along[0]))) + 180) % 180
     return shift, f"ridge at {angle:.0f} deg (edges agree {top:.2f}, next {second:.2f}, {'SPICE' if g is not None and c != (0.0, 0.0) else 'as taken'} along it)"
 
