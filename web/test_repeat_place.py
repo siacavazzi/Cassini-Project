@@ -55,7 +55,7 @@ survey = [frame("ISS_241RI_PROPSURVY001_PIE", T0 + 90000 + 73 * i, (102.4 * i + 
 view = [frame("ISS_277RI_PROPRETRG001_PRIME", T0 + 100000 + 104 * i, (0.0, 102.4 * i)) for i in range(5)]
 
 idx = pd.DataFrame(rows)
-geo_of = lambda ids: {i: geo[i] for i in ids if i in geo}
+geo_of = lambda ids, reach=False: {i: geo[i] for i in ids if i in geo}
 
 # ---------- the rule ----------
 assert stacking.same_place((0, 0, 1), (20, 0, 1)) and stacking.same_place((0, 0, 1), (0, 21, 1)) is False

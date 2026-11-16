@@ -123,7 +123,7 @@ labels = {"a.png": Label("a.png", m), "b.png": Label("b.png", clean[1])}
 stacking.find_repeats = lambda path, window=120, max_frames=5: ["a.png", "b.png"][:max_frames]
 stacking.lh.label = lambda p, as_png=True: labels[p]
 stacking.ic.find_shift = lambda a, b, r: None
-stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing, so merged unmatched
+stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing, so merged unmatched
 stacking.ds.imread = lambda path, flags=None: pngs[path][..., 0]
 cal.calibrate = lambda codes, info, image=None: codes.astype(np.float32) / 1000
 cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
