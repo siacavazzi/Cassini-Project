@@ -107,6 +107,12 @@ with tempfile.TemporaryDirectory() as folder:
     assert cal.calibrate(stretched, dict(info_8, path="nac_data/N1999999999_1.png"), None) is None
     iof8 = cal.calibrate(stretched, info_8, cal.depth_image(stretched, info_8), smooth=False)
     assert iof8 is not None and np.isfinite(iof8).all()
+    # ... but not one whose DN wrapped past 255 (only their low 8 bits were sent)
+    wrapped = eight.copy(); wrapped[20:40, 20:40] = 3; wrapped[20:40, 40:44] = 250
+    with zipfile.ZipFile(os.path.join(folder, "COISS_2112.zip"), "w") as z:
+        z.writestr("COISS_2112/data/N1876460142_1.IMG.xz", lzma.compress(img_bytes(wrapped, half=False)))
+    ds._originals = None
+    assert cal.calibrate(stretched, dict(info_8, path="nac_data/N1876460142_1.png"), None) is None
     ds.ORIGINALS, ds._originals = None, None
-    checks += 7
+    checks += 8
 print(f"{checks} checks ok")

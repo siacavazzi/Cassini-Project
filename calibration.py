@@ -359,7 +359,20 @@ def original_values(codes, info):
     top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
     if original.min() < 0 or original.max() > top:
         return None   # (garbled at the source, N1517057759_9: -30277..25243; the stored codes are what there is)
+    if top == 255 and _wrapped(original):
+        return None   # an 8LSB frame whose DN went past 255 kept only their low 8 bits: not the light, left out as before
     return original.astype(np.float64)
+
+
+WRAP_JUMP = (200, 5e-4)   # an 8LSB frame wrapped past 255 DN: neighbouring pixels WRAP_JUMP[0] or more apart on over
+                          # WRAP_JUMP[1] of the frame (a bright patch's edge drops from 255 to 0; the picture pipeline
+                          # audit, 11-16: 301 of the 1,652 8LSB frames)
+
+
+def _wrapped(dn):
+    dn = np.asarray(dn, np.int32)
+    jumps = (np.abs(np.diff(dn, axis=1)) >= WRAP_JUMP[0]).sum() + (np.abs(np.diff(dn, axis=0)) >= WRAP_JUMP[0]).sum()
+    return jumps > WRAP_JUMP[1] * dn.size
 
 
 """
