@@ -5910,8 +5910,8 @@ def _part(path, w, h):
 
 
 RING_SOFT = 0.06   # ring_white: the disk's edge eased over this share of its radius each way
-RING_DISK = 0.9    # ... round a circle this share of the disk's (equatorial) radius: Saturn's polar radius, so the rings
-                   # beyond its poles, which the equatorial circle took in, keep today's white (235SA SATSTARE001)
+RING_DISK = 1.0    # ... round a circle this share of the disk's (equatorial) radius (0.9, the polar radius, left a bright
+                   # rim inside the equatorial limb: 235SA SATSTARE001)
 
 
 def ring_white(rgba, scale):
