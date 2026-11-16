@@ -12,8 +12,13 @@
 4. Smaller mechanical merges (both functions kept, both inputs kept, suffix order `_p1` then `_sp1`, CLAUDE.md's limiter section replacing "Use every free core" as #540 intends) are listed per row in the last column.
 
 ### Tests (cloud run of all 194 test files, then every new failure traced to its PR)
-- **Fail on main too (environment or older failures, not this branch):** test_farm (no rsync here), test_cisscal_noise, test_mosaic_layout, test_pass_once, test_prebuild_planes, test_prebuild_procs, test_prebuild_slices, test_processing_steps, test_film_steady, test_tossup_both, test_steady_local (the cloud disk filled).
-- **Pass on main and fail on the branch, but each also fails at its own PR's head** (the PR's own test, not something the merge did): test_contracts (#488), test_segment_progress (#524), test_sets_passes (#483), test_set_matching (#508), test_color_register (#506, which splits `_register` so the test's source check no longer finds its line).
+- **Fail on main too (environment or older failures, not this branch; cloud run, pandas 3.0.5, node 22):** test_farm (no rsync here), test_cisscal_noise, test_mosaic_layout, test_pass_once, test_prebuild_planes, test_prebuild_procs, test_prebuild_slices, test_processing_steps, test_film_steady, test_tossup_both, test_steady_local (the cloud disk filled).
+- **Pass on main and fail on the branch, and also fail at their own PR's head**, so the PR's own test is broken, not something the merge did:
+  - #488 test_contracts: the new lightning routes (`/frames/lightning.json`, `/frames/lightning/<id>.webp`) are not in the contract list or policy.json.
+  - #508 test_set_matching: the test's `_match` stub does not take #508's new `filled` argument.
+  - #506 test_color_register: #506 splits `_register` into `_register` and `_register_match`, so the test's source check no longer finds its line.
+  - #524 test_segment_progress: fixed in #524's new head 5e755992 (in review; it replaces the current head on this branch once cleared).
+- **Environment only, not a defect on the Macs:** #483 test_sets_passes fails in the cloud because the cloud has pandas 3.0.5, where `astype(str)` keeps a missing filter name as NaN. It passes on the MacBook at 95986eb0. It is a latent bug if the Macs move to pandas 3.
 - **Failures caused by the merge, now fixed with test-only commits:** test_repeat_range (#497 x #491: the stub lacked `depth_image`) and test_calibration_let_go (#533 x #481/#524: the stub lacked `steady_chain` and `rolling_restart`).
 - The other 178 test files pass.
 
