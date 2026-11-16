@@ -134,8 +134,23 @@ stacking.find_repeats = lambda p, window=120, max_frames=5: ["far.png", "near.pn
 stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool) if info["path"] == "near.png" \
     else np.ones(codes.shape, bool)
 _, _, n, valid_t, clip_t = stacking.load_hdr("far.png", valid=True, clipped=True)
-assert n == 3 and valid_t.all() and clip_t[512, 2] and clip_t[512, 1021] and not clip_t[512, 512], clip_t.sum()
+# (all but the frame's outermost line, which the other repeat's sub-pixel line-up shifts off the frame)
+assert n == 3 and valid_t[512, 2] and valid_t[512, 1021] and (~valid_t).sum() <= 2 * 1024, (~valid_t).sum()
+assert clip_t[512, 2] and clip_t[512, 1021] and not clip_t[512, 512], clip_t.sum()
 stacking.find_repeats = lambda p, window=120, max_frames=5: ["far.png", "near.png"]
 stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
+# ... a repeat lined up 10 px over: the band it shifts in from off the frame is not merged (its zeros would darken the
+# frame's edge), so the merge there is the frame's own
+places["over"] = places["far"]
+pngs["over.png"] = np.full((1024, 1024), 200, np.uint8)
+pngs["base.png"] = np.full((1024, 1024), 200, np.uint8)
+places["base"] = places["far"]
+stacking.find_repeats = lambda p, window=120, max_frames=5: ["base.png", "over.png"]
+real_shift = stacking.ic.find_shift
+stacking.ic.find_shift = lambda a, b, r, *k: (10.0, 0.0)
+_, merged_o, n = stacking.load_hdr("base.png")
+assert n == 2 and abs(merged_o[512, 1020] - 0.2) < 1e-4 and abs(merged_o[512, 500] - 0.2) < 1e-4, merged_o[512, 1010:]
+stacking.ic.find_shift = real_shift
+stacking.find_repeats = lambda p, window=120, max_frames=5: ["far.png", "near.png"]
 print("load_hdr ok")
 print("ok")

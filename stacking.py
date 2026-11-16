@@ -433,6 +433,10 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
                 # SPICE puts the repeat (image_correction.guided_shift: phase, edges, then the centroid, within 12 px)
                 at_p, at_ref = where[frame_id(p)], where[frame_id(path)]
                 shift, how = ic.guided_shift(ref, image, (at_ref[0] - at_p[0], at_ref[1] - at_p[1]))
+                if shift is not None and how.startswith("edges"):
+                    # (not on edges alone: a ring frame's edges run along its arcs, and match anywhere along them, 28 px
+                    # off on N1581475448_1)
+                    shift = None
             if shift is None:
                 # never merged as it is: SPICE's raw pointing is off by about 5 px frame to frame (p90 9.5), and a
                 # quarter of the repeats merged so were over 3 px off, a blur at every limb, terminator and ring edge
@@ -458,17 +462,18 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             if valid:
                 mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
         full = cal.saturated(codes, info, gray)
-        if ranged:
-            # the edge a shrunk frame no longer covers measured nothing: left out as a saturated pixel is (and never
-            # taken for one the first frame saturated)
+        if ranged or shift is not None:
+            # the edge a shrunk or shifted frame no longer covers measured nothing: left out as a saturated pixel is (and
+            # never taken for one the first frame saturated)
+            cover = inside if ranged else np.ones(full.shape, bool)
             if shift is not None:
-                inside = ic.shift_image(inside.astype(np.float32), *shift) > 0.99
-            full = full | ~inside
-            ranged_any = True
+                cover = ic.shift_image(cover.astype(np.float32), *shift) > 0.99
+            full = full | ~cover
+            ranged_any = ranged_any or ranged
         good = ~cv2.dilate(full.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
         if ref is not image:
-            # (where a repeat measured, saturated or not: all of a plain one, what a resized one still reaches)
-            reach = inside if ranged else np.ones(full.shape, bool)
+            # (where a repeat measured, saturated or not: all of a plain one, what a resized or shifted one still reaches)
+            reach = cover if ranged or shift is not None else np.ones(full.shape, bool)
             seen = reach if seen is None else seen | reach
         merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1), full))
     if note is not None:
