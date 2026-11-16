@@ -6,6 +6,7 @@ https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/inrypl_c.html
 """
 import spiceypy as sp
 import numpy as np
+import json
 import math
 import os
 import threading
@@ -419,7 +420,7 @@ def _store_seen(rows):
     if rows:
         db = _seen_db()
         db.execute("BEGIN")
-        db.executemany("INSERT OR REPLACE INTO seen VALUES (?, ?, ?)", rows)
+        db.executemany("INSERT OR REPLACE INTO seen VALUES (?, ?, ?, ?)", rows)
         db.execute("COMMIT")
 
 
@@ -572,18 +573,19 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
                 error = f"{type(e).__name__}: {e}"
                 body = None
                 if UNKNOWN_NAME in error:
-                    # an archive target SPICE cannot name: the body the frame shows, placed on it (seen_body)
+                    # an archive target SPICE cannot name: the body the frame shows and its place on it (seen_body),
+                    # kept aside; the frame stays unplaced unless its whole group is relabelled (_place_seen)
+                    place = None
                     try:
                         with contextlib.redirect_stdout(io.StringIO()):
                             body = seen_body(label)
                             if body:
                                 label.info["TARGET_NAME"] = body
-                                out.append(_row(frame, find_target(label, False, "graphs"), label.geometry))
+                                place = json.dumps(_row(frame, find_target(label, False, "graphs"), label.geometry))
                     except Exception as e2:   # noqa: BLE001
                         body, error = None, f"{error}; seen: {type(e2).__name__}: {e2}"
-                    seen_rows.append((frame, SEEN_VERSION, body or ""))
-                if not body:
-                    out.append(_row(frame, error=error))
+                    seen_rows.append((frame, SEEN_VERSION, body or "", place))
+                out.append(_row(frame, error=error))
             if len(out) >= 5000:
                 _store_rows(out)
                 out = []
@@ -592,6 +594,37 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
         seen_rows = []
         print(f"{year}: {len(rows)} frames in {time.time() - start:.0f} s (kernels {loaded:.0f} s)", flush=True)
     unload_kernels()
+    _place_seen()
+
+
+def _seen_groups(seen):
+    """The frames of seen ({frame: body}) that are relabelled: those of each (archive target, observation, camera)
+    group of the index every frame of which is in seen with one body, its observation no star-tracking one."""
+    group, members, out = _index_groups(), {}, {}
+    for f, g in group.items():
+        members.setdefault(g, []).append(f)
+    for g in {group.get(f) for f in seen}:
+        frames = members.get(g, ())
+        if not g or _tracks_star(g[1]):
+            continue
+        if frames and all(f in seen for f in frames) and len({seen[f] for f in frames}) == 1:
+            out.update((f, seen[f]) for f in frames)
+    return out
+
+
+def _place_seen():
+    """Writes the target row of every frame _seen_groups relabels (the place on its body that the seen table keeps),
+    and an unplaced row for every other frame the seen rule looked at: a frame whose group is not relabelled (its
+    frames see different bodies or none, a star-tracking observation) is never centred on a body nor grouped with it,
+    as before the rule."""
+    db = _seen_db()
+    rows = list(db.execute("SELECT frame, body, place FROM seen WHERE version = ?", (SEEN_VERSION,)))
+    relabel = _seen_groups({f: b for f, b, place in rows if b and place})
+    placed = [tuple(json.loads(place)) for f, b, place in rows if f in relabel]
+    unplaced = [_row(f, error=f"{UNKNOWN_NAME}; seen: {b or 'nothing'}, its group not relabelled")
+                for f, b, place in rows if f not in relabel]
+    _store_rows(placed + unplaced)
+    print(f"seen rule: {len(placed)} frames placed on the body they show, {len(unplaced)} left unplaced", flush=True)
 
 
 """
@@ -720,7 +753,9 @@ SEEN_GRID = 9          # rays a side through the frame, looked at for the rings
 
 def _seen_db():
     db = _geometry_db()
-    db.execute("CREATE TABLE IF NOT EXISTS seen (frame TEXT PRIMARY KEY, version INTEGER, body TEXT)")
+    # place: the target row (JSON) find_target gives the frame on that body, written to the target table only for the
+    # groups that are relabelled (_place_seen)
+    db.execute("CREATE TABLE IF NOT EXISTS seen (frame TEXT PRIMARY KEY, version INTEGER, body TEXT, place TEXT)")
     return db
 
 
@@ -914,18 +949,8 @@ def shown_targets():
                 "WHERE s.version = ? AND s.body != '' AND t.error IS NULL AND t.target = s.body",
                 (GEOMETRY_VERSION, SEEN_VERSION)):
             seen[frame] = (body, -x, -y, z)
-        out = {}
-        if seen:
-            group = _index_groups()
-            members = {}
-            for f, g in group.items():
-                members.setdefault(g, []).append(f)
-            for g in {group.get(f) for f in seen}:
-                frames = members.get(g, ())
-                if g and _tracks_star(g[1]):
-                    continue
-                if frames and all(f in seen for f in frames) and len({seen[f][0] for f in frames}) == 1:
-                    out.update((f, seen[f]) for f in frames)
+        # (only _place_seen's relabelled groups are placed; checked again, as the fill may have run on another rule)
+        out = {f: seen[f] for f in _seen_groups({f: v[0] for f, v in seen.items()})} if seen else {}
         if found:
             group = _index_groups()
             placed = {f for f, in db.execute("SELECT frame FROM target WHERE version = ? AND error IS NULL",
