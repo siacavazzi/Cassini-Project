@@ -102,6 +102,18 @@ def test_detail_on_disk():
     pp = np.dstack([np.clip(pl, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
     op = om.detail_on_disk(pp, cx + 3, cy, r, target="DIONE")
     assert np.abs(op[..., 0][~disk].astype(int) - pp[..., 0][~disk]).max() == 0
+    # a sliver of backdrop under the open-sky cut-off (a ring arc inside 1.15 x a bigger moon's radius, apart from it):
+    # left out of the body, untouched, while the body still takes the filter
+    R = 100.0
+    r2b = (xx[:h, :w] - cx) ** 2 + (yy[:h, :w] - cy) ** 2
+    diskb = r2b <= R * R
+    arc = (np.abs(yy[:h, :w] - (cy - 1.1 * R)) < 1.5) & (np.abs(xx[:h, :w] - cx) < 0.45 * R) & ~diskb
+    pa = np.where(diskb, 120 + 60 * (xx[:h, :w] - cx) / R + 8 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3),
+                  np.where(arc, 160.0, 4.0))
+    pq = np.dstack([np.clip(pa, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    oq = om.detail_on_disk(pq, cx, cy, R, target="DIONE")
+    assert np.abs(oq[..., 0][arc].astype(int) - pq[..., 0][arc]).max() == 0
+    assert (oq[..., 0][diskb] != pq[..., 0][diskb]).mean() > 0.5
     # an elongated moon over black sky: its far ends (past 1.15 x its mean radius) are raised too
     ell = ((xx[:h, :w] - cx) / (1.33 * r)) ** 2 + ((yy[:h, :w] - cy) / (0.75 * r)) ** 2 <= 1
     le = np.where(ell, 120 + 10 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3), 4.0)

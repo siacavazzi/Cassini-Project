@@ -5903,11 +5903,11 @@ def detail(rgba, sigma):
 
 
 DISK_DETAIL_MARGIN = 1.15   # stills (detail_on_disk): the body's lit pixels within this times its SPICE radius ...
-DISK_DETAIL_REACH = (1.15, 1.4)   # ... (or, for an irregular body, DISK_DETAIL_IRREGULAR, this: its far ends, Hyperion's
+DISK_DETAIL_REACH = (1.15, 1.5)   # ... (or, for an irregular body, DISK_DETAIL_IRREGULAR, this: its far ends, Hyperion's
                                   # long axis is 1.33 x its mean radius) take the change and give the mean ...
 DISK_DETAIL_BACKDROP = 0.05   # ... over open sky only (under this share of the ring DISK_DETAIL_RING lit); a body
                               # with a lit backdrop (Saturn's disk or limb, rings) is left as it is
-DISK_DETAIL_RING = ((1.15, 1.4), (1.45, 1.75))   # x the radius: the ring a backdrop is looked for in (round, irregular)
+DISK_DETAIL_RING = ((1.15, 1.4), (1.55, 1.85))   # x the radius: the ring a backdrop is looked for in (round, irregular)
 DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
 DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
@@ -5953,6 +5953,18 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
         # an irregular moon's far ends lie past its mean radius
         circle = rr <= DISK_DETAIL_REACH[1] * radius
     lit = (bright & circle).astype(np.uint8)
+    # a lit region that runs out to the circle's edge is backdrop, not body (a sliver of ring arc or of Saturn's limb
+    # under DISK_DETAIL_BACKDROP); when the body's own largest lit region is one of them, the body joins its backdrop
+    # and is left as it is (review of #495)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(lit, connectivity=8)
+    if n > 1:
+        edge = circle & ~cv2.erode(circle.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+        touching = np.unique(labels[edge & (lit > 0)])
+        touching = touching[touching > 0]
+        if touching.size:
+            if int(np.argmax(stats[1:, cv2.CC_STAT_AREA])) + 1 in set(touching.tolist()):
+                return rgba
+            lit[np.isin(labels, touching)] = 0
     lit = cv2.erode(lit, np.ones((3, 3), np.uint8)).astype(np.float32)
     if lit.sum() < 50:
         return rgba
