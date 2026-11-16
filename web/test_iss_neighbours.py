@@ -58,4 +58,5 @@ import obs_mosaic as om  # noqa: E402
 om._repointed_frames = None
 u = lambda ids: {"key": ("SATURN", "X", "N", 0), "frames": [("p", i, "CL1/CL2", 0.0, 650.0, 0, 0, 1e6) for i in ids]}
 assert om._repointed(u([other, carried])) and not om._repointed(u([other]))
+assert om.folder(u([other, carried]), "/c").endswith("_sp1")
 print("repointed passes: ok")

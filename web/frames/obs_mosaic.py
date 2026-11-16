@@ -1414,7 +1414,7 @@ def _plan_if_made(u, cache):
         return None
 
 
-REPOINTED = "_p1"    # the folder suffix, after the others, of a pass holding a frame whose pointing the carried-over
+REPOINTED = "_sp1"   # the folder suffix, after the others, of a pass holding a frame whose pointing the carried-over
 #                      corrections changed (bootleg_autonav ISS_NEIGHBOURS_CK, USGS's neighbours: no observation mixes
 #                      corrected and raw pointing, Sam 11-16), so its plan, tiles and frames are made again; every other
 #                      pass keeps its folder
@@ -1422,12 +1422,15 @@ _repointed_frames = None
 
 
 def _repointed(u):
-    """True when pass u holds a frame the carried-over pointing kernels cover (bootleg_autonav.pointing_tag)."""
+    """True when pass u holds a frame the carried-over pointing kernels cover (bootleg_autonav.pointing_tag); worked
+    out once and kept in u (folder asks it for every picture)."""
     global _repointed_frames
-    if _repointed_frames is None:
-        import bootleg_autonav as ba
-        _repointed_frames = ba.iss_neighbours_frames() | ba.usgs_neighbours_frames()
-    return any(fr[1] in _repointed_frames for fr in u["frames"])
+    if "_repointed" not in u:
+        if _repointed_frames is None:
+            import bootleg_autonav as ba
+            _repointed_frames = ba.iss_neighbours_frames() | ba.usgs_neighbours_frames()
+        u["_repointed"] = any(fr[1] in _repointed_frames for fr in u["frames"])
+    return u["_repointed"]
 
 
 def folder(u, cache):
