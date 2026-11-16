@@ -6739,9 +6739,9 @@ def so_far(u, n, cache, made=None, out=OUT):
 
 # the canvas so_far composed last on this thread (its key, the picture on the canvas after detail(), its recovery map,
 # the filters drawn, whether on the luminance base), for the same mosaic asked at another size: the pre-build draws a
-# mosaic pass's 1024 px picture, its 512 and its full view (2048) one after another, and composing is all of the cost
-# (the full view composed again from the pass's filter mosaics took 1.4 to 3.3 core-seconds a picture, 2026-11-16).
-# One canvas a thread (up to CANVAS x CANVAS: 16 MB and its map's 4)
+# mosaic pass's 1024 px picture, its 512 and its full view (up to 2048) one after another, and composing is all of the
+# cost (the full view composed again from the pass's filter mosaics took 1.4 to 3.3 core-seconds a picture,
+# 2026-11-16). One canvas a thread (up to CANVAS x CANVAS: 16 MB and its map's 4)
 _last_canvas = threading.local()
 
 

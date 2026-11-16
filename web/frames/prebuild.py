@@ -447,12 +447,12 @@ def make_fullview(u, cache):
     (Sam, 2026-11-16: 2048 at every frame of every mosaic and mosaic movie, not only a pass's last frame). After the
     mosaics phase, whose plan, tiles and pictures it reuses (found here, not made again):
     - a mosaic movie (kind mosaic_movie): its rolling picture at size=full (obs_mosaic.rolling_webp, the route's
-      mode=rolling&size=full, out frame_server.rolling_full_out), in frame order so each grows from the one before,
+      mode=rolling&size=full, out frame_server.full_out), in frame order so each grows from the one before,
       as the mosaics phase makes the 1024 and 512 ones. Never the pass's mosaic so far, which a window never shows for
       a mosaic movie: drawn at full size, it first redrew every tile's rings as at the pass's epoch (ring_redraw,
       ~1,600 tiles and ~6 GB a process on a Saturn polarimetry pass), which made this phase take hours a pass;
     - a mosaic: its mosaic so far at size=full at each frame (obs_mosaic._mosaic_at, the mosaic route's ?size=full,
-      out CANVAS up to FULL_MAX), on the layout the mosaics phase drew at 1024; frames that add nothing to it share
+      out frame_server.full_out), on the layout the mosaics phase drew at 1024; frames that add nothing to it share
       its picture, made once.
     The number of frames with a picture; a frame with nothing drawn yet (the route's 404) has none."""
     return sum(full_view(u, j, cache) for j in range(len(u["frames"])))
@@ -466,10 +466,11 @@ def full_view(u, j, cache):
     if u.get("kind") == "mosaic_movie":
         f = u["frames"][j]
         res = obs_mosaic.rolling_webp(f[1], frame_server.FULL, cache, 1, wait=True,
-                                      out=frame_server.rolling_full_out(f[1], cache))
+                                      out=frame_server.full_out(f[1], cache))
         return bool(res and res[0] is not None)
+    # (one size for the whole pass: its native size's bucket)
     return bool(obs_mosaic._mosaic_at(u, j, frame_server.FULL, cache, fmt="webp",
-                                      out=min(obs_mosaic.CANVAS, frame_server.FULL_MAX)))
+                                      out=frame_server.full_out(u["frames"][-1][1], cache)))
 
 
 def make_planes(u, cache, centre=True):
