@@ -547,7 +547,7 @@ def calibrate(png, info, image=None, smooth=True):
         raw = np.asarray(png if np.asarray(png).ndim == 2 else pixels)
         dc.repair_hot(per_second, info, spots, raw == 0 if raw.ndim == 2 else None)
     if smooth:
-        per_second = deblock(per_second, pixels, info, sky)
+        per_second = deblock(per_second, pixels, info)
         if sky is not None and step("skysmooth"):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
@@ -583,21 +583,15 @@ LOSSY_RATIO = (6.0, 10.0)  # a lossy frame compressed more than LOSSY_RATIO[0] t
                      # drawn as ragged dark patches
 LOSSY_SMOOTH = 4.0   # ... towards the frame blurred over this many pixels (sigma, at full resolution),
 LOSSY_STEP = 2.5     # ... only where the stored codes are within this many of that blur, so the blocks' one-code steps go
-                     # and edges, stars and real detail (more codes apart) stay as they were;
-LOSSY_DIM = (4.0, 16)  # ... rising to LOSSY_DIM[0] codes where the blur is within LOSSY_DIM[1] codes of the frame's darkest
-                     # (its 1st percentile), fading to LOSSY_STEP by twice that: near the black a picture is stretched most
-                     # and 103RI's dim ring blocks, 2-3 codes apart, kept their edges against it (11-16). Not on the measured
-                     # dark sky: smoothed further, its noise measured lower moved the black and movie evening (Jupiter's
-                     # approach movie clipped 0% -> 29% on a frame)
+                     # and edges, stars and real detail (more codes apart) stay as they were
 
 
 """
 A heavily compressed lossy frame's blocks smoothed (LOSSY_RATIO): its brightness drawn towards its blur over
-LOSSY_SMOOTH pixels where the stored codes are within LOSSY_STEP of theirs (LOSSY_DIM near the black), in proportion.
-iof = the frame calibrated, pixels = its codes (or a stacked picture on their scale), the same size; sky = the measured
-dark sky (or None), which keeps LOSSY_STEP
+LOSSY_SMOOTH pixels where the stored codes are within LOSSY_STEP of theirs, in proportion. iof = the frame calibrated,
+pixels = its codes (or a stacked picture on their scale), the same size
 """
-def deblock(iof, pixels, info, sky=None):
+def deblock(iof, pixels, info):
     if _value(info, "INST_CMPRS_TYPE", "").upper() != "LOSSY":
         return iof
     try:
@@ -610,13 +604,7 @@ def deblock(iof, pixels, info, sky=None):
         return iof
     sigma = LOSSY_SMOOTH * iof.shape[1] / 1024
     codes = pixels.astype(np.float32)
-    blur = cv2.GaussianBlur(codes, (0, 0), sigma)
-    dim = np.clip(2.0 - (blur - float(np.percentile(codes, 1))) / LOSSY_DIM[1], 0, 1)
-    if sky is not None and np.shape(sky) == iof.shape:
-        # (not on the measured dark sky: smoothed further there, its noise measured lower and moved the black and the
-        # movie evening of Jupiter's approach and Phoebe's flyby; the sky has smooth_sky)
-        dim = dim * (1 - cv2.GaussianBlur(np.asarray(sky, np.float32), (0, 0), sigma))
-    near = np.abs(codes - blur) / (LOSSY_STEP + dim * (LOSSY_DIM[0] - LOSSY_STEP))
+    near = np.abs(codes - cv2.GaussianBlur(codes, (0, 0), sigma)) / LOSSY_STEP
     weight = share * np.clip(1 - near, 0, 1)
     return iof + weight * (cv2.GaussianBlur(iof, (0, 0), sigma) - iof)
 
