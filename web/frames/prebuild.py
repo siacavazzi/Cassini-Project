@@ -493,6 +493,20 @@ def make_chains(u, cache):
 
 # ---------- sharing the Mini ----------
 
+def default_max_load():
+    """--max-load's default: 0.8 x the machine's real cores, and no load wait at all for a job running under the slot
+    limiter (~/agents/bin/heavy, HEAVY_SLOTS set), which already decides how many processes run. The limiter makes
+    os.cpu_count() answer the slots it holds (its sitecustomize), so a default taken from it was 0.8 x 3 = 2.4 on a
+    3-slot job, under any busy Mac's load: on 11-16 the before/after builds on both Macs waited at 0% CPU for 30 min."""
+    if os.environ.get("HEAVY_SLOTS", "0") not in ("", "0"):
+        return float("inf")
+    try:
+        cores = os.sysconf("SC_NPROCESSORS_ONLN")
+    except (ValueError, OSError, AttributeError):
+        cores = None
+    return float(cores or os.cpu_count() or 8) * 0.8
+
+
 def busy(args):
     """Why the job should wait now, or None."""
     if args.pause and os.path.exists(os.path.expanduser(args.pause)):
@@ -1168,7 +1182,8 @@ def main():
     ap.add_argument("--threads", type=int, default=3)
     ap.add_argument("--first", type=int, default=0, help="skip this many items (they are made)")
     ap.add_argument("--sample", type=int, help="only time this many items, spread over the mission")
-    ap.add_argument("--max-load", type=float, default=float(os.cpu_count() or 8) * 0.8)
+    ap.add_argument("--max-load", type=float, default=default_max_load(),
+                    help="wait while the 1-minute load is over this (default: 0.8 x the Mac's cores; none under the slot limiter)")
     ap.add_argument("--live", default="http://127.0.0.1:8765", help="the live server, waited for while slow ('' for none)")
     ap.add_argument("--watch", default="", help="more servers to wait for while slow, comma separated (previews)")
     ap.add_argument("--disk", help="BSD name of the LaCie (diskutil list), waited for while busier than --max-tps")
