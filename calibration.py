@@ -582,8 +582,10 @@ LOSSY_RATIO = (6.0, 10.0)  # a lossy frame compressed more than LOSSY_RATIO[0] t
                      # TDIFN45HP001 (W1613182176_1) in blocks a few codes apart, the darkest under the black, so they were
                      # drawn as ragged dark patches
 LOSSY_SMOOTH = 4.0   # ... towards the frame blurred over this many pixels (sigma, at full resolution),
-LOSSY_STEP = 2.5     # ... only where the stored codes are within this many of that blur, so the blocks' one-code steps go
-                     # and edges, stars and real detail (more codes apart) stay as they were
+LOSSY_STEP = 4.0     # ... only where the stored codes are within this many of that blur, so the blocks' steps go and
+                     # edges, stars and real detail (more codes apart) stay as they were. 4 since 11-16 (2.5 before): 103RI's
+                     # dim ring blocks are 2-3 codes apart and kept their edges against the black; on 38 random lossy frames
+                     # (6-20 to 1) the lit parts keep 99% of their fine structure (96% on the worst tenth)
 
 
 """
@@ -610,7 +612,7 @@ def deblock(iof, pixels, info):
 
 
 SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
-SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
+SKY_STEP = 2.5             # ... where the stored codes are within this many of that blur, as deblock did until 11-16
 SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
 SKY_RAMP = 60              # ... and over SKY_GLOW where its level rises half a code to a code or more over this many pixels
 SKY_GLOW = 16              # ... (sigma, at full resolution): a glow's own slope
