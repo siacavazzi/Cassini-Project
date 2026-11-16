@@ -154,8 +154,8 @@ stacking.ic.find_shift = lambda a, b, r: None   # nothing lines up (faint frames
 stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: (None, "not aligned")   # ... not even near SPICE's place
 asked[path(bracket[0])] = [path(bracket[0]), path(bracket[1]), path(step), path(unplaced)]
 _, _, n = stacking.load_hdr(path(bracket[0]))
-assert n == 1, n   # none: SPICE's pointing is a few px off, so a repeat nothing lines up is not merged as it is
-# ... unless the fallback near SPICE's place lines it up (image_correction.guided_shift)
+assert n == 2, n   # the bracket's other exposure, as taken (SPICE puts it here); not the step, nor the unplaced frame
+# ... and lined up where the fallback near SPICE's place matches it (image_correction.guided_shift)
 stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: ((float(guess[0]), float(guess[1])), "phase near SPICE")
 _, _, n = stacking.load_hdr(path(bracket[0]))
 assert n == 2, n   # the bracket's other exposure; not the step, nor the frame SPICE couldn't place

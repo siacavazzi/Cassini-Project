@@ -365,10 +365,11 @@ and the few around them (charge bleeds out of a full pixel), so where a long exp
 short one is used. A repeat find_shift can't match (a faint frame of mostly empty sky, where phase
 correlation round the target finds nothing; and half the repeats of a random 6,000 frames,
 2026-11-16: smooth disks and ring frames that look the same) is matched again near where SPICE puts
-it (image_correction.guided_shift) when SPICE puts it at the frame's pointing (same_place); one
-nothing matches is left out. Taken as it is, one in four of those was over 3 px off (whole-frame
-correlation, p90 12 px): a blur at every edge. A frame of another pointing is never merged (Phoebe's
-black blotches: the other pointing's shadow where this frame saturated).
+it (image_correction.guided_shift, its phase and centroid matches) when SPICE puts it at the frame's
+pointing (same_place): taken as it is, one in four of those was over 3 px off. One nothing matches is
+still taken as it is there (a bracket's short frame is what fills the long one's saturated parts). A
+frame of another pointing is never merged (Phoebe's black blotches: the other pointing's shadow where
+this frame saturated).
 A repeat SPICE puts at another range, the body over REPEAT_GROW bigger or smaller (grown), is first
 brought to the frame's range (to_range): on a close flyby the frames of a bracket seconds apart are
 taken from tens or hundreds of km nearer (Phoebe's closest approach: crater shadows with three edges
@@ -437,11 +438,12 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
                     # (not on edges alone: a ring frame's edges run along its arcs, and match anywhere along them, 28 px
                     # off on N1581475448_1)
                     shift = None
-            if shift is None:
-                # never merged as it is: SPICE's raw pointing is off by about 5 px frame to frame (p90 9.5), and a
-                # quarter of the repeats merged so were over 3 px off, a blur at every limb, terminator and ring edge
-                print(f"Skipping repeat {p}: it doesn't line up with {path}")
+            if shift is None and not here:
+                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing")
                 continue
+            # (one nothing lines up is still merged as taken where SPICE puts it here: left out, the high-phase ring
+            # mosaics' exposure brackets lost the short frames that measure what the long ones saturate, and their
+            # colour channels came apart in magenta and green blocks, Earth Smiled and the Grand Finale rings)
         mask = l.valid_mask() if valid else None
         if valid and ranged:
             # (lost pixels resized with it, and a pixel more round them: the cubic resize of its I/F spreads a lost line
