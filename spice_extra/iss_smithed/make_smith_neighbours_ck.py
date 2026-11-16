@@ -68,9 +68,11 @@ def _faded(E, dt):
 
 
 NEAREST = 5   # a carried frame takes the median correction of this many C-smithed frames nearest it in time
-AGREE_PX = 2.5   # and only where they agree: their median distance from that median at most this many of the frame's
-#                  own pixels; where JPL's own corrections scatter more (ring mosaics: tens of px), no carried value is
-#                  better than raw, and the frame keeps its raw pointing (the mosaic's joint solve places its tiles)
+AGREE_PX = {"N": 5.0, "W": 2.5}   # and only where they agree: their median distance from that median at most this
+#                  many of the frame's own pixels (NAC 30 urad, WAC 150 urad); where JPL's own corrections scatter more
+#                  (the WAC ring mosaics: tens of px), no carried value is better than raw, and the frame keeps its raw
+#                  pointing (the mosaic's joint solve places its tiles). The NAC's 5 keeps the 2005-04-13 ring movie
+#                  carried; the WAC's 2.5 leaves the Grand Finale ring mosaic HIPHASEFA as it was
 PIXEL = {"N": 6.0e-6, "W": 6.0e-5}   # rad per pixel, NAC and WAC
 
 
@@ -79,20 +81,20 @@ def _rotvec(E):
     return np.asarray(axis) * angle
 
 
-def _agreed(refs, k, pixel):
+def _agreed(refs, k, cam):
     """The median correction (a rotation) of the NEAREST C-smithed frames around refs[k] in time, or None where they
     do not agree within AGREE_PX."""
     tk = refs[k][0]
     near = sorted(refs, key=lambda r: abs(r[0] - tk))[:NEAREST]
     vs = np.array([_rotvec(E) for _, E in near])
     v = np.median(vs, axis=0)
-    if np.median(np.linalg.norm(vs - v, axis=1)) > AGREE_PX * pixel:
+    if np.median(np.linalg.norm(vs - v, axis=1)) > AGREE_PX[cam] * PIXEL[cam]:
         return None
     a = float(np.linalg.norm(v))
     return sp.axisar(v / a, a) if a > 0 else np.eye(3)
 
 
-def local_error(refs, t, pixel):
+def local_error(refs, t, cam):
     """The error rotation at t from an observation's (time, E) list. On each side of t, the C-smithed frame nearest
     it stands for the median of the NEAREST corrections around it (_agreed): JPL navigated each image on its own,
     and on a ring mosaic one pointing's corrections scatter by tens of pixels and sometimes hundreds
@@ -102,7 +104,7 @@ def local_error(refs, t, pixel):
     neither side agrees (the frame keeps its raw pointing)."""
     times = [r[0] for r in refs]
     k = bisect.bisect_left(times, t)
-    sides = [(times[j], _agreed(refs, j, pixel)) for j in (k - 1, k) if 0 <= j < len(refs)]
+    sides = [(times[j], _agreed(refs, j, cam)) for j in (k - 1, k) if 0 <= j < len(refs)]
     sides = [(tj, E) for tj, E in sides if E is not None]
     if not sides:
         return None
@@ -183,7 +185,7 @@ for year, rows in index.groupby("year"):
         near = sorted(near.items())
         if not near: continue
         t = ets[f]
-        E = local_error(near, t, PIXEL[f[0]])
+        E = local_error(near, t, f[0])
         if E is None:
             scattered += 1
             continue
