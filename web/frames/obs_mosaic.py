@@ -7610,7 +7610,14 @@ def _colour_recipes(u, p, cache, ns, tiles):
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles, p["grey"])}
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "clip": _clip_fill(),
+            "by": _colour_by(u, want, ns, tiles, p["grey"])}
+
+
+def _clip_fill():
+    """colour_picture's clipped-band fill, as the page does it (steady-local.html fillClipped): [CLIP_FROM, CLIP_REACH,
+    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST]"""
+    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST]
 
 
 def _colour_by(u, want, ns, tiles, grey):
@@ -7648,7 +7655,7 @@ def _eye_recipes(u, p, ns, tiles):
     if len(want) == 2:
         by = {n: [a, a, b] for n, (a, b) in by.items()}
     return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
-            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "clip": _clip_fill(), "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):

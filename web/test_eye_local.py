@@ -48,8 +48,11 @@ def make_pass(name, filters, base):
                 Image.fromarray(im).save(f"{TD}/{n}.png")
                 json.dump({"n": n, "id": fr[n][1], "filter": f, "t": fr[n][3], "offset": spice[n], "box": [-S / 2, -S / 2, S, S]},
                           open(f"{TD}/{n}.json", "w"))
+            # (the grey filter its methane band: a set's frames are drawn as the set, which the page mixes; a grey filter
+            # with a picture of its own (CB2) has every frame drawn tinted, which the table lists and the page leaves)
+            grey = next(f for f in filters if om.held_band(f))
             json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint": [0, 0, 1800, 1100], "fixed": True,
-                       "view": [1800, 1100], "k": 1, "colour": filters, "grey": filters[0], "whole": False},
+                       "view": [1800, 1100], "k": 1, "colour": filters, "grey": grey, "whole": False},
                       open(os.path.join(d, om.PLAN_FILE), "w"))
     return u
 
@@ -66,7 +69,7 @@ def node_mix(cases, sets):
             pl.tofile(f"{tmp}/{c}_{q}.bin")
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), c = " + json.dumps(sets) + ";\n"
           f"for (let i = 0; i < {len(cases)}; i++) {{ const P = [0, 1, 2].map(q => new Uint8ClampedArray(fs.readFileSync('{tmp}/' + i + '_' + q + '.bin')));"
-          f" fs.writeFileSync('{tmp}/' + i + '.out', M.mix(P, c)); }}")
+          f" fs.writeFileSync('{tmp}/' + i + '.out', M.mix(P, c, {cases[0][0].shape[1]})); }}")
     with open(f"{tmp}/mix.js", "w") as fh:
         fh.write(js)
     subprocess.run(["node", f"{tmp}/mix.js"], check=True)
@@ -81,6 +84,7 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
     table = om._steady_table(u, 0, cache, True, True)
     eye = table["eye"]
     assert eye and eye["by"], table.get("eye")
+    assert not table["tint"], table["tint"]
     want_mix = calibration.eye_mix("W", filters, "SATURN")
     assert np.allclose(eye["mix"], want_mix)
     # Natural color, the default, draws a set with a methane band as Natural color (emulated) does (fix plan group
