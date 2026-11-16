@@ -51,6 +51,5 @@ and built the same way: the same 5,255 files, all identical, and **22.8% less wo
 
 ## Image benchmark
 
-Queued behind other threads' runs on the shared Macs when this was written (51 pictures against 1a35acb4,
-`web/frames/image_bench.py`): first on the three exact fixes merged together, then on this branch alone. The
-reports are added to this folder when they finish.
+**PASS (nothing changed): 51 of 51 items identical** to main 1a35acb4 (`image_benchmark_union/report.md`, `summary.json`), run 2026-11-16 on `claude/exact-set-union` (795a49db = main 5d600b52 with the heads of #496 (58502adf), #501 (b487154d) and #502 (01915082) merged in and nothing else), with `CASSINI_HDR_HANDED_DIR` set so #502's files are used.
+One run for the three exact PRs.
