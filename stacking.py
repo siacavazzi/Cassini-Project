@@ -198,8 +198,9 @@ frames of a pass at 128), and a new pass's plan lets go of what the last one's t
 is the one load_hdr returns, so every tile is the same to the bit.
 
 Past that room a merge waits in a file instead (hand_to: a folder for them, which the pre-build gives; without one, as
-before, the frames past the room are merged again by their tiles). 213,502 of the mission's 362,515 pass frames lay
-past the first 21 of their pass and were read, calibrated and merged twice (2026-11-16). A file holds the merge's
+before, the frames past the room are merged again by their tiles). Of the mission's 362,515 pass frames the plans
+read 289,365 (a long pass's scale is measured on SCALE_FRAMES a filter), 140,352 of them past the first 21 of their
+pass: those were read, calibrated and merged twice (2026-11-16). A file holds the merge's
 arrays as they are (the I/F as float32, the masks a bit a pixel: 4.3 MB a 1024 px frame), the label and the count stay
 in memory, and the tile gets back arrays equal to the bit; a file that cannot be written or read back costs only the
 hand-over (the tile merges the frame itself). Up to HANDED_DISK_MB of them wait at a time (CASSINI_HDR_HANDED_DISK_MB),
