@@ -64,3 +64,24 @@ a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r4, g4, b4)).astype(in
 c = a[100, 100, :3]
 assert c[0] < c[1], c
 print("a band clipped over most of the picture is filled from the others alone (%s); ok" % (c,))
+
+# a band the camera saturated on the bright part of a body (stored at 255 whatever the light), in a resampled plane (a
+# movie's or mosaic's) whose clipped area's rim blends that white with what the band read: the band is filled from the
+# others, floored at what it read away from the rim (CLIP_EDGE), not at its white. Floored at white, GRN saturated over
+# 31% of Rhea in 154RH MUTUALEVE002 came out a lime-green patch (green over red, where the rest of the disk is red over
+# green)
+import cv2  # noqa: E402
+gam = 1.5
+ramp = np.tile(np.linspace(0.25, 1.0, 200, dtype=np.float32), (200, 1))   # linear brightness of a neutral body
+enc = lambda v: np.clip(np.power(np.clip(v, 0, 1), 1 / gam) * 255 + 0.5, 0, 255)
+r5, g5, b5 = enc(ramp), enc(0.95 * ramp), enc(0.85 * ramp)
+sat = ramp > 0.8                       # GRN saturated where red still reads 220-ish: stored at 255
+g5 = np.where(sat, 255.0, g5)
+g5 = np.round(cv2.GaussianBlur(g5.astype(np.float32), (0, 0), 0.7))   # resampled: the rim blends 255 with the band's readings
+a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r5, g5, b5)).astype(int)
+inside = a[100, 170:195, :3]
+outside = a[100, 100:140, :3]
+assert (outside[:, 0] > outside[:, 1]).all(), outside[::8]
+assert (inside[:, 1] <= inside[:, 0] + 1).all(), inside[::5]
+print("a band saturated on a body's bright part keeps the body's colour (%s, red over green as round it %s); ok"
+      % (inside[10], outside[20]))

@@ -3553,9 +3553,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    // (the table's c.clip: obs_mosaic CLIP_FROM and CLIP_REACH, calibration FILL_NEAR, FILL_FLOOR and FILL_MOST; these
+    // (the table's c.clip: obs_mosaic CLIP_FROM and CLIP_REACH, calibration FILL_NEAR, FILL_FLOOR and FILL_MOST, obs_mosaic CLIP_EDGE; these
     // for a table made before it had them)
-    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5];
+    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5, 2];
     // np.percentile (linear) of a float32 array, sorted here in place
     function percentile(a, q) {
       a.sort();
@@ -3617,10 +3617,10 @@ body.ambient.phone .amb-where { font-size: 18px; }
     }
     // colour_picture's clipped bands, before its mix: each band in linear light (dec), a band clipped (masks, CLIP_FROM
     // and up) where another is not filled from the others (calibration.fill_saturated, reach CLIP_REACH of the
-    // picture's side), never under what it read unless it clipped over most of the lit picture (mostly_saturated),
+    // picture's side), never under what it read (away from its clipping's rim, EDGE px) unless it clipped over most of the lit picture (mostly_saturated),
     // eased in from CLIP_FROM to white. {x: the three bands, every: where all three clipped, or null}
     function fillClipped(rgb, masks, dec, W, H, clip) {
-      const f = Math.fround, P = W * H, [CLIP_FROM, CLIP_REACH, FILL_NEAR, FILL_FLOOR, FILL_MOST] = clip;
+      const f = Math.fround, P = W * H, [CLIP_FROM, CLIP_REACH, FILL_NEAR, FILL_FLOOR, FILL_MOST] = clip, EDGE = clip.length > 5 ? clip[5] : 0;
       const x = rgb.map(b => { const o = new Float32Array(P); for (let p = 0; p < P; p++) o[p] = dec[b[p]]; return o; });
       const top = new Float32Array(P);
       for (let p = 0; p < P; p++) top[p] = Math.max(x[0][p], x[1][p], x[2][p]);
@@ -3654,12 +3654,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
           const field = resizeLinear(small, ws, hs, W, H);
           for (let p = 0; p < P; p++) if (m[p] && !n[p]) { total[p] = f(total[p] + f(field[p] * o[p])); count[p] += 1; }
         });
-        const out = c.slice();
+        const out = c.slice(), rim = EDGE ? dilate(m, W, H, EDGE) : m;
         let some = false, under = 0;
-        for (let p = 0; p < P; p++) { if (count[p] > 0) { out[p] = f(total[p] / count[p]); some = true; } if (lit[p] && !m[p]) under++; }
+        for (let p = 0; p < P; p++) { if (count[p] > 0) { out[p] = f(total[p] / count[p]); some = true; } if (lit[p] && !rim[p]) under++; }
         if (floorOn && some && under >= 100 && !mostly(m)) {
           const u = new Float32Array(under);
-          for (let p = 0, k = 0; p < P; p++) if (lit[p] && !m[p]) u[k++] = c[p];
+          for (let p = 0, k = 0; p < P; p++) if (lit[p] && !rim[p]) u[k++] = c[p];
           floorOn = f(percentile(u, FILL_FLOOR));
           for (let p = 0; p < P; p++) if (count[p] > 0) out[p] = Math.max(out[p], floorOn);
         }
@@ -3672,13 +3672,28 @@ body.ambient.phone .amb-where { font-size: 18px; }
       x.forEach((c, i) => {
         const fl = filled[i], keep = mostly(masks[i]), b = rgb[i];
         for (let p = 0; p < P; p++) {
-          const v = keep ? fl[p] : Math.max(fl[p], c[p]);
+          const v = keep || b[p] >= 255 ? fl[p] : Math.max(fl[p], c[p]);   // (a band at 255 read only that it clipped)
           let w = Math.min(Math.max(f(f(b[p] - CLIP_FROM) / span), 0), 1);
           w = f(f(w * w) * f(3 - f(2 * w)));
           c[p] = f(c[p] + f(w * f(v - c[p])));
         }
       });
       return { x, every: any ? every : null };
+    }
+    // cv2.dilate of a 0/1 mask (W x H) by a (2r+1) square: what lies within r px of it, either way (fill_saturated's edge)
+    function dilate(m, W, H, r) {
+      const row = new Uint8Array(W * H), out = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        let v = 0;
+        for (let d = Math.max(0, x - r); d <= Math.min(W - 1, x + r) && !v; d++) v = m[y * W + d];
+        row[y * W + x] = v;
+      }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        let v = 0;
+        for (let d = Math.max(0, y - r); d <= Math.min(H - 1, y + r) && !v; d++) v = row[d * W + x];
+        out[y * W + x] = v;
+      }
+      return out;
     }
     // obs_mosaic._shade_rgb: a colour picture (RGBA) times exposure gain g on linear brightness, white kept white by
     // its brightest band under a gain of 1 (movie_frame puts a gain under 1 on the mixed set, not on its planes)
@@ -13997,7 +14012,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"84d41c9b07b3";
+  const BUILD = /*BUILD*/"7ad34c6fc3b5";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

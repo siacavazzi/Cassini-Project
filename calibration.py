@@ -1936,7 +1936,7 @@ def mostly_saturated(mask, lit):
     return n > 0 and float((np.asarray(mask, bool) & lit).sum()) > FILL_MOST * n
 
 
-def fill_saturated(channels, masks, reach=None, where=None, floor=True):
+def fill_saturated(channels, masks, reach=None, where=None, floor=True, edge=0):
     masks = [np.zeros(channels[0].shape, bool) if m is None else np.asarray(m, bool) for m in masks]
     x = [np.asarray(c, np.float32) for c in channels]
     lit = lit_of(x)
@@ -1981,6 +1981,12 @@ def fill_saturated(channels, masks, reach=None, where=None, floor=True):
         # with ragged edges along GRN's clipping. Not for a channel saturated over most of the picture
         # (mostly_saturated), whose fill keeps the others' colour.
         under = lit & ~m
+        if edge:
+            # (edge: picture drawn resampled, a movie's or mosaic's planes, whose clipped area's rim blends its white
+            # with the band's own readings: those pixels, up to edge px from the clipping, are no reading of where the
+            # band clipped. Taken as one, the floor sat above the band's true top: GRN saturated over 31% of Rhea in
+            # 154RH MUTUALEVE002, floored at its rim's 238 where the band read up to 223, drew a lime-green patch)
+            under = under & ~(cv2.dilate(m.astype(np.uint8), np.ones((2 * edge + 1, 2 * edge + 1), np.uint8)) > 0)
         if floor and some.any() and under.sum() >= 100 and not mostly_saturated(m, lit):
             floor = np.float32(np.percentile(c[under], FILL_FLOOR))
             filled[some] = np.maximum(filled[some], floor)
