@@ -689,6 +689,7 @@ body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
 .wmopt span { color: var(--q-dim); font-size: 10px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wmopt i { font-style: normal; color: var(--q-accent); } .wmopt[aria-checked="true"] i::before { content: "✓"; }
 .wmopt[aria-checked="true"] { color: #fff; }
+.wmopt:disabled { opacity: .38; } .wmopt:disabled:hover { background: none; color: inherit; }
 .wmopt:hover, .wmset:hover, .wmopt:focus-visible, .wmset:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
 .wmfoot { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
 .wmset { display: block; color: var(--q-dim); }
@@ -2055,7 +2056,7 @@ function targetLabel(k) {
         b.disabled = m !== "auto" && !!st.allowed && !st.allowed.includes(m);
         b.setAttribute("aria-checked", String(on));
         b.querySelector("span").textContent = m === "auto" && st.playing ? `now ${st.playing}${st.building ? ", building" : ""}`
-          : PASS_MODES.find(x => x[0] === m)[2];
+          : b.disabled ? "not stored for this pass" : PASS_MODES.find(x => x[0] === m)[2];
       }
       // the button says when this window differs from the Settings defaults
       btn.classList.toggle("chosen", st.centre !== def || (st.inPass && st.mode !== "auto"));
