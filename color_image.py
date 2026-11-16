@@ -285,6 +285,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+    # (the pixels still lost after the fills, before the edges are trimmed: what a picture's own black leaves out,
+    # cal.load_channels' valid; None when nothing is lost, so a whole frame is measured as it always was)
+    unfilled = masks if left else None
     # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
     # aligned and drop out of every picture made of it
     masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
@@ -360,7 +363,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # (a set drawn on its own: its sky black in every channel, as the balanced look's, fix plan D)
             alone = scale is None and len(lbls) > 1 and cal.look() == "classic"
             imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None,
-                                     valid=masks if scale is not None else None,
+                                     valid=unfilled if scale is not None else None,
                                      off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None)
             calibrated = imgs is not before
 
