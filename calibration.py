@@ -1819,7 +1819,7 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
             k = x.shape[2] / 1024
             cx, cy, r = (v * k for v in look["disk"])
             r *= 1.0   # (obs_mosaic.RING_DISK)
-            soft = 0.06
+            soft = 0.06   # (obs_mosaic.RING_SOFT; obs_mosaic imports this module, so the value is kept here too)
             ys = np.arange(x.shape[1], dtype=np.float32)[:, None] - np.float32(cy)
             xs = np.arange(x.shape[2], dtype=np.float32)[None, :] - np.float32(cx)
             t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - soft))) / np.float32(2 * soft * r), 0, 1)
