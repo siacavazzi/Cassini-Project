@@ -28,6 +28,14 @@ In main's build of those six passes:
 
 A wider look before the fix, at nine passes of the profile sample: 100 of 276 evened pictures and 192 of 365 planes.
 
+## With the two other exact fixes (`all_three_together.md`)
+
+This branch, the plan's merges handed on in files and the six exact speed-ups, merged on one branch
+and built the same way: the same 5,255 files, all identical, and **22.8% less work** over the ten passes (10.1% to
+35.4% per pass; CPU seconds 1,280 to 952).
+
 ## Image benchmark
 
-BENCH
+Queued behind other threads' runs on the shared Macs when this was written (51 pictures against 1a35acb4,
+`web/frames/image_bench.py`): first on the three exact fixes merged together, then on this branch alone. The
+reports are added to this folder when they finish.
