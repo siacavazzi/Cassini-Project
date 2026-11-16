@@ -1,8 +1,8 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `f79b7cbb` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `f202f92c` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 67 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, and #534), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 12 follow-up merges of reviewed new heads (#530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**In it:** 68 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534 and #546), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 12 follow-up merges of reviewed new heads (#530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
 **Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527, #536 (READY only once a running benchmark passes, or not ready). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
@@ -32,7 +32,7 @@ How to read this:
 #474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, and the three integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -137,3 +137,6 @@ How to read this:
 | 93 | [#534](https://github.com/siacavazzi/Cassini-Project/pull/534) Darks and lamp frames are not pictures
  | `58cbf54e` | **YES (pass contents)** | 4,066 dark and lamp frames (not_pictures.csv) leave the pipeline's frames and passes, repeats (stacking) and the page catalog: 216 observations lose them, 185 fewer passes. Benchmark identical to main. No version bump, and pass numbers can shift: fresh rebuild plus build_data --groups only, never onto a kept cache. | Those 216 observations' passes (fresh rebuild), then build_data --groups. | none | - | resolved by hand: stacking.py: #534's _not_pictures() and the branch's _sets_passes()/to_range() both kept; load_index drops not-pictures first, then shown targets and polarized_index |
 | 94 | [#530](https://github.com/siacavazzi/Cassini-Project/pull/530) Sharpening follow-up: strength 1.6, softer terminator, Titan haze left alone (taste call 1) (new head) | `f79b7cbb` | **YES** | #530's reviewed new head: Titan in its CB3 surface window keeps disk detail inside the haze ring (faded out from 0.7 to 0.85 of the radius), so no dark halo at the limb (133TI CLOUD002). Covered by #530's bump. | Titan CB3 stills and composites. | none | - | integration commit |
+| 95 | Picture-change map (docs) | `ab47165d` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 96 | [#546](https://github.com/siacavazzi/Cassini-Project/pull/546) Full-depth picture sized by what is stored too (N1855753770_1, 246RI color set)
+ | `f202f92c` | **YES (one frame)** | depth_image resizes a full-depth picture stored at a summed size (256 or 512 rows) under a 1024-line label to 1024, as the display copy is: fixes N1855753770_1 (246RI color set and still), which failed to build on this branch. Every other frame unchanged; no benchmark item holds it. | That one frame's 246RI color set and still. | none | - | clean |
