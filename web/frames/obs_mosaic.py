@@ -3199,13 +3199,15 @@ def _limb_register(u, q, ref, out, crop):
     if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
         e = l0[0] - lq[0]
         v = (-e * l0[1][0], -e * l0[1][1])
-        if math.hypot(*v) <= REGISTER_MAX * FRAME:
+        if abs(e) <= LIMB_REGISTER:
+            # (SPICE's place where the limbs agree there: JPL's corrected pointing, within a filter's haze of the
+            # reference's; moved onto the reference's limb, the filter would take on the reference's haze height)
+            how = "SPICE's place (limbs agree there)"
+        elif math.hypot(*v) <= REGISTER_MAX * FRAME:
             moved = [spice[0] + v[0], spice[1] + v[1]]
             check = limb_place(disk, dict(out, offset=moved), crop)
             if check is not None and abs(check[0] - lq[0]) <= LIMB_REGISTER:
                 place, how = moved, f"limb {-e:+.1f} across"
-            elif abs(e) <= LIMB_REGISTER:
-                how = "SPICE's place (limbs agree there)"
     out.pop("spice_offset", None)
     if place is not spice:
         out["spice_offset"] = spice
