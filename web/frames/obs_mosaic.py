@@ -8908,7 +8908,7 @@ def grey_match(u, cache, p=None):
     factor is the median over the sets, within TINT_MATCH. A filter no set holds has none (1)."""
     p = p or plan(u, cache)
     want = p.get("colour")
-    if not want or u.get("track") or getattr(_grey_matching, "on", False) or not plays_colour(u, want, p["grey"]):
+    if not want or getattr(_grey_matching, "on", False) or not plays_colour(u, want, p["grey"]):
         return {}
     rec = _kept_tiles(u, cache, p["display_scale"])
     kept = rec.get("grey_match") if rec is not None else None
