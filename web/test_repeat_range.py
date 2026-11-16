@@ -116,5 +116,17 @@ pngs["near.png"][600:604] = 0   # the lost lines read as 0
 _, merged_l, n, valid_l = stacking.load_hdr("far.png", valid=True)
 col = merged_l[:, int(C - 40)]
 assert n == 2 and valid_l.all() and np.abs(col[560:650] - 0.2).max() < 0.002, np.abs(col[560:650] - 0.2).max()
+# ... the frame saturated all over, a nearer short exposure filling it: the strip along the edge that the nearer frame,
+# brought to range, no longer reaches is left out (not valid, not drawn white as clipped), the rest is the repeat's
+Label.valid_mask = lambda self: np.ones((1024, 1024), bool)
+pngs["near.png"] = disk(208, (40.0, -30.0))
+stacking.cal.saturated = lambda codes, info, image=None: np.ones(codes.shape, bool) if info["path"] == "far.png" \
+    else np.zeros(codes.shape, bool)
+_, merged_s, n, valid_s, clip_s = stacking.load_hdr("far.png", valid=True, clipped=True)
+assert n == 2 and not valid_s[512, 2] and not valid_s[512, 1021] and not clip_s[512, 2] and not clip_s.any(), clip_s.sum()
+assert valid_s[512, 512] and valid_s[512, 40] and abs(merged_s[512, 512] - 0.2) < 1e-3
+edge = (~valid_s).sum(axis=1)[512]
+assert 35 < edge < 48, edge   # 3.8% of the way from the body centre to each edge: about 20 px a side
+stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 print("load_hdr ok")
 print("ok")
