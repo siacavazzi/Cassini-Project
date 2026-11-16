@@ -47,6 +47,7 @@ FRAME = 1024
 # Over the mission (the geometry cache, 2026-11-16) 6,790 of 91,117 frames that merged a repeat differed by over a
 # pixel, 3,701 of those Titan's. Under it a repeat is merged as before, to the bit.
 REPEAT_GROW = 1.0
+HALF_DIAGONAL = math.hypot(FRAME / 2, FRAME / 2)   # px: the frame's corner from its middle
 
 
 def frame_id(path):
@@ -102,6 +103,14 @@ def _reach(target, at, scale):
     return min(radius, math.hypot(FRAME / 2 + abs(x), FRAME / 2 + abs(y)))
 
 
+def _on_disk(place):
+    """True when the frame at place ((x, y, z, reach) as places(reach=True) gives) lies wholly on its body's disk: the
+    body reaches its farthest corner (_reach's cap)."""
+    if place is None or len(place) < 4 or place[3] is None or place[0] is None:
+        return False
+    return place[3] >= math.hypot(FRAME / 2 + abs(place[0]), FRAME / 2 + abs(place[1])) - 1e-6
+
+
 """
 Whether SPICE puts two frames at one pointing: a, b = their places ((x, y, ...) as places gives, or None);
 True within REPEAT_PLACE of a frame, False further apart, None when either has no place.
@@ -120,7 +129,8 @@ def grown(a, b):
     if a is None or b is None:
         return 0.0
     za, zb = (a[2] if len(a) > 2 else None), (b[2] if len(b) > 2 else None)
-    reach = max((r for r in (a[3] if len(a) > 3 else None, b[3] if len(b) > 3 else None) if r is not None), default=None)
+    # (a frame wholly on the disk is brought to range about its middle, to_range: the most it then moves is at its corner)
+    reach = max((HALF_DIAGONAL if _on_disk(p) else p[3] for p in (a, b) if len(p) > 3 and p[3] is not None), default=None)
     if not za or not zb or reach is None:
         return 0.0
     return reach * abs(za - zb) / max(za, zb)
@@ -144,10 +154,14 @@ def repeat_of(kept, t, place, window):
 def to_range(image, place, ref_place, inter=None, border=0):
     """image (a frame's picture, I/F or mask, 1024 px as label.resize_image), taken at place (x, y, z as places gives),
     as seen from ref_place's range: grown or shrunk by its range over ref_place's about the body's centre (find_target's
-    shift: ba.CCD_CENTER less x, y), where it stays; lining up then takes up the rest. What falls outside the frame is
+    shift: ba.CCD_CENTER less x, y), where it stays; lining up then takes up the rest. A frame wholly on its body's disk
+    (_on_disk) about its middle instead, as color_image.spice_warps scales a colour set's channels: the centre can be
+    thousands of px off (a close Titan), and the ground under the frame does not grow about it as the limb does, so a
+    scale about it would move the frame by more than lining up looks (20 px) for. What falls outside the frame is
     border (0: to_range of a frame of ones is the part it covers)."""
     k = place[2] / ref_place[2]
-    centre = (ba.CCD_CENTER - float(place[0]), ba.CCD_CENTER - float(place[1]))
+    centre = (ba.CCD_CENTER, ba.CCD_CENTER) if _on_disk(place) else \
+        (ba.CCD_CENTER - float(place[0]), ba.CCD_CENTER - float(place[1]))
     m = cv2.getRotationMatrix2D(centre, 0, k)
     h, w = image.shape[:2]
     return cv2.warpAffine(image, m, (w, h), flags=cv2.INTER_CUBIC if inter is None else inter,
