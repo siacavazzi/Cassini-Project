@@ -97,8 +97,12 @@ VISIBLE_POLARIZERS = ("P0", "P60", "P120")
 # the mean of a P0, P60, P120 frame of a filter over a plain (CL1) frame of it taken minutes from them, the body whole
 # in frame, both calibrated by the repo (web/frames/polarized_share.py measures it): calibration.calibrate divides a
 # polarized colour frame by it, so its channel has its plain frame's I/F and a set its plain set's colour balance.
-# Only these three (true colour) count; other polarizer frames stay out of colour
-POLARIZED_SHARE = {"BL2": 0.332, "GRN": 0.355, "CB1": 0.349}   # medians of 7, 20, 15 pairs (2026-11-16)
+# BL2 and CB1: medians of 7 and 15 pairs, interquartile range 0.330-0.333 and 0.348-0.349. GRN: the icy moons' 20
+# pairs give 0.355 (0.351-0.356 without the dots and Phoebe's turning face); Titan's and Saturn's 7 observations
+# taking all three both ways (evidence/polarized_colour/tint_check.txt) put it at 0.350, which leaves their corrected
+# polarized sets within 1% of their plain sets' colour. Only these three (true colour) count; other polarizer frames
+# stay out of colour
+POLARIZED_SHARE = {"BL2": 0.332, "GRN": 0.350, "CB1": 0.349}
 VISIBLE_COLOURS = ("RED", "GRN", "BL1", "BL2", "VIO", "CB1")   # an observation taking one of these plainly keeps its polarizers grey
 
 
