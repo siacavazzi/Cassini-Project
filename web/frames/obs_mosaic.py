@@ -5976,21 +5976,22 @@ def sharpens(scale):
     return bool(scale.get("detail", scale.get("filled")))
 
 
-SATURN_LOOK = {"headroom": 1.25, "detail": 2.0, "sigma": 0.6}
-                    # Saturn's atmosphere (saturn_look): its pictures' white this many times its own (the disk's bright half
-                    # had been rolled off by the shoulder into a few levels: the 2007 apoapsis movie's disk at 220-228 of
-                    # 255), then local contrast this strong (detail) on its lit pixels only, over sigma times DETAIL_SIGMA,
-                    # so belts, storms and vortices show (Sam 11-16 chose this, option C, among A-H)
+SATURN_LOOK = {"detail": 2.0, "sigma": 0.6}
+                    # Saturn's atmosphere (saturn_look): local contrast this strong (detail) on its lit pixels, over sigma
+                    # times DETAIL_SIGMA, so belts, storms and vortices show at today's brightness (option L, 11-16). The
+                    # first pick, option C, also gave the white 1.25x "headroom" (the disk's bright half had been rolled
+                    # off by the shoulder into a few levels); Sam found it darkened the disk, its shadows and the rings,
+                    # and its disk-only form showed a seam, so the look has no headroom (SATDEF_OPTIONS keeps C and M)
 SATURN_TAG = "_sl1"   # the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
                       # single picture with it, so only Saturn's own pictures are made again
 SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown on 11-16; "off" none
     "off": {},
     "A": {"headroom": 1.25},
     "B": {"headroom": 1.25, "detail": 1.0, "sigma": 0.6},
-    "C": SATURN_LOOK,
+    "C": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6},
     "D": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6},
     "F": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6, "chroma": 1.4},
-    "L": {"detail": 2.0, "sigma": 0.6},
+    "L": SATURN_LOOK,
     "L3": {"detail": 3.0, "sigma": 0.6},
     "M": {"headroom": 1.25, "match": True, "detail": 2.0, "sigma": 0.6, "nodisk": True},
 }
