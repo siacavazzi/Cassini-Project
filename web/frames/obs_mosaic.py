@@ -6932,7 +6932,7 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 #                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
 
 
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -6972,9 +6972,18 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         reach = g.get("reach", reach)
         shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                  around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
-        if shift is None or math.hypot(*shift) > believed:
+        if shift is not None and math.hypot(*shift) <= believed:
+            d = (rel[0] - shift[0], rel[1] - shift[1])
+        elif ring is not None:
+            # (frames of the rings the pictures cannot be matched on, the ringlets repeating along the ring: their
+            # radial profiles on SPICE's ring plane, matched across the rings only (ring_pair_shift), and along the
+            # rings SPICE's step, under which the picture hardly changes)
+            move, rhow = ring(by[j], own[j], t, own[n])
+            if move is None or math.hypot(*move) > believed:
+                return pr, None, f"{how}; rings: {rhow}"
+            d, how = (rel[0] + move[0], rel[1] + move[1]), f"rings {rhow['lag_km']:+.0f} km"
+        else:
             return pr, None, how
-        d = (rel[0] - shift[0], rel[1] - shift[1])
         if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
             return pr, None, "past reach"
         return pr, d, how
@@ -7117,7 +7126,8 @@ STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_gui
 if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
     # the chain alone keeps steady4's name
-    STEADY_FILE = f"steady5k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady6: a ring pass's frames the pictures cannot be matched on linked by their ring profiles (steady_rings)
+    STEADY_FILE = f"steady6k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -7128,6 +7138,23 @@ STEADY_JUMPY = 8.0    # px
 STEADY_JUMPS = 0.1    # of the neighbouring pairs
 STEADY_EDGE = 16     # px: a blob found nearer the tile's edge than its radius and this is not the moon (seen_places)
 STEADY_SEEN = 0.5     # of the placed tiles: the least share the moon must be found on for the pictures to be believed
+
+
+def steady_rings(u, made):
+    """steady_chain's ring match for a pass that shows Saturn's rings (_ring_geometry): (tile s, its picture, tile t,
+    its picture) -> ring_pair_shift's (move of t across the rings, how) or (None, why); None for any other pass. A ring
+    movie's frames slide along ringlets that repeat along the ring, so a match of the pictures fails or finds the
+    wrong ringlet (rings 2004 HIPHLFMOV001: 33 of its 43 links failed, and the movie kept SPICE's ~9 px shake); their
+    radial profiles say how far across the rings each frame sits, and SPICE's reach still bounds it."""
+    rings = _ring_geometry(u)
+    if rings is None:
+        return None
+    # (SPICE's view at each tile's time worked out here, one at a time: SPICE is not safe from several threads, and the
+    # chain's matches run side by side; once worked out, a ring plane is plain arithmetic)
+    for t in made:
+        if "offset" in t:
+            rings(np.zeros(1), np.zeros(1), _ring_id(t))
+    return lambda s, ref, t, mine: ring_pair_shift(u, rings, s, ref, t, mine)
 
 
 def steady_chain(u, cache, p=None):
@@ -7161,7 +7188,8 @@ def steady_chain(u, cache, p=None):
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
-            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS)
+            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
+                                        steady_rings(u, made))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
