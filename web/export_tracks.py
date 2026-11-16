@@ -28,6 +28,7 @@ import math
 import os
 import re
 import struct
+import sys
 
 import numpy as np
 import pandas as pd
@@ -304,6 +305,12 @@ def ground_range(rng, radius, off, ifov):
 def export_catalog(kdir, out, index_csv, years, data=None, geometry=None):
     df = pd.read_csv(index_csv, low_memory=False)
     df = df[df.year.notna()]
+    # frames that hold no picture (darks, lamp frames: frames/not_pictures.py) are left out, as the pipeline leaves them
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
+    import not_pictures
+    dark = not_pictures.ids()
+    if dark:
+        df = df[[os.path.splitext(os.path.basename(p))[0] not in dark for p in df.path]]
     mks = {int(re.search(r"cas_(\d{4})", m).group(1)): m for m in glob.glob(f"{kdir}/mk/*.tm")}
     # NAC: 12 um pixels at the kernel's 2003.44 mm focal length. WAC: as its frames are drawn, after CISSCAL's geometric
     # correction has resampled them onto a pinhole camera of 200.956 mm (geometric_correction.F_LINEAR, the scale
