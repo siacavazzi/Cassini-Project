@@ -6194,11 +6194,18 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
     top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
     lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g)
-    if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
+    # the lit pixels the match needs: LUM_MATCH_MIN of a picture the windows' size (OUT), and as much of a smaller one's
+    # area. exposure_chain measures the movie on pictures EXPOSURE_SIDE px a side, where a body that fills 7,600 px of
+    # the windows' picture fills 180: under LUM_MATCH_MIN as a count, so the frame was drawn without its match and hue
+    # (dimmed to the match's floor, 0.25 for a set's own frame and 0.67 for the frames between) only where it was
+    # measured, and the chain took that for the movie: every set's own frame of a Jupiter approach movie read 2.3 times
+    # brighter than the frames between, which were drawn as bright (C23RI RMOV001, 2026-11-16)
+    need = LUM_MATCH_MIN * min(1.0, (max(colour.shape[:2]) / OUT) ** 2)
+    if lit.sum() >= need and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
     else:
-        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
+        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= need else 1.0
         hue = np.ones(3, np.float32)
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within TINT_MATCH)
