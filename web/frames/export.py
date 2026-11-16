@@ -81,6 +81,7 @@ SIZES = (512, 1024)       # the pane sizes a film is made at: the sizes the pict
                           # picture is kept at it, so a film at 768 had every picture drawn on the request)
 FULL = "full"               # Picture size Full: mosaics at native resolution (module notes)
 BUCKETS = (1024, 1536, 2048)   # mosaic sizes up to the canvas: a pass is drawn at the biggest its native size fills
+UP_TO = (2048,)             # the "up to" sizes a film is asked at, over SIZES ("up to 1536" went 2026-11-16, with 768)
 FULL_MAX = int(os.environ.get("CASSINI_EXPORT_FULL_MAX", 4096))   # largest pane at Full, px (H.264 plays it)
 FULL_WORKERS = 2            # pictures made at once at Full (each is a native mosaic, hundreds of MB while drawn)
 CAPTION = 48                 # caption strip height at 1024 px panes (scaled with the pane)
@@ -131,7 +132,7 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = get("size", "1024")
-    size = FULL if size == FULL else min(SIZES + BUCKETS[1:], key=lambda s: (abs(s - int(size)), -s))   # (the larger of two as near: 768 is 1024)
+    size = FULL if size == FULL else min(SIZES + UP_TO, key=lambda s: (abs(s - int(size)), -s))   # (the larger of two as near: 768 is 1024, 1536 is 2048)
     look, colors = get("look", calibration.LOOKS[0]), get("colors", calibration.COLORS[0])
     # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
     movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),
