@@ -896,6 +896,18 @@ def slope_guarded(labels):
         _value(lbl.get_info(), "TARGET_NAME", "") in SKY_SLOPE_BODIES for lbl in labels)
 
 
+def let_go():
+    """What a frame's calibration keeps for the next frame, let go: the WAC distortion correction's plans and maps
+    (geometric_correction: up to 400 MB), the dark model's tables and darks (dark_current: 70 MB a camera mode, 4 MB
+    a readout) and the flat fields (flat_field: 4 MB a map). Each is made again, the same numbers, when a frame next
+    asks for it (a plan 70 ms, a camera mode's dark tables half a second). For the pre-build, which asks once a
+    pass's tiles are made: the pass's solve and the pictures drawn of its tiles calibrate nothing, and held these
+    beside the mosaic being composed, 0.5 GB of the 1.5 GB a WAC colour mosaic pass had allocated at its top
+    (2026-11-16)."""
+    for kept in (gc._plan, gc._map, dc._parameters, dc._dark, ff._map, ff._correction):
+        kept.cache_clear()
+
+
 def step(name):
     """True when the pipeline step name is on for this request (STEPS)."""
     return name not in _off.get()
