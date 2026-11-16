@@ -814,18 +814,33 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     return data, report
 
 
+POLARIZED_NAME = "_p1"   # a polarized colour frame's own pictures' name after its id (frame_name)
+
+
+def frame_name(frame_id):
+    """The name of frame frame_id's own processed pictures in the cache: its id, and POLARIZED_NAME after it for a
+    frame the index reads as a polarized colour frame (sets_passes.polarized_index: calibrated to its plain frame's
+    I/F, its filter's three angles stacked), so the pictures made of it before are not served for it"""
+    try:
+        polarized = obs_mosaic.polarized_frame(frame_id)
+    except FileNotFoundError:   # (no index: a synthetic cache)
+        polarized = False
+    return frame_id + (POLARIZED_NAME if polarized else "")
+
+
 def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), frame_id)
+    name = frame_name(frame_id)
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), name)
     report = {}
     def make():
         with _movie_slots:
             # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
             # made once, not once a size
             im, made = _recent_composite([frame_id], centre)
-        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), frame_id)
+        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), name)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         reel.keep_report(base + ".json", made)
@@ -834,8 +849,8 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     if not report:
         report = reel.report_of(base + ".json", {})
     folder = processed_folder(cache, centre)
-    calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), frame_id + ".webp"),
-                                os.path.join(folder, HDR_DIR, frame_id + ".webp"))
+    calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), name + ".webp"),
+                                os.path.join(folder, HDR_DIR, name + ".webp"))
     return data, report
 
 
@@ -1747,7 +1762,7 @@ def make_handler(site, cache, flags=None):
                 try:
                     data, report = processed_webp(m.group(1), size, cache, fmt, centre)
                     if query.get("hdr", ["0"])[0] == "1" and fmt == "webp":
-                        return self.send_hdr(processed_folder(cache, centre), m.group(1), size, data, query,
+                        return self.send_hdr(processed_folder(cache, centre), frame_name(m.group(1)), size, data, query,
                                              f"Cassini_{m.group(1)}_processed", report)
                     return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_processed", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:

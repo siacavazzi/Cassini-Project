@@ -119,6 +119,8 @@ def load_index():
     shown = ba.shown_targets()
     if shown:
         idx["TARGET_NAME"] = [shown[i][0] if i in shown else t for i, t in zip(idx["id"].tolist(), idx["TARGET_NAME"].tolist())]
+    # an observation's polarizer frames that are its only colours read as their colour filter (sets_passes.polarized_index)
+    sets_passes.polarized_index(idx)
     cams, targets, obs = idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist()
     f1s, f2s, t = idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(), idx["seconds_1970"].to_numpy()
     # the filter sets, by the one rule (sets_passes: the camera windows', the pre-build's and the data's)

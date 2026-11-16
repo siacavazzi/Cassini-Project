@@ -83,6 +83,67 @@ def colour_filter(f1, f2):
     return "/".join(f for f in (f1, f2) if not f.startswith("CL")) or None
 
 
+# Polarized colour. The narrow-angle camera's visible polarizers (P0, P60, P120, in its first filter wheel) sit in front
+# of a colour filter in its second; a frame through one is that colour seen through a polarizer, calibrated as its
+# clear filter (calibration.calibrate, as CISSCAL). An observation that takes its colours only through them (the 2004
+# and 2005 Saturn polarimetry mosaics, 2X2PLRNC and 1X2PLRNC: every frame P0, P60 or P120 with BL2, GRN, CB1, CB2) had
+# no colour frame at all by the rule that a polarizer frame is none, and played grey (Sam 2026-11-16). There each
+# polarizer frame of a filter of POLARIZED_SHARE is that filter's frame (polarized_as_colour), so its sets form by the
+# one rule, and the three angles of a filter, taken seconds apart at one pointing, are repeat exposures stacked into
+# one channel (stacking): their mean is the light without its polarization. An observation that also takes plain
+# visible colour frames keeps its polarizer frames out of colour, as before, so its colour stays its plain frames' (a polarized
+# frame calibrates to about a third of its plain frame's I/F: POLARIZED_SHARE).
+VISIBLE_POLARIZERS = ("P0", "P60", "P120")
+# the mean of a P0, P60, P120 frame of a filter over a plain (CL1) frame of it taken minutes from them, the body whole
+# in frame, both calibrated by the repo (web/frames/polarized_share.py measures it): calibration.calibrate divides a
+# polarized colour frame by it, so its channel has its plain frame's I/F and a set its plain set's colour balance.
+# Only these three (true colour) count; other polarizer frames stay out of colour
+POLARIZED_SHARE = {"BL2": 0.332, "GRN": 0.355, "CB1": 0.349}   # medians of 7, 20, 15 pairs (2026-11-16)
+VISIBLE_COLOURS = ("RED", "GRN", "BL1", "BL2", "VIO", "CB1")   # an observation taking one of these plainly keeps its polarizers grey
+
+
+def polarized_filter(cam, f1, f2):
+    """The colour filter a visible polarizer frame of camera cam ("ISSNA" or "N") stands for, or None."""
+    return f2 if cam in ("ISSNA", "N") and f1 in VISIBLE_POLARIZERS and f2 in POLARIZED_SHARE else None
+
+
+def polarized_as_colour(cams, targets, obs, f1s, f2s):
+    """For each frame (columns, as filter_sets takes them), whether it is a polarizer frame that counts as its colour
+    filter: a visible polarizer frame of a POLARIZED_SHARE filter in an observation (camera, target, observation)
+    that takes every filter of POLARIZED_SHARE through the visible polarizers (true colour) and no visible colour
+    (VISIBLE_COLOURS) without one. Its plain frames of other bands (a methane, ultraviolet or near-infrared band:
+    018SA 1X2PLRNCJ's CL1 MT2) are its own, as before."""
+    keys = list(zip(cams, targets, obs))
+    pol = [polarized_filter(c, str(a), str(b)) for c, a, b in zip(cams, f1s, f2s)]
+    took, plain = {}, set()
+    for k, p, a, b in zip(keys, pol, f1s, f2s):
+        if p:
+            took.setdefault(k, set()).add(p)
+        elif any(x in VISIBLE_COLOURS for x in str(colour_filter(str(a), str(b)) or "").split("/")):
+            plain.add(k)
+    ok = {k for k, fs in took.items() if fs >= set(POLARIZED_SHARE) and k not in plain}
+    return [p is not None and k in ok for k, p in zip(keys, pol)]
+
+
+def polarized_index(idx, filter_cols=True):
+    """idx (Image_index rows with INSTRUMENT_ID, TARGET_NAME, OBSERVATION_ID, FILTER_NAME, and filter1 and filter2 when
+    filter_cols) with its polarized colour frames (polarized_as_colour) read as CL1 and their colour filter, in place:
+    FILTER_NAME "(CL1,GRN)", filter1 "CL1", and a column "polarized" marking them. The index loaders (reel.load_index, stacking.load_index) read it so, so
+    sets, passes, plans and repeat stacking all take the frame as its colour. Returns idx."""
+    names = idx["FILTER_NAME"].astype(str).tolist()
+    parts = [n.strip("()").split(",") + [""] for n in names]
+    f1s = idx["filter1"].astype(str).tolist() if filter_cols else [p[0] for p in parts]
+    f2s = idx["filter2"].astype(str).tolist() if filter_cols else [p[1] for p in parts]
+    use = polarized_as_colour(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
+                              f1s, f2s)
+    idx["polarized"] = use
+    if any(use):
+        idx["FILTER_NAME"] = [f"(CL1,{b})" if u else n for u, n, b in zip(use, names, f2s)]
+        if filter_cols:
+            idx["filter1"] = ["CL1" if u else a for u, a in zip(use, f1s)]
+    return idx
+
+
 def runs(frames):
     """The filter sets among frames, in time order: frames is a list of (cam, target, observation, colour filter
     or None, t), each optionally with a sixth item, where SPICE places the frame ((x, y, ...) as stacking.places
