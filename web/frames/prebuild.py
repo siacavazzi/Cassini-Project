@@ -537,7 +537,9 @@ def full_view(u, j, cache):
 def make_planes(u, cache, centre=True):
     """The frames the page's movie steps start from (steady-local.html, Settings > Processing > Steady movies on this
     computer), as it asks for them: each frame alone at SPICE's places with no gain and no trail (color=0, trail=0,
-    steady=0, exposure=0), at 1024, Auto center as the window has it; and for a filled pass (Titan, Jupiter), the
+    steady=0, exposure=0), at 1024, Auto center as the window has it (a pass stabilized by default, obs_mosaic.auto_steady,
+    is served at STEADY_SMOOTH's places for steady=0, and its steady table's "auto" says so: the page moves its frames
+    from there); and for a filled pass (Titan, Jupiter), the
     same before its detail filter (sharpen False, detail=0, files _d0), which the page sharpens itself after its
     exposure, trail or colour mix. Returns 0: make_pass has counted the pass's frames."""
     filled = obs_mosaic.sharpens(obs_mosaic.plan(u, cache)["display_scale"])
