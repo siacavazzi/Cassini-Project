@@ -5982,7 +5982,7 @@ SATURN_LOOK = {"detail": 2.0, "sigma": 0.6}
                     # first pick, option C, also gave the white 1.25x "headroom" (the disk's bright half had been rolled
                     # off by the shoulder into a few levels); Sam found it darkened the disk, its shadows and the rings,
                     # and its disk-only form showed a seam, so the look has no headroom (SATDEF_OPTIONS keeps C and M)
-SATURN_TAG = "_sl1"   # the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
+SATURN_TAG = "_sl2"   # (_sl1: option C, never in a kept cache) the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
                       # single picture with it, so only Saturn's own pictures are made again
 SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown on 11-16; "off" none
     "off": {},
