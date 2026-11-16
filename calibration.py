@@ -662,7 +662,7 @@ def calibrate(png, info, image=None, smooth=True):
         dc.repair_hot(per_second, info, spots, raw == 0 if raw.ndim == 2 else None)
     if smooth:
         per_second = deblock(per_second, pixels, info)
-        if sky is not None and step("skysmooth") and (SKY_SMOOTH_ORIGINALS or original_values(png, info) is None):
+        if sky is not None and step("skysmooth") and (SKY_SMOOTH_ORIGINALS or not _smooth_off(info)):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
             per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
@@ -723,7 +723,16 @@ def deblock(iof, pixels, info):
 SKY_SMOOTH_ORIGINALS = False  # smooth_sky on a frame calibrated from its true 12-bit original (original_values): off. It keys
                            # on the archive's squeezed codes, and on the true DN (no code steps, the 2 Hz bands taken off
                            # by the twohz step) it only painted those codes' contours back in as terraces (2017 plume
-                           # N1876463740_1, 11-16); the frames without an original keep it
+                           # N1876463740_1, 11-16); TABLE frames (8-bit codes, all the camera sent) keep it
+                           # ... decided per build, not per frame: with originals in use (CASSINI_ORIGINALS set) every
+                           # 12BIT frame is left unsmoothed, also the few whose original is missing or rejected (a frame
+                           # its download marked "check"), so no frame of a movie looks smoothed among unsmoothed ones
+
+
+def _smooth_off(info):
+    return bool(ds.ORIGINALS) and not ds.ORIGINALS_OFF and _value(info, "DATA_CONVERSION_TYPE", "") in ORIGINAL_CONVERSIONS
+
+
 SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
 SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
 SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
