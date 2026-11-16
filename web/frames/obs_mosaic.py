@@ -2452,7 +2452,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     def black_of(iof, valid=None):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
-        if codes and valid is not None and valid.shape == iof.shape and not valid.all():
+        if valid is not None and valid.shape == iof.shape and not valid.all():   # (taste call 25: ring passes too)
             # the frame's lost pixels (valid False: lost in downlink and filled by nothing, load_aligned's masks) are
             # not picture, and are never drawn: they hold junk, up to 5 times the pass's white along the lost edge
             # columns of 133TI CLOUD002's N1655966473_1, and thousands of times it elsewhere. On the quarter size
