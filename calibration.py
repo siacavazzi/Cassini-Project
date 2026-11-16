@@ -624,6 +624,9 @@ SKY_LINE = 32              # the glow's rise and reach are measured from each li
                            # nearest lines'), not the whole line's median: on a line mostly across Saturn that median is the
                            # body, so the limb, cloud belts and ring edges counted as faint glow and were smoothed over
                            # SKY_GLOW px (a second, darker limb about 10 px inside Saturn's; pipeline audit finding 12)
+SKY_REACH = 128            # ... and the glow is followed past the dark sky only up to about this many pixels from it: faint
+                           # ringlets a few codes over the sky across a ring frame (N1737251394_1) were smoothed as glow; a
+                           # plume's root beside its fan is well within it
 
 
 """
@@ -688,6 +691,10 @@ def smooth_sky(iof, png, sky, slopes=False):
         # texture (more than a code off the wider blur, near) stay as they are
         over = smoothed - floor
         faint = np.clip(2.0 - over / SKY_GLOW_TOP, 0, 1).astype(np.float32)
+        # (only within SKY_REACH of the dark sky)
+        reach = int(SKY_REACH * iof.shape[1] / 1024) | 1
+        faint *= cv2.GaussianBlur(cv2.dilate(area, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (reach, reach))).astype(np.float32),
+                                  (0, 0), wide)
         weight = np.maximum(weight, glow * near * faint)
     return iof + weight * (blur - iof)
 
