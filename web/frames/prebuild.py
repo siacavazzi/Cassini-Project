@@ -84,6 +84,7 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 import slices  # noqa: E402
+import stacking  # noqa: E402
 import tables  # noqa: E402
 
 PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview")
@@ -1187,6 +1188,8 @@ def main():
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
     ap.add_argument("--tables-out", help="tables: the folder to write into (default <cache>/public-tables)")
+    ap.add_argument("--handed", help="folder where a pass's merged frames wait for their tiles past the memory's room "
+                                     "(stacking.hand_to; default <cache>.handed, beside the cache; 'none' for none)")
     args = ap.parse_args()
     global _tables_out
     _tables_out = args.tables_out
@@ -1208,6 +1211,11 @@ def main():
     obs_mosaic.rolling_ahead = lambda *a, **k: None
     if args.phase == "tables":
         obs_mosaic.warm_movie = lambda *a, **k: None   # (a steady table's chains are made in order, tables._steady)
+    if args.phase in PASS_PHASES and not os.environ.get("CASSINI_HDR_HANDED_DIR") and args.handed != "none":
+        # a pass's frames are read, calibrated and merged once: the plan's merge of each waits for its tile, past the
+        # memory's room in a file (stacking.hand_on). Beside the cache, on its disk, never in it (the farm ships the
+        # cache's folders); the environment's folder instead when it names one
+        stacking.hand_to(args.handed or os.path.abspath(os.path.expanduser(args.cache)).rstrip(os.sep) + ".handed")
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
