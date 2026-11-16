@@ -236,7 +236,8 @@ WATCH_PAD = 3 * 3600   # s around a watched observation: what a window plays aro
 
 
 def watched_first(todo):
-    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv, and
+    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv and
+    plume_moments.csv, and
     Highlights, web/replay/highlights.csv: each observation's frames, WATCH_PAD either side), in time order, then
     the rest in time order. A Moment plays every frame of its stretch, its neighbours' too: by observation alone,
     most of what played on 8790 was still made on demand (2026-10-26). An item's time is its frame's (a set's last
@@ -245,7 +246,7 @@ def watched_first(todo):
     import csv
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
     watched = set()
-    for name in ("moments.csv", "highlights.csv"):
+    for name in ("moments.csv", "plume_moments.csv", "highlights.csv"):
         try:
             with open(os.path.join(here, name)) as fh:
                 for row in csv.DictReader(fh):
