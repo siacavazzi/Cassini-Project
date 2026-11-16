@@ -77,7 +77,7 @@ def places(ids, reach=False):
             target, x, y, z = shown.get(frame, (target, x, y, z))
             at = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
             if reach:
-                at += (_reach(target, at, scale and scale * r),)
+                at += (_reach(target, at, scale and scale * r), ground_range(at, _radius(target), scale and scale * r))
             out[frame] = at
     return out
 
@@ -85,14 +85,43 @@ def places(ids, reach=False):
 _radii = {}
 
 
+def _radius(target):
+    if target not in _radii:
+        _radii[target] = ba._radius_km(target)
+    return _radii[target]
+
+
+def ground_range(place, km, scale):
+    """The distance (km) from the camera to the ground in the frame's middle: along the camera's axis, hypot(x, y) / scale
+    radians off the body's centre (place = (x, y, z), find_target's shift in px and the centre's range; scale px a
+    radian), to where it meets a sphere of km radius; the centre's range when the axis misses the body or its size is
+    not known. (The formula of export_tracks.ground_range, PR #500, here for the repeat merge and colour sets.)"""
+    x, y, z = place[:3]
+    if not km or not z or not scale or x is None or z <= km:
+        return z
+    off = math.hypot(x, y) / scale
+    side = z * math.sin(off)
+    if side < km and math.cos(off) > 0:
+        return z * math.cos(off) - math.sqrt(km * km - side * side)
+    return z
+
+
+def _range(place, other):
+    """The range that sizes the ground in the frame at place against the frame at other ((x, y, z, reach, ground) as
+    places(reach=True) gives): for two frames wholly on the disk the ground's (the ground under the frame grows by
+    the ratio of its ranges, which on a close Titan is twice the centre's: 2,425 km to the ground at 5,000 from the
+    centre), else the centre's (the limb grows by that)."""
+    if _on_disk(place) and _on_disk(other) and len(place) > 4 and len(other) > 4 and place[4] and other[4]:
+        return place[4]
+    return place[2]
+
+
 def _reach(target, at, scale):
     """How far the body at place at (x, y, z) reaches from its centre within the frame, full resolution pixels: its
     radius (the target's mean radius over the distance, at scale pixels a radian), but no further than the frame's
     farthest corner from it, and 0 when it is wholly off the frame; None when its size is not known."""
     x, y, z = at[:3]
-    if target not in _radii:
-        _radii[target] = ba._radius_km(target)
-    km = _radii[target]
+    km = _radius(target)
     if not km or not z or not scale or x is None:
         return None
     radius = km / z * scale
@@ -128,7 +157,7 @@ def grown(a, b):
     reach (and 0 for either None)."""
     if a is None or b is None:
         return 0.0
-    za, zb = (a[2] if len(a) > 2 else None), (b[2] if len(b) > 2 else None)
+    za, zb = (_range(a, b) if len(a) > 2 else None), (_range(b, a) if len(b) > 2 else None)
     # (a frame wholly on the disk is brought to range about its middle, to_range: the most it then moves is at its corner)
     reach = max((HALF_DIAGONAL if _on_disk(p) else p[3] for p in (a, b) if len(p) > 3 and p[3] is not None), default=None)
     if not za or not zb or reach is None:
@@ -159,7 +188,7 @@ def to_range(image, place, ref_place, inter=None, border=0):
     thousands of px off (a close Titan), and the ground under the frame does not grow about it as the limb does, so a
     scale about it would move the frame by more than lining up looks (20 px) for. What falls outside the frame is
     border (0: to_range of a frame of ones is the part it covers)."""
-    k = place[2] / ref_place[2]
+    k = _range(place, ref_place) / _range(ref_place, place)
     centre = (ba.CCD_CENTER, ba.CCD_CENTER) if _on_disk(place) else \
         (ba.CCD_CENTER - float(place[0]), ba.CCD_CENTER - float(place[1]))
     m = cv2.getRotationMatrix2D(centre, 0, k)

@@ -1204,6 +1204,13 @@ def spice_warps(lbls, ref):
             out.append(None)
             continue
         scale = float(loc[2]) / float(locs[ref][2])
+        on_disk = _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc)
+        if on_disk and _on_disk(lbls[ref], locs[ref]) and _on_disk(lbls[len(out)], loc):
+            # both wholly on the disk: the ground under them grows by the ratio of its ranges, not the centre's (a close
+            # Titan: 2,425 km to the ground at 5,000 from the centre, so 100 km nearer is 4%, not 2%; stacking._range)
+            near, here = _ground(lbls[len(out)], loc), _ground(lbls[ref], locs[ref])
+            if near and here:
+                scale = near / here
         turn = ((float(loc[3]) - float(locs[ref][3]) + 180) % 360) - 180
         moves = HALF_DIAGONAL * (abs(scale - 1) + abs(np.radians(turn)))
         if moves < WARP_LEAST or abs(scale - 1) > WARP_MOST or abs(turn) > WARP_TURN:
@@ -1211,11 +1218,19 @@ def spice_warps(lbls, ref):
             continue
         # about the target's centre; a close-up wholly on its target's disk about the frame's middle: its centre
         # is thousands of px off (Titan at 6,000 km), and a scale about it moves the whole frame by hundreds
-        if _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc):
+        if on_disk:
             out.append((ba.CCD_CENTER, ba.CCD_CENTER, scale, turn))
         else:
             out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
     return out
+
+
+def _ground(lbl, loc):
+    """The range (km) to the ground in the frame's middle (stacking.ground_range), or None"""
+    scale = (getattr(lbl, "geometry", None) or {}).get("scale")
+    if loc is None or not scale:
+        return None
+    return stacking.ground_range(tuple(loc[:3]), ba._radius_km(lbl.info.get("TARGET_NAME")), float(scale))
 
 
 def _on_disk(lbl, loc):

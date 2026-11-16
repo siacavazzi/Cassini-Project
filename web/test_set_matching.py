@@ -83,6 +83,14 @@ class L:
 locs[:] = [[-16350.0, -4239.0, 6000.0, 30.0], [-16000.0, -4100.0, 5500.0, 30.0]]
 w = color_image.spice_warps([L(), L()], 0)
 assert w[1] is not None and w[1][:2] == (C, C) and abs(w[1][2] - 5500 / 6000) < 1e-6, w
+# ... with its scale known, by the ground's ranges, not the centre's: the ground under the frame (about 3,470 and
+# 2,960 km off) grows by their ratio, 0.85, where the centre's is 0.92
+L.geometry = {"scale": 1 / 6.0e-6}
+import stacking  # noqa: E402
+w = color_image.spice_warps([L(), L()], 0)
+g = [stacking.ground_range(tuple(v[:3]), 2575, 1 / 6.0e-6) for v in locs]
+assert 2900 < g[1] < g[0] < 3500 and abs(w[1][2] - g[1] / g[0]) < 1e-9 and w[1][2] < 5500 / 6000 - 0.05, (g, w)
+del L.geometry
 print("4. scale and turn: radius", round(lit(small), 1), "->", round(lit(grown), 1), "reference", round(lit(ref), 1))
 
 # ---------- 5. stars ----------

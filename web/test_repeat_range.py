@@ -20,6 +20,12 @@ assert abs(stacking.grown((0, 0, 2400.0, 600.0), (0, 0, 2304.0, 625.0)) - 625 * 
 on = (2000.0, 0.0, 6000.0, 3500.0)
 assert stacking._on_disk(on) and not stacking._on_disk((0.0, 0.0, 6000.0, 300.0))
 assert abs(stacking.grown(on, (2000.0, 0.0, 5940.0, 3535.0)) - stacking.HALF_DIAGONAL * 60 / 6000) < 1e-9
+# ... and with the ground's ranges (places gives them fifth), by those: 60 km nearer the centre, 60 nearer the ground
+# 2,000 km off is 3% where the centre's is 1%
+assert abs(stacking.grown(on + (2000.0,), (2000.0, 0.0, 5940.0, 3535.0, 1940.0)) - stacking.HALF_DIAGONAL * 60 / 2000) < 1e-9
+# (ground_range: straight down at a sphere, the centre's range less the radius; off the body, the centre's)
+assert abs(stacking.ground_range((0.0, 0.0, 6000.0), 2575.0, 1 / 6.0e-6) - 3425.0) < 1e-6
+assert stacking.ground_range((0.0, 0.0, 6000.0), None, 1 / 6.0e-6) == 6000.0
 # a small body far off grows a fraction of a pixel; no reach (a body of no known size) or no place: 0
 assert stacking.grown((0, 0, 1.0e6, 20.0), (0, 0, 0.97e6, 20.6)) < 1
 assert stacking.grown((0, 0, 2400.0), (0, 0, 2300.0)) == 0 and stacking.grown(None, (0, 0, 1.0, 5.0)) == 0
@@ -56,6 +62,9 @@ cv2.circle(ring, (512, 512), 300, 1.0, 3)
 got = stacking.to_range(ring, (2000.0, 0.0, 5940.0, 3535.0), (2000.0, 0.0, 6000.0, 3500.0))
 ys = np.nonzero(got[:, 512] > 0.5)[0]
 assert abs((ys.max() - ys.min()) / 2 - 300 * 0.99) < 2.5 and abs((ys.max() + ys.min()) / 2 - 512) < 1, (ys.min(), ys.max())
+got = stacking.to_range(ring, (2000.0, 0.0, 5940.0, 3535.0, 1940.0), (2000.0, 0.0, 6000.0, 3500.0, 2000.0))
+ys = np.nonzero(got[:, 512] > 0.5)[0]
+assert abs((ys.max() - ys.min()) / 2 - 300 * 0.97) < 2.5, (ys.min(), ys.max())
 print("to_range ok")
 
 # ---------- load_hdr: the nearer repeat merged at the frame's size ----------
