@@ -3744,17 +3744,21 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
         im = picture(t["n"])
         got = _tile_ring_samples(u, t, im, rings, reach) if im is not None else None
         if got is not None:
-            data[t["n"]] = got
+            # (its radius grid, 9.5 MB, let go here for its bins' 2.4, tile by tile: kept until every tile was
+            # sampled, the grids of a whole pass were held at once, 1.3 GB for 132 tiles and 3 GB for 316; the
+            # values as the doubles bincount sums)
+            v, radius, on, sy, sx = got
+            data[t["n"]] = (v.astype(np.float64),) + _ring_bins(radius) + (sy.astype(np.int64) * radius.shape[1] + sx,
+                                                                           radius.shape[1])
+            del got, radius, on
     if ref is None and len(data) < RING_FIT_MIN:
         return {}, None
     moves = {n: tuple(fixed[n][:2]) if n in fixed else (0, 0) for n in data}
     # each tile's samples binned by radius at every place tried, ~2,200 a tile (the coarse grid of RING_FIT_STEP, the
     # fine one, the parabola, RING_FIT_ROUNDS times): the bin of every point of its radius grid is worked out once
-    # (_ring_bins) and a place tried only reads its samples' bins there, where it worked the bins out again from the
-    # radii each time (half of a ring pass's time, 2026-11-16). The same bins, sums and counts: _ring_profile's.
-    # (the radius grid itself, 9.5 MB a tile, is let go for its bins' 2.4; the values as the doubles bincount sums)
-    data = {n: (v.astype(np.float64),) + _ring_bins(radius) + (sy.astype(np.int64) * radius.shape[1] + sx, radius.shape[1])
-            for n, (v, radius, on, sy, sx) in data.items()}
+    # (_ring_bins, above as each tile is sampled) and a place tried only reads its samples' bins there, where it
+    # worked the bins out again from the radii each time (half of a ring pass's time, 2026-11-16). The same bins,
+    # sums and counts: _ring_profile's.
     given = ref is not None
     # A tile's profile at a place does not depend on the reference, only what it is matched to does: the rounds after
     # the first try the same ~1,100 places of every tile against a new reference, so each profile made is kept (over
