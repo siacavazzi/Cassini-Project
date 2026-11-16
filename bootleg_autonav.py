@@ -82,16 +82,58 @@ def usgs_titan_on():
         os.path.exists(os.path.join(USGS_TITAN_DIR, "Titan_CISS_2024_ck.bc"))
 
 
+"""
+JPL's per-image corrected pointing (the C-smithed *_ISS.bc CKs of the mission kernels) carried over to every other frame
+of the same observations (spice_extra/iss_smithed/make_smith_neighbours_ck.py), so no observation mixes corrected and
+raw pointing (Sam 2026-11-16: 5,533 observations did; spice_extra/iss_smithed/check_mixed.py lists any). One type 3
+segment per frame round its mid-exposure time, loaded before USGS's (theirs win where they overlap).
+CASSINI_ISS_NEIGHBOURS=0 leaves it out.
+"""
+ISS_NEIGHBOURS_DIR = os.environ.get("CASSINI_ISS_NEIGHBOURS_DIR") or \
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "spice_extra", "iss_smithed")
+ISS_NEIGHBOURS_CK = "ISS_smithed_neighbours_ck.bc"
+ISS_NEIGHBOURS_TAG = "iss-neighbours-2026-11"
+_iss_frames = None
+
+
+def iss_neighbours_on():
+    return os.environ.get("CASSINI_ISS_NEIGHBOURS", "1").lower() not in ("0", "false", "no") and \
+        os.path.exists(os.path.join(ISS_NEIGHBOURS_DIR, ISS_NEIGHBOURS_CK))
+
+
+def iss_neighbours_frames():
+    """Frame ids ISS_NEIGHBOURS_CK gives the carried-over corrected pointing (its .lis)."""
+    global _iss_frames
+    if _iss_frames is None:
+        _iss_frames = set()
+        path = os.path.join(ISS_NEIGHBOURS_DIR, ISS_NEIGHBOURS_CK[:-3] + ".lis")
+        if iss_neighbours_on() and os.path.exists(path):
+            with open(path) as f:
+                _iss_frames = {line.strip() for line in f if line.strip()}
+    return _iss_frames
+
+
 def extra_kernels():
+    iss = [os.path.join(ISS_NEIGHBOURS_DIR, ISS_NEIGHBOURS_CK)] if iss_neighbours_on() else []
     if not usgs_titan_on():
-        return []
-    return [os.path.join(USGS_TITAN_DIR, k) for k in USGS_TITAN_KERNELS if os.path.exists(os.path.join(USGS_TITAN_DIR, k))]
+        return iss
+    return iss + [os.path.join(USGS_TITAN_DIR, k) for k in USGS_TITAN_KERNELS if os.path.exists(os.path.join(USGS_TITAN_DIR, k))]
+
+
+def pointing_tag(frame):
+    """The tag a geometry cache answer for frame is kept with when extra pointing kernels give its pointing
+    (USGS_TITAN_TAG, ISS_NEIGHBOURS_TAG), or None for the mission kernels' own."""
+    if frame in usgs_titan_frames():
+        return USGS_TITAN_TAG
+    if frame in iss_neighbours_frames():
+        return ISS_NEIGHBOURS_TAG
+    return None
 
 
 """
 Frame ids (N1467471504_2) the USGS kernels change: the release's image list, and the WAC frames shuttered at the
 same moment as one of its NAC frames (concurrent.lis), which take the corrected spacecraft attitude too, and the
-other Titan frames of the same passes the correction is carried over to (neighbours.lis)
+other frames of the same passes the correction is carried over to (neighbours.lis)
 """
 def usgs_titan_frames():
     global _usgs_frames
@@ -104,6 +146,7 @@ def usgs_titan_frames():
                 with open(os.path.join(USGS_TITAN_DIR, name)) as f:
                     _usgs_frames |= {line.strip() for line in f if line.strip()}
     return _usgs_frames
+
 
 """
 Extracts the SPICE kernels for one year from the zip without loading them
@@ -391,10 +434,13 @@ def cached_target(label):
 
 
 def _needs_usgs(frame):
-    if frame not in usgs_titan_frames():
+    """True when frame's pointing comes from extra kernels (pointing_tag) and its cached answer was worked out
+    without them: it is worked out again."""
+    tag = pointing_tag(frame)
+    if tag is None:
         return False
     return _geometry_db().execute("SELECT 1 FROM pointing WHERE frame = ? AND kernels = ?",
-                                  (frame, USGS_TITAN_TAG)).fetchone() is None
+                                  (frame, tag)).fetchone() is None
 
 
 def _known(target):
@@ -409,9 +455,8 @@ def _store_rows(rows):
     db = _geometry_db()
     db.execute("BEGIN")
     db.executemany("INSERT OR REPLACE INTO target VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
-    usgs = usgs_titan_frames()
     db.executemany("INSERT OR REPLACE INTO pointing VALUES (?, ?)",
-                   [(row[0], USGS_TITAN_TAG) for row in rows if row[0] in usgs])
+                   [(row[0], pointing_tag(row[0])) for row in rows if pointing_tag(row[0]) is not None])
     db.execute("COMMIT")
 
 
@@ -533,9 +578,12 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
     retry = set(index.loc[index["TARGET_NAME"].isin(CATALOG_NAMES), "frame"]) & {
         frame for frame, error in cached if error and UNKNOWN_NAME in error}
     # frames the USGS Titan kernels cover that were worked out before they were added
+    # and the frames the ISS neighbours CK covers: each worked out again until kept with its kernels' tag
     usgs = usgs_titan_frames()
     retry |= usgs - {frame for frame, in _geometry_db().execute("SELECT frame FROM pointing WHERE kernels = ?",
                                                                (USGS_TITAN_TAG,))}
+    retry |= iss_neighbours_frames() - {frame for frame, in _geometry_db().execute(
+        "SELECT frame FROM pointing WHERE kernels = ?", (ISS_NEIGHBOURS_TAG,))}
     if usgs_only:
         index = index[index["frame"].isin(usgs)]
     done = {frame for frame, _ in cached} - retry
