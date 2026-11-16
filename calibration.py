@@ -1476,9 +1476,10 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
         out, drawn_at = [], []
-        for iof, black in zip(iofs, scale["blacks"]):
-            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
-            own = scale["black_of"](iof) if scale.get("black_of") else None
+        for i, (iof, black) in enumerate(zip(iofs, scale["blacks"])):
+            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale), told which of its
+            # pixels the camera saturated
+            own = scale["black_of"](iof, saturated[i] if saturated and i < len(saturated) else None) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
             out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe, hdr=len(iofs) == 1))
             drawn_at.append((black, toe))
