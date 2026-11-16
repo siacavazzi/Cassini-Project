@@ -25,7 +25,7 @@ Timed alone on a 1,024 px frame (a 3,072 px tile canvas for the channel maximum)
 | `saturated_code`: 529 saturated patches' medians | 542 ms | 0.6 ms |
 | `_brightest` against `max(axis=2)` | 72 ms | 8 ms |
 
-`web/test_exact_speedups.py` holds each old form and checks the new one against it to the bit.
+`web/test_pass_speedups.py` holds each old form and checks the new one against it to the bit.
 
 ## Where these were found
 
