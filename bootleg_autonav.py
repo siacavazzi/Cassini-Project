@@ -92,7 +92,7 @@ CASSINI_ISS_NEIGHBOURS=0 leaves it out.
 ISS_NEIGHBOURS_DIR = os.environ.get("CASSINI_ISS_NEIGHBOURS_DIR") or \
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "spice_extra", "iss_smithed")
 ISS_NEIGHBOURS_CK = "ISS_smithed_neighbours_ck.bc"
-ISS_NEIGHBOURS_TAG = "iss-neighbours-2026-11"
+ISS_NEIGHBOURS_TAG = "iss-neighbours"   # + the CK's own content hash (pointing_tags): a regenerated CK never reuses old rows
 _iss_frames = None
 
 
@@ -147,13 +147,43 @@ def extra_kernels():
     return iss + [os.path.join(USGS_TITAN_DIR, k) for k in USGS_TITAN_KERNELS if os.path.exists(os.path.join(USGS_TITAN_DIR, k))]
 
 
+_tags = None
+
+
+def _content_tag(name, paths):
+    """name + a short hash of the files' bytes (each file's size and its first and last MB: a few ms for the 33 MB CK),
+    so the tag changes whenever a kernel is made again."""
+    import hashlib
+    h = hashlib.md5()
+    for p in paths:
+        if os.path.exists(p):
+            size = os.path.getsize(p)
+            h.update(str(size).encode())
+            with open(p, "rb") as f:
+                h.update(f.read(1 << 20))
+                f.seek(max(0, size - (1 << 20)))
+                h.update(f.read())
+    return f"{name}-{h.hexdigest()[:10]}"
+
+
+def pointing_tags():
+    """(USGS tag, ISS neighbours tag): the tags geometry cache answers worked out with the extra pointing kernels are
+    kept with, each its kernels' content hash, so a kernel made again (a regenerated carry-over) is worked out again
+    instead of served the rows of the one before (180 2X2MOVIEA001 frames kept an earlier carry, 2026-11-16)."""
+    global _tags
+    if _tags is None:
+        _tags = (_content_tag(USGS_TITAN_TAG, [os.path.join(USGS_TITAN_DIR, k) for k in USGS_TITAN_KERNELS]),
+                 _content_tag(ISS_NEIGHBOURS_TAG, [os.path.join(ISS_NEIGHBOURS_DIR, ISS_NEIGHBOURS_CK)]))
+    return _tags
+
+
 def pointing_tag(frame):
     """The tag a geometry cache answer for frame is kept with when extra pointing kernels give its pointing
-    (USGS_TITAN_TAG, ISS_NEIGHBOURS_TAG), or None for the mission kernels' own."""
+    (pointing_tags), or None for the mission kernels' own."""
     if frame in usgs_titan_frames():
-        return USGS_TITAN_TAG
+        return pointing_tags()[0]
     if frame in iss_neighbours_frames():
-        return ISS_NEIGHBOURS_TAG
+        return pointing_tags()[1]
     return None
 
 
@@ -608,9 +638,9 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
     # and the frames the ISS neighbours CK covers: each worked out again until kept with its kernels' tag
     usgs = usgs_titan_frames()
     retry |= usgs - {frame for frame, in _geometry_db().execute("SELECT frame FROM pointing WHERE kernels = ?",
-                                                               (USGS_TITAN_TAG,))}
+                                                               (pointing_tags()[0],))}
     retry |= iss_neighbours_frames() - {frame for frame, in _geometry_db().execute(
-        "SELECT frame FROM pointing WHERE kernels = ?", (ISS_NEIGHBOURS_TAG,))}
+        "SELECT frame FROM pointing WHERE kernels = ?", (pointing_tags()[1],))}
     if usgs_only:
         index = index[index["frame"].isin(usgs)]
     done = {frame for frame, _ in cached} - retry
