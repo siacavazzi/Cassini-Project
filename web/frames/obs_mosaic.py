@@ -2450,16 +2450,25 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     def black_of(iof, valid=None):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
-        # the frame's brightest (its 99.9th percentile, which its sky is under 5% of) is measured without its lost pixels
-        # (valid False: lines lost in downlink that nothing filled, load_aligned's masks). They are not picture: they
-        # hold whatever the fill left there, up to 5 times the pass's white in 133TI CLOUD002's N1655966473_1, four
-        # lost lines. On the quarter size picture one such row is 0.4% of the frame, so the brightest tripled, three
-        # times as much of Titan's haze counted as sky, and the sky's spread and the frame's black went up with it:
-        # every second or third CB3 frame of that movie on a black 8% of white over its neighbours', and 207SA
-        # NHEMMOV001's on one 44% of white over theirs, drawn near black. (Only the brightest: the sky is found and
-        # measured as before, lost pixels and all, so a frame that lost a dark half keeps the black it had)
-        ok = valid[::4, ::4] if valid is not None and valid.shape == iof.shape else None
-        brightest = float(np.percentile(q[ok] if ok is not None and ok.any() else q, 99.9))
+        # the frame's brightest (its 99.9th percentile, which its sky is under 5% of) is measured without the lost
+        # pixels of its outermost lines and columns (valid False within color_image.EDGE_PX of the edge: load_aligned's
+        # masks). Those lines are not picture (edge_trimmed: nothing drawn from them), and where a frame's edge columns
+        # were lost they hold junk, up to 5 times the pass's white in 133TI CLOUD002's N1655966473_1. On the quarter
+        # size picture one such column is 0.4% of the frame, so the brightest tripled, three times as much of Titan's
+        # haze counted as sky, and the sky's spread and the frame's black went up with it: every second or third CB3
+        # frame of that movie on a black 8% of white over its neighbours', and 207SA NHEMMOV001's on one 44% of white
+        # over theirs, drawn near black. (Only those: a frame with lost pixels inside the picture is measured as it
+        # was, and a frame that lost none is measured on every pixel, the same to the last digit)
+        brightest = None
+        if valid is not None and valid.shape == iof.shape and not valid.all():
+            e = color_image.EDGE_PX
+            edge = np.ones(valid.shape, bool)
+            edge[e:-e, e:-e] = False
+            junk = (edge & ~valid)[::4, ::4]
+            if junk.any() and not junk.all():
+                brightest = float(np.percentile(q[~junk], 99.9))
+        if brightest is None:
+            brightest = float(np.percentile(q, 99.9))
         top_of_sky = 0.05 * brightest
         if glow_only and not codes and float(np.median(q)) > calibration.GLOW_IOF[1]:
             # (a ring pass's frame as bright as a sunlit surface, GLOW_IOF, is the rings filling it, real light, never a
@@ -2653,7 +2662,7 @@ def _dark_sky(q, top=None):
     the gamma 3 scale the offsets came out as a blue-grey sky behind the moon (RED 2, GRN 18, BL1 32 levels). A floor
     over SKY_OFFSET_MOST of the 99.9th percentile is a lit body, not an offset sky (a moon or Titan's haze filling the
     frame, whose darkest part is no sky): measured from 0 then, as before."""
-    # (top: the frame's brightest where the caller measured it, tile_scale's black_of without the frame's lost pixels)
+    # (top: the frame's brightest where the caller measured it, tile_scale's black_of without the frame's lost edges)
     top = float(np.percentile(q, 99.9)) if top is None else top
     floor = float(np.percentile(q, 1))
     floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
