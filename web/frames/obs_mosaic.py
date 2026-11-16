@@ -3470,7 +3470,8 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
 EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose tiles ring registration moved (ring_places)
-RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)
+RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE), and its "too little ring"
+                         # outcome ("short", ring_moves): renamed when ring_places' or _tile_ring_samples' rule changes
 
 # Global panel registration (on unless CASSINI_GLOBAL_PANELS=0): every pair of overlapping pointings is measured once
 # (panel_shift / edge_shift at SPICE's places, as panel_places measures them), and all pointings' moves are solved
@@ -3869,7 +3870,7 @@ def ring_moves(u, cache, p, tiles):
         return {}
     path = os.path.join(folder(u, cache), (RING_REDRAW_DIR + "-" if any("ring_at" in t for t in tiles) else "") + RING_FILE + PLAN_FILE)
     with _ulock(u):
-        kept, ref = {}, None
+        kept, ref, short = {}, None, set()
         if os.path.exists(path):
             with open(path) as fh:
                 rec = json.load(fh)
@@ -3879,9 +3880,16 @@ def ring_moves(u, cache, p, tiles):
             # once it is redrawn: what each was fitted on is kept with it, ring_redraw)
             drawn = {t["n"]: "ring_at" in t for t in tiles if "offset" in t}
             kept = {n: v for n, v in kept.items() if n not in drawn or (len(v) > 4 and v[4]) == drawn[n]}
+            short = {json.dumps(k) for k in rec.get("short", [])}
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
+        # (too few ring tiles for a reference, found before on these tiles or more: ring_places reads every tile to say
+        # so again, 3 to 6.5 s a layout on 271SA NHEMMAP001's 36 tiles, on every request for one of its mosaics)
+        tried = [_ring_tried(t) for t in tiles if "offset" in t]
+        if todo and ref is None and not kept and short and all(json.dumps(k) in short for k in tried):
+            todo = []
         if todo:
             there = _tiles(u, cache, p["display_scale"])
+            unread = []
 
             pics = {t["n"]: t["pic"] for t in tiles if "pic" in t}
             by_n_ = {t["n"]: t for t in tiles}
@@ -3893,12 +3901,20 @@ def ring_moves(u, cache, p, tiles):
                     got = _made_pictures.get(fp)
                 if got is None and os.path.exists(fp):
                     got = np.asarray(Image.open(fp).convert("RGBA"))
+                if got is None:
+                    unread.append(j)
                 return got
             # (the reference profile is made once, from the first RING_FIT_MIN ring tiles or more; later tiles are fitted
             # to it alone, so a mosaic grown a tile at a time reads each tile once)
             found, made = ring_places(u, [t for t in tiles if "offset" in t], picture, fixed=kept, ref=ref)
             if made is not None:
                 ref = made
+            elif ref is None and not found and not kept and not unread and _ring_geometry(u) is not None \
+                    and all(_ring_geometry(u).knows(_ring_id(t)) for t in tiles if "offset" in t):
+                # too few ring tiles to make a reference from (ring_places' ({}, None)), every tile read and its time
+                # known: kept, with the tiles it was found on, so the same tiles or fewer of them are not read again
+                # (fewer tiles hold no more ring); a pass grown past them is read again, as before
+                _keep_ring_short(path, tried)
             if found:
                 # a pointing's filters move together: each pointing's fitted tiles (with those kept before) give its
                 # move, their median, and a tile of it not fitted, or fitted further than RING_AGREE from it, takes it
@@ -3953,6 +3969,29 @@ def ring_moves(u, cache, p, tiles):
     # (a tile fitted where it already was, a move of [0, 0], is kept too: the global solve takes it as an anchor holding
     # its pointing there, where left out it took it as not fitted and let pair matches drag it)
     return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0] or (len(v) > 3 and v[3])}
+
+
+def _ring_tried(t):
+    """(ring_moves) What a tile's ring samples depend on beside its picture: the tile, whether its rings were redrawn,
+    and where it sits (_tile_ring_samples), as kept in the pass's ring file's "short"."""
+    return [int(t["n"]), "ring_at" in t, [round(float(v), 3) for v in t["offset"][:2]], [round(float(v), 3) for v in t["box"]]]
+
+
+def _keep_ring_short(path, tried):
+    """(ring_moves) Keeps that the tiles tried hold too little ring between them for a reference: the pass's ring file
+    with no reference, no moves and "short", the tiles (_ring_tried). A file with a reference is never written over."""
+    part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+    try:
+        if os.path.exists(path):
+            with open(path) as fh:
+                if json.load(fh).get("ref"):
+                    return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(part, "w") as fh:
+            json.dump({"ref": None, "tiles": {}, "short": tried}, fh)
+        os.replace(part, path)
+    except (OSError, ValueError) as e:
+        print(f"cannot keep {path} in the cache ({e})", flush=True)
 
 
 _ring_geometries = {}   # pass key -> _ring_geometry's answer
