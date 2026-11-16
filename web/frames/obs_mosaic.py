@@ -6325,11 +6325,12 @@ DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the wa
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
 DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
 DISK_DETAIL_HAZE = ("TITAN",)    # ... and hazy ones unless a frame is in their surface window (calibration.SURFACE_WINDOW,
-                                 # Titan's CB3): the haze has no detail to raise (Sam, 11-16), the surface does
+                                 # Titan's CB3): the haze has no detail to raise (Sam, 11-16), the surface does ...
+DISK_DETAIL_HAZE_INNER = (0.7, 0.85)   # ... and there only inside the haze ring: faded out from 0.7 to 0.85 x the radius
 DISK_DETAIL_IRREGULAR = set(SMALL_RADIUS) | {"HYPERION", "PHOEBE"}   # bodies whose ends lie past their mean radius
 
 
-def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
+def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None, haze=False):
     """detail() on a still or composite whose body SPICE places (frame_server.centred): the same raise of the local
     contrast (DETAIL, DETAIL_EDGE, DETAIL_KNEE), its neighbourhood mean taken over the body's lit pixels only (inside
     DISK_DETAIL_REACH and DISK_DETAIL_SLACK of (cx, cy), DISK_DETAIL_LIT over the sky, apart from any lit backdrop)
@@ -6380,12 +6381,22 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
     if biggest in touching:
         return rgba
     lit = (np.isin(labels, [t for t in inner if t not in touching]) & circle).astype(np.uint8)
+    if haze:
+        # a hazy body seen in its surface window (Titan in CB3): the surface inside is raised, the haze ring round the
+        # limb is not, so no dark band is drawn between the two (133TI CLOUD002, N1655966005_1: a dark halo inside
+        # Titan's blue haze ring). The mean and the change keep inside DISK_DETAIL_HAZE_INNER x the radius
+        lit = lit & (rr <= DISK_DETAIL_HAZE_INNER[1] * radius).astype(np.uint8)
     lit = cv2.erode(lit, np.ones((5, 5), np.uint8)).astype(np.float32)   # (back inside the limb: bright was blurred 2 px out)
     if lit.sum() < 50:
         return rgba
     # (the change follows the lit body itself, faded in from its edge; SPICE's circle, reach x the radius, only bounds
     # it, so SPICE's few px of error draw no second limb inside the body's own; review of #495)
     fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit
+    if haze:
+        # (faded out from DISK_DETAIL_HAZE_INNER[0] to [1] x the radius: no line where the raised surface stops)
+        a0, a1 = DISK_DETAIL_HAZE_INNER
+        t = np.clip((a1 * radius - rr) / ((a1 - a0) * radius), 0, 1)
+        fade = fade * t * t * (3 - 2 * t)
     weight = cv2.GaussianBlur(lit, (0, 0), sigma)
     mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
     x = lum - mean
