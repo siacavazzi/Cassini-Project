@@ -1186,7 +1186,10 @@ offset per filter fitted to them all (evidence/wac_filter_offsets/fit.py). Held-
 pointing JPL corrected; the rest is the raw pointing's own frame to frame error). The same from 2000 to 2017 for RED
 and BL1 to 0.3 px; VIO, CB2 and MT2 to about 1 px. Summed frames are left out of the fit, not of the table: their
 matches lock to whole camera pixels (2 or 4 px), but the filters move their pictures as much. The narrow-angle
-camera's filters show no such offset (under 0.2 px between its visible filters) and have no table.
+camera's filters show no such offset (under 0.2 px between its visible filters) and have no table.The camera team measured the same before launch (ISS calibration report 699-416, section 5.4.3, table 5.4-1, 1997
+nav-target disks through CL, RED, GRN and BL1; COISS_0011 document/report/iss/5.0/5.4.pdf): against GRN, RED
+(+2.2, +0.8), BL1 (+2.0, -1.6), CL1/CL2 (+1.4, -0.1) px (sample, line), within 0.4 px of this table. SPICE's ISS
+instrument kernel (cas_iss_v10.ti) has one WAC boresight and no filter terms.
 """
 WAC_FILTER_OFFSETS = {
     ("CL1", "GRN"): (0.00, 0.00), ("CL1", "RED"): (2.03, 1.16), ("CL1", "BL1"): (2.10, -1.35), ("CL1", "VIO"): (2.16, -1.75),
