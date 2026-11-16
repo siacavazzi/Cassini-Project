@@ -344,6 +344,8 @@ def dark_dn(info):
     return None if r is None else _dark(r)
 
 
+# (kept from frame to frame, as _parameters' tables above are: calibration.let_go lets both go once a pass's tiles
+# are made; a maker kept like these belongs in its list)
 @functools.lru_cache(maxsize=16)
 def _dark(r):
     camera, lines, gain = r[0], r[1], r[2]

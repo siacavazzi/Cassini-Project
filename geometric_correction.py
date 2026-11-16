@@ -109,6 +109,8 @@ _edges = collections.OrderedDict()   # (npix, f) -> the mask of the pixels the r
 _edges_lock = threading.Lock()
 
 
+# (kept from frame to frame: calibration.let_go lets it go once a pass's tiles are made; a maker kept like this
+# belongs in its list)
 @functools.lru_cache(maxsize=MAPS_KEEP)
 def _map(npix, f):
     """Where each output pixel of an npix x npix frame comes from, in the buffered array (cassimg__geomcorr.pro):
@@ -177,6 +179,8 @@ def _smooth_nan(image, width):
         return np.where(count > 0.5, total / np.maximum(count, 1e-12), np.nan)
 
 
+# (kept from frame to frame: calibration.let_go lets it go once a pass's tiles are made; a maker kept like this
+# belongs in its list)
 @functools.lru_cache(maxsize=PLANS_KEEP)
 def _plan(npix, f):
     """What geomcorr needs for every frame of size npix at focal length f, worked out once: the map, its cubic

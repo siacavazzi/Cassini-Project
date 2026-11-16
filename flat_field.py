@@ -185,6 +185,8 @@ def mottle_strength(info):
     return STRENGTH_SECOND.get(i2, 1.0)
 
 
+# (kept from frame to frame: calibration.let_go lets it go once a pass's tiles are made; a maker kept like this
+# belongs in its list)
 @functools.lru_cache(maxsize=24)
 def _map(name, mode):
     folder = "slope/flat" if name.startswith("flat") else "dustring"
@@ -218,6 +220,8 @@ def correction(info):
     return _correction(flat, dust, aboff, strength, mode)
 
 
+# (kept from frame to frame: calibration.let_go lets it go once a pass's tiles are made; a maker kept like this
+# belongs in its list)
 @functools.lru_cache(maxsize=32)
 def _correction(flat, dust, aboff, strength, mode):
     out = None
