@@ -41,3 +41,19 @@ assert run(drift, still) == (0, 4, 0)                                      # a s
 assert run(jumpy, still, keep_chain=False) == (0, 4, 0)                    # no chain kept: SPICE's places
 assert run(jumpy, still, track=True) == (0, 0, 0)                          # a feature track: as before
 print("auto stabilization of passes SPICE places jump in: ok")
+
+# prebuild.make_pass works out a movie's chain before its first frame, so auto_steady is decided for every frame
+import prebuild  # noqa: E402
+calls = []
+was = (om.plan, om.tile, om.steady_chain, om.movie_webp)
+om.plan = lambda u, cache: {"display_scale": {}}
+om.tile = lambda u, j, cache, scale=None: calls.append("tile")
+om.steady_chain = lambda u, cache, p=None: calls.append("chain")
+om.movie_webp = lambda *a, **k: calls.append("frame")
+try:
+    prebuild.make_pass({"key": ("TITAN", "X", "N", 0), "frames": [("p", f"N{i}_1", "CB3", float(i), 938.0, 0, 0, 1e6) for i in range(3)],
+                        "mosaic": False, "kind": "movie"}, "/c")
+finally:
+    om.plan, om.tile, om.steady_chain, om.movie_webp = was
+assert calls.index("chain") < calls.index("frame") and calls.count("chain") == 1, calls
+print("make_pass: chain before the first frame; ok")
