@@ -13087,6 +13087,7 @@ void main() {
     { key: "closest", label: "Closest views", c: "#ef8f6b" },
     { key: "find", label: "Finds", c: "#9fd38a" },
     { key: "transit", label: "Transits", c: "#c49cf0" },
+    { key: "plume", label: "Plumes", c: "#f3f0e2" },
     { key: "flyby", label: "Flybys", c: "#8ab6ff" },
     { key: "movie", label: "Movies", c: "#6fd6d0" },
   ];
@@ -13792,7 +13793,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"968db3bcdb98";
+  const BUILD = /*BUILD*/"3bf945a4deb1";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
