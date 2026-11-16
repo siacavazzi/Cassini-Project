@@ -105,8 +105,8 @@ for p, lb in labels.items():
     made[p] = (lb, np.full((H, H), 100, np.uint8), np.full((H, H), 0.1, np.float32))
 stacking.find_repeats = lambda path, window=120, max_frames=5: asked.append(max_frames) or [p for p, _ in repeats[path]][:max_frames]
 stacking.lh.label = lambda p, as_png=True: labels[p]
-stacking.ic.find_shift = lambda a, b, r: None
-stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing, so merged unmatched
+stacking.ic.find_shift = lambda a, b, r: (0.0, 0.0)   # the frames line up as they are (one nothing lines up is left out)
+stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing
 cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 stacking.cal = cal
 _, _, n = stacking.load_hdr("a.png")

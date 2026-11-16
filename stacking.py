@@ -362,11 +362,13 @@ exposure for the bright parts, a long one for the faint ones) becomes one pictur
 of both. Each frame is calibrated on its own, aligned to the frame at path, and averaged weighted by
 its exposure time (the long exposures carry the faint signal), leaving out its saturated pixels
 and the few around them (charge bleeds out of a full pixel), so where a long exposure saturated the
-short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
-correlation finds nothing; and half the repeats of a random 6,000 frames, 2026-11-16: smooth disks
-and ring frames that look the same) is taken as it is only where SPICE puts it at the frame's
-pointing (same_place); otherwise it is left out, as a frame of another pointing would put its scene
-over this one (Phoebe's black blotches: the other pointing's shadow where this frame saturated).
+short one is used. A repeat find_shift can't match (a faint frame of mostly empty sky, where phase
+correlation round the target finds nothing; and half the repeats of a random 6,000 frames,
+2026-11-16: smooth disks and ring frames that look the same) is matched again near where SPICE puts
+it (image_correction.guided_shift) when SPICE puts it at the frame's pointing (same_place); one
+nothing matches is left out. Taken as it is, one in four of those was over 3 px off (whole-frame
+correlation, p90 12 px): a blur at every edge. A frame of another pointing is never merged (Phoebe's
+black blotches: the other pointing's shadow where this frame saturated).
 A repeat SPICE puts at another range, the body over REPEAT_GROW bigger or smaller (grown), is first
 brought to the frame's range (to_range): on a close flyby the frames of a bracket seconds apart are
 taken from tens or hundreds of km nearer (Phoebe's closest approach: crater shadows with three edges
@@ -426,8 +428,15 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
                 gray, codes = to_range(gray, at, ref_at), to_range(codes, at, ref_at, cv2.INTER_NEAREST)
                 inside = to_range(np.ones(iof.shape[:2], np.float32), at, ref_at, cv2.INTER_LINEAR) > 0.99
             shift = ic.find_shift(ref, image, 20) if here is not False else None
-            if not here and shift is None:
-                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing")
+            if shift is None and here:
+                # phase correlation round the target found nothing: the repo's fallback for that, matched near where
+                # SPICE puts the repeat (image_correction.guided_shift: phase, edges, then the centroid, within 12 px)
+                at_p, at_ref = where[frame_id(p)], where[frame_id(path)]
+                shift, how = ic.guided_shift(ref, image, (at_ref[0] - at_p[0], at_ref[1] - at_p[1]))
+            if shift is None:
+                # never merged as it is: SPICE's raw pointing is off by about 5 px frame to frame (p90 9.5), and a
+                # quarter of the repeats merged so were over 3 px off, a blur at every limb, terminator and ring edge
+                print(f"Skipping repeat {p}: it doesn't line up with {path}")
                 continue
         mask = l.valid_mask() if valid else None
         if valid and ranged:
