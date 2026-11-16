@@ -90,6 +90,16 @@ def repeat_of(kept, t, place, window):
     return None
 
 
+def _sets_passes():
+    """web/frames/sets_passes (the one rule for filter sets), imported from beside this module."""
+    import sys
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "frames")
+    if here not in sys.path:
+        sys.path.append(here)
+    import sets_passes
+    return sets_passes
+
+
 def load_index():
     global index, groups, columns
     if index is None:
@@ -103,6 +113,9 @@ def load_index():
                 if shown:
                     ids = [frame_id(p) if isinstance(p, str) else None for p in idx["path"].tolist()]
                     idx["TARGET_NAME"] = [shown[i][0] if i in shown else t for i, t in zip(ids, idx["TARGET_NAME"].tolist())]
+                # a polarized colour frame (sets_passes.polarized_index) stacks with its filter's other angles, its
+                # repeat exposures, as the index loaders all read it
+                _sets_passes().polarized_index(idx, filter_cols=False)
                 # row positions of every camera/target/observation/filter combination, for fast lookup
                 groups = idx.groupby(keys, sort=False).indices
                 columns = {k: idx[k].to_numpy() for k in keys + ["path", "seconds_1970"]}
