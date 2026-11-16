@@ -29,10 +29,10 @@ How to read this:
 - Base: main 85d2a2a9 (the full cache was built at f9ab1b4; main since then adds #475, #477, #478, #485 and #525).
 
 ## No-pixel PRs (rule these out first)
-#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, and the three integration commits
+#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, and the three integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #545
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -127,4 +127,4 @@ How to read this:
 | 84 | [#522](https://github.com/siacavazzi/Cassini-Project/pull/522) Ring fit: a tile's radius grid let go as soon as its bins are made (new head) | `d1998f6f` | no | #522's reviewed new head: benchmark evidence only. | Nothing. | none | `evidence/ring_grids_released` | integration commit |
 | 85 | [#520](https://github.com/siacavazzi/Cassini-Project/pull/520) Dark-current tables made once and a map at a time (new head) | `816f5b27` | no | #520's reviewed new head: benchmark evidence only. | Nothing. | none | `evidence/dark_maps_once` | integration commit |
 | 86 | Picture-change map (docs) | `6bd110e6` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
-| 87 | [#545](https://github.com/siacavazzi/Cassini-Project/pull/545) Sun distance for the Moon, Venus and Masursky (audit S3) | `43f9d078` | **YES** | Cruise stills calibrated at their real Sun distance instead of Jupiter's: the Moon (56 frames, 1999-08-18) was 24x too bright in I/F, Venus (24 frames, 1999-06-24) 47x, Masursky (106 frames, 2000-01-23) 3.6x; they now come out darker and true. Frames described as Saturn (Earth through the rings, 2013/2017) stay at Saturn's distance (calibration.py). No version bump: relies on the fresh rebuild. | Those three cruise passes (186 frames); nothing else. | none | `evidence/cruise_sun_distance` | clean |
+| 87 | [#545](https://github.com/siacavazzi/Cassini-Project/pull/545) Sun distance for the Moon, Venus and Masursky (audit S3) | `43f9d078` | no (science values only) | Cruise frames of the Moon (56, 1999-08-18), Venus (24, 1999-06-24) and Masursky (106, 2000-01-23) get their real Sun distance (calibration.py), so their I/F numbers in the science download drop 24x, 47x and 3.6x. Displayed pictures do not change: benchmark moon99 and masursky byte-identical, venus99 at most 4 levels of rounding (pictures are scaled to their own white). Earth through the rings (2013/2017) stays at Saturn. No version bump: relies on the fresh rebuild. | Nothing for pictures; those cruise passes' science downloads at the rebuild. | none | `evidence/cruise_sun_distance` | clean |
