@@ -7549,8 +7549,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     step, tint = {}, []
     for m in ns if colour else ():
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
-        if tinted:
-            tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
+        if tinted or (not got and grey_match(u, cache, p).get(u["frames"][s][2], 1.0) != 1.0):
+            # (a frame drawn in its set's colour, set_shown, or in gray at the brightness of the pass's colour pictures,
+            # grey_match: the server draws it, steady-local.html want)
+            tint.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
@@ -8888,6 +8890,71 @@ def shown_of(u, p, n, not_shown, tile_of):
     return s, None, False
 
 
+GREY_MATCH_FILE = "greymatch1-" + PLAN_FILE   # grey_match's factors, kept with the pass; renamed when its rule changes
+GREY_MATCH_SETS = 6      # colour sets of a pass, spread through it, the factors are measured on
+_grey_matching = threading.local()
+
+
+def grey_match(u, cache, p=None):
+    """{filter: factor} for a movie pass that plays in colour (plays_colour; {} for any other): how bright a frame through
+    one of its colour filters is in the pass's colour pictures, against the frame drawn on its own in gray. A frame of
+    the pass left with no colour set to show (its own set never complete, a channel of it lost in downlink, and the
+    sets either side not covering its place: set_of) is drawn in gray, and at its filter's own brightness it sat 20
+    to 28% above the colour pictures round it (257DA DAPHNIS001's frames 7 to 9: 208 against 163 to 189, 2026-11-16).
+    movie_frame draws such a frame times its filter's factor.
+    Measured once per pass and kept with it: on up to GREY_MATCH_SETS of its complete sets, spread through the pass, each
+    of a set's frames drawn as the movie shows it in colour (the windows' picture, so its tint is the windows': see
+    exposure_chain) and on its own in gray, the ratio of their lit levels (_lit_level) over what both show; a filter's
+    factor is the median over the sets, within TINT_MATCH. A filter no set holds has none (1)."""
+    p = p or plan(u, cache)
+    want = p.get("colour")
+    if not want or u.get("track") or getattr(_grey_matching, "on", False) or not plays_colour(u, want, p["grey"]):
+        return {}
+    rec = _kept_tiles(u, cache, p["display_scale"])
+    kept = rec.get("grey_match") if rec is not None else None
+    if kept is not None:
+        return kept
+    path = os.path.join(folder(u, cache), GREY_MATCH_FILE)
+    with _ulock(u):
+        if not os.path.exists(path):
+            frames, gamma = u["frames"], p["display_scale"].get("gamma", 2.2)
+            tile_of = lambda j: tile(u, j, cache, p["display_scale"])
+            not_shown = lambda j: unfit(frames, j, tile_of)
+            whole = []
+            for run in _pass_sets(u):
+                got = {f: j for f, j in run if f in want and not not_shown(j)}
+                if len(got) == len(want) and all("offset" in tile_of(j) for j in got.values()):
+                    whole.append(got)
+            picked = [whole[i] for i in sorted({round(x) for x in np.linspace(0, len(whole) - 1, min(len(whole), GREY_MATCH_SETS))})] if whole else []
+            ratios = collections.defaultdict(list)
+            _grey_matching.on = True   # (the frames drawn here are never themselves matched)
+            try:
+                for got in picked:
+                    for f, j in got.items():
+                        col, rep = movie_frame(u, j, cache, 0, True, out=OUT, per_body=False)
+                        if col is None or not rep.get("color"):
+                            continue
+                        own, _ = movie_frame(u, j, cache, 0, False, out=OUT, per_body=False)
+                        if own is None or own.size != col.size:
+                            continue
+                        a, b = np.asarray(col), np.asarray(own)
+                        both = (a[..., 3] > 0) & (b[..., 3] > 0)
+                        la, lb = (_lit_level(np.where(both[..., None], q, 0), gamma) for q in (a, b))
+                        if la and lb:
+                            ratios[f].append(la / lb)
+            finally:
+                _grey_matching.on = False
+            factors = {f: round(float(np.clip(np.median(v), *TINT_MATCH)), 3) for f, v in ratios.items() if v}
+            data = json.dumps({"factors": factors, "sets": len(picked), "ratios": {f: [round(x, 4) for x in v] for f, v in ratios.items()}})
+            reel._cached(path, data.encode)
+        with open(path) as fh:
+            kept = json.load(fh)["factors"]
+        if rec is not None:
+            with _lock:
+                rec["grey_match"] = kept
+        return kept
+
+
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True):
     """Frame n of the pass played as a movie, RGBA out px on its longest side, and its report; (None, report)
     when SPICE could not place it. The frame is the pass's tile n (color_image.processed_frame: repeat exposures
@@ -9053,6 +9120,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         else:
             used = None
     if not used:
+        if colour and not trail:
+            # a frame left with no colour set to show in a pass that plays in colour (its own set never complete, the
+            # sets either side not covering its place): in gray, at the brightness its filter's frames take in the
+            # pass's colour pictures (grey_match), not at its filter's own
+            match = grey_match(u, cache, p).get(t["filter"], 1.0)
+            if match != 1.0:
+                t = dict(t, gain=round(t.get("gain", 1.0) * match, 3), gamma=t.get("gamma", gamma))
+                rep["matched"] = match
         rgba = _place(u, t, rect, k, W, H, cache, p["display_scale"])
         # the rolling trail: earlier frames of this filter under it, older ones fainter
         if trail:
