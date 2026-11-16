@@ -6620,7 +6620,7 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
     body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame).
-    sat: one saturation excess map per plane (_place_sat, _mosaic_sat: linear, float32) or None: how much of the band's
+    sat: one saturation excess map per plane (_place_sat: linear, float32) or None (a mosaic: not yet carried): how much of the band's
     value there is the white its saturated pixels were drawn over the light they saturated on; the band is filled there
     and floored at what it read less that, not at its white."""
     scale = p["display_scale"]
@@ -6638,7 +6638,7 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     alpha = np.min([a[..., 3] for a in planes], axis=0)
-    # (sat: each band's saturation excess, _place_sat / _mosaic_sat: how much of its linear value is the white the camera's
+    # (sat: each band's saturation excess, _place_sat: how much of its linear value is the white the camera's
     # saturated pixels were drawn, over the light they saturated on; a band with any is clipped there too, even drawn
     # under CLIP_FROM: a thin saturated ring blended into a mosaic's canvas, 269RI HIPHASEFB001's F ring and A ring edge)
     excess = list(sat) if sat is not None else []
@@ -6737,9 +6737,7 @@ def so_far(u, n, cache, made=None, out=OUT):
     if len(used) > 1:
         colour = used
         acc = colour_planes(u, p, colour, tiles, rect, cache, ref, tag)
-        # (where a filter's camera saturated, how much of its mosaic is the white that was drawn: colour_picture's sat)
-        sats = [_mosaic_sat(u, p, f, visit_tiles(u, tiles, colour), rect, cache, a.shape) for f, a in zip(colour, acc)]
-        rgba, used = colour_picture(u, p, colour, acc, sat=sats if any(m is not None for m in sats) else None), colour
+        rgba, used = colour_picture(u, p, colour, acc), colour
         if base:
             grey = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
             if mixes(u, p, tiles, colour):
@@ -6767,35 +6765,6 @@ def so_far(u, n, cache, made=None, out=OUT):
     return im, {**laps, "mosaic": sum(count.get(f, 0) for f in drawn), "filters": len(used), "filter_names": used,
                 "observation": u["key"][1], "pass": u["key"][3], "of": sum(1 for fr in u["frames"] if fr[2] in drawn),
                 "fixed": p["fixed"], "luminance": bool(base), "width": im.width, "height": im.height}
-
-
-def _mosaic_sat(u, p, f, tiles, rect, cache, shape):
-    """Filter f's saturation excess on its mosaic's canvas (shape): each of its tiles' (_sat_excess) placed as _over
-    places them, the ones drawn under the picture first, a tile drawn later covering an earlier one's where it has
-    any alpha (a tile with no map leaves 0 there); None when none of its tiles has a map. colour_picture's sat for a
-    mosaic: 269RI HIPHASEFB001's thin F ring and A ring edge, saturated in BL1 and GRN, blended into the canvas
-    under CLIP_FROM, drew cyan and yellow-green."""
-    mine = _mine(u, p, tiles, f)
-    if not any(t.get("sat") for t in mine):
-        return None
-    k, scale = p["k"], p["display_scale"]
-    H, W = shape[:2]
-    out = np.zeros((H, W), np.float32)
-    under = lambda t: partial(t) or bool(t.get("under")) or bool(t.get("long")) or bool(t.get("fill"))
-    for t in [t for t in mine if under(t)] + [t for t in mine if not under(t)]:
-        if "offset" not in t:
-            continue
-        bx, by, bw, bh = t["box"]
-        left, top = round((t["offset"][0] + bx - rect[0]) * k), round((t["offset"][1] + by - rect[1]) * k)
-        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
-        x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
-        if x0 >= x1 or y0 >= y1:
-            continue
-        a = _part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh)[..., 3][y0 - top:y1 - top, x0 - left:x1 - left] > 0
-        ex = _sat_excess(u, t, cache, scale, sw, sh)
-        part = out[y0:y1, x0:x1]
-        part[a] = 0.0 if ex is None else ex[y0 - top:y1 - top, x0 - left:x1 - left][a]
-    return out if out.any() else None
 
 
 def _mosaic_map(u, p, tiles, rect, used, base, shape, cache):
