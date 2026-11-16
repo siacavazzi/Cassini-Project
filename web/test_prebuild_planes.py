@@ -11,6 +11,7 @@ import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
 import calibration  # noqa: E402
 import obs_mosaic as om  # noqa: E402
+om._raw_pointing = lambda u: False   # (made-up frame ids, no measured pointing: drawn at SPICE's places, not stabilized by default)
 import prebuild  # noqa: E402
 
 rng = np.random.default_rng(5)

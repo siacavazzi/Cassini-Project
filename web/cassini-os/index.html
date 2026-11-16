@@ -3395,10 +3395,12 @@ body.ambient.phone .amb-where { font-size: 18px; }
     }
     // obs_mosaic._place's corner of tile a in the canvas (k at OUT), at place o
     const corner = (t, a, o) => [pyRound((o[0] + t.box[a][0] - t.view[0]) * t.k), pyRound((o[1] + t.box[a][1] - t.view[1]) * t.k)];
-    // how far frame a's tile moves from SPICE's place to its stabilized one, canvas pixels
-    function shift(t, pl, a) {
+    // how far frame a's tile moves from where the served frame has it to its stabilized place, canvas pixels: from
+    // SPICE's place, or, for a pass the server stabilizes by default (the table's "auto", obs_mosaic.auto_steady: its
+    // pre-built frames are drawn at that smoothing), from its places at that smoothing (base)
+    function shift(t, pl, a, base) {
       if (!pl) return [0, 0];
-      const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
+      const s = corner(t, a, base ? base[a] : t.spice[a]), p = corner(t, a, pl[a]);
       return [p[0] - s[0], p[1] - s[1]];
     }
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
@@ -3749,6 +3751,9 @@ onmessage = async e => {
   if (m.table) { tables.set(m.key, m.table); return; }
   const t = tables.get(m.key), pk = m.key + ":" + m.steady, gk = m.key + ":" + m.exposure, t0 = performance.now();
   if (!placed.has(pk)) placed.set(pk, M.places(t, m.steady));
+  const bk = m.key + ":" + (t.auto || 0);
+  if (t.auto && !placed.has(bk)) placed.set(bk, M.places(t, t.auto));
+  const base = t.auto ? placed.get(bk) : null;
   if (m.exposure && !gained.has(gk)) gained.set(gk, M.gains(t.exposure, m.exposure));
   // one gain for every tile of the picture (movie_frame), through _shade's lookup table
   const gain = m.exposure ? (gained.get(gk)[m.n] ?? 1.0) : 1.0, t1 = performance.now();
@@ -3761,7 +3766,7 @@ onmessage = async e => {
   const W = m.planes[0].bitmap.width, H = m.planes[0].bitmap.height, mixing = m.planes.length > 1 || m.trail, moves = [];
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
   const planes = m.planes.map(p => {
-    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i, base), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);
@@ -13793,7 +13798,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3bf945a4deb1";
+  const BUILD = /*BUILD*/"79c498c6899a";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
