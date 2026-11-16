@@ -49,3 +49,13 @@ os.environ["CASSINI_ISS_NEIGHBOURS"] = "0"
 ba._iss_frames = None
 assert os.path.basename(ba.extra_kernels()[0]) != ba.ISS_NEIGHBOURS_CK and ba.iss_neighbours_frames() == set()
 print("ok")
+
+# a pass holding a repointed frame takes its own folder (obs_mosaic.REPOINTED), so it is made again; others keep theirs
+os.environ["CASSINI_ISS_NEIGHBOURS"] = "1"
+ba._iss_frames = None
+sys.path.insert(0, os.path.join(ROOT, "web", "frames"))
+import obs_mosaic as om  # noqa: E402
+om._repointed_frames = None
+u = lambda ids: {"key": ("SATURN", "X", "N", 0), "frames": [("p", i, "CL1/CL2", 0.0, 650.0, 0, 0, 1e6) for i in ids]}
+assert om._repointed(u([other, carried])) and not om._repointed(u([other]))
+print("repointed passes: ok")

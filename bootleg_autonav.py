@@ -113,6 +113,15 @@ def iss_neighbours_frames():
     return _iss_frames
 
 
+def usgs_neighbours_frames():
+    """The frames USGS's correction is carried over to (neighbours.lis), not USGS's own."""
+    path = os.path.join(USGS_TITAN_DIR, "neighbours.lis")
+    if not usgs_titan_on() or not os.path.exists(path):
+        return set()
+    with open(path) as f:
+        return {line.strip() for line in f if line.strip()}
+
+
 def extra_kernels():
     iss = [os.path.join(ISS_NEIGHBOURS_DIR, ISS_NEIGHBOURS_CK)] if iss_neighbours_on() else []
     if not usgs_titan_on():
