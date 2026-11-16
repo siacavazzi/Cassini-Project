@@ -482,6 +482,7 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
             # the channels before alignment, for per_body
             before = (list(guide), list(linear[0]), list(masks), None if full is None else list(full))
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess, on_disk=filled)
+            refine_summed(guide, lbls, ref, shifts, aligned)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
             if full is not None:
                 full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
@@ -504,7 +505,9 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
                 imgs = neutral(imgs, region)
         else:
             before, shifts = (list(imgs), list(imgs), list(masks)), []
-            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess, on_disk=filled)
+            ic.align_with_masks(list(imgs), [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess, on_disk=filled)
+            refine_summed(imgs, lbls, ref, shifts, aligned)
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, use=shifts)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
             if why == "moved":
                 got = per_body(lbls, ref, *before, bands, None, shifts, warps)
@@ -568,6 +571,52 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     # no colour that is not the picture's under the pixels round it (rim_coloured)
     imgs = [rim_coloured(img, valid) for img in imgs]
     return imgs, valid, lbls[ref], report
+
+
+"""
+A set of summed frames (2x2 or 4x4 on the camera) has its channels' matches refined at the frames' own size.
+label.resize_image enlarges a summed frame by repeating each pixel, and the match on those blocks snaps to whole camera
+pixels: a 4x4 frame shifted 2.0 px came back 0 or 4 px, 2.5 px came back 4 (real WAC frames shifted by a known amount and
+summed, evidence/summed_native_match). The match there is as good as a full frame's only at the frame's own size (to
+about 0.3 px, 1024 px grid). So each channel matched on the enlarged frames is moved by its match rounded to whole
+camera pixels (exact on the blocks), both are taken back to their own size (INTER_AREA: each block, its pixel) and
+matched again there (image_correction.find_shift), and a remainder within SUMMED_REFINE camera pixels is added. A set
+whose frames are not all summed alike, and a channel SPICE or nothing placed, is left as it was.
+shifts and aligned (the report) are changed in place.
+"""
+SUMMED_REFINE = 0.75   # camera pixels: past this the match on the blocks was not merely rounded
+
+
+def refine_summed(images, lbls, ref, shifts, aligned):
+    try:
+        lines = {int(l.info.get("LINES", 1024)) for l in lbls}
+    except (TypeError, ValueError):
+        return
+    h, w = images[ref].shape[:2]
+    if len(lines) != 1:
+        return
+    n = lines.pop()
+    if n <= 0 or n >= h or h % n or w % n:
+        return
+    f = h // n
+
+    def own(im):
+        im = im if im.ndim == 3 else cv2.cvtColor(im.astype(np.uint8) if im.dtype != np.uint8 else im, cv2.COLOR_GRAY2BGR)
+        if im.dtype != np.uint8:
+            im = np.clip(im, 0, 255).astype(np.uint8)
+        return cv2.resize(im, (w // f, h // f), interpolation=cv2.INTER_AREA)
+    a = own(images[ref])
+    for j, shift in enumerate(shifts):
+        how = aligned[j] if j < len(aligned) else ""
+        if j == ref or shift is None or not isinstance(how, str) or how.startswith(("SPICE", "as taken", "not aligned")):
+            continue
+        bx, by = round(shift[0] / f) * f, round(shift[1] / f) * f
+        b = own(ic.shift_image(images[j], bx, by))
+        r = ic.find_shift(a, b, max_shift=4)
+        if r is None or np.hypot(r[0], r[1]) > SUMMED_REFINE:
+            continue
+        shifts[j] = (bx + r[0] * f, by + r[1] * f)
+        aligned[j] = f"{how} refined at {f}x{f} {shifts[j][0]:+.1f},{shifts[j][1]:+.1f}"
 
 
 """
