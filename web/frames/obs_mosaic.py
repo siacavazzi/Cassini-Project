@@ -6026,6 +6026,85 @@ def detail(rgba, sigma):
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
 
+DISK_DETAIL_REACH = ((1.15, 1.4), (1.5, 1.85))   # stills (detail_on_disk): x the SPICE radius, the body's reach and
+                            # the edge where backdrop is told from it (round, or irregular, DISK_DETAIL_IRREGULAR:
+                            # Hyperion's long axis is 1.33 x its mean radius) ...
+DISK_DETAIL_SLACK = 12.0    # ... each at least this many px further (SPICE's place is off by up to 10 px) ...
+DISK_DETAIL_TOP = 251.0     # ... and raised toward white only up to this level ...
+DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
+DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
+DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
+DISK_DETAIL_IRREGULAR = set(SMALL_RADIUS) | {"HYPERION", "PHOEBE"}   # bodies whose ends lie past their mean radius
+
+
+def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
+    """detail() on a still or composite whose body SPICE places (frame_server.centred): the same raise of the local
+    contrast (DETAIL, DETAIL_EDGE, DETAIL_KNEE), its neighbourhood mean taken over the body's lit pixels only (inside
+    DISK_DETAIL_REACH and DISK_DETAIL_SLACK of (cx, cy), DISK_DETAIL_LIT over the sky, apart from any lit backdrop)
+    and its change only on those lit pixels,
+    faded in from their edge, so a moon smaller than the filter's patch is not raised to flat white against the black sky (why #304
+    kept small centred moons out of it) and no dark ring is drawn round it. rgba: H x W x 2 (LA) or 4, uint8."""
+    import cv2
+    h, w = rgba.shape[:2]
+    if not radius or radius < 4:
+        return rgba
+    sigma = sigma or min(DETAIL_SIGMA * FRAME, DISK_DETAIL_SIGMA * radius)
+    colors = rgba.shape[2] - 1
+    rgb = rgba[..., :colors].astype(np.float32)
+    lum = rgb.mean(axis=2)
+    alpha = rgba[..., colors] > 0
+    yy, xx = np.mgrid[:h, :w]
+    rr = np.hypot(xx - cx, yy - cy).astype(np.float32)
+    irregular = str(target or "").upper() in DISK_DETAIL_IRREGULAR
+    # the body: its lit pixels within reach of SPICE's centre, reach = the radius times DISK_DETAIL_REACH (an
+    # irregular moon's far ends lie past its mean radius) plus DISK_DETAIL_SLACK px for SPICE's own error
+    k_in, k_out = DISK_DETAIL_REACH[1] if irregular else DISK_DETAIL_REACH[0]
+    r_in = max(k_in * radius, radius + DISK_DETAIL_SLACK)
+    r_out = max(k_out * radius, r_in + DISK_DETAIL_SLACK)
+    circle = rr <= r_in
+    body = lum[circle & alpha]
+    if body.size < 50:
+        return rgba
+    sky = float(np.percentile(lum[alpha], 5))
+    floor = sky + max(6.0, DISK_DETAIL_LIT * (float(np.percentile(body, 90)) - sky))
+    bright = ((cv2.GaussianBlur(lum, (0, 0), 2) > floor) & alpha & (rr <= r_out)).astype(np.uint8)
+    # a lit region that runs out to r_out is backdrop, not body (Saturn's disk or limb behind a moon, a ring arc): it
+    # is left out; when the body's own largest lit region is one of them, the body joins its backdrop and is left as
+    # it is (it still takes the fine sharpening). SPICE's limb is 5 to 10 px off the body's on some frames (Dione at
+    # Saturn's limb, N1493949963_1), so the change is bounded by the lit body itself, never by SPICE's circle: a
+    # mean or change bounded by it drew a dark arc under Rhea before Saturn (N1648105861_1) and a second limb inside
+    # Dione (review of #495)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(bright, connectivity=8)
+    if n < 2:
+        return rgba
+    edge = (rr > r_out - 2.5) & (rr <= r_out) & alpha
+    touching = np.unique(labels[edge & (bright > 0)])
+    touching = set(int(t) for t in touching if t > 0)
+    inner = np.unique(labels[circle & (bright > 0)])
+    inner = [int(t) for t in inner if t > 0]
+    if not inner:
+        return rgba
+    biggest = max(inner, key=lambda t: stats[t, cv2.CC_STAT_AREA])
+    if biggest in touching:
+        return rgba
+    lit = (np.isin(labels, [t for t in inner if t not in touching]) & circle).astype(np.uint8)
+    lit = cv2.erode(lit, np.ones((5, 5), np.uint8)).astype(np.float32)   # (back inside the limb: bright was blurred 2 px out)
+    if lit.sum() < 50:
+        return rgba
+    # (the change follows the lit body itself, faded in from its edge; SPICE's circle, reach x the radius, only bounds
+    # it, so SPICE's few px of error draw no second limb inside the body's own; review of #495)
+    fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit
+    weight = cv2.GaussianBlur(lit, (0, 0), sigma)
+    mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
+    x = lum - mean
+    d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE)) * fade
+    # (up only to DISK_DETAIL_TOP: the roll-off toward white never lands a raised pixel on 254-255, which read as
+    # clipped on the brightest crater rims; the image benchmark's clip measure, review of #495)
+    room = np.where(d > 0, np.maximum(DISK_DETAIL_TOP - rgb.max(axis=2), 0), rgb.min(axis=2))
+    out = np.clip(rgb + _soft_detail(d.astype(np.float32), room)[..., None], 0, 255).round().astype(np.uint8)
+    return np.concatenate([out, rgba[..., colors:]], axis=2)
+
+
 def _soft_detail(d, room):
     """detail()'s change d (float32, levels) where a pixel has room levels left in its direction: as it is up to
     DETAIL_KNEE of that room, past it rolled off toward the room's end (over / (over + rest): no step in slope, and
