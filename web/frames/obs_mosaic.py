@@ -6745,6 +6745,12 @@ def so_far(u, n, cache, made=None, out=OUT):
     if not made:
         return None, None
     p, tiles, rect, count, used, name = made
+    # the canvas this thread composed last, asked again at another size (the pre-build's 1024, then its full view):
+    # the same canvas, only shrunk anew
+    key = (drawn(u, cache), name, n, bool(_rolling.get()))
+    last = getattr(_last_canvas, "made", None)
+    if last is not None and last[0] == key:
+        return _sized(u, n, p, count, *last[1:], out)
     # a set of tiles other than every tile up to n has a name of its own (tag): a mosaic movie's lap, a tuned layout
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
@@ -6773,6 +6779,20 @@ def so_far(u, n, cache, made=None, out=OUT):
     hdr = _mosaic_map(u, p, tiles, rect, used, base, rgba.shape, cache) if HDR_ON else None
     if sharpens(p["display_scale"]):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
+    _last_canvas.made = (key, rgba, hdr, used, bool(base))
+    return _sized(u, n, p, count, rgba, hdr, used, bool(base), out)
+
+
+# the canvas so_far composed last on this thread (its key, the picture on the canvas after detail(), its recovery map,
+# the filters drawn, whether on the luminance base), for the same mosaic asked at another size: the pre-build draws a
+# mosaic pass's 1024 px picture, its 512 and its full view (up to 2048) one after another, and composing is all of the
+# cost (the full view composed again from the pass's filter mosaics took 1.4 to 3.3 core-seconds a picture,
+# 2026-11-16). One canvas a thread (up to CANVAS x CANVAS: 16 MB and its map's 4)
+_last_canvas = threading.local()
+
+
+def _sized(u, n, p, count, rgba, hdr, used, base, out):
+    """so_far's picture and report from its canvas rgba (and recovery map hdr): out px on its longest side."""
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
