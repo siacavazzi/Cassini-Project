@@ -93,17 +93,24 @@ with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration
     assert a != b
     print("movies phase: %d planes at 1024 (each frame alone) + %d _d0; the page's requests all found in the cache" %
           (sum(len(u["frames"]) for u, _ in passes), len(d0)))
-    # Exposure normalization (on by default): the false colour pass's frames with it at the default smoothing, as the
-    # window asks for them, are pre-built; the passes the page evens itself have none
+    # Exposure normalization (on by default): every pass's frames with it at the default smoothing are pre-built, at
+    # both sizes (make_evened every=True, #487). The camera windows even two of these passes themselves (page_evens)
+    # and ask the server only for the false colour pass's; but the Movie Editor's pictures, a Pre-process and a film
+    # ask the server for the evened frame of any pass, and with none kept it drew each one on the request (a 999 frame
+    # stretch took 131 s to open on a finished cache, 2026-11-15). Until #487 only the false colour pass had them
     e8 = sorted(f for f in built if f"_e{om.EXPOSURE_SMOOTH}r{om.EXPOSURE_RULE}" in os.path.basename(f) and f.endswith(".webp"))
-    assert e8 and all("ISS_TEST_PLANES2" in f for f in e8) and len(e8) == 2 * N, e8
+    assert len(e8) == 2 * N * len(passes), e8
+    for u, _ in passes:
+        assert sum(u["key"][1] in f for f in e8) == 2 * N, (u["key"][1], e8)
     assert [om.page_evens(u, cache) for u, _ in passes] == [True, True, False]
+    # asked for afterwards, as the window (the false colour pass) and the editor (any pass) ask: all found, none made
     before = files()
-    for f in passes[2][0]["frames"]:
-        for size in (1024, 512):
-            made = route(f[1], f"size={size}&color=1&trail=0&laps=1&exposure={om.EXPOSURE_SMOOTH}")
-            assert made and made[0] is not None, f[1]
+    for u, _ in passes:
+        for f in u["frames"]:
+            for size in (1024, 512):
+                made = route(f[1], f"size={size}&color=1&trail=0&laps=1&exposure={om.EXPOSURE_SMOOTH}")
+                assert made and made[0] is not None, f[1]
     assert not files() - before, sorted(files() - before)
-    print(f"Exposure normalization: {len(e8)} frames of the false colour pass pre-built at smoothing {om.EXPOSURE_SMOOTH}; "
-          "the window's requests for them all found; none for the passes the page evens")
+    print(f"Exposure normalization: {len(e8)} frames pre-built at smoothing {om.EXPOSURE_SMOOTH}, every pass's at both sizes; "
+          "the requests for them all found, none made")
 print("ok")
