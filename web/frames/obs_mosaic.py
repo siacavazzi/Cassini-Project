@@ -8418,6 +8418,12 @@ def _place_sat(u, t, rect, k, W, H, cache, scale):
     out = np.zeros((H, W), np.float32)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
+        if SUBPIXEL:
+            # (moved by the part of a pixel _place moves the picture, so the excess lies under the pixels it belongs to:
+            # a pixel off, it fell on the sky beside a saturated ring's edge, 003SA 3X3MOVIEA002, and drew a dark line)
+            q = np.clip(ex * 255 + 0.5, 0, 255).astype(np.uint8)
+            q = _subpixel_at(np.dstack([q, q, q, np.full_like(q, 255)]), t, rect, k, left, top)
+            ex = q[..., 0].astype(np.float32) / 255
         out[y0:y1, x0:x1] = ex[y0 - top:y1 - top, x0 - left:x1 - left]
     return out
 
