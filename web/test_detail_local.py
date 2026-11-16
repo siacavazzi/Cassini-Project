@@ -48,10 +48,14 @@ def picture(seed, w, h):
 
 CASES = [(1, 384, 320, 19.2, 0), (2, 512, 512, 25.6, 0), (3, 300, 420, 7.5, 0), (11, 400, 360, 12.8, 0), (12, 320, 320, 25.6, 0),
          # Saturn's (detail_how: its own strength, the lit disk only, never the sky or a feathered edge)
-         (1, 384, 320, 11.5, 1), (12, 320, 320, 15.4, 1)]
+         (1, 384, 320, 11.5, 1), (12, 320, 320, 15.4, 1),
+         # ... and on the body's disk only (disk: x, y, radius px; the rings beside it unchanged)
+         (2, 512, 512, 15.4, 2), (1, 384, 320, 11.5, 2)]
 LIT = {"detail_how": {"strength": 2.0, "lit": True}}
+DISK = lambda w, h: [w * 0.52, h * 0.47, min(w, h) * 0.3]
 with calibration.looking("balanced"):
-    wants = [om.detail(picture(s, w, h), sig, LIT if lit else None) for s, w, h, sig, lit in CASES]
+    wants = [om.detail(picture(s, w, h), sig, dict(LIT, disk=DISK(w, h)) if lit == 2 else LIT if lit else None)
+             for s, w, h, sig, lit in CASES]
 for q, (s, w, h, sig, lit) in enumerate(CASES):
     picture(s, w, h).tofile(f"{tmp}/{q}.bin")
 # the crescents reach both ends: detail() rolls them off there (no flat 255 or 0 where the picture had none)
@@ -66,7 +70,7 @@ for (s, w, h, sig, lit), want in zip(CASES, wants):
 # the processor's version, in node
 js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), C = " + json.dumps(CASES) + ";\n"
       "C.forEach(([s, w, h, sig, lit], q) => { const px = new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + q + '.bin'));"
-      " const k = M.gaussKernel(sig), d = M.detailInputs(px, lit ? " + json.dumps(list(om.DETAIL_LIT)) + " : null);"
+      " const k = M.gaussKernel(sig), d = M.detailInputs(px, lit ? " + json.dumps(list(om.DETAIL_LIT)) + " : null, lit == 2 ? [w * 0.52, h * 0.47, Math.min(w, h) * 0.3] : null, w);"
       " fs.writeFileSync('" + tmp + "/' + q + '.cpu', M.detailFinish(px, d.lum, M.blurCPU(d.a, w, h, k), M.blurCPU(d.la, w, h, k), lit ? 2.0 : " + str(om.DETAIL) + ", " + str(om.DETAIL_KNEE) + ", " + str(om.DETAIL_EDGE) + ", d.w)); });")
 with open(f"{tmp}/cpu.js", "w") as fh:
     fh.write(js)
@@ -89,7 +93,7 @@ const [dir, cases, amount, knee, edge] = process.argv.slice(2), C = JSON.parse(c
       const M = window.cassiniSteadyMath(), blur = window.cassiniSteadyGPU();
       if (!blur) return null;
       const b = atob(px), a = new Uint8ClampedArray(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
-      const k = M.gaussKernel(sig), d = M.detailInputs(a, lit ? litw : null), t0 = performance.now(), [ga, gla] = blur([d.a, d.la], w, h, k), ms = performance.now() - t0;
+      const k = M.gaussKernel(sig), d = M.detailInputs(a, lit ? litw : null, lit == 2 ? [w * 0.52, h * 0.47, Math.min(w, h) * 0.3] : null, w), t0 = performance.now(), [ga, gla] = blur([d.a, d.la], w, h, k), ms = performance.now() - t0;
       const r = M.detailFinish(a, d.lum, ga, gla, lit ? 2.0 : amount, knee, edge, d.w);
       let s = ''; for (let i = 0; i < r.length; i += 32768) s += String.fromCharCode.apply(null, r.subarray(i, i + 32768));
       return { px: btoa(s), ms };

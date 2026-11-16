@@ -5901,6 +5901,16 @@ def _part(path, w, h):
     return part
 
 
+def movie_disk(scale, rect, k, radius, unturn=None):
+    """The display scale with the body's disk on a movie frame drawn at k px a reference pixel over rect (whose origin is
+    the body's centre): {"disk": (x, y, radius) px} for a scale whose detail is Saturn's lit one (detail_how), as is
+    otherwise; not on a frame drawn as Cassini took it (unturn: follow_view's own axes)"""
+    how = scale.get("detail_how") or {}
+    if not how.get("lit") or unturn or not radius:
+        return scale
+    return dict(scale, disk=(-rect[0] * k, -rect[1] * k, radius * k))
+
+
 def sharpens(scale):
     """True when pictures on the display scale end in detail(): a pass whose body fills its frames (pass_scale's
     "detail"; a scale made before it had one, its "filled")."""
@@ -5949,6 +5959,18 @@ def saturn_frames(ids):
     return saturn_look({"key": (str(r["TARGET_NAME"]), str(r["OBSERVATION_ID"]))})
 
 
+DISK_SOFT = 0.03   # disk_weight: the disk's edge eased over this share of its radius each way
+
+
+def disk_weight(shape, cx, cy, r):
+    """(float32, shape) 1 on the disk of radius r px round (cx, cy), 0 off it, eased (smoothstep) over DISK_SOFT of r"""
+    ys = np.arange(shape[0], dtype=np.float32)[:, None] - np.float32(cy)
+    xs = np.arange(shape[1], dtype=np.float32)[None, :] - np.float32(cx)
+    d = np.sqrt(ys * ys + xs * xs)
+    t = np.clip((np.float32(r * (1 + DISK_SOFT)) - d) / np.float32(2 * DISK_SOFT * r), 0, 1)
+    return (t * t * (3 - 2 * t)).astype(np.float32)
+
+
 def chroma(rgb, k):
     """A colour picture's (uint8 RGB) colour differences raised k times about each pixel's own grey (the channels'
     mean), its brightness kept: a channel pushed past 0 or 255 brings the pixel's change down until none is, so the
@@ -5984,6 +6006,10 @@ def detail(rgba, sigma, scale=None):
         # (and only the picture's whole pixels: its feathered edge, drawn darker as it fades out, pulled the mean
         # down and left a light line along a tile's edge, 193SA NPOLMOV001)
         a = (a >= np.float32(250 / 255)).astype(np.float32) * lit
+        if scale and scale.get("disk"):
+            # and only on the body's disk where SPICE puts it (x, y, radius in this picture's pixels): the rings
+            # beside it keep their own look (235SA SATSTARE001's rings showed their tile seams sharpened)
+            a = a * disk_weight(a.shape, *scale["disk"])
         lit = a
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
     if calibration.look() == "balanced":
@@ -6773,6 +6799,17 @@ def colour_picture(u, p, colour, planes, away=None):
         rgb = np.moveaxis((calibration.encode(np.clip(x, 0, 1), g) * 255 + 0.5).astype(np.uint8), 0, -1)
     elif mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
+    if scale.get("sat_white"):
+        # the Saturn look (saturn_look's headroom): where a band reached its clip, the pixel goes to that band's
+        # brightness in every band (white, as a saturated pixel is drawn alone), eased in from CLIP_FROM. With the
+        # headroom the bands round a clipped one sit well under it now, and the fill kept the clipped band over them:
+        # 150SA NHEMMOVIE001's GRN-saturated cap came out lime
+        top = np.stack([a[..., 0] for a in planes]).max(axis=0).astype(np.float32) if len(planes) == 3 else \
+            np.maximum(planes[0][..., 0], planes[-1][..., 0]).astype(np.float32)
+        w = np.clip((top - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
+        w = (w * w * (3 - 2 * w))[..., None]
+        x = rgb.astype(np.float32)
+        rgb = np.clip(x + (x.max(axis=2, keepdims=True) - x) * w + 0.5, 0, 255).astype(np.uint8)
     if scale.get("chroma"):
         rgb = chroma(rgb, scale["chroma"])
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
@@ -7662,7 +7699,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
-    how = p["display_scale"].get("detail_how") or {}
+    dhow = p["display_scale"].get("detail_how") or {}
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
@@ -7671,9 +7708,11 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
-            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * how.get("sigma", 1.0),
-            "amount": how.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
-            **({"lit": list(DETAIL_LIT)} if how.get("lit") else {})}
+            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
+            "amount": dhow.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
+            **({"lit": list(DETAIL_LIT)} if dhow.get("lit") else {}),
+            **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
+               if dhow.get("lit") and radius and not follows(fp, rect) else {})}
 
 
 def page_evens(u, cache, colour=True, centre=True):
@@ -9188,7 +9227,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         rgba = _unturn(rgba, *unturn)
         H, W = rgba.shape[:2]
     if sharpens(p["display_scale"]) and sharpen:
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, p["display_scale"])
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, movie_disk(p["display_scale"], rect, k, radius, unturn))
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     im = Image.fromarray(rgba, "RGBA")
     if unturn:

@@ -258,15 +258,23 @@
     // what is blurred: the alpha a and the luminance times it, float32 as numpy has them
     // lit (obs_mosaic.DETAIL_LIT, a Saturn pass's detail_how): each pixel weighted by how lit it is, and only the
     // picture's whole pixels, so the sky and a tile's feathered edge neither count in the mean nor change
-    function detailInputs(px, lit) {
+    // disk (obs_mosaic.disk_weight): [x, y, radius] px of the body's disk, eased over soft of its radius, outside which
+    // nothing changes (the rings beside Saturn); W the picture's width
+    function detailInputs(px, lit, disk = null, W = 0, soft = 0.03) {
       const f = Math.fround, N = px.length / 4, a = new Float32Array(N), la = new Float32Array(N), lum = new Float32Array(N);
       const w = lit ? new Float32Array(N) : null, lo = lit ? f(lit[0]) : 0, span = lit ? f(f(lit[1]) - lo) : 1, whole = f(250 / 255);
+      const dr = disk ? f(disk[2] * (1 + soft)) : 0, dw = disk ? f(2 * soft * disk[2]) : 1;
       for (let p = 0, i = 0; p < N; p++, i += 4) {
         a[p] = f(px[i + 3] / 255);
         lum[p] = f((px[i] + px[i + 1] + px[i + 2]) / 3);
         if (w) {
           const t = Math.min(1, Math.max(0, f(f(f(lum[p] / 255) - lo) / span)));
           w[p] = a[p] >= whole ? f(f(t * t) * f(3 - f(2 * t))) : 0;
+          if (disk) {
+            const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+            const u = Math.min(1, Math.max(0, f(f(dr - d) / dw)));
+            w[p] = f(w[p] * f(f(u * u) * f(3 - f(2 * u))));
+          }
           a[p] = w[p];
         }
         la[p] = f(lum[p] * a[p]);
@@ -390,7 +398,7 @@ void main() {
 let blur;   // the GPU blur, made when a filled pass first needs it
 const sharpen = (px, W, H, t) => {
   if (blur === undefined) blur = (${STEADY_GPU.toString()})();
-  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px, t.lit);
+  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px, t.lit, t.disk ? [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W] : null, W);
   const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
   return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge, d.w);
 };
