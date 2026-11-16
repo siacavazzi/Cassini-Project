@@ -40,6 +40,7 @@ EDGE = 24.0         # levels: a change of this size or more is eased off (x / (1
 OVERSHOOT = 0.15    # past the 3x3 neighbours' range by at most this share of it ...
 OVERSHOOT_MAX = 6.0  # ... and at most this many levels
 OVERSHOOT_DARK = 32.0  # levels: under a darkest neighbour this dim, the room to go darker shrinks with its level (none at black)
+TOP = 251.0         # levels: a raised pixel rolls off toward this, never onto white (254-255 reads as clipped)
 SAT_LEVEL = 253     # a pixel with a color at or over this is saturated; none within SAT_PX of it changes
 SAT_PX = 2
 SPIKE = 5.0         # a pixel this many noise sigmas (and SPIKE_MIN levels) off its 3x3 median is a spike
@@ -202,7 +203,7 @@ def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, gra
     new = np.clip(new, lo - m_dark, hi + m)
     x = new - lum
     # room: the same change on every color, rolled off as it nears 0 or 255 (no clipped colors)
-    room = np.where(x > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+    room = np.where(x > 0, np.maximum(TOP - rgb.max(axis=2), 0), rgb.min(axis=2))
     knee = 0.5 * room
     mag = np.abs(x)
     soft = np.where(mag > knee, knee + (room - knee) * (mag - knee) / np.maximum(mag - knee + room - knee, 1e-6), mag)

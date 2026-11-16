@@ -5906,6 +5906,7 @@ DISK_DETAIL_REACH = ((1.15, 1.4), (1.5, 1.85))   # stills (detail_on_disk): x th
                             # the edge where backdrop is told from it (round, or irregular, DISK_DETAIL_IRREGULAR:
                             # Hyperion's long axis is 1.33 x its mean radius) ...
 DISK_DETAIL_SLACK = 12.0    # ... each at least this many px further (SPICE's place is off by up to 10 px) ...
+DISK_DETAIL_TOP = 251.0     # ... and raised toward white only up to this level ...
 DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
 DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
@@ -5973,7 +5974,9 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
     mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
     x = lum - mean
     d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE)) * fade
-    room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+    # (up only to DISK_DETAIL_TOP: the roll-off toward white never lands a raised pixel on 254-255, which read as
+    # clipped on the brightest crater rims; the image benchmark's clip measure, review of #495)
+    room = np.where(d > 0, np.maximum(DISK_DETAIL_TOP - rgb.max(axis=2), 0), rgb.min(axis=2))
     out = np.clip(rgb + _soft_detail(d.astype(np.float32), room)[..., None], 0, 255).round().astype(np.uint8)
     return np.concatenate([out, rgba[..., colors:]], axis=2)
 
