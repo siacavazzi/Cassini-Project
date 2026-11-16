@@ -5906,12 +5906,13 @@ DISK_DETAIL_REACH = ((1.15, 1.4), (1.5, 1.85))   # stills (detail_on_disk): x th
                             # the edge where backdrop is told from it (round, or irregular, DISK_DETAIL_IRREGULAR:
                             # Hyperion's long axis is 1.33 x its mean radius) ...
 DISK_DETAIL_SLACK = 12.0    # ... each at least this many px further (SPICE's place is off by up to 10 px) ...
-DISK_DETAIL_TEXTURE = 0.003   # ... skipped on a body this smooth at the pixel scale (its fine texture over its level)
 DISK_DETAIL_TERMINATOR = 0.2  # ... and eased off where its brightness falls by this share of its bright level per patch
 DISK_DETAIL_TOP = 251.0     # ... and raised toward white only up to this level ...
 DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
 DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
+DISK_DETAIL_HAZE = ("TITAN",)    # ... and hazy ones unless a frame is in their surface window (calibration.SURFACE_WINDOW,
+                                 # Titan's CB3): the haze has no detail to raise (Sam, 11-16), the surface does
 DISK_DETAIL_IRREGULAR = set(SMALL_RADIUS) | {"HYPERION", "PHOEBE"}   # bodies whose ends lie past their mean radius
 
 
@@ -5974,14 +5975,6 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
     fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit
     weight = cv2.GaussianBlur(lit, (0, 0), sigma)
     mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
-    # nothing to raise: a body whose lit surface is this smooth at the pixel scale (Titan's haze, 0.0007 of its
-    # brightness against an icy moon's 0.006 or more) is left as it is (Sam, 11-16: Titan's haze has nothing to sharpen)
-    sel = cv2.erode(lit, np.ones((7, 7), np.uint8)) > 0
-    if sel.sum() >= 100:
-        fine = lum - cv2.GaussianBlur(lum, (0, 0), 2.0)
-        texture = float(np.median(np.abs(fine[sel]))) * 1.48 / max(float(np.median(lum[sel])), 1.0)
-        if texture < DISK_DETAIL_TEXTURE:
-            return rgba
     x = lum - mean
     d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE)) * fade
     if DISK_DETAIL_TERMINATOR:
