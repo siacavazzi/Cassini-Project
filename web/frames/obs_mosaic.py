@@ -10060,6 +10060,60 @@ def fade_table(frame_id, cache, laps=1, W=0, H=0):
             "ids": [fr[1] for fr in u["frames"]], "fade_max": FADE_MAX}
 
 
+def _rolling_path(u, made, size, cache, fmt="webp", out=OUT):
+    """Where a mosaic movie's picture of this layout (rolling_layout's) is kept."""
+    full = size == "full"
+    return os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+
+
+def rolling_restart(u, size, cache, laps=1, fade=(0, 0), last=None, fmt="webp", out=OUT):
+    """Before a build makes a mosaic movie's pictures in frame order: when some of them are kept and others are not
+    (a build stopped part way through the pass) and this process holds none of the pass's pictures in memory, the
+    kept ones are removed so that all are made again from the first frame; the number removed.
+    A mosaic movie's picture is grown from the one before it in memory (_roll), and drawn whole when there is none
+    to grow from; grown and whole differ by a few levels in places (_over composes the new tile over the 8-bit picture,
+    _compose all tiles at once). A process that found the first pictures kept had no picture in memory to grow the
+    next from, drew it whole, and grew the rest from that: the pass's pictures then depended on where the build had
+    been stopped (jupiter-atmos-mosaic's last picture came out three different ways after three stopped benchmark
+    builds, 2026-11-16, and the same at every uninterrupted one). Made again in order, they are the pictures an
+    uninterrupted build makes. Tiles, plan and solve are kept: only the pictures are made again. last: the frames
+    up to it only (prebuild's stretch; its tiles are made)."""
+    fade = fade_style(*fade)
+    with _lock:
+        if any(k[0] == u["key"] for k in _rolled):
+            return 0   # (this process is growing the pass already: a later stretch of it continues the chain)
+    count = len(u["frames"]) if last is None else last + 1
+
+    def path(n):
+        made = rolling_layout(u, n, cache, laps, fade=fade)   # (as _rolling_picture lays it out for prebuild: wait)
+        return _rolling_path(u, made, size, cache, fmt, out) if made else None
+    # (pictures are made in frame order: the last one kept means all are, the first one missing means none are; only a
+    # part-made pass has every frame laid out)
+    if count == 0:
+        return 0
+    end = path(count - 1)
+    if end is not None and os.path.exists(end):
+        return 0
+    start = next((x for x in map(path, range(count)) if x is not None), None)
+    if start is None or not os.path.exists(start):
+        return 0
+    paths = [x for x in map(path, range(count)) if x is not None]
+    have = [os.path.exists(x) for x in paths]
+    if not any(have) or all(have):
+        return 0
+    gone = 0
+    for x, kept in zip(paths, have):
+        if kept:
+            stem = x[:-len("." + fmt)]
+            for f in (x, stem + ".hdr.webp", stem + ".json"):
+                try:
+                    os.remove(f)
+                    gone += f == x
+                except FileNotFoundError:
+                    pass
+    return gone
+
+
 def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None, fade=(0, 0)):
     """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
     One frame's picture is made once at a time (a window's request and the one made ahead wait for each other).
@@ -10069,8 +10123,7 @@ def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=T
     if not made:
         return None
     post = _faded(u, made, cache) if fade[0] else None
-    full = size == "full"
-    path = os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    path = _rolling_path(u, made, size, cache, fmt, out)
     if os.path.exists(path):
         return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post) if read else True
     with _lock:
