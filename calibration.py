@@ -43,6 +43,7 @@ overclocks).
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
+import collections
 import contextlib
 import contextvars
 import datetime
@@ -361,7 +362,32 @@ def original_values(codes, info):
         return None   # (garbled at the source, N1517057759_9: -30277..25243; the stored codes are what there is)
     if top == 255 and _wrapped(original):
         return None   # an 8LSB frame whose DN went past 255 kept only their low 8 bits: not the light, left out as before
+    if top == 4095 and not _same_codes(original, codes, info):
+        return None   # not the frame the archive squeezed (a wrong or garbled file): the stored codes are what there is
     return original.astype(np.float64)
+
+
+ORIGINAL_MIDS = (LUT[:-1] + LUT[1:]) / 2   # the lean archive's squeeze (helper programs/convert_archive.py encode)
+_same = collections.OrderedDict()
+_same_lock = threading.Lock()
+
+
+def _same_codes(original, codes, info):
+    """Whether a 12BIT frame's original squeezes to exactly its stored codes, as the lean archive made them (37 of 37
+    comparison frames do): kept per frame for the last few asked (calibrate asks several times)."""
+    key = (str(info.get("path")), id(original))
+    with _same_lock:
+        if key in _same:
+            return _same[key]
+    codes = np.asarray(codes)
+    same = codes.dtype == np.uint8 and np.array_equal(np.searchsorted(ORIGINAL_MIDS, original).astype(np.uint8), codes)
+    if not same:
+        print(f"The original of {info.get('path')} doesn't squeeze to its stored codes: not used", flush=True)
+    with _same_lock:
+        _same[key] = same
+        while len(_same) > 16:
+            _same.popitem(last=False)
+    return same
 
 
 WRAP_JUMP = (200, 5e-4)   # an 8LSB frame wrapped past 255 DN: neighbouring pixels WRAP_JUMP[0] or more apart on over

@@ -83,13 +83,30 @@ def img_bytes(dn, half=True):
     return head + body.tobytes()
 
 
-true = np.clip(cal.LUT[codes] + rng.normal(0, 1.0, codes.shape), 0, 4095).round().astype(np.int32)
+# true DN that squeeze to the stored codes (the archive's encode, a guard in calibration.original_values)
+edges = np.concatenate([[-0.5], cal.ORIGINAL_MIDS, [4095.5]])
+true = np.clip(cal.LUT[codes] + rng.normal(0, 1.0, codes.shape), np.ceil(edges[codes] + 1e-9), np.ceil(edges[codes.astype(int) + 1]) - 1).astype(np.int32)
+assert np.array_equal(np.searchsorted(cal.ORIGINAL_MIDS, true), codes)
 eight = rng.integers(10, 30, codes.shape).astype(np.int32)
+
+
+def volume(folder, name, members, manifest=True):
+    """A volume as orig12 writes it: volumes/<name>.zip of FID.IMG.xz and, once complete, manifest/<name>.csv"""
+    os.makedirs(os.path.join(folder, "volumes"), exist_ok=True)
+    os.makedirs(os.path.join(folder, "manifest"), exist_ok=True)
+    with zipfile.ZipFile(os.path.join(folder, "volumes", name + ".zip"), "w") as z:
+        for fid, data in members.items():
+            z.writestr(f"{name}/data/{fid}.IMG.xz", lzma.compress(data))
+    if manifest:
+        with open(os.path.join(folder, "manifest", name + ".csv"), "w") as fh:
+            fh.write("fid,status\n" + "".join(f"{fid},{st}\n" for fid, st in manifest.items()) if isinstance(manifest, dict)
+                     else "fid,status\n" + "".join(f"{fid},ok\n" for fid in members))
+    ds._originals = None
+
+
 with tempfile.TemporaryDirectory() as folder:
-    with zipfile.ZipFile(os.path.join(folder, "COISS_2111.zip"), "w") as z:
-        z.writestr("COISS_2111/data/1876/N1876460140_1.IMG.xz", lzma.compress(img_bytes(true)))
-        z.writestr("COISS_2111/data/1876/N1876460141_1.IMG.xz", lzma.compress(img_bytes(eight, half=False)))
-    ds.ORIGINALS, ds._originals = folder, None
+    ds.ORIGINALS = folder
+    volume(folder, "COISS_2111", {"N1876460140_1": img_bytes(true), "N1876460141_1": img_bytes(eight, half=False)})
     got = ds.original_dn("nac_data/N1876460140_1.png", codes.shape)
     assert got is not None and np.array_equal(got, true)
     assert ds.original_dn("nac_data/N1876460140_1.png", (32, 32)) is None   # another shape: not the frame's
@@ -99,6 +116,21 @@ with tempfile.TemporaryDirectory() as folder:
     direct = cal.calibrate(codes, info, None, smooth=False)
     assert np.allclose(from_original, direct, rtol=1e-5, atol=1e-9 * float(np.abs(direct).max()))
     assert not np.allclose(from_original, exact, rtol=1e-3)   # the true DN, not the squeezed codes
+    # a file that is not the frame the archive squeezed (here: another frame's DN) is not used
+    volume(folder, "COISS_2113", {"N1876460143_1": img_bytes(np.full(codes.shape, 2000, np.int32))})
+    assert cal.original_values(codes, dict(info, path="nac_data/N1876460143_1.png")) is None
+    # a volume still being written (no manifest yet) and a frame its manifest does not mark ok are not read
+    volume(folder, "COISS_2114", {"N1876460144_1": img_bytes(true)}, manifest=False)
+    volume(folder, "COISS_2115", {"N1876460145_1": img_bytes(true)}, manifest={"N1876460145_1": "check"})
+    assert ds.original_dn("nac_data/N1876460144_1.png") is None and ds.original_dn("nac_data/N1876460145_1.png") is None
+    # the build's guard: 3 complete volumes of 125 is not a build (unless asked for a test pass); none set or off
+    try:
+        ds.check_originals(); raise AssertionError("an incomplete download was let through")
+    except ds.OriginalsMissing:
+        pass
+    os.environ["CASSINI_ORIGINALS_PARTIAL"] = "1"
+    assert ds.check_originals()["volumes"] == 3
+    del os.environ["CASSINI_ORIGINALS_PARTIAL"]
     # a TABLE frame keeps its codes whatever is in the folder
     assert np.array_equal(cal.full_values(codes, info_t), codes.astype(np.float64))
     # an 8LSB frame: nothing without its original, calibrated from it with one
@@ -109,10 +141,12 @@ with tempfile.TemporaryDirectory() as folder:
     assert iof8 is not None and np.isfinite(iof8).all()
     # ... but not one whose DN wrapped past 255 (only their low 8 bits were sent)
     wrapped = eight.copy(); wrapped[20:40, 20:40] = 3; wrapped[20:40, 40:44] = 250
-    with zipfile.ZipFile(os.path.join(folder, "COISS_2112.zip"), "w") as z:
-        z.writestr("COISS_2112/data/N1876460142_1.IMG.xz", lzma.compress(img_bytes(wrapped, half=False)))
-    ds._originals = None
+    volume(folder, "COISS_2112", {"N1876460142_1": img_bytes(wrapped, half=False)})
     assert cal.calibrate(stretched, dict(info_8, path="nac_data/N1876460142_1.png"), None) is None
     ds.ORIGINALS, ds._originals = None, None
-    checks += 8
+    try:
+        ds.check_originals(); raise AssertionError("a build without originals was let through")
+    except ds.OriginalsMissing:
+        pass
+    checks += 12
 print(f"{checks} checks ok")
