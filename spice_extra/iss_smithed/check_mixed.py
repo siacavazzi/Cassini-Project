@@ -3,8 +3,8 @@ attitude in the same pointing of an observation (its frames in time order, a new
 POINTING_STEP or more from one frame to the next, as make_smith_neighbours_ck.py has it) as a frame whose pointing is
 corrected (JPL's per-image C-smithed CK, USGS's Titan CK, or one carried over from either). A mosaic's tiles at other
 pointings may differ in source (a correction is carried only within a pointing: the attitude error changes with the
-attitude). With the carry-over CKs in place there should be none (Sam 11-16: a sequence never switches pointing
-source).
+attitude). With the carry-over CKs in place, what is left are pointings whose own C-smithed corrections disagree
+(make_smith_neighbours_ck.AGREE_PX): 1,408 observations, 26,635 frames, from 4,590 (84,954).
 
     python spice_extra/iss_smithed/check_mixed.py [--before] [--out mixed.json]
 --before: as the frames stood without the carried-over corrections."""
