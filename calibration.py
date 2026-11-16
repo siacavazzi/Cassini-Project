@@ -828,6 +828,11 @@ SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move furth
                            # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14). Only on the
 SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets: every other frame keeps the smoothing as it was (on all of them,
                            # the change moved Jupiter's approach movie's evening and ring movies' registration)
+SKY_LINE = (32, 0.75)      # the glow's rise and reach are measured from each line's dark sky (its median over that line's
+                           # pixels of the measured dark sky, with at least SKY_LINE[0] of them; a line with fewer takes the
+                           # nearest lines') on a line less than SKY_LINE[1] dark sky, not the whole line's median: on a line mostly across Saturn that median is the
+                           # body, so the limb, cloud belts and ring edges counted as faint glow and were smoothed over
+                           # SKY_GLOW px (a second, darker limb about 10 px inside Saturn's; pipeline audit finding 12)
 
 
 """
@@ -866,8 +871,9 @@ def smooth_sky(iof, png, sky, slopes=False):
     # them it was drawn as flat terraces whose edges the 2 Hz bands scalloped (spot check 7: ISS_279EN_PLUME001_PIE
     # N1876460140_1, Enceladus's plume a stack of blocks); over SKY_GLOW they blend into its slope. A stray light
     # gradient across the frame, a few codes over its width, is smoothed as the rest of the sky
-    # (each line's median taken off first, so the 2 Hz bands themselves are no rise)
-    level = cv2.GaussianBlur(codes - np.median(codes, axis=1, keepdims=True), (0, 0), SKY_LEVEL * iof.shape[1] / 1024)
+    # (each line's dark sky level taken off first, so the 2 Hz bands themselves are no rise)
+    floor = _sky_lines(codes, sky)
+    level = cv2.GaussianBlur(codes - floor, (0, 0), SKY_LEVEL * iof.shape[1] / 1024)
     rise = np.hypot(*np.gradient(level)) * SKY_RAMP * 1024 / iof.shape[1]
     glow = np.clip(2.0 * rise - 1.0, 0, 1).astype(np.float32)
     if glow.any():
@@ -891,10 +897,31 @@ def smooth_sky(iof, png, sky, slopes=False):
         # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
         # fan was a hard grainy ring (Sam, 11-04: "hard looking artifacts"); a moon's lit side, far brighter, and its
         # texture (more than a code off the wider blur, near) stay as they are
-        over = smoothed - np.median(codes, axis=1, keepdims=True)
+        over = smoothed - floor
         faint = np.clip(2.0 - over / SKY_GLOW_TOP, 0, 1).astype(np.float32)
         weight = np.maximum(weight, glow * near * faint)
     return iof + weight * (blur - iof)
+
+
+"""
+Each line's dark sky level for smooth_sky: on a line less than SKY_LINE[1] dark sky, the median of its stored codes
+over the measured dark sky (sky), from lines with at least SKY_LINE[0] of those pixels (scaled to the frame's width;
+a line with fewer takes the level of the nearest lines that have them); a line mostly of dark sky, its own median. (lines, 1) float32; a frame with no such line falls back on each line's own median.
+"""
+def _sky_lines(codes, sky):
+    sky = np.asarray(sky, dtype=bool)
+    median = np.median(codes, axis=1, keepdims=True)
+    count = sky.sum(axis=1)
+    enough = count >= max(4, SKY_LINE[0] * codes.shape[1] // 1024)
+    if not enough.any():
+        return median
+    # (every line taken has sky pixels, so no all-NaN line)
+    level = np.nanmedian(np.where(sky[enough], codes[enough], np.nan), axis=1)
+    lines = np.arange(codes.shape[0])
+    level = np.interp(lines, lines[enough], level).astype(np.float32)[:, None]
+    # a line mostly of dark sky keeps its own median (its sky's level already): a frame of dark sky with a glow, a
+    # plume or a small moon in it is smoothed exactly as before
+    return np.where((count >= SKY_LINE[1] * codes.shape[1])[:, None], median, level)
 
 
 """
