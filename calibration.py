@@ -665,7 +665,11 @@ def calibrate(png, info, image=None, smooth=True):
         if sky is not None and step("skysmooth") and (SKY_SMOOTH_ORIGINALS or not _smooth_off(info)):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
-            per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
+            # (a frame with its original, when SKY_SMOOTH_ORIGINALS turns smoothing on for it: its true DN on the codes'
+            # scale, fractional, so the smoothing's code-step tests see no steps the squeeze made)
+            original = original_values(png, info)
+            steps = png if original is None else np.interp(original, LUT, np.arange(256.0)).astype(np.float32)
+            per_second = smooth_sky(per_second, steps, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
