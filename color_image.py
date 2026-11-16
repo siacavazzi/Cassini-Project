@@ -237,6 +237,38 @@ it) is drawn grey from the reference too (grey_plan, moved_region): that part (r
 picture), or the whole set when it is most of the picture (report["grey"] = "moved").
 """
 def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
+    """(the pictures drawn, valid, the reference label, report): _load_aligned, and a single picture of Saturn's
+    atmosphere (on its own scale, scale None) drawn with the Saturn look (obs_mosaic.saturn_look): its disk's white given
+    headroom in tone, then local contrast on its lit pixels, as its movies' and mosaics' frames are"""
+    look = {}
+    token = cal.still_look.set(look)
+    try:
+        imgs, valid, lbl, report = _load_aligned(paths, hdr, scale, repeat_window, around, look)
+    finally:
+        cal.still_look.reset(token)
+    if look.get("detail") and len(imgs) in (1, 2, 3):
+        imgs = _still_detail(imgs, valid, look)
+        report["saturn_look"] = look
+    return imgs, valid, lbl, report
+
+
+def _still_detail(imgs, valid, look):
+    """load_aligned's channels (BGR, each a grey picture) with obs_mosaic.detail's local contrast on the lit pixels
+    (detail_how), the same change on every channel"""
+    import obs_mosaic as om
+    chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
+    three = chans if len(chans) == 3 else chans * 3 if len(chans) == 1 else \
+        [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
+    rgba = np.dstack(three + [np.where(valid, 255, 0).astype(np.uint8)])
+    sigma = om.DETAIL_SIGMA * om.FRAME * rgba.shape[1] / 1024
+    how = {"strength": look["detail"], "lit": True, "sigma": look.get("sigma", 1.0)}
+    out = om.detail(rgba, sigma, {"detail_how": how})
+    picked = [out[..., 0]] if len(chans) == 1 else [out[..., 0], out[..., 2]] if len(chans) == 2 else [out[..., i] for i in range(3)]
+    return [cv2.cvtColor(np.ascontiguousarray(c), cv2.COLOR_GRAY2BGR) if img.ndim == 3 else np.ascontiguousarray(c)
+            for c, img in zip(picked, imgs)]
+
+
+def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, look=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
     calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
     lbls, imgs, stacked, iofs, masks, clips = [], [], [], [], [], []
@@ -258,6 +290,14 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         stacked.append(n)
         # pixels each frame lost in downlink (truncated lines) that no repeat exposure stacked with it had
         masks.append(mask)
+    if look is not None and scale is None and lbls:
+        try:
+            import obs_mosaic as om
+            info = lbls[0].info
+            target = str(info.get("TARGET_NAME", "")).strip('" ')
+            look.update(om.saturn_look({"key": (target, str(info.get("OBSERVATION_ID", "")).strip('" '))}))
+        except Exception as e:   # noqa: BLE001  (no Saturn look: drawn as before)
+            print(f"No Saturn look: {e}")
     if around and fill and len(paths) == 1:
         # a movie's frame: its one-frame spikes (cosmic rays, there in neither neighbour) replaced by what is round them
         def neighbour(p):

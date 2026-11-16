@@ -1779,6 +1779,9 @@ not is filled from those (fill_saturated), so channels that clipped at different
 cyan (a saturated limb, Hyperion's bright side) and the surface the others saw stays; where every channel saturated,
 neutral white.
 """
+still_look = contextvars.ContextVar("still_look", default=None)   # color_image.load_aligned: a Saturn picture's look
+
+
 def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None):
     every = None
     if saturated is not None and any(m is not None and m.any() for m in saturated):
@@ -1805,6 +1808,11 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
         if TOE_NEUTRAL and (k < 1).any():
             gray = x.mean(axis=0)
             x += (gray - x) * (1 - k * k * (3 - 2 * k))
+    look = still_look.get()
+    if look and look.get("headroom"):
+        # Saturn's atmosphere (obs_mosaic.saturn_look): white given headroom over the disk's, so its bright half is not
+        # rolled off by the shoulder into a few levels (what the camera saturated is still drawn white, below)
+        x /= np.float32(look["headroom"])
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
     # HDR (hdr_capture): the picture's brightness before the shoulder and the clip below, white = 1 (a new array:
     # x itself is not touched, so the picture drawn is the same with HDR on or off)
