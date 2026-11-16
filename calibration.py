@@ -1506,7 +1506,8 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     if off_disk is not None and len(iofs) > 1 and not _sky(iofs).mean() > sky_fraction:
         # a color set's sky lit all over (a faint offset round a small moon): everything off the body's disk
         sky = off_disk(iofs)
-    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile, sky=sky)
+    blacks, white, _ = picture_scale(iofs, sky_fraction, sky_percentile, sky=sky,
+                                     summing=[summing_of(lbl.get_info()) for lbl in labels])
     if white <= 0:
         return images
     shoulder = SHOULDER if look() == "balanced" else None
@@ -1646,7 +1647,8 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         disk_sky = off_disk(iofs)
         if disk_sky is not None and disk_sky.mean() > share:
             sky = disk_sky
-    levels, margin, white, measured = _balanced_scale(iofs, share, sky=sky, floor=floor, glow=glow)
+    levels, margin, white, measured = _balanced_scale(iofs, share, sky=sky, floor=floor, glow=glow,
+                                                      summing=[summing_of(lbl.get_info()) for lbl in labels])
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -1695,7 +1697,7 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
     if len(channels) > 1 and (measured or false):
         # without sky (a body filling the frame) the grain is measured on the whole picture
-        channels = _clean_spikes(channels, sky, false)
+        channels = _clean_spikes(channels, sky, false, summing=[summing_of(i) for i in infos])
         if measured:
             channels = _clean_streaks(channels, sky, false)
     return channels, margin, mix
@@ -1709,7 +1711,20 @@ against a 5x5 median, so 2x2 clusters go too, and where not every other channel 
 star or a small bright feature is in every channel, so it stays.
 channels = linear channels, not yet aligned; sky = the sky mask
 """
-def _clean_spikes(channels, sky, natural=False):
+def _clean_spikes(channels, sky, natural=False, summing=None):
+    # on summed frames at the camera's own pixel size (summing_of): one of its pixels is a 2x2 or 4x4 block of the
+    # picture's, which a 3x3 median here keeps whole, so a cosmic ray stayed as a colored dot
+    s = min(summing) if summing else 1
+    if s > 1 and all(c.shape[0] % s == 0 and c.shape[1] % s == 0 for c in channels):
+        h, w = channels[0].shape[:2]
+        small = [cv2.resize(np.asarray(c, np.float32), (w // s, h // s), interpolation=cv2.INTER_AREA) for c in channels]
+        sky_small = cv2.resize(np.asarray(sky, np.uint8), (w // s, h // s), interpolation=cv2.INTER_NEAREST) > 0
+        cleaned = _clean_spikes(small, sky_small, natural)
+        out = []
+        for c, a, b in zip(channels, small, cleaned):
+            hit = cv2.resize((b != a).astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST) > 0
+            out.append(np.where(hit, cv2.resize(b, (w, h), interpolation=cv2.INTER_NEAREST), c))
+        return out
     meds = [cv2.medianBlur(c, 5 if natural else 3) for c in channels]
     res = [c - m for c, m in zip(channels, meds)]
     noises = [float(np.percentile(np.abs(r[sky]), 99)) / 2.6 for r in res]
@@ -2033,7 +2048,7 @@ One picture's own display scale, as load_channels uses it: (black per channel, w
 blacks were measured on the sky or left at zero for want of sky), in I/F.
 iofs = the picture's channels, float32 I/F
 """
-def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True, sky=None):
+def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True, sky=None, summing=None):
     # Sky is where every channel is dark; without enough sky the black point stays at zero. sky: a sky of the
     # caller's instead (load_channels' off_disk)
     sky = _sky(iofs) if sky is None else sky
@@ -2047,11 +2062,38 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True, sky=Non
             blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
         # One white point for all channels: the brightest channel's brightest pixel, after a
         # 3x3 median so a single cosmic ray hit or hot pixel can't set it
-        white = max(cv2.medianBlur(iof - black, 3).max() for iof, black in zip(iofs, blacks))
+        white = max(_despeckled(iof - np.float32(black), s).max()
+                    for iof, black, s in zip(iofs, blacks, summing or [1] * len(iofs)))
         return blacks, white, measured
     # the sky just measured, not measured again (a percentile of every pixel of each channel)
-    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky, floor=floor)
+    levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky, floor=floor,
+                                                      summing=summing)
     return [level + margin for level in levels], white, measured
+
+
+"""
+How many of the picture's (1024 px) pixels across one of the camera's pixels is: 2 on a SUM2 frame (512 lines), 4 on a
+SUM4 frame (256 lines), else 1
+"""
+def summing_of(info):
+    try:
+        lines = int(str(info.get("LINES", "1024")).strip() or 1024)
+    except ValueError:
+        return 1
+    return max(1, 1024 // lines) if 0 < lines < 1024 else 1
+
+
+"""
+A 3x3 median of img (2-D, float32) at the camera's own pixel size: s = summing_of, the picture's pixels across one of the
+camera's (a summed frame's resized picture). At s 1, cv2.medianBlur's own
+"""
+def _despeckled(img, s=1):
+    img = np.asarray(img, np.float32)
+    if s <= 1 or img.shape[0] % s or img.shape[1] % s:
+        return cv2.medianBlur(img, 3)
+    h, w = img.shape[:2]
+    small = cv2.medianBlur(cv2.resize(img, (w // s, h // s), interpolation=cv2.INTER_AREA), 3)
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
 """
@@ -2081,7 +2123,7 @@ def noise_floor(skies, sky_percentile=98):
     return max(float(np.percentile(v, sky_percentile) - np.median(v)) for v in skies if v.size) if skies else 0.0
 
 
-def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=True, glow=1.0):
+def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=True, glow=1.0, summing=None):
     sky = _sky(iofs) if sky is None else sky
     measured = bool(sky.mean() > sky_fraction)
     levels, margin = [0.0] * len(iofs), 0.0
@@ -2101,7 +2143,20 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
         lit = np.ones(sky.shape, dtype=bool)
     blurred = [cv2.medianBlur(iof - np.float32(black), 3) for iof, black in zip(iofs, blacks)]
     white = max(float(np.percentile(b[lit], WHITE_PCT)) for b in blurred)
-    white = max(white, max(float(b.max()) for b in blurred) / MAX_STRETCH)
+    # (the brightest pixel after a 3x3 median at the camera's own pixel size, _despeckled: on a summed frame one of its
+    # pixels is a 2x2 or 4x4 block of these, which a 3x3 median here keeps whole, so one hot pixel or star set the white,
+    # and a 4x4 spoke-movie ring frame, N1581470364_1, was drawn 6 times too dark. Only on a sunlit picture: a picture of
+    # lit sky (its median under GLOW_IOF[0], an aurora stare's night sky) keeps the guard as it was, as its brightest
+    # few pixels are all there is to show and taken off they lift its noise into a gray veil; between, a blend on a log
+    # scale, as the glow black's)
+    summing = summing or [1] * len(iofs)
+    brightest = max(float(b.max()) for b in blurred)
+    if max(summing) > 1:
+        native = max(float(_despeckled(iof - np.float32(black), s).max()) for iof, black, s in zip(iofs, blacks, summing))
+        median = max(max(float(np.median(i)) for i in iofs), 1e-12)
+        sunlit = float(np.clip(np.log(median / GLOW_IOF[0]) / np.log(GLOW_IOF[1] / GLOW_IOF[0]), 0, 1))
+        brightest = native * sunlit + brightest * (1 - sunlit) if native < brightest else brightest
+    white = max(white, brightest / MAX_STRETCH)
     return levels, margin, white, measured
 
 
