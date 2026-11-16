@@ -79,21 +79,38 @@ def _rotvec(E):
     return np.asarray(axis) * angle
 
 
-def local_error(refs, t, pixel):
-    """The error rotation at t from an observation's (time, E) list: the component-wise median of the NEAREST
-    C-smithed frames' corrections (as rotation vectors), faded by the time to the nearest of them (_faded). JPL
-    navigated each image on its own, and on a ring mosaic the corrections of one pointing's frames scatter by tens of
-    pixels and sometimes hundreds (ISS_260RI_HIPHASEFA001: 2 to 76 px, one 482 px); a median of the nearby ones is
-    what they agree on, where carrying the nearest one (or blending the two either side) copied its own error. None
-    where they do not agree (AGREE_PX)."""
-    near = sorted(refs, key=lambda r: abs(r[0] - t))[:NEAREST]
+def _agreed(refs, k, pixel):
+    """The median correction (a rotation) of the NEAREST C-smithed frames around refs[k] in time, or None where they
+    do not agree within AGREE_PX."""
+    tk = refs[k][0]
+    near = sorted(refs, key=lambda r: abs(r[0] - tk))[:NEAREST]
     vs = np.array([_rotvec(E) for _, E in near])
     v = np.median(vs, axis=0)
     if np.median(np.linalg.norm(vs - v, axis=1)) > AGREE_PX * pixel:
         return None
     a = float(np.linalg.norm(v))
-    E = sp.axisar(v / a, a) if a > 0 else np.eye(3)
-    return sp.q2m(_faded(E, abs(near[0][0] - t)))
+    return sp.axisar(v / a, a) if a > 0 else np.eye(3)
+
+
+def local_error(refs, t, pixel):
+    """The error rotation at t from an observation's (time, E) list. On each side of t, the C-smithed frame nearest
+    it stands for the median of the NEAREST corrections around it (_agreed): JPL navigated each image on its own,
+    and on a ring mosaic one pointing's corrections scatter by tens of pixels and sometimes hundreds
+    (ISS_260RI_HIPHASEFA001: 2 to 76 px, one 482 px), so carrying one frame's copied its error. Each side's value is
+    faded by its time distance (_faded) and the two are blended by where t falls between them (slerp): smooth in time
+    across a movie's gaps (ISS_006RI_LPHRLFMOV001). A side whose corrections do not agree is dropped; None when
+    neither side agrees (the frame keeps its raw pointing)."""
+    times = [r[0] for r in refs]
+    k = bisect.bisect_left(times, t)
+    sides = [(times[j], _agreed(refs, j, pixel)) for j in (k - 1, k) if 0 <= j < len(refs)]
+    sides = [(tj, E) for tj, E in sides if E is not None]
+    if not sides:
+        return None
+    if len(sides) == 1:
+        tj, E = sides[0]
+        return sp.q2m(_faded(E, abs(t - tj)))
+    (ta, ea), (tb, eb) = sides
+    return sp.q2m(_toward(_faded(ea, t - ta), _faded(eb, tb - t), (t - ta) / (tb - ta)))
 
 
 # pass 1: the error rotation at every smithed frame, by observation, over the whole mission (an observation can run
