@@ -141,17 +141,17 @@ def repeat_of(kept, t, place, window):
     return None
 
 
-def to_range(image, place, ref_place, inter=None):
+def to_range(image, place, ref_place, inter=None, border=0):
     """image (a frame's picture, I/F or mask, 1024 px as label.resize_image), taken at place (x, y, z as places gives),
     as seen from ref_place's range: grown or shrunk by its range over ref_place's about the body's centre (find_target's
     shift: ba.CCD_CENTER less x, y), where it stays; lining up then takes up the rest. What falls outside the frame is
-    0 (to_range of a frame of ones: the part it covers)."""
+    border (0: to_range of a frame of ones is the part it covers)."""
     k = place[2] / ref_place[2]
     centre = (ba.CCD_CENTER - float(place[0]), ba.CCD_CENTER - float(place[1]))
     m = cv2.getRotationMatrix2D(centre, 0, k)
     h, w = image.shape[:2]
     return cv2.warpAffine(image, m, (w, h), flags=cv2.INTER_CUBIC if inter is None else inter,
-                          borderMode=cv2.BORDER_CONSTANT)
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=border)
 
 
 def load_index():
@@ -388,7 +388,11 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
                 continue
         mask = l.valid_mask() if valid else None
         if valid and ranged:
-            mask = to_range(mask.astype(np.float32), at, ref_at, cv2.INTER_LINEAR) > 0.99
+            # (lost pixels resized with it, and a pixel more round them: the cubic resize of its I/F spreads a lost line
+            # that far. The edge it no longer covers is not lost but unmeasured, left out as saturated below, so a whole
+            # repeat still has the frame's own mask and the merge stays on the plain path, not "differ"'s)
+            mask = to_range(mask.astype(np.float32), at, ref_at, cv2.INTER_LINEAR, border=1) > 0.99
+            mask = cv2.erode(mask.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
         if valid:
             own = mask if own is None else own
             # a frame that lost other pixels than the frame at path: then every frame's lost ones are left out, so

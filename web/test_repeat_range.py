@@ -87,5 +87,14 @@ assert abs((lit.max() - lit.min() + 1) / 2 - 200) <= 1.5, (lit.min(), lit.max())
 # ... and with valid, the edge the shrunk frame doesn't cover is the frame's own
 _, merged_v, n, valid = stacking.load_hdr("far.png", valid=True)
 assert n == 2 and valid.all() and np.abs(merged_v - merged).max() < 1e-6
+# ... a repeat with lost lines: the cubic resize's spread round them is left out too (a pixel round the resized mask)
+lost = np.ones((1024, 1024), bool)
+lost[600:604] = False
+Label.valid_mask = lambda self: lost if self.info["path"] == "near.png" else np.ones((1024, 1024), bool)
+pngs["near.png"] = disk(208, (40.0, -30.0)).copy()
+pngs["near.png"][600:604] = 0   # the lost lines read as 0
+_, merged_l, n, valid_l = stacking.load_hdr("far.png", valid=True)
+col = merged_l[:, int(C - 40)]
+assert n == 2 and valid_l.all() and np.abs(col[560:650] - 0.2).max() < 0.002, np.abs(col[560:650] - 0.2).max()
 print("load_hdr ok")
 print("ok")
