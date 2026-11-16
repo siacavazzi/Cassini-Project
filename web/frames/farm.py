@@ -57,7 +57,8 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 import slices  # noqa: E402  (stdlib only; prebuild/frame_server are imported only where versions are needed)
 
-REQUIRED_INPUTS = ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_SPICE_CACHE", "CASSINI_CISSCAL")
+REQUIRED_INPUTS = ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_SPICE_CACHE", "CASSINI_CISSCAL",
+                   "CASSINI_ORIGINALS")   # (the 12-bit originals, data_source.check_originals: "off" only for test builds)
 KERNEL_PROBE_MIN = 20   # mission kernels a year's meta-kernel loads (2017: 109); without the kernels zip only the 3 USGS extras load
 
 
@@ -83,7 +84,8 @@ def fingerprint(env):
 def preflight_problems(env, want, kernels_loaded=None):
     """Why this machine must not build: an input missing, an input that differs from the hub's (plan.json "inputs"),
     or a year whose meta-kernel loads too few kernels (kernels_loaded: {year: count})."""
-    problems = [f"{k} missing ({env.get(k) or 'not set'})" for k in REQUIRED_INPUTS if not (env.get(k) and os.path.exists(env[k]))]
+    problems = [f"{k} missing ({env.get(k) or 'not set'})" for k in REQUIRED_INPUTS
+                if not (env.get(k) and (os.path.exists(os.path.expanduser(env[k])) or (k == "CASSINI_ORIGINALS" and env[k].lower() == "off")))]
     have = fingerprint(env)
     for k, v in (want or {}).items():
         if v is not None and have.get(k) != v:
@@ -1000,7 +1002,7 @@ def cmd_doctor(args):
         print(f"plan commit {plan.get('commit', '')[:8]}, packages {plan.get('packages')}")
     for k, v in m.get("env", {}).items():
         p = os.path.expanduser(str(v))
-        if k in ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_SPICE_CACHE", "CASSINI_CISSCAL"):
+        if k in REQUIRED_INPUTS and not (k == "CASSINI_ORIGINALS" and p.lower() == "off"):
             there = os.path.exists(p)
             size = os.path.getsize(p) if there and os.path.isfile(p) else None
             print(f"{'ok ' if there else 'MISSING'} {k}={p}" + (f" ({size / 1e9:.1f} GB)" if size else ""))

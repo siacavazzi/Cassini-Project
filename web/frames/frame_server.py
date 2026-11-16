@@ -2185,6 +2185,12 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
+    # the 12-bit originals (data_source.check_originals): a server drawing pictures on request without them caches the
+    # squeezed-code pictures under the same names a build with them makes, so it says so loudly (and goes on: a preview)
+    try:
+        data_source.check_originals()
+    except data_source.OriginalsMissing as e:
+        print(f"WARNING: {e}. Pictures drawn here are not the rebuild's: keep this cache apart from it", flush=True)
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of), and Pre-process its filter sets (warm_prebuild); made now rather than on
     # the first request
