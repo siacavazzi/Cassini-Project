@@ -26,8 +26,9 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
               movies and chains): it draws no picture, but can write into the cache the chains a steady table still
               waits for, and the tile maps and global solves tile_map and layout keep when first asked (tables.py).
               A pass is made again when its picture versions or its count of built tiles changed (tables.built)
-  fullview    the full view of every mosaic pass (decision D3): its mosaic at its last frame at size=full (CANVAS up to
-              FULL_MAX, 2048 px), as the mosaic route makes it. Run after mosaics
+  fullview    the full view at every frame of every mosaic pass (decision D3, every frame since 2026-11-16): a mosaic's
+              mosaic so far and a mosaic movie's rolling picture at size=full (up to FULL_MAX, 2048 px), as the
+              routes make them for the page's full view. Run after mosaics
 
 tables and fullview add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
 picture phases left it).
@@ -209,7 +210,7 @@ def items(phase):
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_tables(u, c, tuple(u["key"]) in movies))
                 for u in all_passes()]
     if phase == "fullview":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes() if u["mosaic"]]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes()]
     raise ValueError(phase)
 
 
@@ -434,19 +435,30 @@ def make_tables(u, cache, movie):
 
 
 def make_fullview(u, cache):
-    """The full view of mosaic pass u (decision D3): its mosaic at its last frame at size=full, as the mosaic route
-    makes it for ?size=full (obs_mosaic.mosaic_webp, out CANVAS up to FULL_MAX), after the pass's plan and tiles
-    (made by the mosaics phase; found here). 1, or 0 for a pass with nothing drawn at its last frame (the route answers
-    404 for it as for any size: obs_mosaic.blank, a ring scan whose tiles hold nothing above black)."""
-    made = obs_mosaic.mosaic_webp(u["frames"][-1][1], frame_server.FULL, cache, None, fmt="webp",
-                                  out=min(obs_mosaic.CANVAS, frame_server.FULL_MAX), force=False,
-                                  tune=obs_mosaic.parse_tune("", ""))
-    if not made:
-        print(f"fullview {u['frames'][-1][1]}: no mosaic at the pass's last frame (the route's 404)", flush=True)
-        return 0
-    if made[1].get("behind"):
-        raise ValueError(f"mosaic {made[1]['behind']} frames behind its last frame: run the mosaics phase first")
-    return 1
+    """The full view of mosaic pass u at every frame: the picture the page's full view asks for there (its window's
+    picture at size=full), stored so a full view, the studio or a download never makes the server draw one
+    (Sam, 2026-11-16: 2048 at every frame of every mosaic and mosaic movie, not only a pass's last frame). After the
+    mosaics phase, whose plan, tiles and pictures it reuses (found here, not made again):
+    - a mosaic movie (kind mosaic_movie): its rolling picture at size=full (obs_mosaic.rolling_webp, the route's
+      mode=rolling&size=full, out frame_server.rolling_full_out), in frame order so each grows from the one before,
+      as the mosaics phase makes the 1024 and 512 ones. Never the pass's mosaic so far, which a window never shows for
+      a mosaic movie: drawn at full size, it first redrew every tile's rings as at the pass's epoch (ring_redraw,
+      ~1,600 tiles and ~6 GB a process on a Saturn polarimetry pass), which made this phase take hours a pass;
+    - a mosaic: its mosaic so far at size=full at each frame (obs_mosaic._mosaic_at, the mosaic route's ?size=full,
+      out CANVAS up to FULL_MAX), on the layout the mosaics phase drew at 1024; frames that add nothing to it share
+      its picture, made once.
+    The number of frames with a picture; a frame with nothing drawn yet (the route's 404) has none."""
+    n = 0
+    if u.get("kind") == "mosaic_movie":
+        for f in u["frames"]:
+            res = obs_mosaic.rolling_webp(f[1], frame_server.FULL, cache, 1, wait=True,
+                                          out=frame_server.rolling_full_out(f[1], cache))
+            n += bool(res and res[0] is not None)
+        return n
+    out = min(obs_mosaic.CANVAS, frame_server.FULL_MAX)
+    for j in range(len(u["frames"])):
+        n += bool(obs_mosaic._mosaic_at(u, j, frame_server.FULL, cache, fmt="webp", out=out))
+    return n
 
 
 def make_planes(u, cache, centre=True):
