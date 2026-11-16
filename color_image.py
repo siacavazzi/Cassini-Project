@@ -309,6 +309,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
             lbls, imgs, iofs, masks, stacked, clips, own = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own))
+            if unfilled is not None:
+                # (each channel kept keeps its own lost pixels: load_channels' valid goes label by label)
+                unfilled = [unfilled[j] for j in keep]
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
