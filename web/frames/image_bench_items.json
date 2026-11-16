@@ -1,5 +1,5 @@
 {
- "_about": "The image regression benchmark's pictures (web/frames/image_bench.py, docs/image-benchmark.md). Each item is one frame id: a still is that frame processed alone, a composite the camera window's filter set holding it, a pass the pass it is in (a mosaic's finished picture, a mosaic movie's last rolling picture, a movie's every frame), all made by the pre-build's own makers. group: hard = a case an earlier change fixed or broke, plain = a picture that must not change unless a change means to. Changing this list changes every cached base result (they are keyed by its hash).",
+ "_about": "The image regression benchmark's pictures (web/frames/image_bench.py, docs/image-benchmark.md). Each item is one frame id: a still is that frame processed alone, a composite the camera window's filter set holding it, a pass the pass it is in (a mosaic's finished picture, a mosaic movie's last rolling picture, a movie's every frame, and for a toss-up pass playing as a movie its Mosaic view at the frames mosaic_views lists, 1 the first), all made by the pre-build's own makers. group: hard = a case an earlier change fixed or broke, plain = a picture that must not change unless a change means to. Changing this list changes every cached base result (they are keyed by its hash).",
  "items": [
   {"name": "ringsFB-mosaic", "kind": "pass", "frame": "W1870777525_1", "group": "hard", "watch": "ring seams and steps (#449, #457), saturated glow under Saturn (#456 cyan blob)"},
   {"name": "ringsFA-mosaic", "kind": "pass", "frame": "W1865195196_7", "group": "hard", "watch": "outer ring steps (#457), green and pink tiles and the white block (#456)"},
@@ -51,6 +51,8 @@
   {"name": "titan-cloud-mosaic", "kind": "pass", "frame": "N1883839650_1", "group": "plain", "watch": "Titan clouds near the end of the mission"},
   {"name": "earth-fb-still", "kind": "still", "frame": "N1870757502_1", "group": "plain", "watch": "Earth seen from Saturn, a dot"},
   {"name": "enceladus15-composite", "kind": "composite", "frame": "N1820444140_1", "group": "plain", "watch": "Enceladus in colour, 2015"},
-  {"name": "titan17-composite", "kind": "composite", "frame": "N1883848034_1", "group": "plain", "watch": "Titan two-filter colour (approximate colour)"}
+  {"name": "titan17-composite", "kind": "composite", "frame": "N1883848034_1", "group": "plain", "watch": "Titan two-filter colour (approximate colour)"},
+  {"name": "tossup-ring-108ri", "kind": "pass", "frame": "N1617917527_1", "group": "hard", "watch": "a toss-up ring pass playing as a movie (108RI MNRNGSHAD005): its Mosaic view on the way and finished, the ring registration on every tile (#503)", "mosaic_views": [12, 18, 24, 29]},
+  {"name": "tossup-enceladus-088en", "kind": "pass", "frame": "N1602276491_1", "group": "plain", "watch": "a moon toss-up playing as a movie (Enceladus 088EN SECLNX001): its Mosaic view half way and finished (#503)", "mosaic_views": [11, 22]}
  ]
 }

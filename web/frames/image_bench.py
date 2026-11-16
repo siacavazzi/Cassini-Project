@@ -15,7 +15,9 @@ farm's) and a scratch cache of its own, and each item is made in a fresh process
   pass       prebuild.make_pass for the frame's pass (its plan, every tile, the solve the pre-build does), then the
              pass as the window shows it: a mosaic's finished picture at 1024 and full size (obs_mosaic.mosaic_webp),
              a mosaic movie's last rolling picture, a movie's every frame (obs_mosaic.movie_webp) and, for a pass the
-             page cannot even itself, its exposure-evened frames (prebuild.make_evened)
+             page cannot even itself, its exposure-evened frames (prebuild.make_evened). An item with "mosaic_views"
+             (frame numbers, 1 the first) on a toss-up pass that plays as a movie also gets the pass's mosaic view
+             at those frames, as the window's Mosaic choice shows it (obs_mosaic.mosaic_webp, force)
 A long pass's tiles are made first by several processes at once (obs_mosaic.plan, then obs_mosaic.tile over runs of
 tiles cut where a pointing starts, so no tile is registered to one another process is making), which is the same
 call the pre-build makes, only spread over the cores.
@@ -218,6 +220,14 @@ def work_resolve(args):
                 u = _pass(om, it["frame"])
                 r.update(key="_".join(map(str, u["key"])), frames=len(u["frames"]), mosaic=bool(u["mosaic"]),
                          pass_kind=u.get("kind"), cuts=_cuts(om, u))
+                views = it.get("mosaic_views")
+                if views:
+                    # (said here, before anything is built: the views are for a toss-up playing as a movie, at frames
+                    # the pass has)
+                    if u["mosaic"] or u.get("kind") != "movie" or not u.get("tossup"):
+                        raise LookupError("mosaic_views: the pass is not a toss-up that plays as a movie")
+                    if not all(isinstance(v, int) and 1 <= v <= len(u["frames"]) for v in views):
+                        raise LookupError(f"mosaic_views: frame numbers from 1 to {len(u['frames'])}")
         except Exception as e:   # noqa: BLE001  (reported, the rest go on)
             r["error"] = f"{type(e).__name__}: {e}"[:300]
         out["items"][it["name"]] = r
@@ -297,6 +307,15 @@ def work_item(args):
                     _write(args.out, f"evened{j:03d}.webp",
                            om.movie_webp(f[1], SIZE, args.cache, 0, True, wait=True, ahead=0, centre=True,
                                          exposure=om.EXPOSURE_SMOOTH), reports)
+            # a toss-up playing as a movie: its mosaic view at the frames the item names, as the window's Mosaic choice
+            # asks for it (the mosaic route's force=1). make_pass above made what the pre-build makes of them; a view
+            # it did not make under the name asked for is drawn here, as a server draws it on request
+            for v in it.get("mosaic_views") or []:
+                try:
+                    _write(args.out, f"mosaic_at{v:03d}.webp",
+                           om.mosaic_webp(frames[v - 1][1], SIZE, args.cache, None, 0, force=True), reports)
+                except Exception as e:   # noqa: BLE001  (reported: the item's other pictures stand)
+                    reports[f"mosaic_at{v:03d}.webp"] = {"error": f"{type(e).__name__}: {e}"[:300]}
     meta["reports"] = reports
     meta["seconds"] = round(time.time() - t0, 1)
     with open(os.path.join(args.out, "meta.json"), "w") as fh:

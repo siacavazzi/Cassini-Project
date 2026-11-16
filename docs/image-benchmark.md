@@ -18,7 +18,9 @@ commits, the base (usually `origin/main`) and the candidate (the PR's head). The
   `frame_server.processed_webp` centred as Auto center asks. A composite is the camera window's filter set through
   `frame_server.color_webp`. A pass goes through `prebuild.make_pass`, then gives up the finished mosaic (1024 and
   full size), a mosaic movie's last rolling picture, or every frame of a movie, plus the evened frames for a pass the
-  page cannot even itself. Nothing is re-implemented.
+  page cannot even itself. A toss-up pass that plays as a movie can also give its Mosaic view at chosen frames (the
+  item's `mosaic_views`, through `obs_mosaic.mosaic_webp` as the window's Mosaic choice asks). Nothing is
+  re-implemented.
 - **Each commit is built alone**: its own worktree, its own scratch cache and its own copy of the geometry cache
   (the pipeline writes rows into that file, so two commits sharing it would overwrite each other's). A commit is built
   as committed: the tool refuses a checkout with uncommitted changes rather than quietly testing the old code.
@@ -27,7 +29,7 @@ commits, the base (usually `origin/main`) and the candidate (the PR's head). The
     #457), Day the Earth Smiled, the 2004 ring mosaic (#449), In Saturn's Shadow, 039RI's disk square, Jupiter
     ATMOS02A's gray panel (#455), Enceladus' crescent (#456), the SATELLORB002 centring (#450), the Daphnis A-ring
     movie (#400), a ring close-up and the G ring (#401), a CCD bloom frame, the approach and ring movies (#445,
-    #402), and Telesto's colour frame.
+    #402), Telesto's colour frame, and a toss-up ring pass's Mosaic view on the way and finished (#503).
   - `plain` holds pictures across 1999 to 2017 that must not change unless a change means to: the Moon, Venus,
     Masursky and Jupiter from cruise, then Saturn, its rings and the big and small moons. They come as stills, colour
     composites, movies and mosaics, including NAC and WAC, filled Titan passes, specks and dots.
