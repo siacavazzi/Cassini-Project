@@ -240,19 +240,23 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
     calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
     lbls, imgs, stacked, iofs, masks, clips = [], [], [], [], [], []
+    # each channel's picture at full depth (stacking.load_stacked's deep), filled and cleaned as its display copy is
+    # below: what it is calibrated from (calibration.calibrated_each); None where load_hdr calibrated it already
+    deeps = []
     spiked = 0
     for path in paths:
-        iof = clip = None
+        iof = clip = deep = None
         if hdr and calibrating:
             lbl, iof, n, mask, clip = stacking.load_hdr(path, repeat_window, valid=True, clipped=True)
         if iof is None:
-            lbl, img, n, mask = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
-                                                      count=True, valid=True)
+            lbl, img, n, mask, deep = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
+                                                            count=True, valid=True, deep=True)
         else:
             img = lbl.resize_image()
         lbls.append(lbl)
         imgs.append(img)
         iofs.append(iof)
+        deeps.append(deep)
         # what the camera saturated in every exposure merged (drawn white)
         clips.append(clip)
         stacked.append(n)
@@ -268,6 +272,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         found = ic.spikes(_linear(lbls[0]), [neighbour(p) for p in around if p])
         if found.any():
             imgs[0] = ic.unspike(imgs[0], found)
+            if deeps[0] is not None:
+                deeps[0] = ic.unspike(deeps[0], found)
             if iofs[0] is not None:
                 iofs[0] = ic.unspike(iofs[0], found)
             spiked = int(found.sum())
@@ -280,11 +286,13 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                  for img, mask, lbl in zip(imgs, masks, lbls)]
         lined = [ic.fill_lines(img, mask, fills=f) for img, mask, f in zip(imgs, masks, fills)]
         iofs = [None if iof is None else ic.fill_lines(iof, mask, fills=f)[0] for iof, mask, f in zip(iofs, masks, fills)]
+        deeps = [None if d is None else ic.fill_lines(d, mask, fills=f)[0] for d, mask, f in zip(deeps, masks, fills)]
         imgs, masks = [l[0] for l in lined], [l[1] for l in lined]
     left = sum(int((~m).sum()) for m in masks)
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+        deeps = [None if d is None else ic.fill_invalid(d, mask) for d, mask in zip(deeps, masks)]
     # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
     # aligned and drop out of every picture made of it
     masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
@@ -292,7 +300,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
         own = list(iofs)   # (as given: the guide below calibrates them again without the slope guard)
-        iofs = cal.calibrated_each(lbls, imgs, iofs)
+        iofs = cal.calibrated_each(lbls, imgs, iofs, deeps)
         keep = [j for j, iof in enumerate(iofs) if iof is not None]
         # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
         # when two others calibrate, so the set is a calibrated two-filter picture instead of every
@@ -305,7 +313,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
-            lbls, imgs, iofs, masks, stacked, clips, own = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own))
+            lbls, imgs, iofs, masks, stacked, clips, own, deeps = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own, deeps))
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
@@ -323,7 +331,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 full = None if full[0] is None else full
                 share = float(full[0].mean()) if full else 0.0
             linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share),
-                                     off_disk=lambda linear: dim_off_disk(lbls, linear))
+                                     off_disk=lambda linear: dim_off_disk(lbls, linear), deep=deeps)
         if linear is not None:
             calibrated = True
             if full is not None:
@@ -338,7 +346,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # out several pixels apart on some sets, h229/h230 ISS_229TI/230TI, fringes round the limb)
             if cal.slope_guarded(lbls):
                 with cal.looking("classic"), cal.slope_guard(False):
-                    guide = cal.load_channels(lbls, imgs, iofs=cal.calibrated_each(lbls, imgs, own))
+                    guide = cal.load_channels(lbls, imgs, iofs=cal.calibrated_each(lbls, imgs, own, deeps))
             else:
                 with cal.looking("classic"):
                     guide = cal.load_channels(lbls, imgs, iofs=iofs)
@@ -360,7 +368,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # (a set drawn on its own: its sky black in every channel, as the balanced look's, fix plan D)
             alone = scale is None and len(lbls) > 1 and cal.look() == "classic"
             imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None,
-                                     off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None)
+                                     off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None, deep=deeps)
             calibrated = imgs is not before
 
     # align to the middle frame in time so the largest offset is as small as possible

@@ -122,7 +122,7 @@ def test_preflight(tmp):
     os.makedirs(os.path.join(d, "spice"))
     env = {"CASSINI_DATA": os.path.join(d, "data.zip"), "CASSINI_KERNELS": os.path.join(d, "kernels.zip"),
            "CASSINI_CISSCAL": os.path.join(d, "cisscal"), "CASSINI_GEOMETRY_CACHE": os.path.join(d, "geometry.sqlite"),
-           "CASSINI_SPICE_CACHE": os.path.join(d, "spice")}
+           "CASSINI_SPICE_CACHE": os.path.join(d, "spice"), "CASSINI_ORIGINALS": os.path.join(d, "spice")}
     want = farm.fingerprint(env)
     assert want == {"CASSINI_DATA": 10, "CASSINI_KERNELS": 20, "CASSINI_CISSCAL": [1, 5]}, want
     assert farm.preflight_problems(env, want, {2017: 109}) == []
@@ -130,6 +130,11 @@ def test_preflight(tmp):
     del no_k["CASSINI_KERNELS"]
     probs = farm.preflight_problems(no_k, want, {2017: 3})
     assert any("CASSINI_KERNELS missing" in p for p in probs) and any("only 3 SPICE kernels" in p for p in probs), probs
+    # the 12-bit originals are an input too ("off" only for a test build)
+    no_o = dict(env)
+    del no_o["CASSINI_ORIGINALS"]
+    assert any("CASSINI_ORIGINALS missing" in p for p in farm.preflight_problems(no_o, want, {2017: 109}))
+    assert farm.preflight_problems(dict(env, CASSINI_ORIGINALS="off"), want, {2017: 109}) == []
     write(os.path.join(d, "cisscal", "b.dat"), "c")
     assert any("CASSINI_CISSCAL differs" in p for p in farm.preflight_problems(env, want, {2017: 109}))
     assert farm.plan_years({"units": [{"unit": "2017-08", "from": "2017-08-01", "until": "2017-09-01"},

@@ -43,6 +43,7 @@ overclocks).
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
+import collections
 import contextlib
 import contextvars
 import datetime
@@ -234,13 +235,13 @@ to convert instead of png itself
 """
 def unstretch(png, info, image=None):
     conversion = _value(info, "DATA_CONVERSION_TYPE", "")
-    if conversion not in ("TABLE", "12BIT"):
-        return None  # 8LSB frames only kept the low 8 bits
+    if conversion not in ("TABLE", "12BIT") and original_values(png, info) is None:
+        return None  # 8LSB frames only kept the low 8 bits (and the archive only their stretched PNG)
     if ds.lut8():
-        # the lean archive keeps the camera's codes, so nothing has to be guessed
+        # the lean archive keeps the camera's codes (or the frame's original is at hand), so nothing has to be guessed
         if image is None:
-            return stored_values(png, info)
-        low, high = stored_range(png, info)
+            return full_values(png, info)
+        low, high = value_range(png, info)
         return np.asarray(image, dtype=np.float64) * (high - low) / 254.0 + low
     png = np.asarray(png, dtype=np.float64)
     span = recover_span(png)
@@ -340,6 +341,117 @@ def display_stretch(codes, info):
     return _lookup(codes, np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8))
 
 
+ORIGINAL_CONVERSIONS = ("12BIT", "8LSB")   # the frames the lean archive could not keep at full depth (original_values)
+
+
+"""
+Lean archive only: a 12BIT frame's true 12-bit DN where an original of it is at hand (data_source.original_dn: the
+frames re-downloaded from the PDS, CASSINI_ORIGINALS), as float64 on the frame's own grid, else None: the lean archive
+squeezed every 12BIT frame to 256 square-root codes (stored_values), a few DN apart in the dark and 16 at the top.
+Also an 8LSB frame's (the camera sent the low 8 bits of each DN, for a faint scene): the archive has only the old
+stretched PNG of it, which can't be calibrated (unstretch), its original can.
+"""
+def original_values(codes, info):
+    if not ds.lut8() or _value(info, "DATA_CONVERSION_TYPE", "") not in ORIGINAL_CONVERSIONS:
+        return None
+    original = ds.original_dn(info.get("path"), np.shape(codes))
+    if original is None:
+        return None
+    top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
+    if original.min() < 0 or original.max() > top:
+        return None   # (garbled at the source, N1517057759_9: -30277..25243; the stored codes are what there is)
+    if top == 255 and _wrapped(original):
+        return None   # an 8LSB frame whose DN went past 255 kept only their low 8 bits: not the light, left out as before
+    if top == 4095 and not _same_codes(original, codes, info):
+        return None   # not the frame the archive squeezed (a wrong or garbled file): the stored codes are what there is
+    return original.astype(np.float64)
+
+
+ORIGINAL_MIDS = (LUT[:-1] + LUT[1:]) / 2   # the lean archive's squeeze (helper programs/convert_archive.py encode)
+_same = collections.OrderedDict()
+_same_lock = threading.Lock()
+
+
+def _same_codes(original, codes, info):
+    """Whether a 12BIT frame's original squeezes to exactly its stored codes, as the lean archive made them (37 of 37
+    comparison frames do): kept per frame for the last few asked (calibrate asks several times)."""
+    key = (str(info.get("path")), id(original))
+    with _same_lock:
+        if key in _same:
+            return _same[key]
+    codes = np.asarray(codes)
+    same = codes.dtype == np.uint8 and np.array_equal(np.searchsorted(ORIGINAL_MIDS, original).astype(np.uint8), codes)
+    if not same:
+        print(f"The original of {info.get('path')} doesn't squeeze to its stored codes: not used", flush=True)
+    with _same_lock:
+        _same[key] = same
+        while len(_same) > 16:
+            _same.popitem(last=False)
+    return same
+
+
+WRAP_JUMP = (200, 5e-4)   # an 8LSB frame wrapped past 255 DN: neighbouring pixels WRAP_JUMP[0] or more apart on over
+                          # WRAP_JUMP[1] of the frame (a bright patch's edge drops from 255 to 0; the picture pipeline
+                          # audit, 11-16: 301 of the 1,652 8LSB frames)
+
+
+def _wrapped(dn):
+    dn = np.asarray(dn, np.int32)
+    jumps = (np.abs(np.diff(dn, axis=1)) >= WRAP_JUMP[0]).sum() + (np.abs(np.diff(dn, axis=0)) >= WRAP_JUMP[0]).sum()
+    return jumps > WRAP_JUMP[1] * dn.size
+
+
+"""
+Lean archive only: what the camera sent for each pixel at full depth, the one input every picture is calibrated from
+(depth_image): a 12BIT frame's original DN where there is one (original_values), else its stored codes mapped back to
+DN (stored_values); a TABLE frame's codes, all the camera sent. codes = the frame's PNG as stored, info = its label.
+"""
+def full_values(codes, info):
+    original = original_values(codes, info)
+    return stored_values(codes, info) if original is None else original
+
+
+"""
+The smallest and largest of full_values(codes, info): the range depth_image puts on 0..254 and unstretch takes back
+"""
+def value_range(codes, info):
+    original = original_values(codes, info)
+    return stored_range(codes, info) if original is None else (float(original.min()), float(original.max()))
+
+
+"""
+The picture a frame is calibrated from (calibrate's image), at full depth: its stored values (full_values) on the
+scale of its display stretch (display_stretch: the frame's darkest stored code 0, its brightest 254; or those of
+scale = (low, high) in stored values: a repeat put on the scale of the frame it is stacked with), float32 and not
+rounded, resized to 1024 px as label.resize_image resizes a summed frame. calibrate turns it back into the very values
+(unstretch). The display copy (resize_image: 255 levels over the frame's range) is kept for aligning and matching
+frames only: calibrated, its levels were up to 16 DN apart on a 12-bit frame with anything bright in it (a median of
+14), and the darkest 60% of a plume frame went from 5 codes to 2 levels (picture pipeline audit, 11-16). Frames the
+lean archive keeps no camera values for (8LSB, or the old dataset PNGs) are their display copy, as before.
+codes = the frame's PNG as stored (gray)
+"""
+def depth_image(codes, info, scale=None):
+    codes = np.asarray(codes)
+    if codes.ndim == 3:
+        codes = codes[..., 0]
+    small = int(_value(info, "LINES", "1024") or 1024) < 1024
+    original = original_values(codes, info)
+    if not ds.lut8() or (_value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT") and original is None):
+        image = display_stretch(codes, info) if ds.lut8() else codes
+        return cv2.resize(image, (1024, 1024), interpolation=cv2.INTER_AREA) if small else image
+    low, high = value_range(codes, info) if scale is None else scale
+    span = float(high - low)
+    if span <= 0:
+        image = np.zeros(codes.shape, np.float32)
+    elif original is None:
+        # per code, looked up (_lookup), as display_stretch does: the same numbers, not rounded
+        table = ((stored_values(CODES, info) - low) * (254.0 / span)).astype(np.float32)
+        image = table[codes] if codes.dtype == np.uint8 else ((stored_values(codes, info) - low) * (254.0 / span)).astype(np.float32)
+    else:
+        image = ((original - low) * (254.0 / span)).astype(np.float32)
+    return cv2.resize(image, (1024, 1024), interpolation=cv2.INTER_AREA) if small else image
+
+
 """
 The frame's bias level, in the units of its stored values (DN for 12BIT frames, codes for TABLE ones): its bias
 strip's mean. A frame that lost lines in transmission can lose its bias strip with them (a strip mean of 0 or
@@ -352,7 +464,7 @@ def bias_of(png, info):
     if lossy and _fsw(info) <= 1.3:
         bias = 0  # the SIS: a lossy frame's strip mean is not valid with flight software 1.2 and 1.3
     if bias <= 0 and ds.lut8():
-        stored = stored_values(png, info)
+        stored = full_values(png, info)
         kept = stored[np.asarray(png) > 0]
         bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0
     return bias
@@ -491,7 +603,9 @@ def calibrate(png, info, image=None, smooth=True):
     # lean archive: every pixel of the 8-bit image (or PNG) is one of 256 codes, so the steps up to the shutter's
     # per column exposure are worked out for the 256 codes and looked up (_lookup): the same numbers, a third of the time
     pixels = np.asarray(png if image is None else image)
-    codes = ds.lut8() and pixels.dtype == np.uint8 and pixels.ndim == 2 and np.asarray(png).size > 0
+    # (a frame whose original is at hand is worked out per pixel: its values are not 256 codes)
+    codes = (ds.lut8() and pixels.dtype == np.uint8 and pixels.ndim == 2 and np.asarray(png).size > 0
+             and original_values(png, info) is None)
     dn = _unstretch_codes(png, info, image) if codes else unstretch(png, info, image)
     if dn is None:
         return None
@@ -576,10 +690,12 @@ def calibrate(png, info, image=None, smooth=True):
         dc.repair_hot(per_second, info, spots, raw == 0 if raw.ndim == 2 else None)
     if smooth:
         per_second = deblock(per_second, pixels, info)
-        if sky is not None and step("skysmooth"):
+        if sky is not None and step("skysmooth") and (SKY_SMOOTH_ORIGINALS or not _smooth_off(info)):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
-            per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
+            # (a frame with its original, when SKY_SMOOTH_ORIGINALS turns smoothing on for it: its true DN on the codes'
+            # scale, fractional, so the smoothing's code-step tests see no steps the squeeze made)
+            per_second = smooth_sky(per_second, _smooth_steps(png, info), sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -637,6 +753,31 @@ def deblock(iof, pixels, info):
     near = np.abs(codes - cv2.GaussianBlur(codes, (0, 0), sigma)) / LOSSY_STEP
     weight = share * np.clip(1 - near, 0, 1)
     return iof + weight * (cv2.GaussianBlur(iof, (0, 0), sigma) - iof)
+
+
+SKY_SMOOTH_ORIGINALS = False  # smooth_sky on a frame calibrated from its true 12-bit original (original_values): off. It keys
+                           # on the archive's squeezed codes, and on the true DN (no code steps, the 2 Hz bands taken off
+                           # by the twohz step) it only painted those codes' contours back in as terraces (2017 plume
+                           # N1876463740_1, 11-16); TABLE frames (8-bit codes, all the camera sent) keep it
+                           # ... decided per build, not per frame: with originals in use (CASSINI_ORIGINALS set) every
+                           # 12BIT frame is left unsmoothed, also the few whose original is missing or rejected (a frame
+                           # its download marked "check"), so no frame of a movie looks smoothed among unsmoothed ones
+
+
+def _smooth_steps(png, info):
+    """What smooth_sky measures a frame's code steps on: its stored codes, or with its original its true values on the
+    codes' scale (fractional): a 12BIT frame's DN through the squeeze's table, an 8LSB frame's DN as they are (the camera's
+    own 0-255 scale; through the 12-bit table they would sit within 0-53 and real detail read as steps)"""
+    original = original_values(png, info)
+    if original is None:
+        return png
+    if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT":
+        return np.interp(original, LUT, np.arange(256.0)).astype(np.float32)
+    return original.astype(np.float32)
+
+
+def _smooth_off(info):
+    return bool(ds.ORIGINALS) and not ds.ORIGINALS_OFF and _value(info, "DATA_CONVERSION_TYPE", "") in ORIGINAL_CONVERSIONS
 
 
 SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
@@ -1488,6 +1629,7 @@ Loads the frames of one color image and puts them on the same brightness scale.
 labels = label objects, one per channel
 images = the channels' images as label.resize_image (or stacking.load_stacked) returns
 them; loaded with resize_image if not given
+deep = optional list, one per label: the picture to calibrate that channel from at full depth (calibrated_each), or None
 iofs = optional list, one per label: an I/F image already calibrated (stacking.load_hdr) to use
 instead of calibrating that channel's image, or None
 scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
@@ -1502,10 +1644,10 @@ stretch so their relative brightness is what the camera measured. Otherwise the 
 are returned unchanged, each with its own stretch as before.
 """
 def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None,
-                  saturated=None, off_disk=None):
+                  saturated=None, off_disk=None, deep=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
-    iofs = _calibrated(labels, images, iofs)
+    iofs = _calibrated(labels, images, iofs, deep)
     if iofs is None:
         return images
     if scale is not None:
@@ -1629,16 +1771,19 @@ def neutral_display(imgs, gamma=2.2):
 
 
 """
-Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated
+Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated.
+Each is calibrated at full depth: from deep's picture for it (color_image.load_aligned: its stack at full depth,
+stacking.load_stacked's deep, filled as its display copy was), or where there is none from the frame's own stored
+values (depth_image), never from its display copy in images (255 levels over its range: the dark codes merged)
 """
-def calibrated_each(labels, images, iofs=None):
+def calibrated_each(labels, images, iofs=None, deep=None):
     given = iofs or [None] * len(labels)
+    deep = deep or [None] * len(labels)
     iofs = []
-    for lbl, image, iof in zip(labels, images, given):
+    for lbl, image, iof, picture in zip(labels, images, given, deep):
         if iof is None:
             png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-            iof = calibrate(png, lbl.get_info(), gray)
+            iof = calibrate(png, lbl.get_info(), depth_image(png, lbl.get_info()) if picture is None else picture)
         iofs.append(iof)
     return iofs
 
@@ -1646,8 +1791,8 @@ def calibrated_each(labels, images, iofs=None):
 """
 The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
 """
-def _calibrated(labels, images, iofs=None):
-    iofs = calibrated_each(labels, images, iofs)
+def _calibrated(labels, images, iofs=None, deep=None):
+    iofs = calibrated_each(labels, images, iofs, deep)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")
@@ -1667,10 +1812,10 @@ off_disk = for a color set, a function of its channels' I/F giving where its sky
 asked only when _sky finds under a tenth of the frame is sky (color_image.dim_off_disk)
 returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
-def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=None):
+def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=None, deep=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
-    iofs = _calibrated(labels, images, iofs)
+    iofs = _calibrated(labels, images, iofs, deep)
     if iofs is None:
         return None
     # the sky is measured once, for the scale and the toe below

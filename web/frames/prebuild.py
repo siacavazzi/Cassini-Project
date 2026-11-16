@@ -1289,6 +1289,9 @@ def main():
     if args.until and args.until[5:10] in ("01-01", "") and until > since:
         until -= 1
     data_source.check_kernels(range(since, until + 1))
+    # ... and the 12-bit originals (data_source.check_originals): a cache built partly on the squeezed codes would keep
+    # those pictures under the same names
+    data_source.check_originals()
     if args.phase == "lightning":
         import lightning
         lightning.build(args.cache)
