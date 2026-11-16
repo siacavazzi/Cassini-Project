@@ -29,7 +29,7 @@ def clouds(dx, dy, band, lines=(300.0,), texture=None):
         img = img + 0.08 * np.sin((xx - dx) / texture) * np.exp(-((yy - 700 - dy) / 120) ** 2)
     for row in lines:
         img = img - 0.35 * np.exp(-((yy - row - dy) / 3.0) ** 2)
-    img = img + rng.normal(0, 0.004, img.shape)
+    img = img + np.random.default_rng(int(abs(dx) * 7 + abs(dy) * 13 + band + len(lines))).normal(0, 0.004, img.shape)
     return cv2.cvtColor(np.clip(img * 255, 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 
 
@@ -62,4 +62,21 @@ assert ic._flat(flat1, flat2, MASK, MASK, filled=True)
 shift5, how5 = ic._match(flat1, flat2, (4800.0, 3700.0), MASK, MASK, filled=True)
 assert shift5 is not None and np.hypot(*shift5) < 1.0, (shift5, how5)
 print("blank on the disk:", how5)
+
+# ... and only a lit one counts as on the disk (color_image._lit_well): a blank pair on the night side, or on sky that
+# SPICE puts on the disk, is dark noise whose color is the filters' noise ratio stretched: it stays gray
+import color_image as ci  # noqa: E402
+haze = 1.4 + rng.normal(0, 0.005, (N, N)).astype(np.float32)
+night = 0.002 + rng.normal(0, 0.003, (N, N)).astype(np.float32)
+assert ci._lit_well(haze) and not ci._lit_well(night)
+assert not ci._lit_well(np.zeros((N, N), np.float32))
+print("night-side blank pair: not lit, stays gray")
+
+# in a set of three the channel the ridge places must itself be flat along the ridge (placed_flat): here the reference
+# (clouds faint, flat along the edge) is flat but the channel placed has a wave along the edge, so it is not placed
+ref6, moved6 = clouds(0, 0, 1), clouds(15, -6, 0, texture=8.0)
+pair = ic.ridge_shift(ref6, moved6, MASK, MASK, (13.0, -1.0))
+three = ic.ridge_shift(ref6, moved6, MASK, MASK, (13.0, -1.0), placed_flat=True)
+assert pair[0] is not None and three[0] is None, (pair, three)
+print("set of three, placed channel not flat along the ridge:", pair[1][:40], "->", three[1])
 print("ok")

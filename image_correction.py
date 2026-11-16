@@ -321,7 +321,7 @@ def align_with_masks(imgs, masks, ref=0, report=None, found=None, use=None, gues
             continue
         g = guess[i] if guess is not None else None
         filled = bool(on_disk is not None and on_disk[ref] and on_disk[i])
-        shifts[i], hows[i] = _match(orig[ref], orig[i], g, omasks[ref], omasks[i], within, filled)
+        shifts[i], hows[i] = _match(orig[ref], orig[i], g, omasks[ref], omasks[i], within, filled, len(imgs) > 2)
     if use is None and within is None and len(imgs) == 3:
         _loop(orig, omasks, ref, shifts, hows, guess, on_disk)
     for i in range(0, len(imgs)):
@@ -351,7 +351,7 @@ edges, then by the lit area's centroid; then SPICE's offset alone where it lines
 within = only near g (or no shift) within that many px (guided_shift's search alone): a mosaic tile already at
 SPICE's place, where a larger move is a false match (obs_mosaic._register). ((dx, dy) or None, how)
 """
-def _match(im1, im2, g, mask1, mask2, within=None, filled=False):
+def _match(im1, im2, g, mask1, mask2, within=None, filled=False, placed_flat=False):
     if within is not None:
         found, how = guided_shift(im1, im2, g if g is not None else (0.0, 0.0), window=within)
         return found, how
@@ -383,7 +383,7 @@ def _match(im1, im2, g, mask1, mask2, within=None, filled=False):
         shift, how = limb_shift(im1, im2, mask1, mask2)
     if shift is None:
         # one straight feature (a ring's edge across cloud tops): pinned across it, SPICE's place along it (ridge_shift)
-        shift, how = ridge_shift(im1, im2, mask1, mask2, g)
+        shift, how = ridge_shift(im1, im2, mask1, mask2, g, placed_flat)
     if shift is None and g is not None:
         # nothing matched anywhere (or only wild fits): SPICE's offset, where it lines the frames up better than none
         shift, how = spice_shift(im1, im2, mask1, mask2, g)
@@ -520,7 +520,7 @@ for every move within RIDGE_REACH px of SPICE's offset g (of no move without g, 
 it falls off steeply across the edge and hardly at all along it, a ridge. Across the ridge the frames pin the move; along
 it they cannot, and there it is SPICE's (or none). That is believed only when it cannot show: along the ridge at least one
 of the two frames changes by no more than _flat allows when moved FLAT_PROBE px (so a channel placed off along it puts no
-color fringe anywhere), the ridge stands at least RIDGE_LEAST, falls RIDGE_SHARP across RIDGE_STEP px on either side
+color fringe anywhere; in a set of three, placed_flat, it must be the frame placed), the ridge stands at least RIDGE_LEAST, falls RIDGE_SHARP across RIDGE_STEP px on either side
 and under RIDGE_FLAT along it, and no other ridge parallel to it (a ringlet's neighbour) comes within RIDGE_SECOND of it.
 Against 245 channel pairs phase correlation lines up surely, a ridge's move across it is 0.26 px from theirs (median),
 none 2 px. ((dx, dy), how) or (None, "not aligned")
@@ -580,7 +580,7 @@ def _flat_along(im, mask, v):
     return np.percentile(d, 99) <= FLAT_DN and np.percentile(d, 99.9) <= FLAT_PEAK_DN
 
 
-def ridge_shift(im1, im2, mask1, mask2, g=None):
+def ridge_shift(im1, im2, mask1, mask2, g=None, placed_flat=False):
     c = (0.0, 0.0) if g is None or np.hypot(g[0], g[1]) > RIDGE_GUESS else (float(g[0]), float(g[1]))
     got = _edge_surface(im1, im2, mask1, mask2, c, RIDGE_REACH)
     if got is None:
@@ -615,7 +615,9 @@ def ridge_shift(im1, im2, mask1, mask2, g=None):
     second = float(np.nanmax(prof[far])) if far.any() and not np.isnan(prof[far]).all() else -1.0
     if second > top - RIDGE_SECOND:
         return None, "not aligned"
-    if not (_flat_along(im1, mask1, along) or _flat_along(im2, mask2, along)):
+    # (in a set of three the channel placed must itself be flat along the ridge: were only the reference flat there, it
+    # and the third channel, placed by its own match, could both show detail along it, SPICE's error apart)
+    if not (_flat_along(im2, mask2, along) or not placed_flat and _flat_along(im1, mask1, along)):
         return None, "not aligned"
     t = float(ts[m])
     shift = (c[0] + t * across[0], c[1] + t * across[1])
@@ -706,7 +708,8 @@ def _loop(orig, masks, ref, shifts, hows, guess, on_disk=None):
         g = (guess[b][0] - guess[a][0], guess[b][1] - guess[a][1])
     if sa is None and sb is None:
         return
-    sab, how = _match(orig[a], orig[b], g, masks[a], masks[b], filled=bool(on_disk is not None and on_disk[a] and on_disk[b]))
+    sab, how = _match(orig[a], orig[b], g, masks[a], masks[b], filled=bool(on_disk is not None and on_disk[a] and on_disk[b]),
+                      placed_flat=True)
     if sab is None:
         return
     if sa is None or sb is None:

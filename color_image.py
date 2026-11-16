@@ -382,9 +382,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         else:
             imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
 
-    # which frames SPICE puts wholly on their target's disk: a blank pair of them is the body's own even color, not a
+    # which frames SPICE puts wholly on their target's disk, lit: a blank pair of them is the body's own even color, not a
     # black sky stretched to gray (image_correction._flat)
-    filled = disk_filled(lbls) if align and len(lbls) > 1 else None
+    filled = disk_filled(lbls, linear[0]) if align and len(lbls) > 1 and linear is not None else None
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
     why = region = bodies = None
@@ -1221,12 +1221,31 @@ def spice_warps(lbls, ref):
     return out
 
 
-def disk_filled(lbls):
-    """Per frame, whether SPICE puts it wholly on its target's disk (_on_disk); None without the geometry cache"""
+"""
+Per frame, whether SPICE puts it wholly on its target's disk (_on_disk) and it is clearly lit: its median I/F at least
+FILLED_LIT times its own pixel-to-pixel noise. A frame on the night side, or one SPICE puts on the disk while the camera
+pointed at the sky (raw pointing is 5 to 12 px off, tens for a small moon), is blank too, but its "color" is the ratio
+of the filters' dark noise stretched (W1448930891_1's white): it stays gray. channels = the set's linear (calibrated)
+channels, not yet aligned. None without the geometry cache.
+"""
+FILLED_LIT = 20.0
+
+
+def disk_filled(lbls, channels):
     locs = _spice_locs(lbls)
     if locs is None:
         return None
-    return [_on_disk(lbl, loc) for lbl, loc in zip(lbls, locs)]
+    return [_on_disk(lbl, loc) and _lit_well(c) for lbl, loc, c in zip(lbls, locs, channels)]
+
+
+def _lit_well(channel):
+    c = np.asarray(channel, np.float32)
+    if c.ndim == 3:
+        c = c.mean(axis=2)
+    high = c - cv2.GaussianBlur(c, (0, 0), 3)
+    noise = 1.4826 * float(np.median(np.abs(high - np.median(high))))
+    level = float(np.median(c))
+    return level > 0 and level >= FILLED_LIT * max(noise, 1e-12)
 
 
 def _on_disk(lbl, loc):
