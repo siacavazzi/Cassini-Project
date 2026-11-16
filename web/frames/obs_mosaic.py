@@ -2858,7 +2858,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
             shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
             out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
-    elif calibration.false_balanced() and len(mine) == 2:
+    elif calibration.false_balanced() and len(mine) == 2 == len(drawn):
+        # (a pair drawn: three filters drawn, one of them with no frame read, are not a pair. Titan 020TI
+        # 1X1PT40001's CB3, CB2, UV1 got a pair's balance of CB2 and UV1 alone, and its movie stopped on CB3, 11-14)
         # two filters: each band's gain to the pair's mean, which calibration.color_mix balances as three channels
         # (two_bands), and the typical color of those three, a list (the green channel is no one filter's)
         levels = []
@@ -4611,7 +4613,9 @@ def _ring_motion(rp, u, t, by_id, ets, view, image, km_px, there):
     rings = _ring_geometry(u)
     r = by_id[base]
     fp = os.path.join(there, f"{r['n']}.png")
-    if rings is None or not os.path.exists(fp):
+    # (a pointing's first tile left out of the mosaic, unfit, has no place to measure against: 209SA_STORMW004's
+    # saturated clear frame, which its MT2 was registered to, stopped the movie, KeyError 'box', 11-14)
+    if rings is None or "box" not in r or not os.path.exists(fp):
         return tries[0]
     with _lock:
         ref = _made_pictures.get(fp)
@@ -5228,8 +5232,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 def limb(n):
                     im = picture(n)
                     return n, (limb_place(disk, by_n[n], im) if im is not None else None)
+                # (only tiles of the pointings solved, as every other match: a tile whose pointing's root is not among
+                # the tiles drawn has no place in the solve; 041RI_PHOTDRK004 W stopped on one, KeyError 13, 11-14)
                 with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
-                    for n, got_l in ex.map(limb, sorted(by_n)):
+                    for n, got_l in ex.map(limb, sorted(n for n in by_n if rootmap.get(n) in by_n)):
                         if got_l is not None:
                             o, nv, count = got_l
                             meas.append(("limb", rootmap[n], by_n[n]["filter"], nv, o, LIMB_WEIGHT))
