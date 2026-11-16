@@ -77,10 +77,12 @@ HIGHLIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlight
 CANDIDATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "candidates.csv")
 # the passes where Enceladus' plumes show clearly, by one rule (plume_moments.py), added to the Moments list
 PLUMES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plume_moments.csv")
+# the passes where Cassini's camera caught lightning on Saturn (web/frames/lightning.py, from the published flash list)
+LIGHTNING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lightning_moments.csv")
 # what a moments.csv row is (its "type" column), so the Moments window can group, sort and filter by it: a hand-picked
 # special moment, a find from the poster and geometry sweeps, a transit, eclipse or mutual event, a body's closest view,
-# or a pass where Enceladus' plumes show (plume_moments.csv)
-MOMENT_TYPES = ("special", "find", "transit", "closest", "plume")
+# a pass where Enceladus' plumes show (plume_moments.csv), or one where the camera caught lightning (lightning_moments.csv)
+MOMENT_TYPES = ("special", "find", "transit", "closest", "plume", "lightning")
 CANDIDATE_TYPES = ("movie", "transit", "find", "closest")
 TRUE_BLUES = ("BL1", "BL2", "VIO")   # the blue of a true colour set (reel.TRUE_BLUES)
 SET_GAP = 300        # seconds between the frames of one filter set (reel.SET_GAP)
@@ -97,6 +99,8 @@ def main():
     ap.add_argument("--moments", default=MOMENTS, help="curated imaging sessions for the Moments list (default: %(default)s)")
     ap.add_argument("--plumes", default=PLUMES, help="Enceladus plume passes for the Moments list, rows like the "
                     "moments file's (plume_moments.py; default: %(default)s)")
+    ap.add_argument("--lightning", default=LIGHTNING, help="Saturn lightning passes for the Moments list, rows like "
+                    "the moments file's (web/frames/lightning.py moments; default: %(default)s)")
     ap.add_argument("--candidates", default=CANDIDATES, help="potential moments nobody picked yet, hidden in the Moments "
                     "window until asked for (make_candidates.py; default: %(default)s)")
     ap.add_argument("--scores", help="observations_scored.csv from the highlight scoring, for each moment's photo score")
@@ -234,15 +238,16 @@ def read_scores(args):
 
 def moments(args, years):
     """
-    The rows of the moments file and the plumes file (plume_moments.csv) that fall in these years, as encounters.json
-    entries:
+    The rows of the moments file, the plumes file (plume_moments.csv) and the lightning file (lightning_moments.csv)
+    that fall in these years, as encounters.json entries:
       {"kind": "observation", "type", "label", "body", "obs": [OBSERVATION_ID, ...], "et", "utc", "start", "end",
        "end_et", "frames", "rgb_sets", "why", "source", "photo_score" (with --scores)}
     type is the row's type column (MOMENT_TYPES), special when it is empty.
     et/utc is the first picture of the listed observations and end the last, both from the catalog.
     A row in these years with no pictures in the catalog is an error.
     """
-    files = [f for f in (args.moments, getattr(args, "plumes", None)) if f and os.path.exists(f)]
+    files = [f for f in (args.moments, getattr(args, "plumes", None), getattr(args, "lightning", None))
+             if f and os.path.exists(f)]
     rows = [r for f in files for r in csv.DictReader(open(f, newline="")) if int(r["date"][:4]) in years]
     if not rows:
         return []

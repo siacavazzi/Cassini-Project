@@ -3,9 +3,10 @@
   every entry has a type, and a bar over the list sorts and filters by it.
 
   Types: milestones, special moments (hand-picked), closest views, finds (poster and geometry sweeps), transits
-  (transits, mutual events, eclipses), Enceladus plumes (plume_moments.py's rule), flybys, and movies. The first six
-  come from encounters.json (a moments.csv or plume_moments.csv row's "type" column; milestones and flybys by their
-  kind); movies and the potential moments come from candidates.json
+  (transits, mutual events, eclipses), Enceladus plumes (plume_moments.py's rule), lightning on Saturn (the published
+  flashes, web/frames/lightning.py; playing one also opens the Lightning window, lightning.html), flybys, and movies.
+  The first seven come from encounters.json (a moments.csv, plume_moments.csv or lightning_moments.csv row's "type"
+  column; milestones and flybys by their kind); movies and the potential moments come from candidates.json
   (make_candidates.py, build_data.py): moments the searches found that nobody has picked, the whole movie catalog among
   them. Those load only when asked for: Potential movies (off by default) shows every catalog movie, Potential
   moments the unpicked finds, transits and closest views.
@@ -78,6 +79,7 @@ body.phone #mbar .mrow.mlenrow { grid-template-columns: 40px minmax(0, 1fr) 48px
     { key: "find", label: "Finds", c: "#9fd38a" },
     { key: "transit", label: "Transits", c: "#c49cf0" },
     { key: "plume", label: "Plumes", c: "#f3f0e2" },
+    { key: "lightning", label: "Lightning", c: "#ffd35a" },
     { key: "flyby", label: "Flybys", c: "#8ab6ff" },
     { key: "movie", label: "Movies", c: "#6fd6d0" },
   ];
@@ -184,7 +186,11 @@ body.phone #mbar .mrow.mlenrow { grid-template-columns: 40px minmax(0, 1fr) 48px
   // ---- a row ----
   function play(x) {
     const e = x.e;
-    if (e.kind === "flyby" || e.kind === "milestone" || e.kind === "observation") return jump(e);
+    if (e.kind === "observation") {
+      // a moment that holds a lightning pass also opens the Lightning window (lightning.html), which follows the clock
+      return Promise.resolve(jump(e)).then(() => window.cassiniLightning && cassiniLightning.open(e));
+    }
+    if (e.kind === "flyby" || e.kind === "milestone") return jump(e);
     // a potential moment opens like an imaging session; a movie also plays in movie mode, its camera's pictures only
     const session = { ...e, kind: "observation" };
     return Promise.resolve(jump(session)).then(() => {

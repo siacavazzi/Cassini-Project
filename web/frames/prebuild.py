@@ -29,6 +29,10 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   fullview    the full view of every mosaic pass (decision D3): its mosaic at its last frame at size=full (CANVAS up to
               FULL_MAX, 2048 px), as the mosaic route makes it. Run after mosaics
 
+  lightning   the lightning passes' enhanced pictures and lightning.json (lightning.py: the published flashes, night
+              side stretched on the storm, day side tinted where brighter than the pictures before and after), about
+              70 pictures, a few minutes. Needs only the data and kernels, not the other phases
+
 tables and fullview add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
 picture phases left it).
 
@@ -86,7 +90,7 @@ import reel  # noqa: E402
 import slices  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "lightning")
 ADDED = ("tables", "fullview")   # phases run on a finished cache, not recorded in slices.json
 
 
@@ -236,8 +240,8 @@ WATCH_PAD = 3 * 3600   # s around a watched observation: what a window plays aro
 
 
 def watched_first(todo):
-    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv and
-    plume_moments.csv, and
+    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv,
+    plume_moments.csv and lightning_moments.csv, and
     Highlights, web/replay/highlights.csv: each observation's frames, WATCH_PAD either side), in time order, then
     the rest in time order. A Moment plays every frame of its stretch, its neighbours' too: by observation alone,
     most of what played on 8790 was still made on demand (2026-10-26). An item's time is its frame's (a set's last
@@ -246,7 +250,7 @@ def watched_first(todo):
     import csv
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
     watched = set()
-    for name in ("moments.csv", "plume_moments.csv", "highlights.csv"):
+    for name in ("moments.csv", "plume_moments.csv", "lightning_moments.csv", "highlights.csv"):
         try:
             with open(os.path.join(here, name)) as fh:
                 for row in csv.DictReader(fh):
@@ -1219,6 +1223,10 @@ def main():
     if args.until and args.until[5:10] in ("01-01", "") and until > since:
         until -= 1
     data_source.check_kernels(range(since, until + 1))
+    if args.phase == "lightning":
+        import lightning
+        lightning.build(args.cache)
+        return
     (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 
