@@ -5719,7 +5719,24 @@ function targetLabel(k) {
     const shownFrameUrl = (k, sz) => centres(k)
       ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`
       : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
-    // a picture at full resolution as a PNG to save (the frame server names the file)
+    // a PNG of a stored picture, made in the browser: the WebP at the same address (size=full: the stored full picture,
+    // a frame's 1024, a mosaic's full view) drawn on a canvas and saved losslessly; false when it could not be fetched
+    async function pngInBrowser(href, name) {
+      try {
+        const r = await fetch(href.replace(/[?&]format=png/, "").replace(/[?&]download=1/, ""));
+        if (!r.ok) return false;
+        const bm = await createImageBitmap(await r.blob());
+        const c = document.createElement("canvas"); c.width = bm.width; c.height = bm.height;
+        c.getContext("2d").drawImage(bm, 0, 0);
+        const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
+        if (!blob) return false;
+        const u = URL.createObjectURL(blob), go = document.createElement("a");
+        go.href = u; go.download = name; document.body.appendChild(go); go.click(); go.remove();
+        setTimeout(() => URL.revokeObjectURL(u), 60000);
+        return true;
+      } catch (err) { return false; }
+    }
+    // a picture at full resolution as a PNG to save (made in the browser from the stored picture: pngInBrowser)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
     let saveWrap = well.querySelector(".savewrap");
@@ -5734,6 +5751,19 @@ function targetLabel(k) {
     saveMenu.addEventListener("click", e => {
       const a = e.target.closest("a");
       if (a && a.dataset.native && nativeSave(a, e)) return;
+      // a PNG is made here in the browser from the stored picture (the same address as WebP), so the server only sends
+      // a file it has: it drew each PNG on request before, 2.6 s and 0.3 GB for a processed frame, 5 s for a color set
+      // (Sam's rule: nothing drawn at request time; call 19)
+      if (a && /[?&]format=png/.test(a.href) && !(a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit)) {
+        e.preventDefault();
+        const ids = a.href.match(/[NW]\d{10}_\d+/g) || [], ch = (a.href.match(/[?&]channel=(\d)/) || [])[1];
+        const span = a.querySelector("span"), was = span ? span.textContent : "";
+        if (span) span.textContent = "PNG · making it…";
+        pngInBrowser(a.href, `Cassini_${ids.join("_") || "picture"}${ch !== undefined ? `_c${ch}` : ""}.png`)
+          .then(ok => { if (span && a.isConnected) span.textContent = ok ? was : "could not be saved"; });
+        setTimeout(() => { saveOpen(false); if (e.detail) document.activeElement.blur(); }, 0);
+        return;
+      }
       // the Orbit graphic box: a picture comes as a JPEG with the orbit graphic in its corner (cassiniOrbit.download)
       if (a && a.dataset.pic && S.get("gallery.orbitInset") && window.cassiniOrbit) {
         e.preventDefault();
@@ -10111,7 +10141,8 @@ function targetLabel(k) {
         const wait = document.createElement("div"); wait.className = "galwait"; wait.textContent = "The frame server is making this picture…"; st.appendChild(wait);
         im.onload = () => wait.remove(); im.onerror = () => { wait.textContent = "The frame server could not make this picture (is it running?)"; };
         im.src = sized(item.src, "full");
-        dl.href = sized(item.src, "full") + "&format=png&download=1"; dl.setAttribute("download", base + ".png");
+        // (the stored picture itself until the JPEG below is made from it in the browser: no PNG drawn on the server)
+        dl.href = sized(item.src, "full"); dl.setAttribute("download", base + ".webp");
         fetch(sized(item.src, "full")).then(r => r.ok ? r.blob() : null).then(b => jpeg(b)).then(j => {
           if (j && /jpeg/.test(j.type) && (G.cur === item || G.shared === item)) { dl.href = objUrl(j); dl.setAttribute("download", base + ".jpg"); }
         }).catch(() => {});
@@ -13793,7 +13824,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3bf945a4deb1";
+  const BUILD = /*BUILD*/"f526e8d6af74";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
