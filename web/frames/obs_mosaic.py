@@ -3122,14 +3122,30 @@ def _register_to(u, n):
     wavelength, not simply the first: a Titan cycle through many filters (215TI M90R1CLD125: CB3, MT1, MT3, RED, GRN,
     BL1, ...) put RED and GRN each on MT3, where Titan's haze looks nothing like it does in the visible, and the two
     matches (edges, centroid) landed 4 px apart, a magenta and green rim round Titan in the movie; GRN now lands on
-    RED and BL1 on GRN."""
+    RED and BL1 on GRN.
+    Where some of the pass's frames have JPL's own corrected pointing and others not (carried over second-hand, or
+    raw: _carried), the frames with JPL's own pointing lead: they land only on one another, and another frame lands
+    on one of them, before or after it. In the 2004 approach movie 00ASA 2X2MOVIEA001 each pointing's first frame (MT2) was a carried one 4 to
+    9 px off its pointing's JPL frames, and every filter followed it: a step in the limb where pointings met."""
     frames = u["frames"]
     _, _, f, t, nm, x, y, z = frames[n]
     if not z:
         return None
     k = z / u["z"] if u["z"] else 1.0
-    there = [j for j in range(n) if frames[j][2] != f and frames[j][7] and 0 <= t - frames[j][3] <= REGISTER_GAP
-             and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME]
+    here = lambda j: frames[j][2] != f and frames[j][7] and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME
+    carried = _carried(u)
+    if frames[n][1] in carried:
+        # a frame without JPL's own corrected pointing (carried over, or raw) lands on one with it at its pointing,
+        # taken before or after it (REGISTER_GAP either way), when there is one: JPL's frames lead the pointing
+        sure = [j for j in range(len(frames)) if j != n and frames[j][1] not in carried and here(j)
+                and abs(t - frames[j][3]) <= REGISTER_GAP]
+        if sure:
+            colour = _colour_filters(u)
+            if f in colour:
+                sure = [j for j in sure if frames[j][2] in colour] or sure
+            return min(sure, key=lambda j: (abs((frames[j][4] or 0) - (nm or 0)), abs(t - frames[j][3])))
+    there = [j for j in range(n) if here(j) and 0 <= t - frames[j][3] <= REGISTER_GAP
+             and (frames[n][1] in carried or frames[j][1] not in carried)]
     if not there:
         return None
     # a colour filter's frame lands on a frame in a colour filter, when there is one: the others
@@ -3141,6 +3157,29 @@ def _register_to(u, n):
         there = [j for j in there if frames[j][2] in colour] or there
     # of those, the one nearest in wavelength (the first of those as near)
     return min(there, key=lambda j: abs((frames[j][4] or 0) - (nm or 0)))
+
+
+def _carried(u):
+    """The frame ids of pass u whose pointing is not JPL's (or USGS's) own correction, when some of its frames have it
+    (bootleg_autonav.own_pointing_frames; or, without that list, the frames the carried-over corrections give,
+    iss_neighbours_frames and usgs_neighbours_frames): the frames that follow JPL's in _register_to. Empty when no frame
+    of the pass has its own correction, or this checkout has neither list. Worked out once, kept in u."""
+    if "_carried" not in u:
+        import bootleg_autonav as ba
+        ids = [fr[1] for fr in u["frames"]]
+        own = getattr(ba, "own_pointing_frames", None)
+        if own is not None:
+            mine = own()
+            out = {i for i in ids if i not in mine} if any(i in mine for i in ids) else set()
+        else:
+            got = set()
+            for name in ("iss_neighbours_frames", "usgs_neighbours_frames"):
+                fn = getattr(ba, name, None)
+                if fn is not None:
+                    got |= fn()
+            out = {i for i in ids if i in got}
+        u["_carried"] = frozenset(out)
+    return u["_carried"]
 
 
 def _colour_filters(u):
@@ -4402,8 +4441,17 @@ def clouded(u):
 def _pointing_root(u, n, roots):
     """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, a frame of its pointing in
     another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
-    j = _register_to(u, n)
-    return roots.get(j, j) if j is not None else n
+    j, seen = _register_to(u, n), {n}
+    if j is None:
+        return n
+    # (followed to the end: a carried frame lands on a later frame, which may itself land on an earlier one)
+    while j not in roots and j not in seen:
+        seen.add(j)
+        nxt = _register_to(u, j)
+        if nxt is None:
+            return j
+        j = nxt
+    return roots.get(j, j)
 
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
