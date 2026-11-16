@@ -40,5 +40,11 @@ survey kept "no match" for every tile after searching each.
 
 ## Whole passes
 
-Three ring passes built by `prebuild.py` in a process of its own each, on main and on this branch, compared file by
-file: PASSES
+Three ring passes built by `prebuild.py <phase> --only <its frames> --threads 1` in a process of its own each
+(`build_each.sh`), on main, on #496 and on this branch, into empty caches, every file compared (`summary2.py`):
+
+- **1,408 files, all byte-identical**, against main and against #496 (`passes_vs_main.md`, `passes_vs_496.md`).
+- Work, as instructions retired: 24.1% less than main over the three passes, 12.0% less than #496. The ring mosaic
+  (282RI HIRESAFRG, 24 tiles) does half the work it did on main (1,985 to 1,000 billion; 187 to 72 CPU seconds) and
+  36.6% less than on #496; the WAC color mosaic, whose time is elsewhere, 0.5% less than on #496; the toss-up ring
+  pass as main builds it (a tile at a time, one round each, so little to read back) 2.8% less.
