@@ -22,7 +22,9 @@ call the pre-build makes, only spread over the cores.
 
 A commit's results (the pictures' bytes, the makers' reports, timings) are kept under <root>/results/<commit>-<set>
 (<set>: a hash of the item list and the inputs), so a base built once is never built again; only the candidate is.
-The scratch cache is removed once its pictures are taken out (--keep-cache keeps it).
+The scratch cache is removed once its pictures are taken out (--keep-cache keeps it). The commit's worktree
+and the tool copy go too when a build ends (--keep-worktree keeps the worktree), so only results and reports stay. A build will not start with under 60 GB free on its drive (CASSINI_BENCH_MIN_FREE_GB): the Mac
+needs that room for swap.
 
 The report (<out>/index.html, report.md, summary.json): each item identical (same bytes) or changed; for a changed
 picture the share of pixels that moved and by how much, a base | candidate | difference sheet and 1:1 crops of where
@@ -66,6 +68,7 @@ INPUTS = ("CASSINI_DATA", "CASSINI_KERNELS", "CASSINI_GEOMETRY_CACHE", "CASSINI_
 SHARD_FROM = 40     # tiles: a pass with more is tiled by several processes first
 SHARD_MIN = 12      # tiles: the least a process is given
 SIZE = 1024
+MIN_FREE_GB = float(os.environ.get("CASSINI_BENCH_MIN_FREE_GB", "60"))   # a build will not start under this much free disk
 TOOL_VERSION = "bench-v2"   # bump when what a result holds or how it is built changes (older results are rebuilt); v2: a private geometry cache per build
 
 # What counts as a picture changed, and as worse by measure (docs/image-benchmark.md). A picture whose bytes are the
@@ -309,11 +312,19 @@ def work_item(args):
 
 # ---------------------------------------------------------------- building one commit
 
+def free_gb(path):
+    """Free space (GB) on the drive holding path (or its nearest existing parent)."""
+    while not os.path.exists(path):
+        path = os.path.dirname(path)
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize / 1e9
+
+
 class Builder:
     """One commit's results on this machine: its worktree, the item jobs run as processes over the free cores."""
 
-    def __init__(self, rev, cfg, names=None, slots=None, keep_cache=False, log=print):
-        self.cfg, self.log, self.keep_cache = cfg, log, keep_cache
+    def __init__(self, rev, cfg, names=None, slots=None, keep_cache=False, log=print, keep_worktree=False):
+        self.cfg, self.log, self.keep_cache, self.keep_worktree = cfg, log, keep_cache, keep_worktree
         self.root = cfg["root"]
         self.sha = git("rev-parse", rev + "^{commit}")
         if self.sha == git("rev-parse", "HEAD") and git("status", "--porcelain", "--untracked-files=no"):
@@ -377,6 +388,17 @@ class Builder:
                            capture_output=True)
         return self.wt
 
+    def tidy(self):
+        """Take away what a finished build leaves behind: the commit's worktree (a whole checkout; made again from git
+        when the commit is built again) and the tool copy. Results and reports stay."""
+        if not self.keep_worktree and os.path.exists(self.wt):
+            subprocess.run(["git", "worktree", "remove", "--force", self.wt], cwd=REPO, capture_output=True)
+            shutil.rmtree(self.wt, ignore_errors=True)
+            subprocess.run(["git", "worktree", "prune"], cwd=REPO, capture_output=True)
+        if os.path.basename(os.path.dirname(self.tool)).startswith("image-bench-tool-"):
+            shutil.rmtree(os.path.dirname(self.tool), ignore_errors=True)
+            self.tool = os.path.abspath(__file__)
+
     def worker(self, *args, timeout=None):
         """Run a worker command (this file, the commit's code) in a fresh process; (rc, seconds, last lines)."""
         cmd = [self.cfg["python"], self.tool, "work", *args, "--code", os.path.join(self.wt, "web", "frames"),
@@ -397,7 +419,9 @@ class Builder:
                     if not (self.cfg["env"].get(k) and os.path.exists(self.cfg["env"][k]))]
         if problems:
             raise RuntimeError("the inputs are not all here: " + "; ".join(problems))
-        self.worktree()
+        if free_gb(self.root) < MIN_FREE_GB:
+            raise RuntimeError(f"only {free_gb(self.root):.0f} GB free on the drive holding {self.root}; a build needs "
+                               f"{MIN_FREE_GB:.0f} GB (CASSINI_BENCH_MIN_FREE_GB) so the Mac keeps room for swap")
         os.makedirs(self.result, exist_ok=True)
         import fcntl
         self._lock = open(os.path.join(self.result, ".lock"), "w")
@@ -419,6 +443,19 @@ class Builder:
         except OSError:
             self.log(f"{self.sha[:12]}: waiting for another build of this commit to finish with its cache")
             fcntl.flock(self._cache_lock, fcntl.LOCK_EX)
+        # (the worktree is per commit too: made only once this build holds the commit's cache lock, so a build of
+        # another item set that finished first cannot have tidied it away under this one)
+        try:
+            return self._build_locked(want, have, todo)
+        finally:
+            if not self.keep_cache:
+                shutil.rmtree(self.cache, ignore_errors=True)   # (never resumed: the next start wipes it anyway)
+            self.tidy()
+            self._cache_lock.close()
+            self._lock.close()
+
+    def _build_locked(self, want, have, todo):
+        self.worktree()
         if os.path.exists(self.cache) and not self.keep_cache:
             self.log(f"{self.sha[:12]}: removing a cache an interrupted build left ({self.cache})")
             shutil.rmtree(self.cache, ignore_errors=True)
@@ -431,6 +468,7 @@ class Builder:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             json.dump({"items": todo}, fh)
         rc, s, tail = self.worker("resolve", "--items", fh.name, "--out", res)
+        os.remove(fh.name)
         if rc:
             raise RuntimeError(f"resolve failed on {self.sha[:12]}:\n" + "\n".join(tail))
         resolved = json.load(open(res))
@@ -446,10 +484,6 @@ class Builder:
             json.dump(info, fh, indent=1)
         self.log(f"{self.sha[:12]}: built {len(todo) - len(failures)} of {len(todo)} items in {info['seconds'] / 60:.1f} min"
                  + (f"; failed: {', '.join(failures)}" if failures else ""))
-        if not self.keep_cache and not failures:
-            shutil.rmtree(self.cache, ignore_errors=True)
-        self._cache_lock.close()
-        self._lock.close()
         return self.result
 
     def _old_resolved(self):
@@ -574,9 +608,9 @@ def merge_result(into, src):
         json.dump(a or b, fh, indent=1)
 
 
-def build_commit(rev, hosts, cfg, names=None, slots=None, keep_cache=False, log=print):
+def build_commit(rev, hosts, cfg, names=None, slots=None, keep_cache=False, log=print, keep_worktree=False):
     """A commit's results on this machine, built here or split across hosts."""
-    b = Builder(rev, cfg, names, slots, keep_cache, log)
+    b = Builder(rev, cfg, names, slots, keep_cache, log, keep_worktree)
     want = [it["name"] for it in b.items if names is None or it["name"] in names]
     left = [n for n in want if n not in b.done_items()]
     remote = [h for h in hosts if h != "local"]
@@ -981,6 +1015,7 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("--slots", type=int, help="processes at once (default: the free cores)")
         p.add_argument("--keep-cache", action="store_true")
+        p.add_argument("--keep-worktree", action="store_true", help="keep the commit's checkout after the build")
         p.add_argument("--items", help="only these items (comma separated)")
         p.add_argument("--root", help="where worktrees, scratch caches and results go (default ~/cassini-build/image-bench)")
         p.add_argument("--python", help="the Python with the pipeline's packages (default: this one)")
@@ -1029,16 +1064,16 @@ def main():
     hosts = args.hosts.split(",")
     log = lambda m: print(f"{datetime.datetime.now():%H:%M:%S} {m}", flush=True)   # noqa: E731
     if args.cmd == "build":
-        b = Builder(args.rev, cfg, names, args.slots, args.keep_cache, log)
+        b = Builder(args.rev, cfg, names, args.slots, args.keep_cache, log, args.keep_worktree)
         if hosts == ["local"]:
             path = b.build()
         else:
-            path = build_commit(args.rev, hosts, cfg, names, args.slots, args.keep_cache, log)
+            path = build_commit(args.rev, hosts, cfg, names, args.slots, args.keep_cache, log, args.keep_worktree)
         print(f"RESULT {path}", flush=True)
         return
     t0 = time.time()
-    base = build_commit(args.base, hosts, cfg, names, args.slots, args.keep_cache, log)
-    cand = build_commit(args.candidate, hosts, cfg, names, args.slots, args.keep_cache, log)
+    base = build_commit(args.base, hosts, cfg, names, args.slots, args.keep_cache, log, args.keep_worktree)
+    cand = build_commit(args.candidate, hosts, cfg, names, args.slots, args.keep_cache, log, args.keep_worktree)
     out = args.out or os.path.join(cfg["root"], "reports", f"{os.path.basename(base)[:12]}-{os.path.basename(cand)[:12]}")
     notes = json.load(open(args.notes)) if args.notes else {}
     s = compare(base, cand, out, set(filter(None, args.target.split(","))), notes, log)
