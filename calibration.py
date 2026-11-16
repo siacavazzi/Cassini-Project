@@ -161,6 +161,7 @@ ORBITS = {
     # 1.6 million km off (Cassini's own from SPICE), as a circle
     "MASURSKY": (2.617, 0.0, datetime.datetime(2000, 1, 23), 1.0),
 }
+CRUISE_BODIES = ("EARTH", "MOON", "VENUS", "MASURSKY")   # at their own distance only while Cassini was passing them
 
 _filters = None
 
@@ -205,8 +206,10 @@ def sun_distance(info):
         date = datetime.datetime.strptime(time.replace("Z", "")[:17], "%Y-%jT%H:%M:%S")
     except ValueError:
         return None
-    if target not in ORBITS:
+    if target not in ORBITS or (target in CRUISE_BODIES and date.year >= 2003):
         # Cassini spent the mission at Saturn, and was near Jupiter only in 2000-2001
+        # (a cruise body photographed from Saturn, Earth in 2013 and 2017, is a dot in a picture of Saturn's rings
+        # and sky, whose I/F is the rings': Saturn's distance, as it always was)
         target = "JUPITER" if date.year < 2003 else "SATURN"
     a, e, perihelion, period = ORBITS[target]
     mean_anomaly = 2 * math.pi * ((date - perihelion).days / 365.25 / period % 1)
