@@ -7,6 +7,11 @@ of its own is ever made or cached for it. Synthetic passes as web/test_steady_lo
 Run: python web/test_eye_local.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, subprocess, tempfile  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import numpy as np  # noqa: E402
 import cv2  # noqa: E402
 from PIL import Image  # noqa: E402

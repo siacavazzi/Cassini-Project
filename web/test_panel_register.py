@@ -5,6 +5,11 @@ nothing keeps SPICE's place, the moves are kept with the pass and never change f
 says its tiles moved, and Settings > Processing's panels step off gives SPICE's places and the plain name.
 Run: python web/test_panel_register.py"""
 import os, sys, json, tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 # the time-order registration this test is about (global_places, the default, is tested by test_global_panels.py)
 os.environ["CASSINI_GLOBAL_PANELS"] = "0"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
