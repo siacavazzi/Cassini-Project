@@ -93,6 +93,8 @@ stacking.lh.label = lambda p, as_png=True: Label(p)
 stacking.ds.imread = lambda p, flags=None: pngs[p]
 stacking.cal.calibrate = lambda codes, info, image=None: codes.astype(np.float32) / 1000
 stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
+# (#491: frames are calibrated from their full-depth values; here the codes are those values)
+stacking.cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)
 stacking.find_repeats = lambda p, window=120, max_frames=5: ["far.png", "near.png"]
 stacking.places = lambda ids, reach=False: {i.split(".")[0]: places[i.split(".")[0]][:4 if reach else 3] for i in ids}
 stacking.frame_id = lambda p: os.path.basename(p).split(".")[0]
