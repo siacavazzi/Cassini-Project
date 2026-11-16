@@ -15,6 +15,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fra
 import prebuild  # noqa: E402
 
 N = 200
+# (no wait for a busy machine: prebuild holds while the 1-minute load is over --max-load, 0.8 a core by default, so on
+# a Mac busy with other work the run below never started and the test hung, 2026-11-16)
+CALM = ["--max-load", "1e9"]
 
 
 def fake_items(phase):
@@ -36,7 +39,8 @@ def main():
         os.environ["CASSINI_DATA"] = d   # a folder, so no archive index is read
         t0 = time.monotonic()
         rc = os.spawnv(os.P_WAIT, sys.executable, [sys.executable, __file__, "frames", "--cache", cache, "--status", status,
-                                                 "--procs", "4", "--live", "", "--pause", os.path.join(d, "pause")])
+                                                 "--procs", "4", "--live", "", "--pause", os.path.join(d, "pause")]
+                       + CALM)
         assert rc == 0, rc
         made = sorted(f.split(".") for f in os.listdir(cache) if not f.startswith("errors-") and f != "slices.json")
         assert sorted(int(i) for i, _ in made) == list(range(N)), made          # every item, once
