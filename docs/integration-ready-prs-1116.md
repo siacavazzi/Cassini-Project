@@ -1,8 +1,8 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `91012dfb` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `bf987347` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 63 PRs (with #541, #537 and #542), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 8 follow-up merges of reviewed new heads (#524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412).
+**In it:** 64 PRs (with #541, #537, #542 and #544), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 8 follow-up merges of reviewed new heads (#524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412).
 **Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527, #534, #536 (READY only once a running benchmark passes, or not ready). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
@@ -29,7 +29,7 @@ How to read this:
 - Base: main 85d2a2a9 (the full cache was built at f9ab1b4; main since then adds #475, #477, #478, #485 and #525).
 
 ## No-pixel PRs (rule these out first)
-#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, and the three integration commits
+#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, and the three integration commits
 
 ## PRs that change pictures (in merge order)
 #476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537
@@ -120,3 +120,5 @@ How to read this:
 | 77 | [#506](https://github.com/siacavazzi/Cassini-Project/pull/506) Check each filter's match on the body's limb; keep each placement solve's misfit (audit finding 14) (new head) | `fb6f273d` | no | #506's reviewed new head 44d49412: test_color_register checks _register_match. Test only. | Nothing. | none | - | integration commit |
 | 78 | [#537](https://github.com/siacavazzi/Cassini-Project/pull/537) Summed frames: white guard and spike cleaning at the camera's pixel size (finding 21) | `fb4c4a6b` | **YES** | Summed (2x2, 4x4) frames: the white guard and the spike cleaning work at the camera's own pixel size, not the summed frame's (audit finding 21), so bright summed frames are no longer clipped or cleaned as if their pixels were small. #491's full-depth unspike takes the same summing. | Every summed frame and the passes holding one (the obs bump renames every pass folder). | export-v118, levels-v80, obs-v130/v113, reel-v107/v90/v84, native-v65, color-v70/v53/v48, proc-v37/v31, thumb-v36 | `evidence/summed_white` | resolved by hand: Versions renumbered past the branch's tops: obs-v130/v113/v99, export-v118, levels-v80, color-v70/v53, proc-v37/v31, thumb-v36, native-v65, reel-v107/v90/v84. color_image.py: #537's summing argument on unspike, also applied to #491's deeps unspike line (as the review asked). |
 | 79 | [#542](https://github.com/siacavazzi/Cassini-Project/pull/542) Repointed passes: folder() names passes given without their frames again | `91012dfb` | no | Repointed passes: folder() names passes given without their frames again (fixes test_processing_steps; #525 follow-up). No picture change. | Nothing. | none | - | clean |
+| 80 | [#doc](https://github.com/siacavazzi/Cassini-Project/pull/doc) Picture-change map (docs) | `96c80dad` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 81 | [#544](https://github.com/siacavazzi/Cassini-Project/pull/544) Prebuild: --max-load default under the slot limiter | `bf987347` | no | Prebuild's --max-load default comes from the real cores, and there is no load wait under the slot limiter (a rebuild gate). | Nothing. | none | - | clean |
