@@ -2051,6 +2051,8 @@ function targetLabel(k) {
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
         const m = b.dataset.mode, on = m === st.mode;
+        // (a view the pass has no stored picture for is not offered: it would be drawn on request)
+        b.disabled = m !== "auto" && !!st.allowed && !st.allowed.includes(m);
         b.setAttribute("aria-checked", String(on));
         b.querySelector("span").textContent = m === "auto" && st.playing ? `now ${st.playing}${st.building ? ", building" : ""}`
           : PASS_MODES.find(x => x[0] === m)[2];
@@ -2665,6 +2667,7 @@ function targetLabel(k) {
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
+    const tossPasses = new Set();     // passes the server said are a toss-up (kind_of tossup): the build stores both views
     // what the data says (passInfo, the server's own rule worked out ahead) counts as the server's answer
     const dataKind = k => { const p = passInfo(k); return p ? p[0] : null; };
     const mosaicPass = k => mosaicPasses.has(passOf(k)) || dataKind(k) === "mosaic" || dataKind(k) === "mosaic_movie";
@@ -2676,7 +2679,18 @@ function targetLabel(k) {
     // window), else the cameras.passes default; "auto" follows the server (a mosaic pass builds, a movie or a stare
     // plays its frames, a mosaic movie rolls: each place shows its newest tile)
     const passChoice = new Map();
-    const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
+    // the views the build stores for the pass (prebuild.make_pass): a mosaic movie rolls, a mosaic builds, a movie plays its
+    // frames, and a toss-up has both a mosaic and a movie. A Mosaic, Movie or Mosaic movie asked for that the pass has
+    // no stored picture for plays Auto instead: it would be drawn on request (a movie pass laid out as a mosaic took the
+    // server 4-5 minutes a picture and up to ~15 GB, cache completeness check 2026-11-16)
+    const storedModes = k => {
+      const toss = tossPasses.has(passOf(k));
+      if (lapPass(k)) return ["mosaic_movie"];
+      if (mosaicPass(k)) return toss ? ["mosaic", "movie"] : ["mosaic"];
+      if (moviePass(k)) return toss ? ["movie", "mosaic"] : ["movie"];
+      return [];
+    };
+    const modeOf = k => { const m = passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto"; return m === "auto" || storedModes(k).includes(m) ? m : "auto"; };
     const playsAs = k => { const m = modeOf(k); return m !== "auto" ? m : lapPass(k) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePass(k) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
     // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
@@ -2690,7 +2704,7 @@ function targetLabel(k) {
       // a pass asked for as a mosaic whose mosaic is not up yet is being built (a long movie's first mosaic deep in
       // the pass makes every tile before it: minutes when nothing of it is in the cache)
       const building = on && p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
-      menu.sync({ inPass: !!on, mode: m, playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
+      menu.sync({ inPass: !!on, mode: m, allowed: on ? storedModes(k) : [], playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
                   centred: k >= 0 && centreOn() && /[?&]center=1/.test(shownKey || "") });
     }
     menu.onMode = mode => {
@@ -3623,6 +3637,7 @@ function targetLabel(k) {
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
+            if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
