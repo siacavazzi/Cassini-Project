@@ -1495,7 +1495,7 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
             if full is not None and full.any():
-                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale["white"], gamma,
+                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale.get("sat_white") or scale["white"], gamma,
                                                                             scale.get("shoulder"), toe)[..., 0])
         sink = _hdr_sink.get()
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:

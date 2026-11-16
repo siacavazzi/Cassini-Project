@@ -256,22 +256,31 @@
       return k;
     }
     // what is blurred: the alpha a and the luminance times it, float32 as numpy has them
-    function detailInputs(px) {
+    // lit (obs_mosaic.DETAIL_LIT, a Saturn pass's detail_how): each pixel weighted by how lit it is, and only the
+    // picture's whole pixels, so the sky and a tile's feathered edge neither count in the mean nor change
+    function detailInputs(px, lit) {
       const f = Math.fround, N = px.length / 4, a = new Float32Array(N), la = new Float32Array(N), lum = new Float32Array(N);
+      const w = lit ? new Float32Array(N) : null, lo = lit ? f(lit[0]) : 0, span = lit ? f(f(lit[1]) - lo) : 1, whole = f(250 / 255);
       for (let p = 0, i = 0; p < N; p++, i += 4) {
         a[p] = f(px[i + 3] / 255);
         lum[p] = f((px[i] + px[i + 1] + px[i + 2]) / 3);
+        if (w) {
+          const t = Math.min(1, Math.max(0, f(f(f(lum[p] / 255) - lo) / span)));
+          w[p] = a[p] >= whole ? f(f(t * t) * f(3 - f(2 * t))) : 0;
+          a[p] = w[p];
+        }
         la[p] = f(lum[p] * a[p]);
       }
-      return { a, la, lum };
+      return { a, la, lum, w };
     }
     // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change (less on big differences,
     // DETAIL_EDGE) rolled off past knee of the room the pixel has left (obs_mosaic._soft_detail), clip, round half to even
-    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32) {
+    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32, w = null) {
       const f = Math.fround, floor = f(1e-3), D = f(amount), K = f(knee), E = f(edge), tiny = f(1e-6);
       for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
         const mean = f(gla[p] / Math.max(ga[p], floor)), x = f(lum[p] - mean);
         let d = f(f(D * x) / f(1 + f(Math.abs(x) / E)));
+        if (w) d = f(d * w[p]);
         const room = d > 0 ? f(255 - Math.max(px[i], px[i + 1], px[i + 2])) : f(Math.min(px[i], px[i + 1], px[i + 2]));
         const k = f(K * room), mag = Math.abs(d);
         if (mag > k) {
@@ -381,9 +390,9 @@ void main() {
 let blur;   // the GPU blur, made when a filled pass first needs it
 const sharpen = (px, W, H, t) => {
   if (blur === undefined) blur = (${STEADY_GPU.toString()})();
-  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px);
+  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px, t.lit);
   const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
-  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge);
+  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge, d.w);
 };
 const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {

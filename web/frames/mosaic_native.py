@@ -400,7 +400,7 @@ def block(u, made, corr, k, x0, y0, w, h, cache):
     else:
         rgba = planes[filters[0]]
     if filled:
-        rgba = om.detail(rgba, sigma)
+        rgba = om.detail(rgba, sigma, p["display_scale"])
     return np.ascontiguousarray(rgba[py:py + h, px:px + w])
 
 

@@ -2815,6 +2815,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # mosaic (195RI, 260RI and 269RI HIPHASE) was not brighter, and 1.4x only dimmed its faint rings (lit median 34 to 31)
     if _ring(u) and u.get("movie") and not u.get("mosaic"):
         white *= RING_HEADROOM
+    sat_white = None
+    if saturn_look(u).get("headroom") and calibration.look() == "balanced":
+        # (what the camera saturated stays drawn on the white before the headroom, as bright as it was: a patch one
+        # filter saturated came out a stronger tint once it was no longer at white, 150SA NHEMMOVIE001's lime top)
+        sat_white = white
+        white *= saturn_look(u)["headroom"]
     if calibration.look() == "balanced" and white > 0:
         # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
         # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
@@ -2825,8 +2831,16 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # the local contrast (detail) only where the body fills the frames: on a small disk against the sky (Dione 180 px
     # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
+    sat = saturn_look(u) if calibration.look() == "balanced" else {}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
            "detail": bool(filled and not small)}
+    if sat_white:
+        out["sat_white"] = sat_white
+    if sat.get("chroma"):
+        out["chroma"] = sat["chroma"]
+    if sat.get("detail"):
+        out["detail"], out["detail_how"] = True, {"strength": sat["detail"], "lit": True,
+                                                  "sigma": sat.get("sigma", 1.0), "grain": sat.get("grain", 0)}
     long = _long_white(each, blacks, white) if u.get("movie") and not filled else None
     if long:
         out["long"] = long
@@ -5892,7 +5906,44 @@ def sharpens(scale):
     return bool(scale.get("detail", scale.get("filled")))
 
 
-def detail(rgba, sigma):
+SATDEF = os.environ.get("CASSINI_SATDEF", "")   # prototype: Saturn atmosphere definition options (thread)
+SATDEF_OPTIONS = {
+    "A": {"headroom": 1.25},
+    "B": {"headroom": 1.25, "detail": 1.0, "sigma": 0.6},
+    "C": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6},
+    "D": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6},
+    "E": {"headroom": 1.3, "detail": 3.0, "sigma": 1.2},
+    "F": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6, "chroma": 1.4},
+    "G": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6, "chroma": 1.7},
+    "H": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6, "chroma": 1.7, "grain": 1.2},
+}
+DETAIL_LIT = (0.04, 0.12)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
+                            # from this share of white to the second (its luminance), so the sky round a planet neither
+                            # pulls its limb up into a bright rim nor gets texture of its own
+
+
+def saturn_look(u):
+    """{"gamma", "detail", "sigma"} of the Saturn definition option on (CASSINI_SATDEF), for Saturn's passes; {}"""
+    if u["key"][0] != "SATURN" or _ring(u):
+        return {}
+    return dict(SATDEF_OPTIONS.get(SATDEF, {}))
+
+
+def chroma(rgb, k):
+    """A colour picture's (uint8 RGB) colour differences raised k times about each pixel's own grey (the channels'
+    mean), its brightness kept: a channel pushed past 0 or 255 brings the pixel's change down until none is, so the
+    hue holds and nothing clips into a new tint"""
+    x = rgb.astype(np.float32)
+    lum = x.mean(axis=2, keepdims=True)
+    d = x - lum
+    # (the most of k each pixel takes before a channel reaches 0 or 255)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        up = np.where(d > 0, (255 - lum) / d, np.where(d < 0, -lum / d, np.inf)).min(axis=2, keepdims=True)
+    g = np.minimum(np.float32(k), np.maximum(up, 1))
+    return np.clip(lum + d * g, 0, 255)
+
+
+def detail(rgba, sigma, scale=None):
     """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
     against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
     over the mosaic's own pixels only, so the empty canvas does not darken its edges) by DETAIL times the
@@ -5900,16 +5951,32 @@ def detail(rgba, sigma):
     (the mean of the channels), the same change added to every channel, so the small misregistration between
     filters does not turn into rainbow texture."""
     import cv2
+    how = (scale or {}).get("detail_how") or {}
+    strength = np.float32(how.get("strength", DETAIL))
+    sigma = sigma * how.get("sigma", 1.0)
     a = rgba[..., 3].astype(np.float32) / 255
     rgb = rgba[..., :3].astype(np.float32)
+    lit = None
+    if how.get("lit"):
+        lum0 = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3 / 255
+        t = np.clip((lum0 - DETAIL_LIT[0]) / (DETAIL_LIT[1] - DETAIL_LIT[0]), 0, 1)
+        lit = (t * t * (3 - 2 * t)).astype(np.float32)
+        # (and only the picture's whole pixels: its feathered edge, drawn darker as it fades out, pulled the mean
+        # down and left a light line along a tile's edge, 193SA NPOLMOV001)
+        a = (a >= np.float32(250 / 255)).astype(np.float32) * lit
+        lit = a
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
     if calibration.look() == "balanced":
         # the channels' mean: 8-bit values, so the sum is exact and this is numpy's mean(axis=2) to the bit (all
         # 2^24 colours), without its slow reduce over three
         lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
-        x = lum - mean
-        d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+        # (grain: the difference taken on the luminance blurred over that many px, so the pixel noise and the
+        # camera's 8-bit steps are not raised with the clouds)
+        x = (cv2.GaussianBlur(lum, (0, 0), how["grain"]) if how.get("grain") else lum) - mean
+        d = strength * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+        if lit is not None:
+            d = d * lit
         # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
         # three keeps its color)
         room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
@@ -6686,6 +6753,8 @@ def colour_picture(u, p, colour, planes, away=None):
         rgb = np.moveaxis((calibration.encode(np.clip(x, 0, 1), g) * 255 + 0.5).astype(np.uint8), 0, -1)
     elif mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
+    if scale.get("chroma"):
+        rgb = chroma(rgb, scale["chroma"])
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
     rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
     return np.dstack([rgb, alpha])
@@ -6746,7 +6815,7 @@ def so_far(u, n, cache, made=None, out=OUT):
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
     hdr = _mosaic_map(u, p, tiles, rect, used, base, rgba.shape, cache) if HDR_ON else None
     if sharpens(p["display_scale"]):
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"], p["display_scale"])
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
@@ -7573,6 +7642,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
+    how = p["display_scale"].get("detail_how") or {}
     return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
             "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
@@ -7581,7 +7651,9 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
-            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL, "knee": DETAIL_KNEE, "edge": DETAIL_EDGE}
+            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * how.get("sigma", 1.0),
+            "amount": how.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
+            **({"lit": list(DETAIL_LIT)} if how.get("lit") else {})}
 
 
 def page_evens(u, cache, colour=True, centre=True):
@@ -9096,7 +9168,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         rgba = _unturn(rgba, *unturn)
         H, W = rgba.shape[:2]
     if sharpens(p["display_scale"]) and sharpen:
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, p["display_scale"])
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     im = Image.fromarray(rgba, "RGBA")
     if unturn:
@@ -10407,7 +10479,7 @@ def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=
     else:
         rgba = planes[0]
     if sharpens(p["display_scale"]):
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, p["display_scale"])
     # (not cut to its picture: the tiles are cut to theirs, and the canvas is where pointing_box says it is)
     return np.ascontiguousarray(rgba), (x0, y0, k)
 
