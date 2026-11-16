@@ -375,6 +375,16 @@ def keep_failed(path, part, e):
         print(f"cannot keep {path} in the cache ({e}); sending it anyway", flush=True)
 
 
+def frame_size(query, default, fmt="webp"):
+    """size_of for a single frame's picture (a frame, a processed frame, a movie frame): its full size is the stored
+    1024 (Cassini's frames are 1024 px at most, and the build stores every frame's picture at 1024), so a full view
+    or a studio asking size=full is answered from the cache instead of drawn again on request (2026-11-16, cache
+    completeness check: 10 of 13 such asks were drawn). A PNG download (format=png) keeps FULL: it is made from the
+    frame itself."""
+    size = size_of(query, default)
+    return 1024 if size == FULL and fmt == "webp" else size
+
+
 def size_of(query, default):
     """The size= asked for: FULL, or the nearest of SIZES."""
     asked = query.get("size", [str(default)])[0]
@@ -1740,7 +1750,8 @@ def make_handler(site, cache, flags=None):
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
                 query = parse_qs(url.query)
-                size, fmt = size_of(query, 512), picture_format(query)
+                fmt = picture_format(query)
+                size = frame_size(query, 512, fmt)
                 centre = self.centre_of(query, m.group(1))
                 if centre is False:
                     return
@@ -1913,7 +1924,8 @@ def make_handler(site, cache, flags=None):
                     info = obs_mosaic.pass_info(m.group(1), cache)
                     return self.send_json(info) if info else self.send_error(404, "Not in a pass")
                 query = parse_qs(url.query)
-                size, fmt = size_of(query, 512), picture_format(query)
+                fmt = picture_format(query)
+                size = frame_size(query, 512, fmt)
                 # full resolution: the pass's view at its longest side (obs_mosaic.OUT), as saved from the window
                 size = max(SIZES) if size == FULL else size
                 try:
@@ -2051,7 +2063,8 @@ def make_handler(site, cache, flags=None):
                         return self.send_bytes(data, mime, False, headers)   # the calibration may still improve
                     if kind == "png":
                         return self.send_picture(archive_png(frame_id), "png", query, f"Cassini_{frame_id}_archive")
-                    size, fmt = size_of(query, 512), picture_format(query)
+                    fmt = picture_format(query)
+                    size = frame_size(query, 512, fmt)
                     if reel._index is not None and size != FULL and size >= 512:
                         # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles; not
                         # for a small picture (a body's folder picture), which no camera window asks for
