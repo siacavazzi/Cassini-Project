@@ -401,6 +401,22 @@ class Builder:
         have = self.done_items()   # (again: a build that finished while this one waited)
         todo = [it for it in want if it["name"] not in have]
         self.snapshot()
+        # (holding the lock: a cache or item folder already here is what an interrupted build left: its plan,
+        # tiles and private geometry copy were made by a run that never finished, so a resume must not reuse them)
+        # (the cache is per commit, the result per commit and item set: hold the cache's own lock too, so another
+        # set's build of this commit is never wiped from under it)
+        os.makedirs(os.path.dirname(self.cache), exist_ok=True)
+        self._cache_lock = open(self.cache + ".lock", "w")
+        try:
+            fcntl.flock(self._cache_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.log(f"{self.sha[:12]}: waiting for another build of this commit to finish with its cache")
+            fcntl.flock(self._cache_lock, fcntl.LOCK_EX)
+        if os.path.exists(self.cache) and not self.keep_cache:
+            self.log(f"{self.sha[:12]}: removing a cache an interrupted build left ({self.cache})")
+            shutil.rmtree(self.cache, ignore_errors=True)
+        for it in todo:
+            shutil.rmtree(os.path.join(self.result, it["name"]), ignore_errors=True)
         os.makedirs(self.cache, exist_ok=True)
         self.private_geometry()
         t0 = time.time()
@@ -425,6 +441,7 @@ class Builder:
                  + (f"; failed: {', '.join(failures)}" if failures else ""))
         if not self.keep_cache and not failures:
             shutil.rmtree(self.cache, ignore_errors=True)
+        self._cache_lock.close()
         self._lock.close()
         return self.result
 
