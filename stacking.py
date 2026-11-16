@@ -147,17 +147,24 @@ def find_repeats(path, window=120, max_frames=5):
 """
 Loads the frame at path and stacks it with its repeat exposures.
 returns (label of the frame at path, stacked image resized like label.resize_image),
-plus how many frames went in when count is True, and with valid True last the mask of pixels
-valid in any frame stacked (label.valid_mask): a repeat fills what the frame lost in downlink
+plus how many frames went in when count is True, and with valid True the mask of pixels
+valid in any frame stacked (label.valid_mask): a repeat fills what the frame lost in downlink.
+deep = also return, last, the same stack at full depth (calibration.depth_image, every repeat on the scale of the
+frame at path: identical exposures, so the same DN are the same level), float32: what the stack is calibrated from
+(the display copies' stack is rounded to 255 levels over the frame's range, and is for aligning and matching only)
 """
-def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
+def load_stacked(path, window=120, max_frames=5, count=False, valid=False, deep=False):
     lbl = lh.label(path, as_png=True)
     frames = [lbl.resize_image()]
     masks = [lbl.valid_mask()] if valid else None
+    codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE) if deep else None
+    scale = cal.stored_range(codes, lbl.info) if deep and ds.lut8() else None
+    deeps = [cal.depth_image(codes, lbl.info)] if deep else None
     if not cal.step("stack"):   # Settings > Processing: the frame alone
         max_frames = 1
+    tail = lambda n, mask, d: ((n,) if count else ()) + ((mask,) if valid else ()) + ((d,) if deep else ())
     if max_frames <= 1:
-        return (lbl, frames[0]) + ((1,) if count else ()) + ((masks[0],) if valid else ())
+        return (lbl, frames[0]) + tail(1, masks[0] if valid else None, deeps[0] if deep else None)
     for repeat in find_repeats(path, window, 4 * max_frames)[1:]:
         if len(frames) >= max_frames:
             break
@@ -168,6 +175,11 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
                 continue
             frame = repeat_lbl.resize_image()
             mask = repeat_lbl.valid_mask() if valid and frame is not None else None
+            if deep and frame is not None:
+                repeat_codes = ds.imread(repeat_lbl.export(), cv2.IMREAD_GRAYSCALE)
+                if scale is not None and repeat_lbl.info.get("DATA_CONVERSION_TYPE") != lbl.info.get("DATA_CONVERSION_TYPE"):
+                    continue
+                deep_frame = cal.depth_image(repeat_codes, repeat_lbl.info, scale)
         except Exception as e:
             print(f"Skipping repeat {repeat}: {e}")
             continue
@@ -175,13 +187,17 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
             frames.append(frame)
             if valid:
                 masks.append(mask)
+            if deep:
+                deeps.append(deep_frame)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
     if valid:
-        stacked, mask = ic.stack_frames(frames, masks=masks)
-        return (lbl, stacked) + ((len(frames),) if count else ()) + (mask,)
-    stacked = ic.stack_frames(frames)
-    return (lbl, stacked, len(frames)) if count else (lbl, stacked)
+        got = ic.stack_frames(frames, masks=masks, deep=deeps)
+        return (lbl, got[0]) + tail(len(frames), got[1], got[2] if deep else None)
+    got = ic.stack_frames(frames, deep=deeps)
+    if deep:
+        return (lbl, got[0]) + tail(len(frames), None, got[1])
+    return (lbl, got, len(frames)) if count else (lbl, got)
 
 
 """
@@ -293,7 +309,9 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             image = l.resize_image()
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
             codes = ds.imread(l.export(), cv2.IMREAD_GRAYSCALE)
-            iof = cal.calibrate(codes, info, gray)
+            # calibrated from its stored values at full depth (cal.depth_image), not from the display copy (image,
+            # gray: 255 levels over the frame's range, for lining the repeats up and marking what the camera saturated)
+            iof = cal.calibrate(codes, info, cal.depth_image(codes, info))
         except Exception as e:
             print(f"Skipping repeat {p}: {e}")
             continue

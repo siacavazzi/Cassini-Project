@@ -982,15 +982,17 @@ def _stars(clipped, gray):
     return out
 
 
-def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
+def stack_frames(frames, sigma=3.0, max_shift=20, masks=None, deep=None):
     if masks is not None and all(np.array_equal(m, masks[0]) for m in masks[1:]):
         # nothing lost, or every frame lost the same pixels (a summed frame's edge column): no frame can fill another,
         # so the plain stack below, byte for byte
-        return stack_frames(frames, sigma, max_shift), masks[0]
+        got = stack_frames(frames, sigma, max_shift, deep=deep)
+        return (got[0], masks[0], got[1]) if deep is not None else (got, masks[0])
     lost = masks is not None
     if len(frames) == 1:
         # nothing to stack it with (most frames have no repeat): the frame as it is, as below
-        return (frames[0], masks[0]) if lost else frames[0]
+        out = (frames[0], masks[0]) if lost else (frames[0],)
+        return out + (deep[0],) if deep is not None else (out if lost else out[0])
     ref = frames[0]
     ref_valid = masks[0] if lost else None
     # shifts are found on the frames with their lost pixels filled, so a gap's edge doesn't pull the match
@@ -1002,6 +1004,10 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
 
     stack = [ref_gray]
     agrees = [ref_valid if lost else np.ones(ref_gray.shape, bool)]
+    # deep = the frames at full depth (calibration.depth_image, on the reference's scale), stacked as the display
+    # copies are: the same shifts, the same pixels left out, so calibrated they are the same picture without the
+    # display copies' 255 levels
+    deep_stack = [np.asarray(deep[0], np.float32)] if deep is not None else None
     for i, frame in enumerate(frames[1:], 1):
         if frame.shape != ref.shape:
             continue
@@ -1018,10 +1024,17 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
             matched = unclipped & both
         else:
             matched = unclipped
+        if deep is not None:
+            deep_frame = np.asarray(deep[i], np.float32)
+            deep_gray = shift_image(fill_invalid(deep_frame, masks[i]) if lost else deep_frame, *shift)
         if matched.sum() > 100:
             # match brightness to the reference; a gain alone keeps black sky black
             gain = (gray[matched] * ref_gray[matched]).sum() / max((gray[matched] ** 2).sum(), 1)
             gray = gain * gray
+            if deep is not None:
+                ref_deep = deep_stack[0]
+                deep_gray = deep_gray * ((deep_gray[matched] * ref_deep[matched]).sum()
+                                         / max(float((deep_gray[matched] ** 2).sum()), 1e-9))
         # mark where the scene changed: differences that survive smoothing are structure, not noise
         # (noise is measured over the whole frame, since a moving moon can fill much of the target)
         diff = gray - ref_gray
@@ -1056,13 +1069,16 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
             changed |= clipped & ((np.abs(near - level) > max(5 * noise, 3))
                                   | (np.abs(pixel_diff) > max(CLIP_SIGMA * pixel_noise, 3)))
         stack.append(gray)
+        if deep is not None:
+            deep_stack.append(deep_gray)
         # where the reference lost the pixel nothing was compared (diff 0 there): a change padded in from beside it
         # says nothing about this frame's pixel, which is then the only picture there is; left out, it left a
         # hole along the edge of every block the reference lost, filled as a flat grey dash (N1800422096_8)
         agrees.append((~changed | ~ref_valid) & valid if lost else ~changed)
 
     if len(stack) == 1:
-        return (ref, ref_valid) if lost else ref
+        out = (ref, ref_valid) if lost else (ref,)
+        return out + (deep_stack[0],) if deep is not None else (out if lost else ref)
     stack = np.array(stack)
     agrees = np.array(agrees)
 
@@ -1081,10 +1097,18 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
     out = (stack * keep).sum(axis=0) / np.maximum(keep.sum(axis=0), 1)
     out = np.where(pair, np.where(agrees, stack, np.inf).min(axis=0), out)
     out = np.where(keep.any(axis=0) | pair, out, ref_gray)
+    if deep is not None:
+        # the same frames' full depth values: kept where the display copies were, the pair's darker one by theirs
+        deep_stack = np.array(deep_stack)
+        deep_out = (deep_stack * keep).sum(axis=0) / np.maximum(keep.sum(axis=0), 1)
+        darker = np.argmin(np.where(agrees, stack, np.inf), axis=0)
+        deep_out = np.where(pair, np.take_along_axis(deep_stack, darker[None], 0)[0], deep_out)
+        deep_out = np.where(keep.any(axis=0) | pair, deep_out, deep_stack[0]).astype(np.float32)
 
     out = np.clip(out + 0.5, 0, 255).astype(np.uint8)
     out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
-    return (out, agrees.any(axis=0)) if lost else out
+    out = (out, agrees.any(axis=0)) if lost else (out,)
+    return out + (deep_out,) if deep is not None else (out if lost else out[0])
         
         
 def seqAlign(im):
