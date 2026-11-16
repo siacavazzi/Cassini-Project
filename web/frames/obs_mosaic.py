@@ -5923,9 +5923,11 @@ SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown 
     "F": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6, "chroma": 1.4},
 }
 SATDEF = os.environ.get("CASSINI_SATDEF", "")
-DETAIL_LIT = (0.04, 0.12)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
+DETAIL_LIT = (0.15, 0.35)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
                             # from this share of white to the second (its luminance), so the sky round a planet neither
-                            # pulls its limb up into a bright rim nor gets texture of its own
+                            # pulls its limb up into a bright rim nor gets texture of its own, and the glow round a bright
+                            # disk (a fifth to a quarter of white) is not pulled down into a dark ring beside it (2004
+                            # approach N1455663489: at 0.04-0.12 its halo went black)
 
 
 def saturn_look(u):
