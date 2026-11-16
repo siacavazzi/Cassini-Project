@@ -1812,7 +1812,20 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
     if look and look.get("headroom"):
         # Saturn's atmosphere (obs_mosaic.saturn_look): white given headroom over the disk's, so its bright half is not
         # rolled off by the shoulder into a few levels (what the camera saturated is still drawn white, below)
-        x /= np.float32(look["headroom"])
+        # ... on the body's disk only where SPICE puts it (look["disk"]: x, y, radius px at 1024; obs_mosaic.ring_white
+        # for a movie): the rings and the sky round it keep today's white, eased over RING_SOFT of the radius at the limb
+        h = np.float32(1 / look["headroom"])
+        if look.get("disk"):
+            k = x.shape[2] / 1024
+            cx, cy, r = (v * k for v in look["disk"])
+            soft = 0.06
+            ys = np.arange(x.shape[1], dtype=np.float32)[:, None] - np.float32(cy)
+            xs = np.arange(x.shape[2], dtype=np.float32)[None, :] - np.float32(cx)
+            t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - soft))) / np.float32(2 * soft * r), 0, 1)
+            on = 1 - t * t * (3 - 2 * t)
+            x *= (1 - (1 - h) * on).astype(np.float32)
+        else:
+            x *= h
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
     # HDR (hdr_capture): the picture's brightness before the shoulder and the clip below, white = 1 (a new array:
     # x itself is not touched, so the picture drawn is the same with HDR on or off)

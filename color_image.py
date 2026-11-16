@@ -248,7 +248,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         cal.still_look.reset(token)
     if look.get("detail") and len(imgs) in (1, 2, 3):
         imgs = _still_detail(imgs, valid, look, _still_disk(lbl, imgs[0].shape[:2]))
-        report["saturn_look"] = look
+        report["saturn_look"] = {k: v for k, v in look.items() if k != "disk"}
     return imgs, valid, lbl, report
 
 
@@ -312,6 +312,8 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
             import obs_mosaic as om
             # (by the index, as the frame server names the cached picture: frame_server.saturn_name)
             look.update(om.saturn_frames([os.path.basename(p).replace(".png", "") for p in paths]))
+            if look:
+                look["disk"] = _still_disk(lbls[-1], (1024, 1024))
         except Exception as e:   # noqa: BLE001  (no Saturn look: drawn as before)
             print(f"No Saturn look: {e}")
     if around and fill and len(paths) == 1:

@@ -311,6 +311,28 @@
       }
       return px;
     }
+    // obs_mosaic.ring_white: off the body's disk (disk: x, y, radius px, eased over soft of its radius) the picture
+    // back on the pass's own white (H: the Saturn look's headroom, g: its gamma, knee: the shoulder), so the rings and
+    // sky keep today's brightness; in place
+    function ringWhite(px, W, H, g, knee, disk, soft = 0.06) {
+      const f = Math.fround, room = f(1 - knee), K = f(knee), G = f(g), iG = f(1 / g), r0 = f(disk[2] * (1 - soft)), w2 = f(2 * soft * disk[2]);
+      const lut = new Float32Array(256);   // each code's linear value with the shoulder undone, times H, rolled off again
+      for (let v = 0; v < 256; v++) {
+        let x = f(Math.pow(f(v / 255), G));
+        if (x > K) x = f(K + f(room * f(Math.atanh(Math.min(f(f(x - K) / room), f(0.999999))))));
+        x = f(x * f(H));
+        if (x > K) x = f(K + f(room * f(Math.tanh(f(f(x - K) / room)))));
+        lut[v] = f(f(Math.pow(Math.min(Math.max(x, 0), 1), iG)) * 255);
+      }
+      for (let p = 0, i = 0; i < px.length; p++, i += 4) {
+        const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+        let t = Math.min(1, Math.max(0, f(f(d - r0) / w2)));
+        t = f(f(t * t) * f(3 - f(2 * t)));
+        if (t <= 0) continue;
+        for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] + f(f(lut[px[i + c]] - px[i + c]) * t)) + 0.5))));
+      }
+      return px;
+    }
     // cv2's separable float32 blur (BORDER_REFLECT_101), on the processor: rows summed tap by tap, then columns
     // centre first and each pair of taps together, as cv2's RowFilter and SymmColumnFilter (the reference the GPU's
     // version is tested against; slow for a whole picture)
@@ -330,7 +352,7 @@
       return out;
     }
     return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
-      gaussKernel, detailInputs, detailFinish, blurCPU };
+      gaussKernel, detailInputs, detailFinish, blurCPU, ringWhite };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
@@ -448,6 +470,7 @@ onmessage = async e => {
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
       : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, m.eye ? t.eye : t.sets);
+    if (m.detail && t.headroom && t.disk) px = M.ringWhite(px, W, H, t.headroom, t.hgamma, t.shoulder, [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W]);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);

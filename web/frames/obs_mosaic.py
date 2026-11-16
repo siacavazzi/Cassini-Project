@@ -2842,6 +2842,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
            "detail": bool(filled and not small)}
     if sat_white:
         out["sat_white"] = sat_white
+        out["headroom"] = saturn_look(u)["headroom"]
     if sat.get("chroma"):
         out["chroma"] = sat["chroma"]
     if sat.get("detail"):
@@ -5906,6 +5907,40 @@ def _part(path, w, h):
     return part
 
 
+RING_SOFT = 0.06   # ring_white: the disk's edge eased over this share of its radius each way
+
+
+def ring_white(rgba, scale):
+    """A picture on a Saturn look scale (its "headroom": white that many times the pass's own) with everything off the
+    body's disk ("disk": x, y, radius px; movie_disk) back on the pass's own white, as it was drawn before the look:
+    the rings, the sky and moons keep today's brightness, the headroom is the disk's only (eased over RING_SOFT of its
+    radius at the limb). Each channel decoded at the scale's gamma, the shoulder's roll-off undone, brightened, rolled
+    off again; nothing without a disk (a frame drawn as Cassini took it)"""
+    H, disk = scale.get("headroom"), scale.get("disk")
+    if not H or not disk or isinstance(scale.get("gamma", 2.2), str):
+        return rgba
+    g = np.float32(scale.get("gamma", 2.2))
+    knee = np.float32(scale.get("shoulder") or calibration.SHOULDER)
+    room = np.float32(1) - knee
+    cx, cy, r = disk
+    ys = np.arange(rgba.shape[0], dtype=np.float32)[:, None] - np.float32(cy)
+    xs = np.arange(rgba.shape[1], dtype=np.float32)[None, :] - np.float32(cx)
+    t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - RING_SOFT))) / np.float32(2 * RING_SOFT * r), 0, 1)
+    off = (t * t * (3 - 2 * t)).astype(np.float32)
+    if not off.any():
+        return rgba
+    x = np.power(rgba[..., :3].astype(np.float32) / np.float32(255), g)
+    past = x > knee
+    x[past] = knee + room * np.arctanh(np.minimum((x[past] - knee) / room, np.float32(0.999999)))
+    x *= np.float32(H)
+    past = x > knee
+    x[past] = knee + room * np.tanh((x[past] - knee) / room)
+    y = np.power(np.clip(x, 0, 1), np.float32(1) / g) * np.float32(255)
+    rgb = rgba[..., :3].astype(np.float32)
+    rgb = rgb + (y - rgb) * off[..., None]
+    return np.dstack([np.clip(rgb + 0.5, 0, 255).astype(np.uint8), rgba[..., 3]])
+
+
 def movie_disk(scale, rect, k, radius, unturn=None):
     """The display scale with the body's disk on a movie frame drawn at k px a reference pixel over rect (whose origin is
     the body's centre): {"disk": (x, y, radius) px} for a scale whose detail is Saturn's lit one (detail_how), as is
@@ -6878,8 +6913,10 @@ def so_far(u, n, cache, made=None, out=OUT):
     else:
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
     hdr = _mosaic_map(u, p, tiles, rect, used, base, rgba.shape, cache) if HDR_ON else None
+    on_disk = movie_disk(p["display_scale"], rect, p["k"], RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]]))
+    rgba = ring_white(rgba, on_disk)
     if sharpens(p["display_scale"]):
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"], p["display_scale"])
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"], on_disk)
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
@@ -7719,7 +7756,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "amount": dhow.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
             **({"lit": list(DETAIL_LIT)} if dhow.get("lit") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
-               if dhow.get("lit") and radius and not follows(fp, rect) else {})}
+               if dhow.get("lit") and radius and not follows(fp, rect) else {}),
+            **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2),
+                "shoulder": p["display_scale"].get("shoulder") or calibration.SHOULDER}
+               if p["display_scale"].get("headroom") and isinstance(p["display_scale"].get("gamma", 2.2), (int, float)) else {})}
 
 
 def page_evens(u, cache, colour=True, centre=True):
@@ -9235,8 +9275,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         drawn = (W, H)
         rgba = _unturn(rgba, *unturn)
         H, W = rgba.shape[:2]
-    if sharpens(p["display_scale"]) and sharpen:
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, movie_disk(p["display_scale"], rect, k, radius, unturn))
+    if sharpen:
+        on_disk = movie_disk(p["display_scale"], rect, k, radius, unturn)
+        rgba = ring_white(rgba, on_disk)
+        if sharpens(p["display_scale"]):
+            rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, on_disk)
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     im = Image.fromarray(rgba, "RGBA")
     if unturn:
