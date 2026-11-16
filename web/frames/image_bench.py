@@ -139,6 +139,10 @@ def set_key(items, env):
 
 
 def job_env(cfg, workers=2):
+    # (under the slot limiter (~/agents/bin/heavy, HEAVY_SLOTS) a build's slots are its processes: each runs its
+    # frames' pool at 1, not 2, so n slots stay n processes (11-16: benchmarks at ~9 processes a slot crashed the MacBook))
+    if os.environ.get("HEAVY_SLOTS", "0") != "0":
+        workers = 1
     env = dict(os.environ)
     env.update(cfg["env"])
     env.update({"CASSINI_KEEP_SPICE_CACHE": "1", "PYTHONUNBUFFERED": "1", "MPLBACKEND": "Agg", "PYTHONDONTWRITEBYTECODE": "1",
@@ -320,6 +324,9 @@ class Builder:
         self.key = set_key(self.items, cfg["env"])
         self.names = names
         self.slots = slots or free_slots()
+        held = int(os.environ.get("HEAVY_SLOTS", "0") or 0)
+        if held:
+            self.slots = min(self.slots, held)   # (never more processes than the limiter's slots, whatever --slots says)
         self.result = os.path.join(self.root, "results", f"{self.sha[:12]}-{self.key}")
         self.wt = os.path.join(self.root, "wt", self.sha[:12])
         self.cache = os.path.join(self.root, "cache", self.sha[:12])
