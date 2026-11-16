@@ -40,7 +40,7 @@ def units(*observations):
     geo = {k: v for o in observations for k, v in o.geo.items()}
     groups = idx.groupby(["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], sort=False).indices
     om._observations = lambda: (idx, groups)
-    om.reel.geometry = lambda ids: {i: geo[i] for i in ids if i in geo}
+    om.reel.geometry = lambda ids, reach=False: {i: geo[i] for i in ids if i in geo}
     om.reel.wavelength = lambda inst, f: 600
     om._units.clear()
     om._unit_of.clear()

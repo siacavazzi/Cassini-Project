@@ -4,10 +4,12 @@ Finds repeat exposures of a frame so they can be stacked into one lower-noise im
 
 A repeat is a frame from the same camera, target, observation and exact filter pair,
 taken within a short window of the original, that SPICE (the geometry cache) puts at the
-same pointing: within REPEAT_PLACE of a frame of it. A frame taken seconds later at another
-pointing (the next panel of a mosaic; Phoebe 2004-06-11 goes back and forth between two
-pointings a minute apart) is not a repeat, however close in time. Where SPICE can't place a
-frame, the repeat must line up with it (image_correction.find_shift) to be merged.
+same pointing: within REPEAT_PLACE of a frame of it, and at the same range: within REPEAT_GROW of it in
+size. A frame taken seconds later at another pointing (the next panel of a mosaic; Phoebe 2004-06-11
+goes back and forth between two pointings a minute apart) is not a repeat, however close in time, nor
+is one taken from nearer or further, on a close flyby (Phoebe's closest approach, 2004-06-11: frames
+18 s apart from 100 km closer, the body 4% bigger and its craters 30 px apart at the frame's edge).
+Where SPICE can't place a frame, the repeat must line up with it (image_correction.find_shift) to be merged.
 """
 
 import math
@@ -37,6 +39,13 @@ same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
 # find_shift lines a repeat up by at most 20 px, the same.
 REPEAT_PLACE = 0.02
 FRAME = 1024
+# full resolution pixels: two frames SPICE puts at ranges this far apart in size are not repeats. Lining a repeat up
+# shifts it; it can't make the body bigger or smaller, so a frame taken nearer or further than this is merged as two
+# pictures of different sizes laid over each other (Phoebe N1465674377_2: crater shadows with three edges). The size
+# that counts is how far the body reaches from its centre within the frame (its limb, or the frame's farthest corner on
+# a body that fills it): that far out the range change moves the ground most. Over the mission (the geometry cache,
+# 2026-11-16) 6,790 of 91,117 frames that merged a repeat differed by over a pixel, 3,701 of those over 2 px Titan's.
+REPEAT_GROW = 1.0
 
 
 def frame_id(path):
@@ -47,32 +56,75 @@ def frame_id(path):
 Where SPICE puts the body in each of the frames ids (its target, or the body it shows instead, ba.shown_targets),
 from the geometry cache (bootleg_autonav, CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
 the distance in km. Frames that are not cached, or that SPICE could not place, are left out.
+reach = also give, fourth, how far the body reaches from its centre within the frame (full resolution pixels, as
+drawn: reach), None for a body of no known size; same_place's range test asks for it
 """
-def places(ids):
+def places(ids, reach=False):
     if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
         return {}
     db, out = ba._geometry_db(), {}
+    shown = ba.shown_targets()
     for k in range(0, len(ids), 900):
         part = ids[k:k + 900]
-        for frame, x, y, z, camera, scale in db.execute(
-                f"SELECT frame, x, y, z, camera, scale FROM target WHERE version = ? AND error IS NULL "
+        for frame, target, x, y, z, camera, scale in db.execute(
+                f"SELECT frame, target, x, y, z, camera, scale FROM target WHERE version = ? AND error IS NULL "
                 f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
             # on the frame as it is drawn: a WAC frame's shift grown by its geometric correction (ba.linear_ratio)
             r = ba.linear_ratio(camera, scale)
             # a frame that shows another body than its target: that body's place (ba.shown_targets)
-            x, y, z = ba.shown_targets().get(frame, (None, x, y, z))[1:]
-            out[frame] = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
+            target, x, y, z = shown.get(frame, (target, x, y, z))
+            at = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
+            if reach:
+                at += (_reach(target, at, scale and scale * r),)
+            out[frame] = at
     return out
+
+
+_radii = {}
+
+
+def _reach(target, at, scale):
+    """How far the body at place at (x, y, z) reaches from its centre within the frame, full resolution pixels: its
+    radius (the target's mean radius over the distance, at scale pixels a radian), but no further than the frame's
+    farthest corner from it, and 0 when it is wholly off the frame; None when its size is not known."""
+    x, y, z = at[:3]
+    if target not in _radii:
+        _radii[target] = ba._radius_km(target)
+    km = _radii[target]
+    if not km or not z or not scale or x is None:
+        return None
+    radius = km / z * scale
+    # (the body's centre sits at -x, -y from the frame's: find_target's shift centres it)
+    near = math.hypot(max(abs(x) - FRAME / 2, 0), max(abs(y) - FRAME / 2, 0))
+    if near >= radius:
+        return 0.0
+    return min(radius, math.hypot(FRAME / 2 + abs(x), FRAME / 2 + abs(y)))
 
 
 """
 Whether SPICE puts two frames at one pointing: a, b = their places ((x, y, ...) as places gives, or None);
-True within REPEAT_PLACE of a frame, False further apart, None when either has no place.
+True within REPEAT_PLACE of a frame, False further apart, None when either has no place. With their ranges and
+reaches ((x, y, z, reach) as places(reach=True) gives) also False when the range change grows or shrinks the body by
+over REPEAT_GROW where it reaches furthest (grown): lining up can't undo that.
 """
 def same_place(a, b):
     if a is None or b is None or a[0] is None or b[0] is None:
         return None
-    return math.hypot(a[0] - b[0], a[1] - b[1]) <= REPEAT_PLACE * FRAME
+    if math.hypot(a[0] - b[0], a[1] - b[1]) > REPEAT_PLACE * FRAME:
+        return False
+    return grown(a, b) <= REPEAT_GROW
+
+
+def grown(a, b):
+    """How far, full resolution pixels, the change of range between places a and b ((x, y, z, reach)) moves the ground
+    where the body reaches furthest in the frame (a limb, or the farthest corner of a body filling it): its size seen
+    from the nearer over its size from the further, less one, times the nearer's reach. 0 without both ranges and a
+    reach."""
+    za, zb = (a[2] if len(a) > 2 else None), (b[2] if len(b) > 2 else None)
+    reach = max((r for r in (a[3] if len(a) > 3 else None, b[3] if len(b) > 3 else None) if r is not None), default=None)
+    if not za or not zb or reach is None:
+        return 0.0
+    return reach * abs(za - zb) / max(za, zb)
 
 
 """
@@ -139,7 +191,7 @@ def find_repeats(path, window=120, max_frames=5):
     near = pd.notna(paths) & (gap <= window) & (paths != key)
     nearest = paths[near][np.argsort(gap[near], kind="quicksort")].tolist()
     if nearest:
-        where = places([frame_id(p) for p in [key] + nearest])
+        where = places([frame_id(p) for p in [key] + nearest], reach=True)
         nearest = [p for p in nearest if same_place(where.get(frame_id(key)), where.get(frame_id(p))) is not False]
     return [path] + [prefix + p for p in nearest[:max_frames - 1]]
 
@@ -256,9 +308,12 @@ of both. Each frame is calibrated on its own, aligned to the frame at path, and 
 its exposure time (the long exposures carry the faint signal), leaving out its saturated pixels
 and the few around them (charge bleeds out of a full pixel), so where a long exposure saturated the
 short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
-correlation finds nothing) is taken as it is only where SPICE puts it at the frame's pointing
-(same_place); otherwise it is left out, as a frame of another pointing would put its scene over
-this one (Phoebe's black blotches: the other pointing's shadow where this frame saturated).
+correlation finds nothing; and half the repeats of a random 6,000 frames, 2026-11-16: smooth disks
+and ring frames that look the same) is taken as it is only where SPICE puts it at the frame's
+pointing and range (same_place); otherwise it is left out, as a frame of another pointing would put
+its scene over this one (Phoebe's black blotches: the other pointing's shadow where this frame
+saturated), and one taken nearer or further its scene at another size (Phoebe's closest approach:
+crater shadows with three edges).
 returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
 frames went in), or the label, None and 1 when the frame at path can't be calibrated.
 valid = also return, last, the mask of pixels valid in any frame merged (label.valid_mask): what a frame lost in
@@ -283,7 +338,7 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
     merging, own, differ = [], None, False
     plain = not cal.step("hdr")
     repeats = find_repeats(path, window, max_frames if cal.step("stack") else 1)
-    where = places([frame_id(p) for p in repeats]) if len(repeats) > 1 else {}
+    where = places([frame_id(p) for p in repeats], reach=True) if len(repeats) > 1 else {}
     for p in repeats:
         try:
             l = lbl if p == path else lh.label(p, as_png=True)
@@ -303,12 +358,13 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             continue
         shift = None
         if ref is not None:
-            # a frame SPICE puts at another pointing is never merged, one that doesn't line up only where SPICE puts it
-            # at this one
+            # a frame SPICE puts at another pointing or range is never merged, one that doesn't line up only where SPICE
+            # puts it at this one, at this range (same_place: a nearer or further frame can't be laid over it as taken)
             here = same_place(where.get(frame_id(path)), where.get(frame_id(p)))
             shift = ic.find_shift(ref, image, 20) if here is not False else None
             if not here and shift is None:
-                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing")
+                print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing"
+                      f" and range")
                 continue
         mask = l.valid_mask() if valid else None
         if valid:

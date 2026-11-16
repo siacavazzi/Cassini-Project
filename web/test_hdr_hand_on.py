@@ -52,7 +52,7 @@ calls = []
 stacking.find_repeats = lambda path, window=120, max_frames=5: repeats.get(path, [path])[:max_frames]
 stacking.lh.label = lambda p, as_png=True: labels[p]
 stacking.ic.find_shift = lambda a, b, r: None
-stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}
+stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}
 stacking.ds.imread = lambda path, flags=None: pngs[path][..., 0]
 cal.calibrate = lambda codes, info, image=None: (calls.append(info["path"]), codes.astype(np.float32) / 1000)[1]
 cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)

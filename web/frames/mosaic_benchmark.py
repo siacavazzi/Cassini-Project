@@ -50,7 +50,7 @@ def frames(obs, target, cam):
                       usecols=["path", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "filter1", "filter2", "seconds_1970"])
     idx = idx[(idx.OBSERVATION_ID == obs) & (idx.TARGET_NAME == target) & (idx.INSTRUMENT_ID == cam) & idx.path.notna()]
     idx = idx.sort_values("seconds_1970")
-    where = stacking.places([stacking.frame_id(p) for p in idx.path])
+    where = stacking.places([stacking.frame_id(p) for p in idx.path], reach=True)
     out, kept = [], {}
     for r in idx.itertuples(index=False):
         f = "/".join(x for x in (str(r.filter1), str(r.filter2)) if not x.startswith("CL")) or "CL1/CL2"

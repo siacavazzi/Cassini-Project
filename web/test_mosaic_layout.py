@@ -115,7 +115,7 @@ def load():
     turned = {fr[3]: fr[10] for fr in cases["frames"] if fr[10] is not None}
     groups = idx.groupby(["TARGET_NAME", "OBSERVATION_ID", "INSTRUMENT_ID"], sort=False).indices
     om._observations = lambda: (idx, groups)
-    om.reel.geometry = lambda ids: {i: geo[i] for i in ids if i in geo}
+    om.reel.geometry = lambda ids, reach=False: {i: geo[i] for i in ids if i in geo}
     om.reel.turns = lambda ids: {i: turned[i] for i in ids if i in turned}
     om._units.clear()
     om._unit_of.clear()
