@@ -77,7 +77,8 @@ ONLY = 1.5
 # pictures in a film at most, 0 for no limit (the default: a film is drawn a picture at a time, so a month of pictures
 # is only a longer film); a public site sets CASSINI_EXPORT_MAX. The Movie Editor's list (list=1) has no cap either way
 MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", "0") or 0)
-SIZES = (512, 768, 1024)
+SIZES = (512, 1024)       # the pane sizes a film is made at: the sizes the pictures are kept at (768 went 2026-11-16: no
+                          # picture is kept at it, so a film at 768 had every picture drawn on the request)
 FULL = "full"               # Picture size Full: mosaics at native resolution (module notes)
 BUCKETS = (1024, 1536, 2048)   # mosaic sizes up to the canvas: a pass is drawn at the biggest its native size fills
 FULL_MAX = int(os.environ.get("CASSINI_EXPORT_FULL_MAX", 4096))   # largest pane at Full, px (H.264 plays it)

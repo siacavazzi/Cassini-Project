@@ -848,7 +848,7 @@ SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the
 SEGMENT_MAX = int(os.environ.get("CASSINI_SEGMENT_MAX", "0") or 0)
 ETA_WINDOW, ETA_LEAST = 60.0, 8.0   # seconds of pace the time left is worked out from, and the least that says anything
 SEGMENT_KEEP = 12       # finished stretches the server keeps the status of (a stretch asked again past them is made again from the cache)
-SEGMENT_SIZES = (512, 768, 1024)
+SEGMENT_SIZES = (512, 1024)   # the sizes the windows ask for and the build keeps (sizes= takes the nearest)
 SEGMENT_ANSWER = 0.3    # seconds POST /prebuild waits for its stretch to be made before it answers how far it is
 
 
