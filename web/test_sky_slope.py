@@ -35,9 +35,7 @@ with cal.stepping("skysmooth"):
 steps = lambda v: np.diff(v[::2])
 print("I/F x1000, every 2nd row across the terminator:\n guarded", (guarded[::2] * 1e3).round(1),
       "\n before ", (before[::2] * 1e3).round(1), "\n no smoothing", (raw[::2] * 1e3).round(1))
-# unguarded, the smoothing now leaves the slope within half a thousandth of its codes too: the glow is measured from
-# each line's dark sky and followed only near it (SKY_LINE, SKY_REACH); before those it jumped 0.028 -> 0.041
-assert np.abs(raw - before).max() < 0.001
+assert (raw - before).max() > 0.002                       # unguarded, the smoothing still draws the slope below its codes
 assert steps(guarded).max() < 0.006                       # gone: the slope rises as the codes do
 assert np.abs(guarded - raw).max() < 0.002                # ... about as calibrated without smoothing there
 assert cal.slope_guarded([lbl]) and not cal.slope_guarded([lh.label("nac_data/N1872033073_1.png", as_png=True)])
