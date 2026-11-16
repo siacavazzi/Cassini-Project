@@ -164,6 +164,11 @@ STRIPPED = "_g8"     # the folder suffix, after PANNED's, of every pass of an ob
 JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
 TWIST = 0.04         # of a frame: a pass the camera turns under (reel.turns) by more than this at its frames' places is drawn
                      # on a footprint turned frame by frame, and judged on its frames' places turned so (_flat)
+STARE_GAP = 300      # s: a single-filter pass whose frames come this far apart (median) or further, and whose frames all
+STARE_UNION = 2.0    # lie on less ground than this many frames, is a time-lapse of one view that creeps, not a mosaic
+                     # (_stare): the CIRS ride-along ring stares (106RI_TDIFS45HP001's second pass, eight CL1/CL2
+                     # frames 10 to 28 minutes apart within 0.8 x 0.85 of a frame, drawn as a mosaic of one view
+                     # stacked eight times, audit 11-16)
 DRIFT_LAPS = 0.5     # the least share of a frame the places of a time series' laps in a row overlap by (median) as they drift
 TOUCH_GAP = 0.2      # frames of a mosaic this share of a frame apart or less touch (_touching): a grid of tiles taken as Cassini
                      # closes in, each tile smaller on the canvas than the step between them (016DI_TARGFLYBY001's ring of
@@ -978,6 +983,29 @@ def _named_map(u):
     return bool(u["key"][0] == "SATURN" and name and any(m in name[3:] for m in MAP_NAMES))
 
 
+def _stare(u):
+    """Pass u is a time-lapse of one view of the rings (_ring), not a mosaic: one filter, its frames STARE_GAP or more apart (median), and
+    all of them, each a frame square at its place, on less ground than STARE_UNION frames. Its creep of a quarter of a
+    frame between frames counts as a jump of the camera (mosaic.min_step), but a mosaic steps on to new ground; this
+    films the same patch for hours (a CIRS ride-along stare at the rings), so it plays as a movie."""
+    fr = [f for f in u["frames"] if f[7]]
+    if not _ring(u) or len(fr) < MIN_PLACES or len({f[2] for f in fr}) != 1:
+        return False   # (the rings' ride-along stares: a moon's or Titan's, or Saturn's own, are taste call 21's wider option)
+    if float(np.median(np.diff([f[3] for f in fr]))) < STARE_GAP:
+        return False
+    xy = np.array([(-f[5] * f[7] / u["z"], -f[6] * f[7] / u["z"]) for f in fr]) / FRAME
+    k = STRIP_GRID
+    lo = xy.min(0) - 0.5
+    w, h = np.ceil((xy.max(0) + 0.5 - lo) * k).astype(int) + 2
+    if w * h > 4e6:
+        return False
+    grid = np.zeros((h, w), bool)
+    for p in xy:
+        x, y = np.round((p - 0.5 - lo) * k).astype(int) + 1
+        grid[y:y + k, x:x + k] = True
+    return bool(grid.sum() / k ** 2 < STARE_UNION)
+
+
 def _drifting(u):
     """Pass u is a time series of one view drifting over the canvas: its frames are laps (a lap ends where a filter
     comes again), at least MIN_PLACES of them, the places of laps in a row overlapping by at least DRIFT_LAPS of a
@@ -1314,6 +1342,13 @@ def _judge(u):
             u["movie"], u["kind"], u["panned"], u["pair"] = True, "movie", False, False
             return
         u["drift"], u["pair"] = True, False
+        return
+    if kind == "mosaic" and not u["pair"] and _stare(u):
+        # a time-lapse of one view: a movie held on its own view, as a feature track is (track_places: each frame
+        # where the one before it is, as the pictures line up), so every frame is drawn whole in the window; held on
+        # the body's center instead, a ring stare slid round a canvas as big as its drift, small and off center
+        u["movie"], u["kind"], u["revisit"], u["pair"], u["panned"], u["track"] = True, "movie", True, False, False, True
+        u["stare"] = True
         return
     if kind == "mosaic" and (_revisits(u) or _drifting(u)):
         # a time series: a movie
