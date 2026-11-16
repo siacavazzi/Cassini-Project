@@ -2833,7 +2833,20 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # median (its brightest filter's, white = 1), as a single picture's highlights do (calibration.tone)
         lit = max(calibration.lit_median((np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white)
                   for f, iofs in by.items())
+        pre = gamma
         gamma = calibration.eased_gamma(gamma, lit, calibration.EASE_PASS)
+        if sat_white and saturn_look(u).get("match") and 0 < lit < 1 and not isinstance(gamma, str):
+            # the Saturn look's brightness kept: the gamma that draws the disk's lit median (lit, on the white with
+            # headroom) at the level the pass's own white and gamma drew it, so the headroom spreads the disk's bright
+            # half without darkening it, the rings or the shadows (Sam, 11-16: "the atmosphere looks darker")
+            H = saturn_look(u)["headroom"]
+            old = min(lit * H, 4.0)
+            g0 = calibration.eased_gamma(pre, old, calibration.EASE_PASS)
+            knee = calibration.SHOULDER
+            rolled = old if old <= knee else knee + (1 - knee) * math.tanh((old - knee) / (1 - knee))
+            level = rolled ** (1 / float(g0))
+            if 0 < level < 1:
+                gamma = round(min(max(math.log(lit) / math.log(level), float(gamma)), 4.0), 4)
     # the local contrast (detail) only where the body fills the frames: on a small disk against the sky (Dione 180 px
     # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
@@ -2849,7 +2862,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # (a pass that had detail() already keeps it off the disk: its rings as they are drawn today, detail_base)
         out["detail_base"] = out["detail"]
         out["detail"], out["detail_how"] = True, {"strength": sat["detail"], "lit": True,
-                                                  "sigma": sat.get("sigma", 1.0), "grain": sat.get("grain", 0)}
+                                                  "sigma": sat.get("sigma", 1.0), "grain": sat.get("grain", 0),
+                                                  **({"nodisk": True} if sat.get("nodisk") else {})}
     long = _long_white(each, blacks, white) if u.get("movie") and not filled else None
     if long:
         out["long"] = long
@@ -5951,7 +5965,7 @@ def movie_disk(scale, rect, k, radius, unturn=None):
     the body's centre): {"disk": (x, y, radius) px} for a scale whose detail is Saturn's lit one (detail_how), as is
     otherwise; not on a frame drawn as Cassini took it (unturn: follow_view's own axes)"""
     how = scale.get("detail_how") or {}
-    if not how.get("lit") or unturn or not radius:
+    if not how.get("lit") or unturn or not radius or how.get("nodisk"):
         return scale
     return dict(scale, disk=(-rect[0] * k, -rect[1] * k, radius * k))
 
@@ -5976,6 +5990,9 @@ SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown 
     "C": SATURN_LOOK,
     "D": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6},
     "F": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6, "chroma": 1.4},
+    "L": {"detail": 2.0, "sigma": 0.6},
+    "L3": {"detail": 3.0, "sigma": 0.6},
+    "M": {"headroom": 1.25, "match": True, "detail": 2.0, "sigma": 0.6, "nodisk": True},
 }
 SATDEF = os.environ.get("CASSINI_SATDEF", "")
 DETAIL_LIT = (0.15, 0.35)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
