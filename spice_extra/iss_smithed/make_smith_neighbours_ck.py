@@ -1,8 +1,8 @@
 """JPL's C-smithed pointing (*_ISS.bc, one segment per image) carried over to every frame of the same observation that
 has none, so no observation mixes corrected and raw pointing (Sam 11-16: a sequence must never switch pointing
 source). As make_neighbours_ck.py carries USGS's: E = C_iss(t0) C_raw(t0)^T at the observation's smithed frames,
-applied to the raw attitude at the frame's own time; between two smithed frames E is interpolated (slerp) by time,
-before the first or after the last the nearest one's is taken. Frames USGS or its neighbours CK cover are left out.
+applied to the raw attitude at the frame's own time, faded with time distance (HOLD, FADE) and blended (slerp)
+between the smithed frames either side. Frames USGS or its neighbours CK cover are left out.
 Writes one CK (type 3, a second round each mid-exposure time) and its frame list (.lis).
 
     python spice_extra/iss_smithed/make_smith_neighbours_ck.py spice_extra/iss_smithed/ISS_smithed_neighbours_ck.bc [years]
@@ -11,6 +11,7 @@ import collections, contextlib, io, os, sys, time, bisect
 import numpy as np, pandas as pd, spiceypy as sp
 ROOT = os.getcwd(); sys.path.insert(0, ROOT)
 os.environ["CASSINI_USGS_TITAN"] = "0"
+os.environ["CASSINI_ISS_NEIGHBOURS"] = "0"   # the raw attitude, not this CK's own earlier answer
 import bootleg_autonav as ba
 OUT = sys.argv[1]; YEARS = {int(y) for y in sys.argv[2].split(",")} if len(sys.argv) > 2 else None
 PAD, BODY = 0.5, "CASSINI_SC_COORD"
@@ -26,26 +27,62 @@ def year_kernels(year):
     return [f for f in iss if f.lower().endswith("_iss.bc")]
 
 
+HOLD, FADE = 600.0, 10800.0   # s: a correction is carried whole this far from its C-smithed frame, then fades with this
+#                              time constant (gone by ~3 h). Measured on 22,000 C-smithed frames of 2005/2008/2011/2015,
+#                              one frame's correction applied to another of its observation at its pointing (raw: a
+#                              median 20 NAC px off): carried whole, a median 6 px under a minute, 9 px to 10 min, 10 px
+#                              to 1 h, 11 px to 6 h (raw 21), worse than raw for 16-28%; faded with 3 h, 13.5 px at 1-6
+#                              h, worse than raw for 20% (the 30 min of an earlier trial gave back most of the gain)
+
+
+def _toward(qa, qb, w):
+    """slerp from quaternion qa to qb by w."""
+    if qa @ qb < 0:
+        qb = -qb
+    om_ = np.arccos(np.clip(qa @ qb, -1.0, 1.0))
+    if om_ < 1e-12:
+        return qa
+    q = (np.sin((1 - w) * om_) * qa + np.sin(w * om_) * qb) / np.sin(om_)
+    return q / np.linalg.norm(q)
+
+
+ONE = np.array([1.0, 0.0, 0.0, 0.0])
+SAME_POINTING = np.radians(0.15)   # rad: and a correction is carried to any frame of the observation within this of its
+#                                    frame's attitude (a pointing the observation comes back to)
+POINTING_STEP = np.radians(0.1)   # rad: a turn this big or more between one frame of an observation and the next starts a
+#                                   new pointing (a mosaic's next tile: a NAC frame is 0.35 deg, a WAC frame 3.5); a
+#                                   correction is carried only within its pointing, however far the camera drifts along it
+#                                   (a movie following its target, a ring movie creeping across the rings)
+
+
+def _turn(a, b):
+    """The angle (rad) between two attitude matrices."""
+    r = np.asarray(a) @ np.asarray(b).T
+    return float(np.arccos(np.clip((np.trace(r) - 1) / 2, -1.0, 1.0)))
+
+
+def _faded(E, dt):
+    """Correction E (a rotation) carried dt seconds from its frame: whole to HOLD, then faded towards none."""
+    w = 1.0 if dt <= HOLD else float(np.exp(-(dt - HOLD) / FADE))
+    return _toward(ONE, np.array(sp.m2q(E)), w)
+
+
 def slerp_error(refs, t):
-    """The error rotation at t from an observation's (time, E) list: interpolated between the two either side, else
-    the nearest end's."""
+    """The error rotation at t from an observation's (time, E) list: each C-smithed frame's correction faded by its
+    distance in time (_faded), then the two either side of t blended by where t falls between them (slerp); before
+    the first or after the last, the nearest one's alone. Smooth in time: no frame switches basis abruptly."""
     times = [a for a, b in refs]
     k = bisect.bisect_left(times, t)
     if k == 0 or k == len(refs):
-        return refs[0 if k == 0 else -1][1]
+        ta, ea = refs[0 if k == 0 else -1]
+        return sp.q2m(_faded(ea, abs(t - ta)))
     (ta, ea), (tb, eb) = refs[k - 1], refs[k]
-    qa, qb = np.array(sp.m2q(ea)), np.array(sp.m2q(eb))
-    if qa @ qb < 0:
-        qb = -qb
-    w = (t - ta) / (tb - ta)
-    om_ = np.arccos(np.clip(qa @ qb, -1.0, 1.0))
-    q = qa if om_ < 1e-12 else (np.sin((1 - w) * om_) * qa + np.sin(w * om_) * qb) / np.sin(om_)
-    return sp.q2m(q / np.linalg.norm(q))
+    return sp.q2m(_toward(_faded(ea, t - ta), _faded(eb, tb - t), (t - ta) / (tb - ta)))
 
 
 # pass 1: the error rotation at every smithed frame, by observation, over the whole mission (an observation can run
 # across a new year: ISS_055RF_FMOVIE001_VIMS, 2007-2008)
-errors_by_obs, smithed_frames, ets = collections.defaultdict(list), set(), {}
+errors_by_obs, smithed_frames, ets, raws = collections.defaultdict(list), set(), {}, {}
 for year, rows in index.groupby("year"):
     if YEARS and year not in YEARS: continue
     iss = year_kernels(year)
@@ -63,12 +100,33 @@ for year, rows in index.groupby("year"):
             try: good[f] = sp.pxform("J2000", BODY, ets[f])
             except Exception: pass
     for f in iss: sp.unload(f)
+    for f in rows["frame"]:
+        try: raws[f] = np.asarray(sp.pxform("J2000", BODY, ets[f]))
+        except Exception: pass
     obs_of = dict(zip(rows["frame"], rows["OBSERVATION_ID"]))
     for f, g in good.items():
-        try: errors_by_obs[obs_of[f]].append((ets[f], g @ sp.pxform("J2000", BODY, ets[f]).T))
-        except Exception: pass
-for refs in errors_by_obs.values():
+        if f in raws:
+            errors_by_obs[obs_of[f]].append((ets[f], g @ raws[f].T, f))
+# each observation's pointings: its frames in time order, a new pointing wherever the raw attitude turns POINTING_STEP
+# or more from one frame to the next
+pointing_of, cos_step = {}, 1 + 2 * np.cos(POINTING_STEP)
+for o, g in index[index["OBSERVATION_ID"].isin(errors_by_obs)].groupby("OBSERVATION_ID"):
+    fs = sorted((ets[f], f) for f in g["frame"] if f in raws)
+    k, prev = 0, None
+    for t, f in fs:
+        if prev is not None and np.einsum("ij,ij->", raws[prev], raws[f]) < cos_step:
+            k += 1
+        pointing_of[f], prev = k, f
+refs_by = collections.defaultdict(list)   # (observation, pointing) -> [(time, E)] in time order
+for o, refs in errors_by_obs.items():
+    for t, E, f in refs:
+        if f in pointing_of:   # (a frame id the index lists twice keeps the pointing of its last row)
+            refs_by[(o, pointing_of[f])].append((t, E))
+for refs in refs_by.values():
     refs.sort(key=lambda r: r[0])
+ref_list = {o: [(t, E) for t, E, f in refs] for o, refs in errors_by_obs.items()}
+ref_raws = {o: np.array([raws[f] for t, E, f in refs]) for o, refs in errors_by_obs.items()}
+cos_same = 1 + 2 * np.cos(SAME_POINTING)
 
 # pass 2: every other frame of those observations takes the raw attitude turned by its observation's error
 if os.path.exists(OUT): os.remove(OUT)
@@ -79,9 +137,20 @@ for year, rows in index.groupby("year"):
     year_kernels(year)
     records = []
     for f, o in zip(rows["frame"], rows["OBSERVATION_ID"]):
-        refs = errors_by_obs.get(o)
-        if not refs or f in smithed_frames or f in skip: continue
-        t = ets[f]; E = slerp_error(refs, t)
+        if f in smithed_frames or f in skip or f not in pointing_of: continue
+        # only from C-smithed frames of the same pointing: the attitude error changes with the attitude, so a mosaic's
+        # tile at another pointing took a correction that did not fit it (the Grand Finale ring mosaic HIPHASEFA's
+        # panels and ring steps, Earth Smiled's gray E-ring panel)
+        # (and from those of a pointing the observation comes back to: a mosaic movie's laps, whose first lap may be
+        # C-smithed and the next ones not; the 2004 approach movie 2X2MOVIEA001's raw laps sat 40 px off its own
+        # C-smithed laps at the same pointings)
+        near = dict(refs_by.get((o, pointing_of[f]), ()))
+        same = np.einsum("nij,ij->n", ref_raws[o], raws[f]) >= cos_same
+        near.update((t0, E) for (t0, E), ok in zip(ref_list[o], same) if ok)
+        near = sorted(near.items())
+        if not near: continue
+        t = ets[f]
+        E = slerp_error(near, t)
         try: cs = [E @ sp.pxform("J2000", BODY, t + d) for d in (-PAD, 0.0, PAD)]
         except Exception: continue
         records.append((f, t, cs))
@@ -92,3 +161,5 @@ for year, rows in index.groupby("year"):
     print(f"{year}: {len(records)} frames carried over ({time.time()-t0:.0f} s)", flush=True)
 sp.ckcls(handle); ba.unload_kernels()
 open(OUT[:-3] + ".lis", "w").writelines(f + "\n" for f in written)
+# and the frames JPL's own per-image pointing covers (bootleg_autonav.own_pointing_frames)
+open(os.path.join(os.path.dirname(OUT), "ISS_smithed_frames.lis"), "w").writelines(f + "\n" for f in sorted(smithed_frames))

@@ -23,6 +23,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 os.environ["CASSINI_USGS_TITAN"] = "0"  # the mission kernels only; the USGS CK is loaded by hand below
+os.environ["CASSINI_ISS_NEIGHBOURS"] = "0"   # (nor the ISS neighbours CK: the raw attitude)
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import spiceypy as sp  # noqa: E402
