@@ -1,9 +1,9 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `a8beb73e` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `88810ec2` (the last commit before the map commit), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 69 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546 and #536), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 13 follow-up merges of reviewed new heads (#546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
-**Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527 (not ready: rework and a new taste call). #530 and #533 went in after their reviews cleared.
+**In it:** 70 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536 and #527), each as its own merge commit at its reviewed READY head, plus 4 integration commits (one code fix, three test-only) and 13 follow-up merges of reviewed new heads (#546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
 1. **#483 x #491 stacking** (`image_correction.stack_frames`, `stacking.load_stacked`): #483's plain polarizer stack and #491's full-depth stack touch the same lines. The combined code is the 491 author's own trial rebase (branch `claude/full-depth-on-484`, 9b41e801). 491's later commits do not touch these files. Reviewed as correct (merge a0c25f1f).
@@ -13,6 +13,7 @@
 
 ### Tests (cloud run of all 196 test files at fb4c4a6b, then test_processing_steps again after #542)
 - **All tests the branch's PRs touch pass.** The 10 failures left all fail on main too (cloud environment or older failures, not this branch): test_farm (no rsync here), test_cisscal_noise, test_mosaic_layout, test_pass_once, test_prebuild_planes, test_prebuild_procs, test_prebuild_slices, test_film_steady, test_tossup_both, test_steady_local (the cloud disk filled). The other 186 pass.
+- **Since #543 (merge f0ac28f5): test_steady_local stops at KeyError 'sets'.** #543's wider auto_steady takes the test's synthetic pass (no measured pointing, linked chain) off the page, so _steady_table returns {"local": False}. Owner: the pointing thread (pin _raw_pointing in the test, or rethink page drawing for raw-pointing passes). test_steady_local's older LUT failure here is environmental.
 - Fixed along the way by the PRs' reviewed new heads, merged on top: #524 test_segment_progress, #488 test_contracts, #483 test_sets_passes (pandas 3), #508 test_set_matching, #506 test_color_register; #542 fixes test_processing_steps (which failed on main from #525).
 - Merge interactions fixed with test-only integration commits: test_repeat_range (#497 x #491) and test_calibration_let_go (#533 x #481/#524).
 
@@ -29,10 +30,10 @@ How to read this:
 - Base: main 85d2a2a9 (the full cache was built at f9ab1b4; main since then adds #475, #477, #478, #485 and #525).
 
 ## No-pixel PRs (rule these out first)
-#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, and the three integration commits
+#474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, and the four integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -146,3 +147,7 @@ How to read this:
 | 99 | Picture-change map (docs) | `1b46fc21` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
 | 100 | [#536](https://github.com/siacavazzi/Cassini-Project/pull/536) A narrow-angle movie frame's black measured without the pixels it lost in downlink
  | `a8beb73e` | **YES** | A narrow-angle movie frame's own black is measured without the pixels it lost in downlink (wide-angle frames as before): 133TI CLOUD002 no longer flickers between two colors, 207SA NHEMMOV001's near-black frames are back. Benchmark 50 of 51 identical; approach-movie changed by at most 12 levels. | Every narrow-angle movie pass with lost pixels (obs bump renames all passes anyway); levels tables. | export-v119, levels-v81, obs-v131/v114 | - | resolved by hand: calibration.load_channels takes both deep (#491) and valid (#536); color_image keeps #491's deeps beside #536's unfilled masks (deeps filtered with the kept channels too, deep= and valid= both passed); obs VERSIONS by hand: #536 renumbered to obs-v131/v114/v100; export-v119, levels-v81 |
+| 101 | Picture-change map (docs) | `789c1cee` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 102 | [#527](https://github.com/siacavazzi/Cassini-Project/pull/527) Saturn look: option L, revised (taste call 3)
+ | `2bd6809c` | **YES (Saturn only)** | Saturn look, revised option L (taste call 3): on Saturn's atmosphere (not ring observations) today's brightness with lit local contrast (0.6) on top where detail() ran, no disk limit, capped at level 250; passes and pictures the camera saturated over 0.2% keep today's look. Saturn's mosaics, movies, stills and composites move to new _sl2-tagged names (no obs bump); page port of the detail in steady-local.html. | Saturn's (non-ring) passes, stills, composites and thumbnails; levels tables. | export-v120, levels-v82, thumb-v37 | - | resolved (author trial merge bd2fb015, reviewed): folder suffix ONE_PAIR/POLARIZED, REPOINTED, then SATURN_TAG; frame_name(id) + saturn_name([id]) in processed_webp and the hdr route; so_far keeps #528 _last_canvas/_sized with detail(..., on_disk); page export list both, setPicture then ringWhite; clip key dropped by 527 itself (986cc6b8); export-v120, levels-v82, thumb-v37. Then integration test commit 88810ec2 (test_processing_steps expects SATURN_TAG) |
+| 103 | Integration fix (#527 x #542, test) | `88810ec2` | no | Integration commit: test_processing_steps expects a Saturn pass's SATURN_TAG (#527 x #542). Test only. | Nothing. | none | - | integration commit |
