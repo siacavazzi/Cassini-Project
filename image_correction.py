@@ -531,7 +531,7 @@ RIDGE_STEP = 6.0      # px either side of the best move where the fall is measur
 RIDGE_SHARP = 0.05    # the least fall across the ridge ...
 RIDGE_FLAT = 0.02     # ... and the most along it
 RIDGE_LEAST = 0.5     # the least agreement on the ridge
-RIDGE_SECOND = 0.1    # how much lower a parallel ridge must stand
+RIDGE_SECOND = 0.2    # how much lower a parallel ridge must stand (a sure pair with one 0.12 lower was 2.3 px off across)
 
 
 def _bilinear(S, x, y):
