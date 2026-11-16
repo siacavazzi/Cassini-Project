@@ -1,0 +1,2 @@
+evened frames: 180 with their other picture kept; 48 meet the rule (gain exactly 1); of those 48 have the same picture, report and recovery map to the bit; 4 more are the same picture without meeting it (drawn as before)
+planes: 260 with their other picture kept; 192 meet the rule (color frame drawn grey of the same held frame); of those 192 have the same picture, report and recovery map to the bit; 0 more are the same picture without meeting it (drawn as before)
