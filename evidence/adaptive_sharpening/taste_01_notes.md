@@ -2,10 +2,6 @@
 
 Every centred still and color composite gets today's close-up detail filter (strength 2.0) on the body's SPICE disk, then noise-aware fine sharpening at 1.6 or 2.4 (it backs off by itself on grainy, stretched or lossy frames). Pictures not centred on a body (rings, close-ups, sky) get the fine sharpening only; Saturn is left out of the disk filter. Mosaics and movie passes are unchanged. Pictures: main's own pipeline, finished with the branch's steps.
 
-All 27 sheets were rendered again with PR #495's latest head (2026-11-16 08:30Z); these are the current pictures and older copies are superseded. Changed since the first upload: the open-sky moons (1-7, 10, 13, 16-19, 23, 24), whose disk detail now follows the lit body rather than SPICE's circle, and the moons with Saturn or rings behind them (20, 21, 26, 27).
-
-Moons in front of Saturn's disk or at its limb, or beside a ring arc (20, 21, 26, 27), are deliberately left plainer: they get the fine sharpening only, not the disk detail filter. SPICE's outline of a moon is 5 to 10 pixels off the moon's real edge on some frames, and wherever the filter's edge strayed onto a lit backdrop it drew a dark arc on Saturn or a second limb inside the moon. When the backdrop is much dimmer than the moon (Enceladus before Saturn's night side, 22), it counts as sky and the moon gets the filter.
-
 - taste_01_icy-moon-enceladus_1.jpg: Enceladus close-up, single frame (2015). Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.
 - taste_01_icy-moon-rhea-color_2.jpg: Rhea full disk, color composite. Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.
 - taste_01_icy-moon-mimas-2x2_3.jpg: Mimas, 2x2 summed frame. Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.

@@ -114,6 +114,17 @@ def test_detail_on_disk():
     oq = om.detail_on_disk(pq, cx, cy, R, target="DIONE")
     assert np.abs(oq[..., 0][arc].astype(int) - pq[..., 0][arc]).max() == 0
     assert (oq[..., 0][diskb] != pq[..., 0][diskb]).mean() > 0.5
+    # small round moons over open sky take the filter at any SPICE error up to 10 px (review of #495)
+    for rs in (10.0, 20.0, 60.0):
+        for off in (0, 5, 10):
+            mx = cx + off
+            m2 = (xx[:h, :w] - mx) ** 2 + (yy[:h, :w] - cy) ** 2
+            dm = m2 <= rs * rs
+            lm = np.where(dm, 120 + 50 * (xx[:h, :w] - mx) / rs + 10 * np.sin(xx[:h, :w] / 1.5) * np.sin(yy[:h, :w] / 1.7), 4.0)
+            pm = np.dstack([np.clip(lm, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+            om_ = om.detail_on_disk(pm, cx, cy, rs, target="MIMAS")
+            assert (om_[..., 0][dm] != pm[..., 0][dm]).mean() > 0.2, (rs, off)
+            assert (om_[..., 0][~dm & (m2 > (rs + 3) ** 2)] == pm[..., 0][~dm & (m2 > (rs + 3) ** 2)]).all(), (rs, off)
     # an elongated moon over black sky: its far ends (past 1.15 x its mean radius) are raised too
     ell = ((xx[:h, :w] - cx) / (1.33 * r)) ** 2 + ((yy[:h, :w] - cy) / (0.75 * r)) ** 2 <= 1
     le = np.where(ell, 120 + 10 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3), 4.0)
