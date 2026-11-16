@@ -1,18 +1,9 @@
-# Taste call 3: Saturn atmosphere, option C as default
+# Taste call 3, revised option L (after review: no disk limit, brightness as today)
 
-- taste_03_2007-full-disk-rings_1.jpg: 2007-08-03 WAC colour movie frame, full disk with the rings edge-on across it (048SA APOMOVIEC001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2011-storm-close_2.jpg: 2011-03-06 NAC colour movie frame, close-up of the Great Storm's vortex and cloud streaks (146SA HIRESGLOB001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2013-hexagon_3.jpg: 2013-06-26 WAC colour movie frame, north polar hexagon and small storms, polar view (193SA NPOLMOV001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2005-methane-rings_4.jpg: 2005-02 WAC methane false colour (MT2, CB2, MT3) movie frame, lit rings crossing the disk (003SA 3X3MOVIEA002). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2007-methane-limb_5.jpg: 2007-08-03 NAC CB2 + MT1 two-filter movie frame, high-latitude limb (048SA APOMOVIEC001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2014-close-terminator_6.jpg: 2014-09-01 NAC CB3 + MT3 close-up near the terminator, low light (207SA NHEMMOV001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2004-approach-still_7.jpg: 2004-02 NAC single picture (camera window still) on approach, full disk and rings. Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2011-storm-still_8.jpg: 2011-02-25 NAC colour composite still of the Great Storm (bench item storm-composite frame). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2017-south-wac_9.jpg: 2017-08-21 WAC movie frame, southern hemisphere with saturated ring patches already white today (289SA SHEMMAP001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2016-rings-stare_10.jpg: 2016-04-26 WAC colour movie frame, full disk inside lit rings, north pole hexagon (235SA SATSTARE001); option C changes the disk only, the rings stay as today. Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2011-storm-wac_11.jpg: 2011-07-12 WAC colour movie frame of the storm, one filter saturated at the top: a pass the camera saturated this much keeps today's white under option C (the lime cap is as today), and gets only the local contrast (150SA NHEMMOVIE001). Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2004-approach-movie_12.jpg: 2004-09 NAC approach movie frame, mostly night side and rings (00ASA 2X2MOVIEA001): little changes, as intended for dim scenes. Left today, right option C (headroom and local contrast on Saturn's disk only; rings, sky and moons as today).
-- taste_03_2012-polar-vortex-still_13.jpg: 2012-11-27 NAC colour composite still of the north polar vortex (175SA NPOLVORT001), from the image benchmark. Left today, right option C.
+Each sheet: Today | Option L revised. The local contrast is applied to every lit area (disk and rings alike, no disk mask, so no box where a ring crosses the disk), and it is capped at level 250 so it never clips. Passes that already had today's sharpening keep it, with a gentler (0.6) local contrast on top. Pictures the camera saturated (over 0.2% white) keep today's look.
 
-## Sub-choice: rings under option C
-- taste_03_sub-rings_*_1..4.jpg: Today | C1 headroom everywhere | C2 headroom on Saturn's disk only. C1 is seamless but makes the rings (and anything else in the frame) about a fifth to a third darker. C2 keeps the rings at today's brightness, but where a ring arc crosses in front of the disk it takes the disk's darker headroom, which shows as a darker patch on that part of the ring (clearest at the bottom of the 2016 stare). The PR ships C2; switching to C1 is one setting.
+- taste_03_v3_2016-rings-stare.jpg: 2016 WAC colour with lit rings. Lit-area brightness 135 vs 135; the rings come out a touch crisper (ringlets), about the same brightness.
+- taste_03_v3_2016-rings-crop.jpg: 2.5x crop of those rings, today vs L. A faint tile seam in the ring is a little more visible.
+- taste_03_v3_2007-full-disk-rings.jpg: 2007 WAC full disk, belts brought out, brightness 162 vs 162.
+- taste_03_v3_2011-storm-close.jpg: 2011 NAC storm close-up, brightness 186 vs 186; more cloud detail and some more grain.
+- taste_03_v3_2013-hexagon.jpg: 2013 WAC hexagon, polar view, brightness 133 vs 133.
