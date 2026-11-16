@@ -68,7 +68,7 @@ def _faded(E, dt):
 
 
 NEAREST = 5   # a carried frame takes the median correction of this many C-smithed frames nearest it in time
-AGREE_PX = 5.0   # and only where they agree: their median distance from that median at most this many of the frame's
+AGREE_PX = 2.5   # and only where they agree: their median distance from that median at most this many of the frame's
 #                  own pixels; where JPL's own corrections scatter more (ring mosaics: tens of px), no carried value is
 #                  better than raw, and the frame keeps its raw pointing (the mosaic's joint solve places its tiles)
 PIXEL = {"N": 6.0e-6, "W": 6.0e-5}   # rad per pixel, NAC and WAC
