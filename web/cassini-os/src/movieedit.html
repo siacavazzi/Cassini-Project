@@ -354,9 +354,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // each picture's body radius, full resolution px (null where the catalog has no scale or the body no size)
   let catIds = null, catOf = null, smallSig = "", smallWas = false, smallPx = 0;
   function radiusPx(id) {
-    if (typeof catalog === "undefined" || !catalog || !catalog.km_per_px || typeof bodies === "undefined") return null;
+    if (typeof catalog === "undefined" || !catalog || !catalog.range_km || typeof bodies === "undefined") return null;
     if (catOf !== catalog) { catOf = catalog; catIds = new Map(catalog.id.map((v, k) => [v, k])); }
-    const k = catIds.get(id), b = k == null ? null : bodies[String(catalog.target[k] || "").toUpperCase()], kp = k == null ? 0 : +catalog.km_per_px[k];
+    // (on the 1024 px grid, from the distance to the body's center: the catalog's km_per_px is the label's, one of the
+    // frame's own pixels at the ground in its middle, summed frames 2 or 4 times as coarse)
+    const k = catIds.get(id), b = k == null ? null : bodies[String(catalog.target[k] || "").toUpperCase()];
+    const kp = k == null || !catalog.range_km ? 0 : +catalog.range_km[k] * (catalog.cam[k] === "W" ? 5.9907e-5 : 5.9897e-6);
     return b && b.radii && kp > 0 ? b.radii.reduce((a, v) => a + v, 0) / b.radii.length / kp : null;
   }
   function smallFilm() {
