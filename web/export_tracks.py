@@ -273,13 +273,16 @@ def pointings(geometry, ids):
     target: bootleg_autonav.shown_targets), for the frames the geometry cache (CASSINI_GEOMETRY_CACHE) placed."""
     if not geometry or not os.path.exists(geometry):
         return {}
-    import sqlite3
+    import sqlite3, sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    from bootleg_autonav import GEOMETRY_VERSION   # (the rows stacking.places reads: this version's only)
     db, out = sqlite3.connect(f"file:{geometry}?mode=ro", uri=True), {}
     ids = list(ids)
     for k in range(0, len(ids), 900):
         part = ids[k:k + 900]
-        for f, x, y, t in db.execute(f"SELECT frame, x, y, target FROM target WHERE error IS NULL AND x IS NOT NULL "
-                                     f"AND frame IN ({','.join('?' * len(part))})", part):
+        for f, x, y, t in db.execute(f"SELECT frame, x, y, target FROM target WHERE version = ? AND error IS NULL "
+                                     f"AND x IS NOT NULL AND frame IN ({','.join('?' * len(part))})",
+                                     (GEOMETRY_VERSION, *part)):
             out[f] = (math.hypot(x, y), t)
     return out
 
@@ -304,6 +307,8 @@ def export_catalog(kdir, out, index_csv, years, data=None, geometry=None):
     mks = {int(re.search(r"cas_(\d{4})", m).group(1)): m for m in glob.glob(f"{kdir}/mk/*.tm")}
     ifov = {"ISSNA": 5.9907e-6, "ISSWA": 5.9907e-5}
     summed = summing(data, df.path)
+    print(f"summing: {sum(v == 2 for v in summed.values())} SUM2 and {sum(v == 4 for v in summed.values())} SUM4 frames "
+          f"of {len(df)} ({len(summed)} labels read{'' if summed else ': no archive, km/px at full resolution'})", flush=True)
     summary = {}
     for year in years:
         # stable, with the path as tie-break, so frames taken at the same instant keep one order on every machine
@@ -311,6 +316,9 @@ def export_catalog(kdir, out, index_csv, years, data=None, geometry=None):
         if not len(sub) or year not in mks:
             continue
         furnish_year(kdir, mks[year])
+        if summed and len(sub) >= 1000 and not any(summed.get(p, 1) > 1 for p in sub.path):
+            # (every year from 1999 on took thousands of summed frames: none read means the labels were not found)
+            raise SystemExit(f"catalog {year}: no summed frame among {len(sub)} labels read: are the index paths the archive's?")
         placed = pointings(geometry, (os.path.splitext(os.path.basename(p))[0] for p in sub.path))
         radii = {}
 
