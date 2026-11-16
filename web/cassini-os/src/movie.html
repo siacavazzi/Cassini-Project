@@ -140,7 +140,9 @@
     if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
     if ((e.key === "m" || e.key === "M") && e.target === document.body) toggle();
     else if (!M.on) return;
-    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
+    // a full camera window's strip steps its own picture with the arrows (head-quiet.html) and says so by
+    // preventDefault: one key press, one step
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") { if (e.defaultPrevented) return; e.preventDefault(); step(e.key === "ArrowRight" ? 1 : -1); }
     else if (e.key === "Escape" && !document.querySelector(".menu.open, .win.full")) stop();
   });
   const go = $("gomenu");
