@@ -276,8 +276,17 @@ def _handed_folder():
             _handed_state["root"] = None   # (cannot be made: no files, as without a folder)
             return None
         _handed_state["folder"] = folder
-        atexit.register(shutil.rmtree, folder, True)
+        atexit.register(_tidy, folder, _handed_state["root"])
     return _handed_state["folder"]
+
+
+def _tidy(folder, root):
+    """(as the process ends) Its folder of filed merges removed, and the folder they are all in once it is empty."""
+    shutil.rmtree(folder, True)
+    try:
+        os.rmdir(root)
+    except OSError:
+        pass
 
 
 def _file_room():
