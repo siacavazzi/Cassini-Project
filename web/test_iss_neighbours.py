@@ -18,7 +18,7 @@ import bootleg_autonav as ba  # noqa: E402
 ck = ba.extra_kernels()[0]
 assert os.path.basename(ck) == ba.ISS_NEIGHBOURS_CK
 frames = ba.iss_neighbours_frames()
-assert len(frames) > 50000 and not frames & ba.usgs_titan_frames(), len(frames)
+assert len(frames) > 20000 and not frames & ba.usgs_titan_frames(), len(frames)
 assert list(sp.ckobj(ck)) == [-82000]
 handle, ids = sp.dafopr(ck), []
 sp.dafbfs(handle)

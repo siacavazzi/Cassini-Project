@@ -68,11 +68,15 @@ def _faded(E, dt):
 
 
 NEAREST = 5   # a carried frame takes the median correction of this many C-smithed frames nearest it in time
-AGREE_PX = {"N": 5.0, "W": 2.5}   # and only where they agree: their median distance from that median at most this
-#                  many of the frame's own pixels (NAC 30 urad, WAC 150 urad); where JPL's own corrections scatter more
-#                  (the WAC ring mosaics: tens of px), no carried value is better than raw, and the frame keeps its raw
-#                  pointing (the mosaic's joint solve places its tiles). The NAC's 5 keeps the 2005-04-13 ring movie
-#                  carried; the WAC's 2.5 leaves the Grand Finale ring mosaic HIPHASEFA as it was
+MIN_REFS = 3  # and never fewer: one or two corrections cannot show whether JPL agrees with itself
+AGREE_PX = {"N": 5.0, "W": 2.5}   # and only where they agree: all of them but one (an outlier JPL navigated off)
+#                  within this many of the frame's own pixels of their median (NAC 30 urad, WAC 150 urad). Where
+#                  JPL's own corrections scatter more, no carried value is better than raw, and the frame keeps its raw
+#                  pointing (a mosaic's joint solve places its tiles). The WAC ring mosaics scatter by tens of px
+#                  (ISS_260RI_HIPHASEFA001: 2 to 76 px, one 482 px); in Day the Earth Smiled (195RI HIPHASEC001) a
+#                  tile's GRN, BL1 and IR3 corrections sat 25-40 px from its RED frame's 7 px, and a median-only test
+#                  passed them, so the carried RED frame landed 20 px from its own filter's and the limb doubled.
+#                  The NAC's 5 keeps the 2005-04-13 ring movie carried.
 PIXEL = {"N": 6.0e-6, "W": 6.0e-5}   # rad per pixel, NAC and WAC
 
 
@@ -83,12 +87,14 @@ def _rotvec(E):
 
 def _agreed(refs, k, cam):
     """The median correction (a rotation) of the NEAREST C-smithed frames around refs[k] in time, or None where they
-    do not agree within AGREE_PX."""
+    do not agree within AGREE_PX (all but one of them) or are fewer than MIN_REFS."""
     tk = refs[k][0]
     near = sorted(refs, key=lambda r: abs(r[0] - tk))[:NEAREST]
+    if len(near) < MIN_REFS:
+        return None
     vs = np.array([_rotvec(E) for _, E in near])
     v = np.median(vs, axis=0)
-    if np.median(np.linalg.norm(vs - v, axis=1)) > AGREE_PX[cam] * PIXEL[cam]:
+    if np.sort(np.linalg.norm(vs - v, axis=1))[-2] > AGREE_PX[cam] * PIXEL[cam]:
         return None
     a = float(np.linalg.norm(v))
     return sp.axisar(v / a, a) if a > 0 else np.eye(3)
@@ -199,5 +205,5 @@ for year, rows in index.groupby("year"):
     print(f"{year}: {len(records)} frames carried over, {scattered} left raw where JPL's corrections scatter ({time.time()-t0:.0f} s)", flush=True)
 sp.ckcls(handle); ba.unload_kernels()
 open(OUT[:-3] + ".lis", "w").writelines(f + "\n" for f in written)
-# and the frames JPL's own per-image pointing covers (bootleg_autonav.own_pointing_frames)
+# and the frames JPL's own per-image pointing covers (a list for the stabilization trigger to come; nothing reads it yet)
 open(os.path.join(os.path.dirname(OUT), "ISS_smithed_frames.lis"), "w").writelines(f + "\n" for f in sorted(smithed_frames))

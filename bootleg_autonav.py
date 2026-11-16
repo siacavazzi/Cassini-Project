@@ -122,24 +122,6 @@ def usgs_neighbours_frames():
         return {line.strip() for line in f if line.strip()}
 
 
-_own_frames = None
-
-
-def own_pointing_frames():
-    """Frame ids whose pointing was measured on the picture itself: JPL's per-image C-smithed segments
-    (iss_smithed/ISS_smithed_frames.lis) and USGS's Titan images. Every other frame has the reconstructed attitude
-    (carried over or not), which jitters about 5 NAC px frame to frame (median, p90 9.5 against moons in the pictures),
-    so a movie holding any such frame is stabilized on its pictures by default (obs_mosaic.auto_steady)."""
-    global _own_frames
-    if _own_frames is None:
-        _own_frames = set()
-        for path in (os.path.join(ISS_NEIGHBOURS_DIR, "ISS_smithed_frames.lis"), os.path.join(USGS_TITAN_DIR, "images.lis")):
-            if os.path.exists(path):
-                with open(path) as f:
-                    _own_frames |= {line.strip() for line in f if line.strip()}
-    return _own_frames
-
-
 def extra_kernels():
     iss = [os.path.join(ISS_NEIGHBOURS_DIR, ISS_NEIGHBOURS_CK)] if iss_neighbours_on() else []
     if not usgs_titan_on():
