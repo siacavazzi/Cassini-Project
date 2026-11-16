@@ -76,6 +76,15 @@ def test_spice_sure_net_of_the_filters():
     assert ic.spice_shift(blank, blank, mask, mask, (float(g[0]), float(g[1])))[0] is None
 
 
+def test_guess_copies_and_pickles():
+    import copy
+    import pickle
+    import image_correction as ic
+    g = ic.Guess(1.5, -2.0, (2.1, -1.4))
+    for h in (copy.copy(g), copy.deepcopy(g), pickle.loads(pickle.dumps(g))):
+        assert tuple(h) == (1.5, -2.0) and h.fixed == (2.1, -1.4)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

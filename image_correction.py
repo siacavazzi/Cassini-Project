@@ -736,6 +736,10 @@ class Guess(tuple):
         guess.fixed = (float(fixed[0]), float(fixed[1]))
         return guess
 
+    def __getnewargs__(self):
+        # (copy and pickle make it again from these: tuple's own would pass one argument)
+        return (self[0], self[1], self.fixed)
+
 
 def spice_shift(im1, im2, mask1, mask2, guess):
     gx, gy = float(guess[0]), float(guess[1])

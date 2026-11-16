@@ -916,7 +916,10 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
                 continue
             # SPICE's move of this body from the reference to channel j (the pointing fix the same in both)
             b0, bj = at[ref][name], at[j][name]
-            g = ((bj[1] - b0[1]) * k, (bj[2] - b0[2]) * k)
+            # (plus the WAC filters' own offset between the two channels, WAC_FILTER_OFFSETS, as spice_offsets adds it)
+            fo = filter_offset(lbls[j], lbls[ref])
+            fo = (fo[0] * k, fo[1] * k)
+            g = ic.Guess((bj[1] - b0[1]) * k + fo[0], (bj[2] - b0[2]) * k + fo[1], fo)
             grow = PER_BODY_GROW + PER_BODY_HAZE * b0[3]
 
             def part(im, b, at_):
@@ -936,7 +939,7 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
                 drift[j] = (found[1][0] - g[0], found[1][1] - g[1])
                 shifts.append(found[1])
                 continue
-            g = (g[0] + drift[j][0], g[1] + drift[j][1])
+            g = ic.Guess(g[0] + drift[j][0], g[1] + drift[j][1], fo)
             ic.align_with_masks(pair, [masks[ref].copy(), masks[j].copy()], 0, how, found=found, guess=[None, g],
                                 within=PER_BODY_NEAR * k)
             got = found[1] if found[1] is not None else g

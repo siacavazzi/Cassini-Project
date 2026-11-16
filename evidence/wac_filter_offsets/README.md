@@ -42,7 +42,10 @@ Offsets relative to CL1/GRN, in full resolution px of the frame as drawn (x, y):
 
 Held-out sets: SPICE's offset is a median 2.36 px from the picture match without the table and 1.25 px with it;
 0.37 px on the 2000-2001 Jupiter frames, whose pointing JPL corrected. RED and BL1 hold to 0.3 px from 2000 to 2017.
-VIO, CB2 and MT2 differ by about 1 px between eras, which may be the mix of observations rather than the camera.
+Refitted by era on full resolution frames only (`era_full_frames.py`, `era_full_frames.txt`; the era rows in
+`fit.txt` mixed in summed frames, whose matches lock to whole camera pixels): RED and BL1 stay within 0.2 px of the
+table in every era. CB2, MT2, MT3 and CB3 differ by 0.5 to 0.7 px in 2009-2017 (CB3 1.5 px on 122 matches), but a
+table fitted to each era lines SPICE up only 0.04 to 0.07 px better (median) than the one table, so there is one table.
 
 ## Open points for whoever takes this on
 
