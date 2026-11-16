@@ -105,6 +105,31 @@ def usgs_titan_frames():
                     _usgs_frames |= {line.strip() for line in f if line.strip()}
     return _usgs_frames
 
+
+ISS_SMITHED_FRAMES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spice_extra", "iss_smithed",
+                                  "ISS_smithed_frames.lis")
+_own_frames = None
+
+
+def own_pointing_frames():
+    """Frame ids whose pointing was measured on the picture itself: JPL's per-image C-smithed CK segments
+    (ISS_SMITHED_FRAMES, 98,692 frames, made by make_smith_neighbours_ck.py) and USGS's Titan images with the WAC frames
+    shuttered with them. Every other frame has the spacecraft's reconstructed attitude, carried-over correction or
+    not, which shakes about 5 NAC px from frame to frame (pipeline audit finding 4: median 4.9, p90 9.5 against the
+    moons in the pictures, where JPL's own pointing shakes 0.26), so a movie holding any such frame is stabilized on
+    its pictures by default (obs_mosaic.auto_steady)."""
+    global _own_frames
+    if _own_frames is None:
+        _own_frames = set()
+        paths = [ISS_SMITHED_FRAMES]
+        if usgs_titan_on():
+            paths += [os.path.join(USGS_TITAN_DIR, "images.lis"), os.path.join(USGS_TITAN_DIR, "concurrent.lis")]
+        for path in paths:
+            if os.path.exists(path):
+                with open(path) as f:
+                    _own_frames |= {line.strip() for line in f if line.strip()}
+    return _own_frames
+
 """
 Extracts the SPICE kernels for one year from the zip without loading them
 (does nothing when the data is unzipped)
