@@ -72,7 +72,25 @@ def test_server_applies():
     print("frame_server: stills and composites end in it")
 
 
+def test_detail_on_disk():
+    """the close-up passes' detail filter on a centred still's SPICE disk: a small moon keeps its shading (not raised
+    to flat white against the sky, #304), its craters are raised, the sky and a ring past the limb are not touched"""
+    import obs_mosaic as om
+    h = w = 400; cx = cy = 199.5; r = 40.0
+    r2 = (xx[:h, :w] - cx) ** 2 + (yy[:h, :w] - cy) ** 2
+    disk = r2 <= r * r
+    lum = np.where(disk, 120 + 60 * (xx[:h, :w] - cx) / r + 8 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3), 4.0)
+    px = np.dstack([np.clip(lum, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    out = om.detail_on_disk(px, cx, cy, r)
+    inner = r2 <= (0.8 * r) ** 2
+    assert out[..., 0][inner].mean() < 200 and abs(float(out[..., 0][inner].mean()) - float(px[..., 0][inner].mean())) < 15
+    assert out[..., 0][inner].std() > 1.05 * px[..., 0][inner].std()
+    assert (out[r2 > (1.1 * r) ** 2] == px[r2 > (1.1 * r) ** 2]).all()
+    print("detail on a small disk: shading kept (%.0f vs %.0f), craters raised, the sky untouched" % (out[..., 0][inner].mean(), px[..., 0][inner].mean()))
+
+
 if __name__ == "__main__":
+    test_detail_on_disk()
     test_detail_over_noise()
     test_guards()
     test_grain_and_lossy()

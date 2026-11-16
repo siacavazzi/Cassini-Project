@@ -5902,6 +5902,50 @@ def detail(rgba, sigma):
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
 
 
+DISK_DETAIL_MARGIN = 1.15   # stills (detail_on_disk): the body's mean is taken inside this times its SPICE radius ...
+DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
+DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
+DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
+
+
+def detail_on_disk(rgba, cx, cy, radius, sigma=None):
+    """detail() on a still or composite whose body SPICE places (frame_server.centred): the same raise of the local
+    contrast (DETAIL, DETAIL_EDGE, DETAIL_KNEE), its neighbourhood mean taken over the body's lit pixels only (inside
+    DISK_DETAIL_MARGIN x radius of (cx, cy), DISK_DETAIL_LIT over the sky) and its change only inside the limb,
+    feathered, so a moon smaller than the filter's patch is not raised to flat white against the black sky (why #304
+    kept small centred moons out of it) and no dark ring is drawn round it. rgba: H x W x 2 (LA) or 4, uint8."""
+    import cv2
+    h, w = rgba.shape[:2]
+    if not radius or radius < 4:
+        return rgba
+    sigma = sigma or min(DETAIL_SIGMA * FRAME, DISK_DETAIL_SIGMA * radius)
+    colors = rgba.shape[2] - 1
+    rgb = rgba[..., :colors].astype(np.float32)
+    lum = rgb.mean(axis=2)
+    alpha = rgba[..., colors] > 0
+    yy, xx = np.mgrid[:h, :w]
+    rr = np.hypot(xx - cx, yy - cy).astype(np.float32)
+    circle = rr <= DISK_DETAIL_MARGIN * radius
+    body = lum[circle & alpha]
+    if body.size < 50:
+        return rgba
+    sky = float(np.percentile(lum[alpha], 5))
+    floor = sky + max(6.0, DISK_DETAIL_LIT * (float(np.percentile(body, 90)) - sky))
+    lit = ((cv2.GaussianBlur(lum, (0, 0), 2) > floor) & circle & alpha).astype(np.uint8)
+    lit = cv2.erode(lit, np.ones((3, 3), np.uint8)).astype(np.float32)
+    if lit.sum() < 50:
+        return rgba
+    inside = np.clip((radius * 1.02 - rr) / max(2.0, 0.03 * radius), 0, 1)
+    fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit * inside
+    weight = cv2.GaussianBlur(lit, (0, 0), sigma)
+    mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
+    x = lum - mean
+    d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE)) * fade
+    room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+    out = np.clip(rgb + _soft_detail(d.astype(np.float32), room)[..., None], 0, 255).round().astype(np.uint8)
+    return np.concatenate([out, rgba[..., colors:]], axis=2)
+
+
 def _soft_detail(d, room):
     """detail()'s change d (float32, levels) where a pixel has room levels left in its direction: as it is up to
     DETAIL_KNEE of that room, past it rolled off toward the room's end (over / (over + rest): no step in slope, and
