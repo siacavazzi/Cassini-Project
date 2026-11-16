@@ -4444,7 +4444,10 @@ def _pointing_root(u, n, roots):
     j, seen = _register_to(u, n), {n}
     if j is None:
         return n
-    # (followed to the end: a carried frame lands on a later frame, which may itself land on an earlier one)
+    if not _carried(u):
+        return roots.get(j, j)
+    # (where some frames follow JPL's, _carried, followed to the end: such a frame lands on a later frame, which may
+    # itself land on an earlier one; otherwise as before, the frame registered to, or its root when it has one)
     while j not in roots and j not in seen:
         seen.add(j)
         nxt = _register_to(u, j)
