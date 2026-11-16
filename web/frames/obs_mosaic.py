@@ -2858,10 +2858,14 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         out["headroom"] = saturn_look(u)["headroom"]
     if sat.get("chroma"):
         out["chroma"] = sat["chroma"]
+    if sat.get("detail") and saturn_clipped(sat_share):
+        # (a pass the camera saturated over much of: its local contrast drew a dark ring round the clipped disk, so it
+        # keeps today's look; 2004 approach N1455663489)
+        sat = {}
     if sat.get("detail"):
         # (a pass that had detail() already keeps it off the disk: its rings as they are drawn today, detail_base)
         out["detail_base"] = out["detail"]
-        out["detail"], out["detail_how"] = True, {"strength": sat["detail"], "lit": True,
+        out["detail"], out["detail_how"] = True, {"strength": sat.get("on_base", sat["detail"]) if out["detail_base"] and sat.get("nodisk") else sat["detail"], "lit": True,
                                                   "sigma": sat.get("sigma", 1.0), "grain": sat.get("grain", 0),
                                                   **({"nodisk": True} if sat.get("nodisk") else {})}
     long = _long_white(each, blacks, white) if u.get("movie") and not filled else None
@@ -5976,12 +5980,15 @@ def sharpens(scale):
     return bool(scale.get("detail", scale.get("filled")))
 
 
-SATURN_LOOK = {"detail": 2.0, "sigma": 0.6}
+SATURN_LOOK = {"detail": 2.0, "on_base": 0.6, "sigma": 0.6, "nodisk": True}
                     # Saturn's atmosphere (saturn_look): local contrast this strong (detail) on its lit pixels, over sigma
                     # times DETAIL_SIGMA, so belts, storms and vortices show at today's brightness (option L, 11-16). The
                     # first pick, option C, also gave the white 1.25x "headroom" (the disk's bright half had been rolled
                     # off by the shoulder into a few levels); Sam found it darkened the disk, its shadows and the rings,
-                    # and its disk-only form showed a seam, so the look has no headroom (SATDEF_OPTIONS keeps C and M)
+                    # and its disk-only form showed a seam, so the look has no headroom (SATDEF_OPTIONS keeps C and M).
+                    # nodisk: on every lit pixel, the rings too, never limited to the disk (a disk limit left a box on the
+                    # ring crossing the disk, 2004 approach composite). on_base: on a pass that had detail() before, the
+                    # look's local contrast this strong on top of today's (detail), so its brightness stays today's
 SATURN_TAG = "_sl2"   # (_sl1: option C, never in a kept cache) the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
                       # single picture with it, so only Saturn's own pictures are made again
 SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown on 11-16; "off" none
@@ -5996,6 +6003,7 @@ SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown 
     "M": {"headroom": 1.25, "match": True, "detail": 2.0, "sigma": 0.6, "nodisk": True},
 }
 SATDEF = os.environ.get("CASSINI_SATDEF", "")
+DETAIL_TOP = 250   # detail_how["lit"]: a pixel is raised by the local contrast at most to this level (what is brighter stays)
 DETAIL_LIT = (0.15, 0.35)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
                             # from this share of white to the second (its luminance), so the sky round a planet neither
                             # pulls its limb up into a bright rim nor gets texture of its own, and the glow round a bright
@@ -6065,6 +6073,11 @@ def detail(rgba, sigma, scale=None):
     """detail_core, and for a Saturn look scale on a pass that had detail() before (detail_base) with the body's disk
     known: today's detail off the disk (the rings as they are drawn today), the Saturn look's on it, eased over the
     disk's edge (disk_weight)"""
+    if scale and scale.get("detail_base") and (scale.get("detail_how") or {}).get("nodisk"):
+        # (no disk limit: today's detail on the whole picture, as before, then the look's lit local contrast on top,
+        # so the picture keeps today's brightness, rings and rim and gains the cloud detail; 235SA SATSTARE001 lost 19
+        # levels on its disk and 22 on its rings when the look's detail replaced today's)
+        return detail_core(detail_core(rgba, sigma, None), sigma, scale)
     if scale and scale.get("detail_base") and scale.get("disk") and (scale.get("detail_how") or {}).get("lit"):
         before = detail_core(rgba, sigma, None).astype(np.float32)
         after = detail_core(rgba, sigma, scale).astype(np.float32)
@@ -6113,7 +6126,9 @@ def detail_core(rgba, sigma, scale=None):
             d = d * lit
         # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
         # three keeps its color)
-        room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+        # (a Saturn lit look's change toward white stops at DETAIL_TOP: it never clips the cloud bands it brings out)
+        top = np.float32(DETAIL_TOP if lit is not None else 255)
+        room = np.where(d > 0, np.maximum(top - rgb.max(axis=2), 0), rgb.min(axis=2))
         out = np.clip(rgb + _soft_detail(d, room)[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
     mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
@@ -7789,7 +7804,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
             "amount": dhow.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
-            **({"lit": list(DETAIL_LIT)} if dhow.get("lit") else {}),
+            **({"lit": list(DETAIL_LIT), "top": DETAIL_TOP} if dhow.get("lit") else {}),
             **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
                if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}

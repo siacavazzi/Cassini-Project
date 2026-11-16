@@ -246,8 +246,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         imgs, valid, lbl, report = _load_aligned(paths, hdr, scale, repeat_window, around, look)
     finally:
         cal.still_look.reset(token)
-    if look.get("detail") and len(imgs) in (1, 2, 3):
-        imgs = _still_detail(imgs, valid, look, _still_disk(lbl, imgs[0].shape[:2]))
+    # (how much of the picture is drawn white: the camera's saturation, which a still's report does not always carry)
+    white = max(float(np.mean((img[..., 0] if img.ndim == 3 else img) >= 254)) for img in imgs) if imgs else 0.0
+    if look.get("detail") and len(imgs) in (1, 2, 3) and max(report.get("saturated_share", 0), white) <= om_clipped():
+        imgs = _still_detail(imgs, valid, look, None if look.get("nodisk") else _still_disk(lbl, imgs[0].shape[:2]))
         report["saturn_look"] = {k: v for k, v in look.items() if k != "disk"}
     return imgs, valid, lbl, report
 
@@ -269,6 +271,13 @@ def _still_disk(lbl, shape):
         return None
 
 
+def om_clipped():
+    """obs_mosaic.SATURN_CLIPPED[0]: a picture the camera saturated over more of keeps today's look (no local contrast:
+    it drew a dark ring round a clipped disk)"""
+    import obs_mosaic as om
+    return om.SATURN_CLIPPED[0]
+
+
 def _still_detail(imgs, valid, look, disk=None):
     """load_aligned's channels (BGR, each a grey picture) with obs_mosaic.detail's local contrast on the lit pixels
     (detail_how), the same change on every channel"""
@@ -278,7 +287,7 @@ def _still_detail(imgs, valid, look, disk=None):
         [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
     rgba = np.dstack(three + [np.where(valid, 255, 0).astype(np.uint8)])
     sigma = om.DETAIL_SIGMA * om.FRAME * rgba.shape[1] / 1024
-    how = {"strength": look["detail"], "lit": True, "sigma": look.get("sigma", 1.0)}
+    how = {"strength": look["detail"], "lit": True, "sigma": look.get("sigma", 1.0), "nodisk": bool(look.get("nodisk"))}
     out = om.detail(rgba, sigma, dict({"detail_how": how}, **({"disk": disk} if disk else {})))
     picked = [out[..., 0]] if len(chans) == 1 else [out[..., 0], out[..., 2]] if len(chans) == 2 else [out[..., i] for i in range(3)]
     return [cv2.cvtColor(np.ascontiguousarray(c), cv2.COLOR_GRAY2BGR) if img.ndim == 3 else np.ascontiguousarray(c)

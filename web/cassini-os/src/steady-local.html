@@ -295,13 +295,13 @@
     }
     // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change (less on big differences,
     // DETAIL_EDGE) rolled off past knee of the room the pixel has left (obs_mosaic._soft_detail), clip, round half to even
-    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32, w = null) {
+    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32, w = null, top = 255) {
       const f = Math.fround, floor = f(1e-3), D = f(amount), K = f(knee), E = f(edge), tiny = f(1e-6);
       for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
         const mean = f(gla[p] / Math.max(ga[p], floor)), x = f(lum[p] - mean);
         let d = f(f(D * x) / f(1 + f(Math.abs(x) / E)));
         if (w) d = f(d * w[p]);
-        const room = d > 0 ? f(255 - Math.max(px[i], px[i + 1], px[i + 2])) : f(Math.min(px[i], px[i + 1], px[i + 2]));
+        const room = d > 0 ? f(Math.max(top - Math.max(px[i], px[i + 1], px[i + 2]), 0)) : f(Math.min(px[i], px[i + 1], px[i + 2]));
         const k = f(K * room), mag = Math.abs(d);
         if (mag > k) {
           const rest = f(room - k), over = f(mag - k), soft = f(k + f(f(rest * over) / Math.max(f(over + rest), tiny)));
@@ -448,8 +448,10 @@ const sharpen = (px, W, H, t) => {
   const one = (p, sigma, amount, lit, dk) => {
     const k = M.gaussKernel(sigma), d = M.detailInputs(p, lit, dk, W);
     const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
-    return M.detailFinish(p, d.lum, ga, gla, amount, t.knee, t.edge, d.w);
+    return M.detailFinish(p, d.lum, ga, gla, amount, t.knee, t.edge, d.w, lit ? (t.top ?? 255) : 255);
   };
+  // obs_mosaic.detail, no disk limit: today's detail first, then the look's lit local contrast on top of it
+  if (t.base && t.lit && !disk) return one(one(px, t.base.sigma, t.base.amount, null, null), t.sigma, t.amount, t.lit, null);
   if (!(t.base && disk && t.lit)) return one(px, t.sigma, t.amount, t.lit, disk);
   // obs_mosaic.detail: today's detail off the disk (the rings as drawn before the Saturn look), the look's on it
   const before = one(new Uint8ClampedArray(px), t.base.sigma, t.base.amount, null, null), after = one(px, t.sigma, t.amount, t.lit, disk);
