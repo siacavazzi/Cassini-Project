@@ -1416,6 +1416,14 @@ def _plan_if_made(u, cache):
         return None
 
 
+def polarized_frame(frame_id):
+    """Whether the index reads frame frame_id as a polarized colour frame (sets_passes.polarized_index): its own
+    pictures (processed, centred, kept HDR) are named apart (frame_server.frame_name), as they are made anew."""
+    idx, row = _row_of()
+    q = row.get(frame_id)
+    return q is not None and "polarized" in idx and bool(idx["polarized"].iat[q])
+
+
 def _polarized_pass(u):
     """Whether pass u holds a frame the index reads as a polarized colour frame (sets_passes.polarized_index)."""
     if "_polarized" not in u:
