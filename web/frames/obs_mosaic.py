@@ -3199,7 +3199,10 @@ def _colour_filters(u):
 # look different in each band) moved it 10 to 25 px, every filter registered after it followed it down the chain, and
 # the movie drew each limb and ring edge two or three times, 13 to 16 px apart, with a step at every seam. A limb's
 # height differs a little with the filter (its haze: Saturn's within about 1 px, the solve's LIMB_HAZE_PRIOR), less
-# than this
+# than this. Only on a clouded body (SURFACE_CLOUDED: Saturn, Jupiter, Titan), whose bands and haze look different in
+# each filter: an airless moon's craters are the same in every filter, its C8 match is sure, and checked on the limb
+# (which SPICE's shape model puts a pixel or two off on a cratered moon) Dione's 2010 mapping mosaic and Iapetus'
+# drew doubled crater rims (the image benchmark, #506)
 LIMB_REGISTER = 2.0      # px
 LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
 
@@ -3214,8 +3217,8 @@ def _register(u, n, out, crop, cache, scale):
 def _limb_register(u, q, ref, out, crop):
     """Tile out (its picture crop) checked against its reference tile q (picture ref) on the body's lit limb
     (LIMB_REGISTER): out's offset and "registered" changed when the two limbs disagree. Nothing where either shows no
-    lit limb SPICE can place (limb_place), or the body is none of LIMB_BODIES."""
-    if u["key"][0] not in LIMB_BODIES or not calibration.step("align"):
+    lit limb SPICE can place (limb_place), or the body is none of LIMB_BODIES or not clouded."""
+    if u["key"][0] not in LIMB_BODIES or not clouded(u) or not calibration.step("align"):
         return
     disk = _disk_geometry(u)
     if disk is None:
