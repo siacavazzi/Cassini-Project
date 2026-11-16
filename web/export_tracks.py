@@ -244,11 +244,71 @@ def export_tracks(kdir, out, years, only=None):
     return manifest_bodies
 
 
-def export_catalog(kdir, out, index_csv, years):
+SUMMING = {"FULL": 1, "SUM2": 2, "SUM4": 4}   # INSTRUMENT_MODE_ID: camera pixels summed along each side
+FOV_HALF = 512 * math.sqrt(2)   # full resolution pixels from a frame's middle to its corner
+
+
+def summing(data, paths):
+    """{index path: pixels summed along a side (1, 2 or 4)} from the frames' labels in the archive zip data (its .LBL
+    beside each .png: INSTRUMENT_MODE_ID); {} without the archive. A summed frame's camera pixel covers 2 or 4 times
+    the ground of a full resolution one."""
+    if not data or not os.path.exists(data):
+        return {}
+    import zipfile
+    out = {}
+    with zipfile.ZipFile(data) as z:
+        names = set(z.namelist())
+        for p in paths:
+            lbl = os.path.splitext(p)[0] + ".LBL"
+            if lbl in names:
+                m = re.search(rb"INSTRUMENT_MODE_ID\s*=\s*\"?(\w+)", z.read(lbl))
+                if m and m.group(1).decode() in SUMMING:
+                    out[p] = SUMMING[m.group(1).decode()]
+    return out
+
+
+def pointings(geometry, ids):
+    """{frame id: (shift_px, target)}: how far from the frame's middle SPICE puts the body's center, in full resolution
+    pixels, and the body placed (the geometry cache's, which may be the body the frame shows rather than the archive's
+    target: bootleg_autonav.shown_targets), for the frames the geometry cache (CASSINI_GEOMETRY_CACHE) placed."""
+    if not geometry or not os.path.exists(geometry):
+        return {}
+    import sqlite3, sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    from bootleg_autonav import GEOMETRY_VERSION   # (the rows stacking.places reads: this version's only)
+    db, out = sqlite3.connect(f"file:{geometry}?mode=ro", uri=True), {}
+    ids = list(ids)
+    for k in range(0, len(ids), 900):
+        part = ids[k:k + 900]
+        for f, x, y, t in db.execute(f"SELECT frame, x, y, target FROM target WHERE version = ? AND error IS NULL "
+                                     f"AND x IS NOT NULL AND frame IN ({','.join('?' * len(part))})",
+                                     (GEOMETRY_VERSION, *part)):
+            out[f] = (math.hypot(x, y), t)
+    return out
+
+
+def ground_range(rng, radius, off, ifov):
+    """The distance to the ground in the frame's middle, km: along the camera's axis, off (radians) from the body's
+    center seen rng km away, to where it meets a sphere of the body's mean radius; where the axis misses the body but
+    its limb is in the frame (within FOV_HALF pixels of the middle), the limb's distance; else the center's, rng."""
+    if not radius or rng <= radius:
+        return rng
+    side = rng * math.sin(off)
+    if side < radius and math.cos(off) > 0:
+        return rng * math.cos(off) - math.sqrt(radius * radius - side * side)
+    if off - math.asin(radius / rng) <= FOV_HALF * ifov:
+        return math.sqrt(rng * rng - radius * radius)
+    return rng
+
+
+def export_catalog(kdir, out, index_csv, years, data=None, geometry=None):
     df = pd.read_csv(index_csv, low_memory=False)
     df = df[df.year.notna()]
     mks = {int(re.search(r"cas_(\d{4})", m).group(1)): m for m in glob.glob(f"{kdir}/mk/*.tm")}
-    ifov = {"ISSNA": 5.9907e-6, "ISSWA": 5.9907e-5}
+    ifov = {"ISSNA": 5.9897e-6, "ISSWA": 5.9907e-5}   # NAC: 12 um pixels at the kernel's 2003.44 mm focal length
+    summed = summing(data, df.path)
+    print(f"summing: {sum(v == 2 for v in summed.values())} SUM2 and {sum(v == 4 for v in summed.values())} SUM4 frames "
+          f"of {len(df)} ({len(summed)} labels read{'' if summed else ': no archive, km/px at full resolution'})", flush=True)
     summary = {}
     for year in years:
         # stable, with the path as tie-break, so frames taken at the same instant keep one order on every machine
@@ -256,20 +316,46 @@ def export_catalog(kdir, out, index_csv, years):
         if not len(sub) or year not in mks:
             continue
         furnish_year(kdir, mks[year])
+        if summed and len(sub) >= 1000 and not any(summed.get(p, 1) > 1 for p in sub.path):
+            # (every year from 1999 on took thousands of summed frames: none read means the labels were not found)
+            raise SystemExit(f"catalog {year}: no summed frame among {len(sub)} labels read: are the index paths the archive's?")
+        placed = pointings(geometry, (os.path.splitext(os.path.basename(p))[0] for p in sub.path))
+        radii = {}
+
+        def radius(body):
+            """the body's mean radius, km (the PCK's), or None"""
+            if body not in radii:
+                try:
+                    radii[body] = float(np.mean(sp.bodvrd(body, "RADII", 3)[1]))
+                except Exception:
+                    radii[body] = None
+            return radii[body]
         cols = {k: [] for k in ("id", "et", "cam", "f1", "f2", "target", "obs", "range_km",
                                 "phase_deg", "km_per_px", "missing_lines")}
         for r in sub.itertuples():
             et = sp.str2et(r.IMAGE_MID_TIME)
+            fid = os.path.splitext(os.path.basename(r.path))[0]
             rng = ph = res = None
             try:
                 p, _ = sp.spkpos(r.TARGET_NAME, et, "J2000", "LT+S", "CASSINI")
                 s, _ = sp.spkpos("SUN", et, "J2000", "LT+S", r.TARGET_NAME)
                 rng = float(np.linalg.norm(p))
                 ph = math.degrees(sp.vsep(-np.array(p), s))
-                res = rng * ifov.get(r.INSTRUMENT_ID, np.nan)
             except Exception:
                 pass
-            cols["id"].append(os.path.splitext(os.path.basename(r.path))[0])
+            try:
+                # km/px: one of the frame's own pixels (summing) at the ground in its middle (ground_range), of the body
+                # the geometry cache placed in it; without a place, at the archive target's center as before
+                at = ifov.get(r.INSTRUMENT_ID, np.nan)
+                off, body = placed.get(fid, (None, r.TARGET_NAME))
+                d = rng
+                if off is not None:
+                    q, _ = sp.spkpos(body, et, "J2000", "LT+S", "CASSINI")
+                    d = ground_range(float(np.linalg.norm(q)), radius(body), off * at, at)
+                res = None if d is None else d * at * summed.get(r.path, 1)
+            except Exception:
+                res = None if rng is None else rng * ifov.get(r.INSTRUMENT_ID, np.nan) * summed.get(r.path, 1)
+            cols["id"].append(fid)
             cols["et"].append(round(et, 3))
             cols["cam"].append("N" if r.INSTRUMENT_ID == "ISSNA" else "W")
             cols["f1"].append(r.filter1)
@@ -367,6 +453,10 @@ def main():
     ap.add_argument("--index", default=os.path.join(os.path.dirname(__file__), "..", "Image_index.csv"))
     ap.add_argument("--highlights", default=None, help="encounters_ranked.csv from the highlight scoring")
     ap.add_argument("--years", default="1997-2017")
+    ap.add_argument("--data", default=os.environ.get("CASSINI_DATA"),
+                    help="the archive zip (CASSINI_DATA): each frame's summing mode for the catalog's km/px")
+    ap.add_argument("--geometry", default=os.environ.get("CASSINI_GEOMETRY_CACHE"),
+                    help="the geometry cache (CASSINI_GEOMETRY_CACHE): where the body sits in each frame, for km/px")
     ap.add_argument("--skip", default="", help="comma list of steps to skip: tracks,catalog,encounters")
     ap.add_argument("--bodies", default="", help="comma list of bodies: export only their tracks and add them to the "
                                                  "manifest's bodies (the catalog and encounters are left as they are)")
@@ -403,7 +493,7 @@ def main():
         manifest["bodies"] = export_tracks(args.kernels, args.out, years)
         save()
     if "catalog" not in skip:
-        manifest["catalog"] = export_catalog(args.kernels, args.out, args.index, years)
+        manifest["catalog"] = export_catalog(args.kernels, args.out, args.index, years, args.data, args.geometry)
         save()
     if "encounters" not in skip:
         manifest["encounters"] = {"file": "encounters.json",

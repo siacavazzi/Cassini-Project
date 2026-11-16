@@ -28,7 +28,7 @@ TIERS = 6                            # tier k: seen at 2k-map scale x 2^(TIERS-1
 K = 8                                # observations kept per place
 T0_UTC, DT = "2004-01-01T00:00:00", 30.0
 FOV_HALF = {"N": math.radians(0.3516 / 2), "W": math.radians(3.4884 / 2)}   # as the page's
-IFOV = {"N": 5.99e-6, "W": 59.9e-6}  # radians per pixel (catalog km_per_px / range_km)
+IFOV = {"N": 5.9897e-6, "W": 59.9e-6}  # radians per pixel (NAC: 12 um pixels at the kernel's 2003.44 mm focal length)
 MAX_EMISSION, MAX_INCIDENCE = math.radians(80), math.radians(85)
 # moons with a surface map on the page and an IAU rotation (Hyperion tumbles: the page spins it by a made-up rule)
 MOONS = ["MIMAS", "ENCELADUS", "TETHYS", "DIONE", "RHEA", "IAPETUS", "PHOEBE", "TITAN"]
