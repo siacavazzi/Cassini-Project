@@ -34,6 +34,9 @@ import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
 import calibration  # noqa: E402
 import obs_mosaic as om  # noqa: E402
+# (these made-up passes' frame ids are no frames with JPL's or USGS's measured pointing: hold them as such, so the
+# server draws them at SPICE's places at steady 0; the pass stabilized by default is checked on its own below)
+om._raw_pointing = lambda u: False
 
 rng = np.random.default_rng(5)
 field = cv2.GaussianBlur(rng.random((2200, 1400)).astype(np.float32), (0, 0), 5)
@@ -138,8 +141,8 @@ def server_lut(g, gm):
 
 def in_node(table):
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), t = " + json.dumps(table) + ";\n"
-          "const out = {};\nfor (const s of " + json.dumps(SMOOTHS) + ") { const p = M.places(t, s); "
-          "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a)) }; }\n"
+          "const out = {}, base = t.auto ? M.places(t, t.auto) : null;\nfor (const s of " + json.dumps(SMOOTHS) + ") { const p = M.places(t, s); "
+          "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a, base)) }; }\n"
           "const r = []; for (const x of [0.125, -0.125, 2.5, -2.5, 1.5, -1.5, 0.375, 1.005, 2.675, -3.14159]) r.push([x, M.pyRound(x), M.pyRound2(x)]);\n"
           "out.gains = {}; for (const x of " + json.dumps(EXPOSURES) + ") out.gains[x] = t.exposure ? M.gains(t.exposure, x) : null;\n"
           "out.chains = " + json.dumps(CHAINS) + ".map(c => " + json.dumps(EXPOSURES) + ".map(x => M.gains(c, x)));\n"
@@ -229,6 +232,33 @@ with calibration.looking("balanced"):
         print(f"centre={centre}: {table['view']} k={table['k']:.4f}; places and moves equal the server's for smoothing "
               f"{SMOOTHS}; {worst['exact']} pixels equal, at most {worst['edge']} uncovered at an edge; as WebP q95 the "
               f"moved picture is {min(worst['psnr']):.1f} dB (worst) / {np.median(worst['psnr']):.1f} dB (median) from the server's")
+
+
+# a pass stabilized by default (obs_mosaic.auto_steady: a frame without measured pointing, its chain linked): the server
+# serves and pre-builds its frames at STEADY_SMOOTH, and the page moves those for any other smoothing, never asking the
+# server to draw one (Sam: the server does no hard processing at view time)
+om._raw_pointing = lambda u: True
+om._auto_steady.clear()
+with calibration.looking("balanced"):
+    table = om._steady_table(u, 0, cache, True)
+    assert table.get("local") and table.get("auto") == om.STEADY_SMOOTH, {k: table.get(k) for k in ("local", "auto")}
+    assert om.steady_of(u, 0, cache) == om.STEADY_SMOOTH
+    got = in_node(table)
+    moved_n = 0
+    for s in SMOOTHS:
+        for a, n in enumerate(table["n"]):
+            A = np.asarray(om.movie_frame(u, n, cache, colour=False, centre=True, steady=om.STEADY_SMOOTH)[0])
+            B = np.asarray(om.movie_frame(u, n, cache, colour=False, centre=True, steady=s)[0])
+            dx, dy = got[str(s)]["shifts"][a]
+            C = moved(A, dx, dy)
+            have = C[..., 3] > 0
+            assert ((C == B).all(axis=2))[have].all(), (s, n, dx, dy)
+            moved_n += (dx, dy) != (0, 0)
+    assert moved_n, "no frame moved"
+print(f"auto-stabilized pass: the page moves its served frames (at {om.STEADY_SMOOTH}) to smoothing {SMOOTHS} and equals "
+      f"the server's frame there pixel for pixel ({moved_n} frames moved)")
+om._raw_pointing = lambda u: False
+om._auto_steady.clear()
 
 def page_gains(g, colour_set):
     """Whether the page puts exposure gain g on each plane (its worker's lookup table): not a colour set's under 1,
