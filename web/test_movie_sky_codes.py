@@ -41,6 +41,26 @@ seen = {}
 own = obs_mosaic.tile_scale(scale, "GRN", True, seen)["black_of"](noisy_sky())
 print("noisy", own, seen)
 assert "whole_codes" not in seen
+# a hazy body's glow round its limb (Titan, HAZE_BODIES) is no part of a whole-code sky's spread: with haze, the black
+# is the sky's own (blocks a code apart), and the same with more or less glow inside the sky mask (133TI CLOUD002's CB3
+# black flipped 0.012 / 0.035 I/F frame to frame, Sam 11-16)
+def hazy(glow):
+    iof = coded_sky()
+    yy, xx = np.mgrid[:1024, :1024]
+    r = np.hypot(yy - 500, xx - 500)
+    iof[r < 300] = 0.3
+    ring = (r >= 300) & (r < 360)
+    iof[ring] += glow * np.exp(-(r[ring] - 300) / 20)
+    return iof
+got = []
+for glow in (0.004, 0.012):
+    seen = {}
+    own = obs_mosaic.tile_scale(scale, "GRN", True, seen, haze=True)["black_of"](hazy(glow))
+    plain = obs_mosaic.tile_scale(scale, "GRN", True, {})["black_of"](hazy(glow))
+    got.append(own["black"])
+    assert seen.get("whole_codes") and own["black"] <= plain["black"] + 1e-9, (own, plain)
+assert abs(got[0] - got[1]) < CODE, got   # the glow's strength moves the black under a code
+print("hazy", got)
 # a frame of the body (no own sky): nothing changes
 assert "black_of" not in obs_mosaic.tile_scale({**scale, "sky_tops": {}}, "GRN", True, {}, None, True)
 

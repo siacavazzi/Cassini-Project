@@ -1421,7 +1421,8 @@ def folder(u, cache):
               + (LAID if u.get("laid") else STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
-              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else ""))
+              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else "")
+              + (HAZED if u.get("kind") == "movie" and u["key"][0] in HAZE_BODIES else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -2381,6 +2382,12 @@ LONG_FAINT = 0.2     # ... off the body's disk, all fainter than this share of t
                      # a lit crescent's 0.26 s ones, ISS_155EN_PLMHPHR001_PIE), take a white of their own (tile_scale)
 SKY_SPREAD = 98     # tile_scale: a movie frame's sky in whole codes (the median rule): its black at least this percentile
                     # of it, as a single picture's (color_image's sky_percentile)
+HAZE_BODIES = ("TITAN",)   # tile_scale: bodies whose haze glows past the limb, real light ...
+HAZE_MARGIN = 16    # ... left out of a movie frame's whole-code sky spread (SKY_SPREAD) this far from the lit body (pixels
+#                     of the quarter-size frame black_of measures on: 64 of the frame's own): Titan's glow round its limb
+#                     fell in the sky mask on some frames and not others, their blacks 0.012 or 0.035 I/F, CB3 8% darker
+#                     on every other set, and 133TI CLOUD002's CB3 + MT1 colour flipped warm and blue (Sam 11-16)
+HAZED = "_h1"       # the folder suffix, after the others, of a movie pass of a HAZE_BODIES body (its tiles made again)
 SKY_OUTLIER = 6  # a movie frame's own sky (tile_scale): pixels further under its median than the sky's threshold (5% of
                  # the 99.9th percentile) or this many times its noise are not sky (a lost line calibrates to ~-1 I/F)
 
@@ -2396,7 +2403,7 @@ def _sky_fine(iofs, masks):
 
 
 def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True,
-               speck=False):
+               speck=False, haze=False):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2411,7 +2418,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     time, which put a movie frame off the disk in one of the pass's runs of long exposures (pass_scale's "long") on
     their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
     the shadow (032RI's silhouette) are in the sky the rule would take under black. speck: the body is one of SPECKS
-    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
+    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil. haze: the body's
+    haze glows past its limb (HAZE_BODIES): a whole-code sky's spread is measured HAZE_MARGIN away from the lit body."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     long = scale.get("long")
     if (long and own_sky and not on_body and exposure is not None and exposure >= long["exposure"] and t is not None
@@ -2497,7 +2505,14 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             # noise measure misses), as a single picture's black sits: the sky's blocks and column stripes over its
             # median, and the faint stray light round the moon they show in, are under black, as in the frame alone
             # (089MI's 2 s UV3 drew its columns as stripes round the moon on the median alone)
-            spread = float(np.percentile(q[m], SKY_SPREAD)) - median
+            far = m
+            if haze:
+                # (the haze's glow round the limb is the body's light, not the sky's blocks and stripes: away from it)
+                k = 2 * HAZE_MARGIN + 1
+                far = m & ~(cv2.dilate((~m).astype(np.uint8), np.ones((k, k), np.uint8)) > 0)
+                if far.mean() <= SKY_MIN:
+                    far = m
+            spread = float(np.percentile(q[far], SKY_SPREAD)) - median
             if seen is not None:
                 seen["whole_codes"] = True
         if glow:
@@ -2991,7 +3006,8 @@ def _tile_made(u, n, cache, scale, base):
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
                                                                                            on_disk(u, u["frames"][n]), exposure, t,
-                                                                                           not _ring(u), u["key"][0] in SPECKS),
+                                                                                           not _ring(u), u["key"][0] in SPECKS,
+                                                                                           u["key"][0] in HAZE_BODIES),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
                                                         turn=view_turn(u))
