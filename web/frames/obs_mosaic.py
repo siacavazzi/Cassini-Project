@@ -2426,18 +2426,24 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     # own, every other frame keeps the pass's)
     glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
+    # the frame's sky is what lies under 5% of its brightest, and that brightest is never taken over the pass's white:
+    # a frame with a few pixels far over white (a saturated cloud or glint as the merge rebuilds it, 2.9 times white in
+    # 133TI CLOUD002's N1655966473_1 against 1.0 in the frames either side) counted three times as much of Titan's
+    # haze as sky, the sky's spread went from 35 to 116 thousandths of white, and the frame's black with it: every
+    # second or third frame of the movie drawn on a black 8% of white higher than its neighbours, in one channel
+    most = black + scale["white"]
 
     def black_of(iof):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
-        top_of_sky = 0.05 * np.percentile(q, 99.9)
+        top_of_sky = 0.05 * min(float(np.percentile(q, 99.9)), most)
         if glow_only and not codes and float(np.median(q)) > calibration.GLOW_IOF[1]:
             # (a ring pass's frame as bright as a sunlit surface, GLOW_IOF, is the rings filling it, real light, never a
             # glow: the pass's black. Its flat floor read as a glow's, and black over its median took half the ring
             # under it: 124RI RDHRCOMP001's frames, median 0.016-0.05 I/F, went to their brightest ringlets on black,
             # 53% of each frame black, from #279. A dim ring frame's veil, 051RG G20PHASE002's 3e-5, keeps the rule)
             return None
-        m = _dark_sky(q)
+        m = _dark_sky(q, most)
         veiled = glow = False
         if speck and disk is not None and disk[2] < SPECK_PX:
             # a body from beyond Saturn's system under a pixel across (Earth from Saturn, SPECKS): the frame is all sky,
@@ -2614,7 +2620,7 @@ def on_disk(u, frame):
 SKY_OFFSET_MOST = 0.25   # _dark_sky: a frame's floor up to this share of its 99.9th percentile is an offset in its sky
 
 
-def _dark_sky(q):
+def _dark_sky(q, most=None):
     """pass_scale's dark sky of a frame (quarter size, I/F): under 5% of the way from its floor (1st percentile, at
     least 0) to its 99.9th percentile. Measured from 0, a sky the calibration left a small even offset in failed the
     test wherever the body was too small to set the 99.9th percentile far above that offset: Phoebe in 2004
@@ -2624,6 +2630,9 @@ def _dark_sky(q):
     over SKY_OFFSET_MOST of the 99.9th percentile is a lit body, not an offset sky (a moon or Titan's haze filling the
     frame, whose darkest part is no sky): measured from 0 then, as before."""
     top = float(np.percentile(q, 99.9))
+    if most is not None:
+        # (tile_scale's black_of: the brightest never taken over the pass's white)
+        top = min(top, most)
     floor = float(np.percentile(q, 1))
     floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
     return q - floor < 0.05 * (top - floor)
