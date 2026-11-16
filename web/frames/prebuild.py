@@ -377,10 +377,9 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
     elif u.get("tossup") and u.get("kind") == "movie" and last == len(u["frames"]) - 1:
         # a toss-up that plays as a movie: its mosaic so far is drawn at every frame too (below), and is solved on
         # all its tiles first as a mosaic pass's is. Left to each frame, the solve was made again at every frame on
-        # the tiles so far (70% of such a pass's time, 108RI MNRNGSHAD005), and each picture was named after that
-        # partial solve's moves, which a server reading the finished pass's solve never asks for: of that pass's 29
-        # mosaics so far it found 10 and drew the other 19 on request (2026-11-16; the Dione 221DI case of
-        # solve_places, still open for these)
+        # the tiles so far and each picture was named after that partial solve's moves, which a server reading the
+        # finished pass's solve never asks for: of 108RI MNRNGSHAD005's 29 mosaics so far it found 10 and drew the
+        # other 19 on request (2026-11-16; the Dione 221DI case of solve_places, still open for these)
         obs_mosaic.solve_places(u, cache)
     kind, n = u.get("kind"), 0
 
