@@ -12,3 +12,7 @@ frame was left out of colour. The WAC took only CB2 and MT2 through IR polarizer
 - Factors: `web/frames/polarized_share.py` (BL2 0.332, CB1 0.349 medians of 7 and 15 pairs; GRN 0.350 from the tint check, 0.355 on the icy moons).
   CISSCAL's pol_correction.tab has GRN and CB1 (3.43, 3.26) but no BL2, so it cannot balance a BL2/GRN/CB1 set.
 - `tint_check.txt` (`tint.py`): 8 observations taking all three both ways; corrected polarized vs plain colour within 1% (2% for 218IC; 047TI an outlier with a mismatched plain GRN frame).
+- `polarized_stills_mean.jpg`: camera-window stills (`/frames/color.webp?ids=...`) of 2X2PLRNC009's south-pole and
+  ring pointings and 1X2PLRNCJ012's limb, at 38ba8534 (the three angles through the repeat stack's gain match and
+  change test: a whitish patch by the south pole, one angle kept alone) and with `stack_frames(plain=True)` (their
+  plain mean). Mosaic tiles and movie frames already merged them by `load_hdr`'s I/F mean, which has no change test.

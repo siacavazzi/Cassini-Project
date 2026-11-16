@@ -123,6 +123,21 @@ def load_index():
     return index
 
 
+def polarized(path):
+    """Whether the frame at path is a polarized colour frame (sets_passes.polarized_index, as load_index reads it):
+    its repeat exposures are its filter's other polarizer angles, stacked as their plain mean (stack_frames plain;
+    load_hdr's I/F merge is one already)."""
+    idx = load_index()
+    if "polarized" not in idx:
+        return False
+    key = path[len("data/"):] if path.startswith("data/") else path
+    try:
+        got = idx.at[key, "polarized"]
+    except KeyError:
+        return False
+    return bool(got if isinstance(got, (bool, np.bool_)) else list(got)[0])
+
+
 """
 Returns the paths of repeat exposures of the frame at path, nearest in time first,
 including path itself as the first entry. A frame SPICE puts at another pointing is left out (same_place).
@@ -190,10 +205,12 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
                 masks.append(mask)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
+    # a polarized colour frame's repeats are its filter's other polarizer angles: their plain mean (stack_frames)
+    plain = len(frames) > 1 and polarized(path)
     if valid:
-        stacked, mask = ic.stack_frames(frames, masks=masks)
+        stacked, mask = ic.stack_frames(frames, masks=masks, plain=plain)
         return (lbl, stacked) + ((len(frames),) if count else ()) + (mask,)
-    stacked = ic.stack_frames(frames)
+    stacked = ic.stack_frames(frames, plain=plain)
     return (lbl, stacked, len(frames)) if count else (lbl, stacked)
 
 

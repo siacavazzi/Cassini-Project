@@ -982,11 +982,17 @@ def _stars(clipped, gray):
     return out
 
 
-def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
+"""
+plain = the frames are one scene seen differently, not repeats of one picture (a polarized colour frame's polarizer
+angles, stacking.polarized): their plain mean where each has the pixel, lined up as repeats are, with no brightness
+matching, change test or outlier vote, which kept the first angle alone, or gained every angle to it, where the light
+is polarized (a whitish patch by Saturn's south pole, 2X2PLRNC009)
+"""
+def stack_frames(frames, sigma=3.0, max_shift=20, masks=None, plain=False):
     if masks is not None and all(np.array_equal(m, masks[0]) for m in masks[1:]):
         # nothing lost, or every frame lost the same pixels (a summed frame's edge column): no frame can fill another,
         # so the plain stack below, byte for byte
-        return stack_frames(frames, sigma, max_shift), masks[0]
+        return stack_frames(frames, sigma, max_shift, plain=plain), masks[0]
     lost = masks is not None
     if len(frames) == 1:
         # nothing to stack it with (most frames have no repeat): the frame as it is, as below
@@ -1018,6 +1024,10 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
             matched = unclipped & both
         else:
             matched = unclipped
+        if plain:
+            stack.append(gray)
+            agrees.append(valid if lost else np.ones(ref_gray.shape, bool))
+            continue
         if matched.sum() > 100:
             # match brightness to the reference; a gain alone keeps black sky black
             gain = (gray[matched] * ref_gray[matched]).sum() / max((gray[matched] ** 2).sum(), 1)
@@ -1066,6 +1076,11 @@ def stack_frames(frames, sigma=3.0, max_shift=20, masks=None):
     stack = np.array(stack)
     agrees = np.array(agrees)
 
+    if plain:
+        have = agrees.sum(axis=0)
+        out = np.where(have > 0, (stack * agrees).sum(axis=0) / np.maximum(have, 1), ref_gray)
+        out = cv2.cvtColor(np.clip(out + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        return (out, have > 0) if lost else out
     # reject single-pixel outliers among the frames that agree with the reference
     count = agrees.sum(axis=0)
     if lost:
