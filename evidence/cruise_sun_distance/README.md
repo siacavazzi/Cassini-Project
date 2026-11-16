@@ -33,3 +33,19 @@ ISS_269RI_HIPHASEFB001) keeps Saturn's distance, as before. The rule rests on th
 year: all 13 carry `TARGET_DESC = "Saturn-Rings"`, the planners' statement of what the picture is of, and a frame
 named for another body but described as Saturn's is lit at Saturn's distance. Every frame of the Moon, Venus and
 Masursky has `TARGET_DESC = "UNK"`, and no frame before 2003 has a Saturn description.
+
+## Image benchmark (a357a732 against 5d600b52)
+
+Run on the six items the change can reach or that guard it: the three cruise bodies, Earth seen from Saturn, and two
+Jupiter composites as controls (`bench_report.md`; the rows of the 45 items not built are left out).
+
+| item | result |
+|---|---|
+| moon99-composite | identical |
+| masursky-still | identical |
+| earth-fb-still (Earth from Saturn, 2017) | identical |
+| jupiter-portrait-composite, approach-composite | identical |
+| venus99-still | one picture differs by at most 4 levels after encoding, none moved more than 8 levels, mean difference 0.0 (`bench_venus99-still.jpg`: the difference panel is black). Rounding: the frame's I/F is 47 times smaller and the picture is scaled to its own white. |
+
+The harness prints FAIL for any run that leaves items unbuilt, and for any change not named as a target. The other 45
+items hold no frame of the Moon, Venus, Masursky or Earth, whose Sun distance is the only thing this changes.
