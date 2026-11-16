@@ -1,8 +1,8 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `43f9d078` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `f0ac28f5` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 65 PRs (with #541, #537, #542, #544 and #545), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 11 follow-up merges of reviewed new heads (#524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**In it:** 66 PRs (with #541, #537, #542, #544, #545 and #543, which contains #481), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 11 follow-up merges of reviewed new heads (#524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
 **Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527, #534, #536 (READY only once a running benchmark passes, or not ready). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
@@ -32,7 +32,7 @@ How to read this:
 #474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, and the three integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -128,3 +128,7 @@ How to read this:
 | 85 | [#520](https://github.com/siacavazzi/Cassini-Project/pull/520) Dark-current tables made once and a map at a time (new head) | `816f5b27` | no | #520's reviewed new head: benchmark evidence only. | Nothing. | none | `evidence/dark_maps_once` | integration commit |
 | 86 | Picture-change map (docs) | `6bd110e6` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
 | 87 | [#545](https://github.com/siacavazzi/Cassini-Project/pull/545) Sun distance for the Moon, Venus and Masursky (audit S3) | `43f9d078` | no (science values only) | Cruise frames of the Moon (56, 1999-08-18), Venus (24, 1999-06-24) and Masursky (106, 2000-01-23) get their real Sun distance (calibration.py), so their I/F numbers in the science download drop 24x, 47x and 3.6x. Displayed pictures do not change: benchmark moon99 and masursky byte-identical, venus99 at most 4 levels of rounding (pictures are scaled to their own white). Earth through the rings (2013/2017) stays at Saturn. No version bump: relies on the fresh rebuild. | Nothing for pictures; those cruise passes' science downloads at the rebuild. | none | `evidence/cruise_sun_distance` | clean |
+| 88 | Picture-change map (docs) | `05ee81bb` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 89 | Picture-change map (docs) | `4873c70b` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 90 | [#543](https://github.com/siacavazzi/Cassini-Project/pull/543) Raw-pointing movie shake (audit finding 4; supersedes #481)
+ | `f0ac28f5` | **YES** | Movies holding frames on the reconstructed attitude (no measured pointing) are now stabilized when 80% of their chain follows the pictures: the frame-to-frame shake of about 5 NAC px goes (Daphnis 9.3 to 0.5 px median, Titan 133TI 20.9 to 1.8; Methone, Enceladus, Pan, Jupiter, Tethys, Telesto, Phoebe steadier). Moons sit on their chain places, so a first frame can move. Contains #481. Benchmark: 7 movies changed, 44 identical. | Movies of those passes; no version bump of its own, rides on #481's obs bump on this branch (main would need one). | none | - | clean: contains #481 (already in); vcheck flagged #481's own export/levels bump as a collision, undone: no version bump of its own |
