@@ -7860,8 +7860,7 @@ def _colour_recipes(u, p, cache, ns, tiles):
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles, p["grey"]),
-            **({"clip": CLIP_FROM} if scale.get("sat_white") else {})}
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles, p["grey"])}
 
 
 def _colour_by(u, want, ns, tiles, grey):
@@ -7899,8 +7898,7 @@ def _eye_recipes(u, p, ns, tiles):
     if len(want) == 2:
         by = {n: [a, a, b] for n, (a, b) in by.items()}
     return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
-            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by,
-            **({"clip": CLIP_FROM} if p["display_scale"].get("sat_white") else {})}
+            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
