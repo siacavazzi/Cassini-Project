@@ -3791,7 +3791,7 @@ def ring_moves(u, cache, p, tiles):
         return {}
     path = os.path.join(folder(u, cache), (RING_REDRAW_DIR + "-" if any("ring_at" in t for t in tiles) else "") + RING_FILE + PLAN_FILE)
     with _ulock(u):
-        kept, ref = {}, None
+        kept, ref, short = {}, None, set()
         if os.path.exists(path):
             with open(path) as fh:
                 rec = json.load(fh)
