@@ -2688,6 +2688,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
 
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     stacking.handing(tuple(u["key"]))
+    sat_share = {}
 
     def read(fr):
         with calibration.in_mode(mode):
@@ -2707,6 +2708,10 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                 lbl, iof, _ = stacking.load_hdr(fr[0], gap)
             # (only the quarter size picture kept, the frame's size and its exposure: pass_scale's long exposures)
             got = None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape, _exposure(lbl))
+            if got is not None:
+                # (the share of the frame the camera saturated, for the Saturn look's headroom: saturn_clipped)
+                clip = whole[4] if whole is not None and not note.get("differ") and len(whole) > 4 else None
+                sat_share[fr[1]] = float(np.mean(clip)) if clip is not None else 0.0
             if whole is not None:
                 stacking.hand_on(fr[0], gap, whole)   # (after this look at it: the tile's own from here on)
         return got
@@ -2817,7 +2822,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     if _ring(u) and u.get("movie") and not u.get("mosaic"):
         white *= RING_HEADROOM
     sat_white = None
-    if saturn_look(u).get("headroom") and calibration.look() == "balanced":
+    if saturn_look(u).get("headroom") and calibration.look() == "balanced" and not saturn_clipped(sat_share):
         # (what the camera saturated stays drawn on the white before the headroom, as bright as it was: a patch one
         # filter saturated came out a stronger tint once it was no longer at white, 150SA NHEMMOVIE001's lime top)
         sat_white = white
@@ -5948,6 +5953,19 @@ def saturn_look(u):
     return dict(SATDEF_OPTIONS.get(SATDEF, SATURN_LOOK) if SATDEF else SATURN_LOOK)
 
 
+SATURN_CLIPPED = (0.002, 0.2)   # saturn_clipped: a pass with more than SATURN_CLIPPED[1] of its frames saturated over
+                                # SATURN_CLIPPED[0] of them keeps today's white (no headroom): its clipped bands, under
+                                # the headroom's white no longer at white beside the bands round them, drew a lime or white
+                                # cap with a hard edge (150SA NHEMMOVIE001: RED and GRN saturated over the north)
+
+
+def saturn_clipped(shares):
+    """Whether a pass's frames, {frame id: share the camera saturated}, saturated too much for the Saturn look's
+    headroom (SATURN_CLIPPED)"""
+    v = list(shares.values())
+    return bool(v) and float(np.mean([x > SATURN_CLIPPED[0] for x in v])) > SATURN_CLIPPED[1]
+
+
 def saturn_frames(ids):
     """saturn_look of a single picture of frames ids (a frame, a colour set), by the index's target and observation of
     its last frame (the reference color_image.load_aligned centres on); {}"""
@@ -6799,17 +6817,6 @@ def colour_picture(u, p, colour, planes, away=None):
         rgb = np.moveaxis((calibration.encode(np.clip(x, 0, 1), g) * 255 + 0.5).astype(np.uint8), 0, -1)
     elif mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
-    if scale.get("sat_white"):
-        # the Saturn look (saturn_look's headroom): where a band reached its clip, the pixel goes to that band's
-        # brightness in every band (white, as a saturated pixel is drawn alone), eased in from CLIP_FROM. With the
-        # headroom the bands round a clipped one sit well under it now, and the fill kept the clipped band over them:
-        # 150SA NHEMMOVIE001's GRN-saturated cap came out lime
-        top = np.stack([a[..., 0] for a in planes]).max(axis=0).astype(np.float32) if len(planes) == 3 else \
-            np.maximum(planes[0][..., 0], planes[-1][..., 0]).astype(np.float32)
-        w = np.clip((top - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
-        w = (w * w * (3 - 2 * w))[..., None]
-        x = rgb.astype(np.float32)
-        rgb = np.clip(x + (x.max(axis=2, keepdims=True) - x) * w + 0.5, 0, 255).astype(np.uint8)
     if scale.get("chroma"):
         rgb = chroma(rgb, scale["chroma"])
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
