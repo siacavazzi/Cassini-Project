@@ -73,7 +73,8 @@ import label_handler  # noqa: E402
 # obs-v123/v106/v92: flat fields for NAC UV2/CL2 from the PDS slope file and fallback flats for pairs with no slope file (#493; renumbered on the integration branch)
 # obs-v124/v107/v93: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges (#497; renumbered on the integration branch)
 # obs-v125/v108/v94: a repeat find_shift can't line up is matched near SPICE's place first (guided_shift phase or centroid), else merged as taken where SPICE puts it here; frames wholly on the disk sized by the ground's range (repeats and colour sets); v89/v103/v120: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges (#529; renumbered on the integration branch)
-VERSIONS = {"balanced": "obs-v125", "raw": "obs-v108", "eye": "obs-v125-eye", "false": "obs-v125-false", "classic": "obs-v94-classic"}
+# obs-v126/v109/v95: a filter's match onto its pointing's other filter is checked on the body's lit limb (_limb_register: the 2004 approach movies' doubled limbs and ring edges, audit finding 14); obs-v119/v102/v88: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; obs-v118/v101/v87: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); obs-v117/v100/v86: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); obs-v116/v99 (classic stays v85): an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; obs-v115/v98/v85: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; obs-v113/v96/v83: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; obs-v112/v95/v82: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; obs-v111/v94/v81: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out (#506; renumbered on the integration branch)
+VERSIONS = {"balanced": "obs-v126", "raw": "obs-v109", "eye": "obs-v126-eye", "false": "obs-v126-false", "classic": "obs-v95-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3211,14 +3212,30 @@ def _register_to(u, n):
     wavelength, not simply the first: a Titan cycle through many filters (215TI M90R1CLD125: CB3, MT1, MT3, RED, GRN,
     BL1, ...) put RED and GRN each on MT3, where Titan's haze looks nothing like it does in the visible, and the two
     matches (edges, centroid) landed 4 px apart, a magenta and green rim round Titan in the movie; GRN now lands on
-    RED and BL1 on GRN."""
+    RED and BL1 on GRN.
+    Where some of the pass's frames have JPL's own corrected pointing and others not (carried over second-hand, or
+    raw: _carried), the frames with JPL's own pointing lead: they land only on one another, and another frame lands
+    on one of them, before or after it. In the 2004 approach movie 00ASA 2X2MOVIEA001 each pointing's first frame (MT2) was a carried one 4 to
+    9 px off its pointing's JPL frames, and every filter followed it: a step in the limb where pointings met."""
     frames = u["frames"]
     _, _, f, t, nm, x, y, z = frames[n]
     if not z:
         return None
     k = z / u["z"] if u["z"] else 1.0
-    there = [j for j in range(n) if frames[j][2] != f and frames[j][7] and 0 <= t - frames[j][3] <= REGISTER_GAP
-             and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME]
+    here = lambda j: frames[j][2] != f and frames[j][7] and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME
+    carried = _carried(u)
+    if frames[n][1] in carried:
+        # a frame without JPL's own corrected pointing (carried over, or raw) lands on one with it at its pointing,
+        # taken before or after it (REGISTER_GAP either way), when there is one: JPL's frames lead the pointing
+        sure = [j for j in range(len(frames)) if j != n and frames[j][1] not in carried and here(j)
+                and abs(t - frames[j][3]) <= REGISTER_GAP]
+        if sure:
+            colour = _colour_filters(u)
+            if f in colour:
+                sure = [j for j in sure if frames[j][2] in colour] or sure
+            return min(sure, key=lambda j: (abs((frames[j][4] or 0) - (nm or 0)), abs(t - frames[j][3])))
+    there = [j for j in range(n) if here(j) and 0 <= t - frames[j][3] <= REGISTER_GAP
+             and (frames[n][1] in carried or frames[j][1] not in carried)]
     if not there:
         return None
     # a colour filter's frame lands on a frame in a colour filter, when there is one: the others
@@ -3232,6 +3249,29 @@ def _register_to(u, n):
     return min(there, key=lambda j: abs((frames[j][4] or 0) - (nm or 0)))
 
 
+def _carried(u):
+    """The frame ids of pass u whose pointing is not JPL's (or USGS's) own correction, when some of its frames have it
+    (bootleg_autonav.own_pointing_frames; or, without that list, the frames the carried-over corrections give,
+    iss_neighbours_frames and usgs_neighbours_frames): the frames that follow JPL's in _register_to. Empty when no frame
+    of the pass has its own correction, or this checkout has neither list. Worked out once, kept in u."""
+    if "_carried" not in u:
+        import bootleg_autonav as ba
+        ids = [fr[1] for fr in u["frames"]]
+        own = getattr(ba, "own_pointing_frames", None)
+        if own is not None:
+            mine = own()
+            out = {i for i in ids if i not in mine} if any(i in mine for i in ids) else set()
+        else:
+            got = set()
+            for name in ("iss_neighbours_frames", "usgs_neighbours_frames"):
+                fn = getattr(ba, name, None)
+                if fn is not None:
+                    got |= fn()
+            out = {i for i in ids if i in got}
+        u["_carried"] = frozenset(out)
+    return u["_carried"]
+
+
 def _colour_filters(u):
     """The pass's colour filters (_filters), worked out once; none when a frame has no wavelength (a test's)."""
     if "_colour_filters" not in u:
@@ -3240,7 +3280,82 @@ def _colour_filters(u):
     return u["_colour_filters"]
 
 
+# a filter's match onto its pointing's other filter (C8, _register_match) checked on the body's lit limb, where the
+# picture shows one: a match that puts the two tiles' limbs further apart than this, across the limb, is a false one,
+# and the tile goes back to SPICE's place moved across the limb onto its reference's (limb_place), or stays at SPICE's
+# place when that does not line the limbs up either. The 2004 approach movie 00ASA 2X2MOVIEA001 (Saturn, 10 filters a
+# pointing, methane bands among them): with JPL's corrected pointing every filter's limb lay within 0.3 px of the
+# others' as taken, but one false match per pointing (CB2 onto the methane MT2, phase correlation on cloud bands that
+# look different in each band) moved it 10 to 25 px, every filter registered after it followed it down the chain, and
+# the movie drew each limb and ring edge two or three times, 13 to 16 px apart, with a step at every seam. A limb's
+# height differs a little with the filter (its haze: Saturn's within about 1 px, the solve's LIMB_HAZE_PRIOR), less
+# than this. Only on a clouded body (SURFACE_CLOUDED: Saturn, Jupiter, Titan), whose bands and haze look different in
+# each filter: an airless moon's craters are the same in every filter, its C8 match is sure, and checked on the limb
+# (which SPICE's shape model puts a pixel or two off on a cratered moon) Dione's 2010 mapping mosaic and Iapetus'
+# drew doubled crater rims (the image benchmark, #506)
+LIMB_REGISTER = 2.0      # px
+LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
+
+
 def _register(u, n, out, crop, cache, scale):
+    """C8 (_register_match), then checked on the limb (_limb_register)."""
+    got = _register_match(u, n, out, crop, cache, scale)
+    if got is not None:
+        _limb_register(u, got[0], got[1], out, crop)
+
+
+def _limb_register(u, q, ref, out, crop):
+    """Tile out (its picture crop) checked against its reference tile q (picture ref) on the body's lit limb
+    (LIMB_REGISTER): out's offset and "registered" changed when the two limbs disagree. Nothing where either shows no
+    lit limb SPICE can place (limb_place), or the body is none of LIMB_BODIES or not clouded."""
+    if u["key"][0] not in LIMB_BODIES or not clouded(u) or not calibration.step("align"):
+        return
+    disk = _disk_geometry(u)
+    if disk is None:
+        return
+    lq = limb_place(disk, q, ref)
+    if lq is None:
+        return
+    reg = out.get("registered") or {}
+    now = limb_place(disk, out, crop)
+    if now is None or float(np.dot(lq[1], now[1])) < LIMB_REGISTER_TURN:
+        return
+    off = now[0] - lq[0]
+    if abs(off) <= LIMB_REGISTER:
+        return
+    spice = out.get("spice_offset", out["offset"])
+    at_spice = dict(out, offset=spice)
+    was = {k: reg[k] for k in ("how", "shift") if k in reg}
+    l0 = now if "spice_offset" not in out else limb_place(disk, at_spice, crop)
+    place, how = spice, "SPICE's place"
+    if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
+        e = l0[0] - lq[0]
+        v = (-e * l0[1][0], -e * l0[1][1])
+        if abs(e) <= LIMB_REGISTER:
+            # (SPICE's place where the limbs agree there: JPL's corrected pointing, within a filter's haze of the
+            # reference's; moved onto the reference's limb, the filter would take on the reference's haze height)
+            how = "SPICE's place (limbs agree there)"
+        elif math.hypot(*v) <= REGISTER_MAX * FRAME:
+            moved = [spice[0] + v[0], spice[1] + v[1]]
+            check = limb_place(disk, dict(out, offset=moved), crop)
+            if check is not None and abs(check[0] - lq[0]) <= LIMB_REGISTER:
+                place, how = moved, f"limb {-e:+.1f} across"
+    out.pop("spice_offset", None)
+    if place is not spice:
+        out["spice_offset"] = spice
+    out["offset"] = list(place)
+    shift = [round(spice[0] - place[0], 2), round(spice[1] - place[1], 2)]
+    out["registered"] = {"to": q["id"], "how": how, "limb_off": round(off, 2), "match": was}
+    if place is not spice:
+        out["registered"]["shift"] = shift
+    else:
+        # (a tile its match left unaligned stays so named: astray leaves such colour tiles out where they land apart)
+        if was.get("how") == "not aligned":
+            out["registered"]["how"] = "not aligned"
+        out["registered"]["kept"] = "SPICE's place"
+
+
+def _register_match(u, n, out, crop, cache, scale):
     """C8, the filters registered to each other: SPICE places each frame on its own, and the few pixels its pointing
     is off differ from frame to frame, so the filters of one pointing landed a little apart and every limb had a red
     and a cyan rim (Dione). Tile n (its report out, crop its picture as made) is moved onto the tile it is registered
@@ -3250,11 +3365,11 @@ def _register(u, n, out, crop, cache, scale):
     shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
     j = _register_to(u, n)
     if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
-        return
+        return None
     q = tile(u, j, cache, scale)
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
     if "offset" not in q or not os.path.exists(path):
-        return
+        return None
     with _lock:
         ref = _made_pictures.get(path)
     if ref is None:
@@ -3271,7 +3386,7 @@ def _register(u, n, out, crop, cache, scale):
             shift, how = wide, said
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
-        return
+        return q, ref
     if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
         # SPICE's pointing of a moon can jump tens of px between frames seconds apart: Dione's 038DI ZEROPHASE001 20 to
         # 45 px (N1549196942_1 sits 42 px from the frames either side), Hyperion's 153HY 70 to 110 px, Helene's 149HE
@@ -3291,17 +3406,18 @@ def _register(u, n, out, crop, cache, scale):
             c = None if how.startswith("centroid") else _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
             if not same(c):
                 out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-                return
+                return q, ref
             how = f"{how}, centroid agrees ({c[0]:+.1f},{c[1]:+.1f})"
     elif shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
         if how is not None:
             out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-        return
+        return q, ref
     # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
     dx, dy = shift
     out["spice_offset"] = out["offset"]
     out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
+    return q, ref
 
 
 def _tile_overlap(q, ref, at_q, t, crop, at_t, around=None, where=None):
@@ -4515,8 +4631,20 @@ def clouded(u):
 def _pointing_root(u, n, roots):
     """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, a frame of its pointing in
     another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
-    j = _register_to(u, n)
-    return roots.get(j, j) if j is not None else n
+    j, seen = _register_to(u, n), {n}
+    if j is None:
+        return n
+    if not _carried(u):
+        return roots.get(j, j)
+    # (where some frames follow JPL's, _carried, followed to the end: such a frame lands on a later frame, which may
+    # itself land on an earlier one; otherwise as before, the frame registered to, or its root when it has one)
+    while j not in roots and j not in seen:
+        seen.add(j)
+        nxt = _register_to(u, j)
+        if nxt is None:
+            return j
+        j = nxt
+    return roots.get(j, j)
 
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
@@ -5448,6 +5576,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             turn = haze.get(("turn", r), 0.0) if r in linked else 0.0
             if abs(turn) >= 0.01:
                 out[n].append(round(turn, 4))
+        misfit = _solve_misfit(meas, keep, {r: out[r] for r in roots if r in out})
         if rings is not None and RING_FILTERS:
             # a pointing's filters on the rings, each lined up across the rings on its pointing's first tile by their
             # radial profiles (the filters' detail: the ringlets and gaps are where they are in every filter), where C8's
@@ -5474,7 +5603,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                         out[n] = [round(out[n][0] + got_r[0][0], 2), round(out[n][1] + got_r[0][1], 2)] + out[n][2:]
                         seen[f"filter-{n}"] = {"shift": [round(v, 2) for v in got_r[0]], "ncc": got_r[1]["ncc"]}
         if report is not None:
-            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
+            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots), "misfit": misfit})
         # (a solve of tiles another solve does not hold is used, not kept over the one kept: the one in memory, or the one
         # on disk, read again here in case another process, the pre-build, wrote a larger one meanwhile)
         latest = _read_solve(path) if os.path.exists(path) else {}
@@ -5484,7 +5613,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             return {n: v for n, v in out.items() if v != [0, 0]}
         part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
         new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
-               "kept": len(keep), "measured": len(meas)}
+               "kept": len(keep), "measured": len(meas), "misfit": misfit}
         if rec is not None:
             rec[name] = new
         try:
@@ -5495,6 +5624,35 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v for n, v in out.items() if v != [0, 0]}
+
+
+# a pass's solve (global_places) checked against the matches it kept, as the pointings are drawn: each match's
+# residual across what it measures (both ways for a panel match, across the edge or the rings for an edge or ring
+# match), and the pass flagged when more than SOLVE_MISFIT_SHARE of them (and at least SOLVE_MISFIT_LEAST) are off by
+# over SOLVE_MISFIT px: tiles drawn where their own matches say they are not, a seam the eye sees. Kept in the solve's
+# file ("misfit") and listed by solve_check.py, which the cache rebuild's checks run (finding 14 of the 2026-11-16
+# pipeline audit: the 2004 approach movies' seams)
+SOLVE_MISFIT = 2.0        # px
+SOLVE_MISFIT_SHARE = 0.1
+SOLVE_MISFIT_LEAST = 5
+
+
+def _solve_misfit(meas, keep, moves):
+    """{"kept", "over", "share", "worst", "flag"}: the kept matches (meas[k] for k in keep, as _solve_moves takes them;
+    limb and turn rows left out) against the pointings' moves as drawn ({root: [dx, dy, ...]})."""
+    res = []
+    for k in keep:
+        m = meas[k]
+        if m[0] in ("limb", "turn") or m[1] not in moves or (m[0] is not None and m[0] not in moves):
+            continue
+        a_, b_, d, P = m[:4]
+        mb = np.array(moves[b_][:2], float)
+        ma = np.array(moves[a_][:2], float) if a_ is not None else np.zeros(2)
+        res.append(float(np.linalg.norm(P @ (mb - ma) - P @ np.asarray(d, float))))
+    over = sum(r > SOLVE_MISFIT for r in res)
+    share = over / len(res) if res else 0.0
+    return {"kept": len(res), "over": over, "share": round(share, 3), "worst": round(max(res), 2) if res else 0.0,
+            "flag": bool(over >= SOLVE_MISFIT_LEAST and share > SOLVE_MISFIT_SHARE)}
 
 
 def _read_solve(path):
