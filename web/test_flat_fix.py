@@ -27,6 +27,7 @@ with tempfile.TemporaryDirectory() as fix:
     ff._map.cache_clear()
     assert np.array_equal(ff._map("flat129", "full"), maps["full"])
     # the build's guard: CISSCAL's files without the repaired maps is no build
+    real_db, ff._slope_db = ff._slope_db, lambda: [["ISSNA", "p5", "UV2", "CL2", "2", "ON", "399", "SLOPE129.IMG"]]
     try:
         ff.check_flat_fix(); raise AssertionError("a build without the repaired flat129 was let through")
     except ff.FlatFixMissing:
@@ -34,6 +35,7 @@ with tempfile.TemporaryDirectory() as fix:
     for mode in ("full", "sum2", "sum4"):
         np.save(os.path.join(fix, "flat", f"flat129.{mode}.npy"), maps[mode])
     assert ff.check_flat_fix() == fix
+    ff._slope_db = real_db
 
 # fallbacks, on a slope table of a few rows
 rows = [["ISSWA", "p5", "CL1", "IRP90", "2", "OFF", "512", "SLOPE080.IMG"],
