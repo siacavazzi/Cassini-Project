@@ -75,4 +75,4 @@ composes those from the tiles once more. Served pictures keep their names. No ve
 
 ## Image benchmark
 
-Queued on the shared MacBook (51 pictures against 1a35acb4, `web/frames/image_bench.py`); the report is added before merge. The set's mosaics are all solved before they are drawn, so it should change nothing there; what this fix moves is shown by the builds above.
+The 51-picture set (`web/frames/image_bench.py`): **PASS (nothing changed): 51 of 51 items identical** to main 1a35acb4 on this branch at 32a691c5 (`image_benchmark/report.md`, `summary.json`; run 2026-11-16). The set's mosaics are all solved before they are drawn, so nothing there moves; what this fix moves is shown by the builds above.
