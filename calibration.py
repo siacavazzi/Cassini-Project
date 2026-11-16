@@ -669,9 +669,11 @@ def smooth_sky(iof, png, sky, slopes=False):
         for _ in range(2):
             spread = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
             near = step * np.clip(1 - (np.abs(codes - spread) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
-        spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        # (near's own blur, the weight under both, worked out once)
+        under = np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / under
         # the codes that smoothing would give, against the pixel's own: past SKY_GLOW_MOVE it is a slope, not a step
-        smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / under
         if slopes:
             moved = np.abs(smoothed - codes)
             near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
@@ -1553,7 +1555,10 @@ def saturated_code(iof, full, draw):
     level = np.zeros(count, np.float32)
     smooth = np.zeros(count, np.float32)
     if count > 1:
-        level[1:] = ndimage.median(iof, labels, index)
+        # (each patch's median from the saturated pixels alone: ndimage.median sorts every pixel it is given by label
+        # and value, and given the whole frame it sorted a million of them for a handful of saturated ones, 0.3 to
+        # 0.5 s a frame; a patch's pixels are the same either way, so is its median)
+        level[1:] = ndimage.median(iof[full], labels[full], index)
         near = near.astype(np.int32)
         on = ring & (near > 0)
         if on.any():

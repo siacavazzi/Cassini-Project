@@ -2969,6 +2969,12 @@ def _tile(u, n, cache, scale, there, rec=None):
         return out
 
 
+def _brightest(image):
+    """image[..., :3].max(axis=2): the brightest of an RGBA picture's three colour channels at each pixel, a plane at a
+    time (numpy's max along an axis of three goes pixel by pixel: 72 ms on a tile's 3072 px canvas, 8 this way)."""
+    return np.maximum(np.maximum(image[..., 0], image[..., 1]), image[..., 2])
+
+
 def _tile_made(u, n, cache, scale, base):
     """(_tile, holding the tile's lock) the report in base.json, or the tile made and its report."""
     if os.path.exists(base + ".json"):
@@ -3023,7 +3029,7 @@ def _tile_made(u, n, cache, scale, base):
         out["saturated"] = share
         if image is not None:
             inside = image[..., 3] > 0
-            lit = inside & (image[..., :3].max(axis=2) >= LIT_LEVEL)
+            lit = inside & (_brightest(image) >= LIT_LEVEL)
             out["lit"] = round(float(lit.sum()) / max(1, int(inside.sum())), 4)
     if image is not None and disk is None:
         # what the tile shows, levels on the display scale: its floor (1st percentile) and top (99.99th: a hundred
@@ -3031,7 +3037,7 @@ def _tile_made(u, n, cache, scale, base):
         # body is under a hundred pixels, is never empty: none written)
         inside = image[..., 3] > 0
         if inside.any():
-            v = image[..., :3].max(axis=2)[inside]
+            v = _brightest(image)[inside]
             out["floor"], out["top"] = (int(x) for x in np.percentile(v, [1, EMPTY_TOP_PCT], method="lower"))
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
@@ -3687,6 +3693,17 @@ def _ring_profile(values, radius):
     return (np.bincount(b[ok], weights=values[ok], minlength=nb), np.bincount(b[ok], minlength=nb))
 
 
+def _ring_bins(radius):
+    """(ring_places) Each point of a radius grid's bin as _ring_profile bins it (RING_BIN km, from RING_INNER), flat,
+    and the number of bins: a point off the rings' bins takes that number, one past the last (a bin of its own, left
+    out of every profile)."""
+    import reproject as rp
+    nb = int((rp.RING_OUTER - rp.RING_INNER) / RING_BIN) + 1
+    b = ((radius - rp.RING_INNER) / RING_BIN).astype(int)
+    b = np.where((b >= 0) & (b < nb), b, nb)
+    return b.astype(np.int16 if nb < 32767 else np.int64).ravel(), nb
+
+
 def _profile_ncc(tot, n, ref):
     """(ring_places) normalized correlation of a profile's detail (_ring_detail) with ref's over the bins both hold"""
     both = (n >= 3) & ~np.isnan(ref)
@@ -3728,11 +3745,19 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
     if ref is None and len(data) < RING_FIT_MIN:
         return {}, None
     moves = {n: tuple(fixed[n][:2]) if n in fixed else (0, 0) for n in data}
+    # each tile's samples binned by radius at every place tried, ~2,200 a tile (the coarse grid of RING_FIT_STEP, the
+    # fine one, the parabola, RING_FIT_ROUNDS times): the bin of every point of its radius grid is worked out once
+    # (_ring_bins) and a place tried only reads its samples' bins there, where it worked the bins out again from the
+    # radii each time (half of a ring pass's time, 2026-11-16). The same bins, sums and counts: _ring_profile's.
+    # (the radius grid itself, 9.5 MB a tile, is let go for its bins' 2.4)
+    data = {n: (v,) + _ring_bins(radius) + (sy.astype(np.int64) * radius.shape[1] + sx, radius.shape[1])
+            for n, (v, radius, on, sy, sx) in data.items()}
 
     def prof(n, d):
-        v, radius, on, sy, sx = data[n]
+        v, bins, nb, at, width = data[n]
         dx, dy = int(round(d[0])), int(round(d[1]))
-        return _ring_profile(v, radius[sy + dy, sx + dx])
+        b = bins.take(at + (dy * width + dx))
+        return np.bincount(b, weights=v, minlength=nb + 1)[:nb], np.bincount(b, minlength=nb + 1)[:nb]
 
     out = {}
     given = ref is not None
@@ -3749,7 +3774,6 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
         for n in data:
             if n in fixed:
                 continue
-            v, radius, on, sy, sx = data[n]
             score = lambda d: _profile_ncc(*prof(n, d), ref)
             before = score((0, 0))
             best, at = -2.0, (0, 0)
@@ -8234,17 +8258,21 @@ def hdr_map(placed, W, H):
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         if not (x0 < x1 and y0 < y1):
             continue
-        part = _part(path, sw, sh)
         m = _map_part(path, sw, sh)
         fx, fy = frac[0] if frac else (0.0, 0.0)
+        # (the tile's alpha as _place drew it, when it gave it: the tile moved by the part of a pixel)
+        alpha = frac[1] if len(frac) > 1 else None
         if abs(fx) > 0.01 or abs(fy) > 0.01:
             # (where _place drew the tile: moved by the part of a pixel its rounding left out, the map with it)
-            part = _subpixel(part, fx, fy)
+            if alpha is None:
+                alpha = _subpixel(_part(path, sw, sh), fx, fy)[..., 3]
             if m is not None:
                 m = cv2.warpAffine(m, np.float32([[1, 0, fx], [0, 1, fy]]), (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR,
                                    borderMode=cv2.BORDER_REPLICATE)
+        else:
+            alpha = _part(path, sw, sh)[..., 3]
         canvas = by.setdefault(f, np.full((H, W), zero, np.uint8))
-        a = part[y0 - top:y1 - top, x0 - left:x1 - left, 3] > 0
+        a = alpha[y0 - top:y1 - top, x0 - left:x1 - left] > 0
         v = m[y0 - top:y1 - top, x0 - left:x1 - left] if m is not None else np.full(a.shape, zero, np.uint8)
         found = found or m is not None
         region = canvas[y0:y1, x0:x1]
@@ -8294,15 +8322,22 @@ def _place(u, t, rect, k, W, H, cache, scale):
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     frame = np.zeros((H, W, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+    moved = None
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         if SUBPIXEL:
+            whole = part
             part = _subpixel_at(part, t, rect, k, left, top)
+            if part is not whole and not t.get("turn"):
+                moved = np.ascontiguousarray(part[..., 3])   # (the tile's alpha as moved by the part of a pixel, for hdr_map)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
     drew = _hdr_drawn.get()
     if drew is not None:
         frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
-        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac))
+        # (with the alpha drawn here when the tile was moved by that part of a pixel and nothing else: hdr_map moved the
+        # whole tile again by it, a cubic resampling of four float planes, only to read where its alpha is over 0. A
+        # plane is resampled on its own, so the alpha is the same whatever the tile's shade)
+        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac, moved))
     return frame
 
 
