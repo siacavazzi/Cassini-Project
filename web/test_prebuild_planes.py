@@ -19,7 +19,10 @@ field = (field - field.min()) / (field.max() - field.min())
 S, N = 400, 6
 cache = tempfile.mkdtemp()
 passes, units = [], {}
-FALSE = ["MT3", "MT2", "CB2"]   # a false colour set: the page leaves its exposure normalization to the server
+# a false colour set: the page leaves its exposure normalization to the server. (MT3, MT2, CB2 was one until #237 drew
+# methane sets in natural colour emulation by default: the page mixes and evens those itself, and this test then found
+# no evened frames pre-built; IR1, GRN, UV3 is still a false colour mix, calibration.FalseMix)
+FALSE = ["IR1", "GRN", "UV3"]
 for p, (filled, colour) in enumerate(((True, None), (False, None), (False, FALSE))):
     scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"RED": 1.0, "GRN": 1.0, **{f: 1.0 for f in FALSE}},
              **({"filled": True} if filled else {})}
@@ -62,6 +65,8 @@ def route(frame_id, query):
 # the page's plane requests, Auto center on (cassiniMovieStyle leaves center out) and off
 PAGE = "size=1024&color=0&trail=0&laps=1"
 with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration.COLORS[0]):
+    # the third pass is drawn by the server in the default look (its mix is a false colour one), as the test needs
+    assert isinstance(calibration.color_mix("N", FALSE, "SATURN", [1.0] * 3, obs="ISS_TEST"), calibration.FalseMix)
     todo = prebuild.items("movies")
     assert [name for name, _ in todo] == ["_".join(map(str, u["key"])) for u, _ in passes], todo
     for _, work in todo:
