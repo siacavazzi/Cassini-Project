@@ -65,23 +65,26 @@ c = a[100, 100, :3]
 assert c[0] < c[1], c
 print("a band clipped over most of the picture is filled from the others alone (%s); ok" % (c,))
 
-# a band the camera saturated on the bright part of a body (stored at 255 whatever the light), in a resampled plane (a
-# movie's or mosaic's) whose clipped area's rim blends that white with what the band read: the band is filled from the
-# others, floored at what it read away from the rim (CLIP_EDGE), not at its white. Floored at white, GRN saturated over
-# 31% of Rhea in 154RH MUTUALEVE002 came out a lime-green patch (green over red, where the rest of the disk is red over
-# green)
+# a band the camera saturated on the bright part of a body, drawn white there (calibration.saturated_code: a patch with
+# an edge), in a resampled plane whose clipped area's rim blends that white with what the band read. With its tile's
+# saturation map (sat: the light it saturated on) the band is floored at that light, not at its white, and keeps the
+# body's colour; without one it is floored at white, as before. GRN saturated over a fifth of Rhea in 154RH
+# MUTUALEVE002, where RED read 230, came out a lime-green patch
 import cv2  # noqa: E402
 gam = 1.5
 ramp = np.tile(np.linspace(0.25, 1.0, 200, dtype=np.float32), (200, 1))   # linear brightness of a neutral body
 enc = lambda v: np.clip(np.power(np.clip(v, 0, 1), 1 / gam) * 255 + 0.5, 0, 255)
 r5, g5, b5 = enc(ramp), enc(0.95 * ramp), enc(0.85 * ramp)
-sat = ramp > 0.8                       # GRN saturated where red still reads 220-ish: stored at 255
+sat = ramp > 0.8                       # GRN saturated where red still reads 220-ish: drawn at 255
+level = np.where(sat, enc(0.95 * ramp), 0).astype(np.uint8)   # the light it saturated on (its own clip)
 g5 = np.where(sat, 255.0, g5)
 g5 = np.round(cv2.GaussianBlur(g5.astype(np.float32), (0, 0), 0.7))   # resampled: the rim blends 255 with the band's readings
-a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], planes(r5, g5, b5)).astype(int)
-inside = a[100, 170:195, :3]
-outside = a[100, 100:140, :3]
+ps = planes(r5, g5, b5)
+a = om.colour_picture(u, p, ["RED", "GRN", "BL1"], ps, sat=[None, level, None]).astype(int)
+old = om.colour_picture(u, p, ["RED", "GRN", "BL1"], ps).astype(int)
+inside, outside = a[100, 170:195, :3], a[100, 100:140, :3]
 assert (outside[:, 0] > outside[:, 1]).all(), outside[::8]
 assert (inside[:, 1] <= inside[:, 0] + 1).all(), inside[::5]
-print("a band saturated on a body's bright part keeps the body's colour (%s, red over green as round it %s); ok"
-      % (inside[10], outside[20]))
+assert (old[100, 170:195, 1] > old[100, 170:195, 0] + 1).any(), old[100, 170:195:5, :3]
+print("a band saturated on a body's bright part, floored at the light it saturated on, keeps the body's colour (%s, "
+      "red over green as round it %s; floored at its white: %s); ok" % (inside[10], outside[20], old[100, 180, :3]))

@@ -3672,7 +3672,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       x.forEach((c, i) => {
         const fl = filled[i], keep = mostly(masks[i]), b = rgb[i];
         for (let p = 0; p < P; p++) {
-          const v = keep || b[p] >= 255 ? fl[p] : Math.max(fl[p], c[p]);   // (a band at 255 read only that it clipped)
+          const v = keep ? fl[p] : Math.max(fl[p], c[p]);
           let w = Math.min(Math.max(f(f(b[p] - CLIP_FROM) / span), 0), 1);
           w = f(f(w * w) * f(3 - f(2 * w)));
           c[p] = f(c[p] + f(w * f(v - c[p])));
@@ -14012,7 +14012,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"7ad34c6fc3b5";
+  const BUILD = /*BUILD*/"4df76fafe2fd";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

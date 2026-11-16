@@ -3043,6 +3043,8 @@ def _tile_made(u, n, cache, scale, base):
             Image.fromarray(crop).save(base + ".png", compress_level=1)
             _keep_made(base + ".png", crop)
             _keep_tile_map(sink, image, side, crop, base)
+            if _keep_tile_sat(sink, image, side, crop, base):
+                out["sat"] = True   # (base.sat.webp: _place_sat, colour_picture's sat)
             out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
             if not rep.get("blown"):
@@ -6149,13 +6151,14 @@ def _shift_cost(x, y, m):
     return cost
 
 
-def _onto_frame(colour, grey):
+def _onto_frame(colour, grey, with_shift=False):
     """A set's picture or one filter's plane (RGBA) moved onto the frame it tints (grey: RGBA) by the pipeline's limb
     registration (image_correction.limb_shift: their lit outlines matched, the move kept only when the outlines then
     differ less), when that is under TINT_SHIFT of the picture's side; else as it is. A set's filters are taken a minute
     or more from each other and from the frame, each placed by its own pointing, so the body can sit 20 to 40 px apart
     in them: their limbs, whose hue is the set's own (a hazy rim blue, a filter's lone edge orange), then crossed the
-    frame's disk as ghost arcs (133TI CLOUD002, CB3 + MT1; Sam 11-08)."""
+    frame's disk as ghost arcs (133TI CLOUD002, CB3 + MT1; Sam 11-08). with_shift: (picture, the move's 2x3 matrix or
+    None)."""
     look = lambda a: np.ascontiguousarray(a[..., :3].mean(axis=2) if a.shape[2] == 4 and not np.array_equal(
         a[..., 0], a[..., 1]) else a[..., 0]).astype(np.uint8)
     shift, _ = image_correction.limb_shift(look(grey), look(colour), grey[..., 3] > 0, colour[..., 3] > 0)
@@ -6163,10 +6166,11 @@ def _onto_frame(colour, grey):
         shift = _outline_shift(look(grey), look(colour), (grey[..., 3] > 0) & (colour[..., 3] > 0),
                                TINT_SHIFT * max(grey.shape[:2]))
     if shift is None or math.hypot(*shift) > TINT_SHIFT * max(grey.shape[:2]) or math.hypot(*shift) < 0.5:
-        return colour
+        return (colour, None) if with_shift else colour
     m = np.float32([[1, 0, -shift[0]], [0, 1, -shift[1]]])
-    return cv2.warpAffine(colour, m, (colour.shape[1], colour.shape[0]), flags=cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    moved = cv2.warpAffine(colour, m, (colour.shape[1], colour.shape[0]), flags=cv2.INTER_LINEAR,
+                           borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    return (moved, m) if with_shift else moved
 
 
 def tinted_frame(colour, grey, gamma=2.2, same=False):
@@ -6609,12 +6613,14 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None, wide=False):
     return float(best[1]), float(best[2])
 
 
-def colour_picture(u, p, colour, planes, away=None):
+def colour_picture(u, p, colour, planes, away=None, sat=None):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
-    body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame)."""
+    body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame).
+    sat: one saturation-level map per plane (_place_sat) or None: where a band the camera saturated is drawn white,
+    the light it saturated on, which its fill is floored at in place of that white."""
     scale = p["display_scale"]
     if len(planes) == 2:
         # two filters: green their mean in linear light, as a two-filter composite draws it (calibration.two_bands)
@@ -6650,13 +6656,24 @@ def colour_picture(u, p, colour, planes, away=None):
         # frame, GRN up to 66%, BL1 up to 67%). Floored, a band meets its own clipping edge without a step.
         # Not for a band clipped over most of the picture (calibration.mostly_saturated), whose fill keeps the others'
         # colour, as the camera window's fill does.
-        # (only where the band still read a value, under 255: a band the camera saturated is stored at white whatever
-        # the light, so its reading there says only that it clipped, which the fill's own floor keeps; floored at
-        # white, GRN saturated over 31% of Rhea in 154RH MUTUALEVE002 stayed white over a red that read 230 and the
-        # set drew a lime-green patch, as did Saturn 2011, 150SA NHEMMOVIE001)
         lit = calibration.lit_of(x)
-        filled = [f if calibration.mostly_saturated(m, lit) else np.where(band < 255, np.maximum(f, c), f)
-                  for f, c, m, band in zip(filled, x, clipped, np.moveaxis(rgb, -1, 0))]
+        # (but where the band is white because the camera saturated, on light its saturation map, sat, says is under
+        # white, what it read there is the white it was drawn, not light: it is floored at that light. GRN saturated
+        # over a fifth of Rhea in 154RH MUTUALEVE002, on light RED read 230, was kept white and the set drew a lime
+        # green patch; the still of the same set is neutral)
+        bands = list(sat) if sat is not None else []
+        if len(bands) == 2:
+            bands = [bands[0], None, bands[1]]
+        reads = []
+        for i, c in enumerate(x):
+            s_ = bands[i] if i < len(bands) else None
+            if s_ is not None and s_.shape == c.shape:
+                at = (rgb[..., i] >= 255) & (s_ > 0) & (s_ < 255)
+                if at.any():
+                    light = calibration.decode(s_.astype(np.float32) / 255, g).astype(np.float32)
+                    c = np.where(at, light, c)
+            reads.append(c)
+        filled = [f if calibration.mostly_saturated(m, lit) else np.maximum(f, c) for f, c, m in zip(filled, reads, clipped)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
@@ -7558,7 +7575,9 @@ def _steady_table(u, n, cache, centre=True, colour=False):
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
         if tinted:
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
-        elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
+        elif got and (_set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3]))
+                      or any(tile_of(j).get("sat") for j in got.values())):
+            # (or a tile of it keeps a saturation map, which the page has not: colour_picture's sat)
             server.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
@@ -8229,6 +8248,31 @@ HDR_ON = os.environ.get("CASSINI_HDR", "1") != "0"
 _hdr_drawn = contextvars.ContextVar("hdr_drawn", default=None)   # movie_frame's tiles as _place draws them
 
 
+def _keep_tile_sat(sink, image, side, crop, base):
+    """The tile's saturation-level map (sink.sat's last, calibration.load_channels: the light the camera saturated on,
+    as drawn; 0 where it did not saturate), cut and sized as _lit_crop cut the tile, written as base.sat.webp (grey,
+    lossless) when the camera saturated on light the tile draws under white; True when written"""
+    try:
+        sat = getattr(sink, "sat", None)
+        m = sat[-1] if sat else None
+        if m is None or m.shape != image.shape[:2] or not m.any():
+            return False
+        lit = _lit_crop(np.dstack([m, m, m, image[..., 3]]), side)
+        if lit is None:
+            return False
+        cut = lit[0][..., 0]
+        if cut.shape != crop.shape[:2]:
+            cut = cv2.resize(cut, (crop.shape[1], crop.shape[0]), interpolation=cv2.INTER_NEAREST)
+        # (only where it says more than the picture: a patch drawn white on light under white)
+        if not ((cut > 0) & (cut < 255) & (crop[..., 0] >= 255)).any():
+            return False
+        Image.fromarray(np.ascontiguousarray(cut), "L").save(base + ".sat.webp", "WEBP", lossless=True, quality=80, method=4)
+        return True
+    except Exception as e:
+        print(f"No saturation map kept for {base}: {e}")
+        return False
+
+
 def _keep_tile_map(sink, image, side, crop, base):
     """The tile's recovery map (sink's last: processed_frame placed it on image's canvas) cut and sized as _lit_crop cut
     the tile, written as base.hdr.webp (grey, lossless); nothing when there is none"""
@@ -8336,6 +8380,34 @@ def _place(u, t, rect, k, W, H, cache, scale):
         frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
         drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac))
     return frame
+
+
+def _place_sat(u, t, rect, k, W, H, cache, scale):
+    """Tile t's saturation-level map (<n>.sat.webp, _keep_tile_sat) placed as _place places its picture (nearest, so a
+    patch keeps its level to its edge), with the tile's gain on linear brightness: a W x H uint8 map, 0 where the
+    camera did not saturate; None when the tile has none."""
+    if not t.get("sat") or "offset" not in t:
+        return None
+    path = os.path.join(_tiles(u, cache, scale), f"{t['n']}.sat.webp")
+    if not os.path.exists(path):
+        return None
+    bx, by, bw, bh = t["box"]
+    left = round((t["offset"][0] + bx - rect[0]) * k)
+    top = round((t["offset"][1] + by - rect[1]) * k)
+    sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+    out = np.zeros((H, W), np.uint8)
+    x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+    if x0 < x1 and y0 < y1:
+        part = np.asarray(Image.open(path).convert("L").resize((sw, sh), Image.NEAREST))
+        g = t.get("gain")
+        if g and g != 1.0:
+            gamma = t.get("gamma", 2.2)
+            v = np.arange(256, dtype=np.float64) / 255
+            lut = np.clip(calibration.encode(np.clip(calibration.decode(v, gamma) * g, 0, 1), gamma) * 255 + 0.5, 1, 255).astype(np.uint8)
+            lut[0] = 0
+            part = lut[part]
+        out[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+    return out
 
 
 PARTIAL = 0.5   # of a whole frame: a frame that came down with less than this (tile "lost") is partial (partial)
@@ -9039,6 +9111,10 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         late = gain < 1.0
         planes = [_place(u, dict(newest[f], gain=own_gain[f]) if late else newest[f], rect, k, W, H, cache,
                          p["display_scale"]) for f in used]
+        # (where a band's camera saturated, the light it saturated on: colour_picture's sat)
+        sats = [_place_sat(u, dict(newest[f], gain=own_gain[f]) if late else newest[f], rect, k, W, H, cache,
+                           p["display_scale"]) for f in used]
+        sats = sats if any(m is not None for m in sats) else None
         # another body in the set (a transit: Titan behind Rhea) moved against the target between the filters: each
         # filter's copy of it put where the shown frame has it (_per_body_planes), not three colored copies
         # (where the target is in each tile's picture: SPICE's place, or the pictures' where seen_places took them,
@@ -9071,8 +9147,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 # and their limbs then crossed the frame's disk as ghost arcs, blue on one side and orange on the other
                 # (133TI CLOUD002, CB3 + MT1; Sam 11-08)
                 shown = _place(u, t, rect, k, W, H, cache, p["display_scale"])
-                planes = [_onto_frame(plane, shown) for plane in planes]
-            rgba = colour_picture(u, p, used, planes, away)
+                onto = [_onto_frame(plane, shown, with_shift=True) for plane in planes]
+                planes = [a for a, _ in onto]
+                if sats is not None:
+                    # (each saturation map moved as its plane was: nearest, so a patch keeps its level)
+                    sats = [m if m is None or mv is None else cv2.warpAffine(m, mv, (m.shape[1], m.shape[0]), flags=cv2.INTER_NEAREST,
+                                                                             borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                            for m, (_, mv) in zip(sats, onto)]
+            rgba = colour_picture(u, p, used, planes, away, sats)
             if late:
                 rgba = _shade_rgb(rgba, gain, gamma)
             rep["color"] = used

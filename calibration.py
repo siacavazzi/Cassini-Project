@@ -1475,7 +1475,7 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
     if scale is not None:
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
-        out, drawn_at = [], []
+        out, drawn_at, sat_level = [], [], None
         for iof, black in zip(iofs, scale["blacks"]):
             # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
             own = scale["black_of"](iof) if scale.get("black_of") else None
@@ -1495,9 +1495,18 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
             if full is not None and full.any():
+                own = []
                 picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale["white"], gamma,
-                                                                            scale.get("shoulder"), toe)[..., 0])
+                                                                            scale.get("shoulder"), toe)[..., 0], own)
+                # the light the camera saturated on, kept beside a one-frame picture (obs_mosaic's <n>.sat.webp): a band
+                # of a colour set drawn white there is floored at that light, not at the white it was drawn
+                # (colour_picture; 154RH MUTUALEVE002: GRN saturated on Rhea where RED read 230, drawn white, made the
+                # set lime green)
+                sat_level = np.zeros(full.shape, np.uint8)
+                sat_level[full] = own[0]
         sink = _hdr_sink.get()
+        if sink is not None and len(iofs) == 1 and hasattr(sink, "sat"):
+            sink.sat.append(sat_level)
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
             # ... and HDR_SATURATED times white in its recovery map (where it is drawn white)
             sink[-1][saturated[0] & (out[0][..., 0] == 255)] = hdr_code(np.log2(HDR_SATURATED))
@@ -1529,7 +1538,7 @@ SAT_SMOOTH = (0.3, 0.6) # ... through the camera's limit when this share of its 
 SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or a spike beside a patch reads anything)
 
 
-def saturated_code(iof, full, draw):
+def saturated_code(iof, full, draw, own=None):
     """The display codes (uint8, one per pixel of full) of the pixels the camera saturated (full) in a picture of I/F
     iof drawn by draw (I/F array -> codes). A patch the light round it climbs up to (SAT_SMOOTH of the unsaturated pixels
     SAT_RING round it within SAT_NEAR of its own clipped value: a smooth glow that rose through the camera's limit) is
@@ -1563,6 +1572,10 @@ def saturated_code(iof, full, draw):
             smooth[1:] = np.clip((np.nan_to_num(close) - SAT_SMOOTH[0]) / (SAT_SMOOTH[1] - SAT_SMOOTH[0]), 0, 1)
             level[1:] = np.maximum(level[1:], np.minimum(round_it, SAT_RING_MOST * level[1:]))
     codes = draw(level[None, :]).astype(np.float32)[0]
+    if own is not None:
+        # (own: the light each patch saturated on, as drawn, before a patch with an edge or near white goes white;
+        # at least 1, so 0 says "not saturated")
+        own.append(np.clip(codes[labels[full]] + 0.5, 1, 255).astype(np.uint8))
     w = np.clip((codes - SAT_WHITE[0]) / float(SAT_WHITE[1] - SAT_WHITE[0]), 0, 1)
     codes = codes + (255 - codes) * (w * w * (3 - 2 * w))
     codes = 255 - (255 - codes) * smooth   # (a patch with an edge: white)
@@ -1845,11 +1858,20 @@ HDR_ZERO = int(round(-HDR_LOG2[0] / (HDR_LOG2[1] - HDR_LOG2[0]) * 255))
 _hdr_sink = contextvars.ContextVar("hdr_sink", default=None)
 
 
+class _HdrSink(list):
+    """hdr_capture's list of recovery maps, with .sat: one saturation-level map per picture (uint8, H x W; 0 where the
+    camera did not saturate, else the display code of the light the saturated patch was on, saturated_code's level
+    before it is drawn white), or None, appended alongside"""
+    def __init__(self):
+        super().__init__()
+        self.sat = []
+
+
 @contextlib.contextmanager
 def hdr_capture():
     """While open (in this thread or task), each tone call appends its recovery map (uint8, H x W) to the list
     yielded; the last one is the picture's"""
-    sink = []
+    sink = _HdrSink()
     token = _hdr_sink.set(sink)
     try:
         yield sink
