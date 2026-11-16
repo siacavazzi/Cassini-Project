@@ -85,12 +85,9 @@ body.phone #tourhint button { padding: 6px 11px; }
     { id: "welcome", at: null, title: "Look around",
       text: p => `${p ? "Drag to look around and pinch to zoom." : "Drag the view to look around and scroll to zoom."} A few quick pointers follow; skip them whenever you like.` },
     { id: "play", at: ["#speedtool", "#play"], title: "Play and speed",
-      text: () => {
-        const cl = document.body.classList, warp = "The arrows are time warp: each one is a faster speed, from real time up to a month a second. Click one, or press period to warp faster and comma to slow down.";
-        return "Play or pause the mission here. " + (cl.contains("warp-only") ? warp
-          : cl.contains("warp-steps") ? warp + " The slider beside them reaches any speed in between."
-          : "The speed slider sets how much mission time passes each second, from real time up to days a second. Period and comma step the speed up and down.");
-      } },
+      text: p => "Play or pause the mission here. " + (document.body.classList.contains("warp-only")
+        ? `The arrows are time warp, from real time up to a month a second. ${p ? "Tap" : "Click"} one to jump to its speed, drag along them for any speed in between${p ? "" : ", or press period to warp faster and comma to slow down"}.`
+        : "The speed slider sets how much mission time passes each second, from real time up to a month a second. Period and comma step the speed up and down.") },
     { id: "timeline", at: ["#tl"], title: "The timeline",
       text: p => `Each mark is a picture Cassini took: narrow-angle camera on one lane, wide-angle on the other. ${p ? "Drag" : "Drag or scroll"} to move through time.` },
     { id: "cameras", at: ["#imgcard", "#wacard"], title: "Cassini's cameras",
