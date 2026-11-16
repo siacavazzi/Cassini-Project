@@ -763,7 +763,7 @@ def centred(ids, view):
     radius = body_radius(lbl) if lbl is not None else None
     target = str(lbl.info.get("TARGET_NAME", "")).replace('"', "").strip() if lbl is not None else ""
     if view.get("centre") and radius and target not in obs_mosaic.DISK_DETAIL_SKIP:
-        out = obs_mosaic.detail_on_disk(out, cx - left, cy - top, radius)
+        out = obs_mosaic.detail_on_disk(out, cx - left, cy - top, radius, target=target)
         report["disk_detail"] = {"radius": round(float(radius), 1)}
     # one frame on its one channel; the last step, noise-aware fine sharpening (_sharpened), on the view as shown
     if len(ids) == 1:
