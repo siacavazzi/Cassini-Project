@@ -1,9 +1,9 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `a8920be7` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `a8beb73e` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 68 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534 and #546), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 13 follow-up merges of reviewed new heads (#546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
-**Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527, #536 (READY only once a running benchmark passes, or not ready). #530 and #533 went in after their reviews cleared.
+**In it:** 69 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546 and #536), each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 13 follow-up merges of reviewed new heads (#546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527 (not ready: rework and a new taste call). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
 1. **#483 x #491 stacking** (`image_correction.stack_frames`, `stacking.load_stacked`): #483's plain polarizer stack and #491's full-depth stack touch the same lines. The combined code is the 491 author's own trial rebase (branch `claude/full-depth-on-484`, 9b41e801). 491's later commits do not touch these files. Reviewed as correct (merge a0c25f1f).
@@ -32,7 +32,7 @@ How to read this:
 #474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, and the three integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -143,3 +143,6 @@ How to read this:
 | 97 | Picture-change map (docs) | `d9b47237` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
 | 98 | [#546](https://github.com/siacavazzi/Cassini-Project/pull/546) Full-depth picture sized by what is stored too (N1855753770_1, 246RI color set)
  (new head) | `a8920be7` | no | #546's reviewed new head: a test case for a summed stored size. No picture change. | Nothing. | none | - | integration commit |
+| 99 | Picture-change map (docs) | `1b46fc21` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 100 | [#536](https://github.com/siacavazzi/Cassini-Project/pull/536) A narrow-angle movie frame's black measured without the pixels it lost in downlink
+ | `a8beb73e` | **YES** | A narrow-angle movie frame's own black is measured without the pixels it lost in downlink (wide-angle frames as before): 133TI CLOUD002 no longer flickers between two colors, 207SA NHEMMOV001's near-black frames are back. Benchmark 50 of 51 identical; approach-movie changed by at most 12 levels. | Every narrow-angle movie pass with lost pixels (obs bump renames all passes anyway); levels tables. | export-v119, levels-v81, obs-v131/v114 | - | resolved by hand: calibration.load_channels takes both deep (#491) and valid (#536); color_image keeps #491's deeps beside #536's unfilled masks (deeps filtered with the kept channels too, deep= and valid= both passed); obs VERSIONS by hand: #536 renumbered to obs-v131/v114/v100; export-v119, levels-v81 |
