@@ -46,7 +46,7 @@
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
     // Gaussian-weighted line over smooth frames (_gaussian_line), the rolling scale (rolled), the gain to that line within
     // GAIN either way, to 1/200
-    function evenedGains(L, smooth, c) {
+    function evenedTargets(L, smooth, c) {
       const N = L.length, h = Math.floor(c.flash / 2), pad = [];
       for (let k = 0; k < h; k++) pad.push(L[0]);
       pad.push(...L);
@@ -72,11 +72,34 @@
       let mid = 0;
       for (const v of want) mid += v;
       mid /= N;
-      const out = [];
+      const target = [];
       for (let a = 0; a < N; a++) {
         const dev = want[a] - mid, roll = c.roll || 0, free = c.free || 0;
-        const w = want[a] - roll * Math.sign(dev) * Math.max(Math.abs(dev) - free, 0);
-        out.push(pyRound(Math.min(Math.max(Math.exp(w - L[a]), 1 / c.gain), c.gain) * 200) / 200);
+        target.push(want[a] - roll * Math.sign(dev) * Math.max(Math.abs(dev) - free, 0));
+      }
+      return target;
+    }
+    // obs_mosaic._evened_gain: the gain that takes a log brightness to the one wanted
+    const evenedGain = (own, want, c) => pyRound(Math.min(Math.max(Math.exp(want - own), 1 / c.gain), c.gain) * 200) / 200;
+    function evenedGains(L, smooth, c) {
+      const target = evenedTargets(L, smooth, c);
+      return L.map((own, a) => evenedGain(own, target[a], c));
+    }
+    // obs_mosaic.held_gains: one gain for each picture, frames in a row that show the same picture (a held color set:
+    // the same log brightness) taking the mean of what evenedGains wants for them. A server whose frames are named
+    // by a rule before 10 evens frame by frame (c.held false or missing): the page then does as its frames were made
+    function heldGains(L, smooth, c) {
+      if (!c.held) return evenedGains(L, smooth, c);
+      const target = evenedTargets(L, smooth, c), out = [];
+      for (let k = 0; k < L.length;) {
+        let j = k;
+        while (j + 1 < L.length && L[j + 1] === L[k]) j++;
+        let want = 0;
+        for (let a = k; a <= j; a++) want += target[a];
+        want /= j + 1 - k;
+        const g = evenedGain(L[k], want, c);
+        for (let a = k; a <= j; a++) out.push(g);
+        k = j + 1;
       }
       return out;
     }
@@ -88,7 +111,7 @@
       for (const n of ns) { const k = e.logs[n][1]; if (!by.has(k)) by.set(k, []); by.get(k).push(n); }
       for (const [k, run] of by) if (inColour && !e.logs[run[0]][2] && run.length < e.greyRun) { for (const n of run) out[n] = 1.0; by.delete(k); }
       for (const run of by.values()) {
-        const g = run.length >= e.flash ? evenedGains(run.map(n => e.logs[n][0]), smooth, e) : run.map(() => 1.0);
+        const g = run.length >= e.flash ? heldGains(run.map(n => e.logs[n][0]), smooth, e) : run.map(() => 1.0);
         run.forEach((n, i) => { out[n] = g[i]; });
       }
       return out;
@@ -300,7 +323,7 @@
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, evenedGains, heldGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU };
   };
   window.cassiniSteadyMath = STEADY_MATH;
