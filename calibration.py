@@ -667,9 +667,7 @@ def calibrate(png, info, image=None, smooth=True):
             # levels apart there)
             # (a frame with its original, when SKY_SMOOTH_ORIGINALS turns smoothing on for it: its true DN on the codes'
             # scale, fractional, so the smoothing's code-step tests see no steps the squeeze made)
-            original = original_values(png, info)
-            steps = png if original is None else np.interp(original, LUT, np.arange(256.0)).astype(np.float32)
-            per_second = smooth_sky(per_second, steps, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
+            per_second = smooth_sky(per_second, _smooth_steps(png, info), sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -731,6 +729,18 @@ SKY_SMOOTH_ORIGINALS = False  # smooth_sky on a frame calibrated from its true 1
                            # ... decided per build, not per frame: with originals in use (CASSINI_ORIGINALS set) every
                            # 12BIT frame is left unsmoothed, also the few whose original is missing or rejected (a frame
                            # its download marked "check"), so no frame of a movie looks smoothed among unsmoothed ones
+
+
+def _smooth_steps(png, info):
+    """What smooth_sky measures a frame's code steps on: its stored codes, or with its original its true values on the
+    codes' scale (fractional): a 12BIT frame's DN through the squeeze's table, an 8LSB frame's DN as they are (the camera's
+    own 0-255 scale; through the 12-bit table they would sit within 0-53 and real detail read as steps)"""
+    original = original_values(png, info)
+    if original is None:
+        return png
+    if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT":
+        return np.interp(original, LUT, np.arange(256.0)).astype(np.float32)
+    return original.astype(np.float32)
 
 
 def _smooth_off(info):

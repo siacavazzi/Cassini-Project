@@ -139,6 +139,11 @@ with tempfile.TemporaryDirectory() as folder:
     assert cal.calibrate(stretched, dict(info_8, path="nac_data/N1999999999_1.png"), None) is None
     iof8 = cal.calibrate(stretched, info_8, cal.depth_image(stretched, info_8), smooth=False)
     assert iof8 is not None and np.isfinite(iof8).all()
+    # sky smoothing, if turned on for originals, measures steps on the true values on the codes' scale: an 8LSB frame's
+    # DN as they are, a 12BIT frame's through the squeeze's table (whose codes are then the stored ones, give or take)
+    assert np.array_equal(cal._smooth_steps(stretched, info_8), eight.astype(np.float32))
+    assert np.abs(cal._smooth_steps(codes, info) - codes).max() < 1.0
+    assert cal._smooth_steps(codes, info_t) is codes
     # ... but not one whose DN wrapped past 255 (only their low 8 bits were sent)
     wrapped = eight.copy(); wrapped[20:40, 20:40] = 3; wrapped[20:40, 40:44] = 250
     volume(folder, "COISS_2112", {"N1876460142_1": img_bytes(wrapped, half=False)})
@@ -148,5 +153,5 @@ with tempfile.TemporaryDirectory() as folder:
         ds.check_originals(); raise AssertionError("a build without originals was let through")
     except ds.OriginalsMissing:
         pass
-    checks += 12
+    checks += 15
 print(f"{checks} checks ok")
