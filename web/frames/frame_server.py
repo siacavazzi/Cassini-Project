@@ -173,6 +173,9 @@ Routes:
                                total (frames: how many of them are the stretch's frames), made through (UTC), seconds left
   POST /prebuild/<JOB>/stop    stops it (what is made stays made)
   /health                      "ok" plus where the frames come from
+  /frames/lightning.json       the lightning passes (lightning.py): their pictures, times and the published flashes'
+                               places on them; /frames/lightning/<ID>.webp a picture's enhanced lightning view. Both
+                               made ahead by the pre-build (prebuild.py lightning) and only sent here; 404 until made
   /frames/slices.json          which stretches of the mission the cache holds pictures for under this server's
                                versions (slices.py: prebuild.py --years records each finished phase): {"spans":
                                [[from, until], ...] UTC, or null for the whole mission, "phases": {...}}. The page keeps
@@ -250,6 +253,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
 import mosaic_native  # noqa: E402
+import lightning  # noqa: E402
 import export  # noqa: E402
 import slices  # noqa: E402
 import usage  # noqa: E402
@@ -1680,6 +1684,19 @@ def make_handler(site, cache, flags=None):
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
             if url.path == "/frames/slices.json":
                 return self.send_json(slices.covered(cache, picture_versions()))
+            # the lightning passes' enhanced pictures and their markers (lightning.py), made ahead by the pre-build:
+            # sent as they are, nothing made here (404 when the pre-build has not made them)
+            if url.path == "/frames/lightning.json":
+                path = os.path.join(cache, lightning.folder(), "lightning.json")
+                if not os.path.exists(path):
+                    return self.send_error(404, "No lightning pictures built")
+                return self.send_file(path, "application/json", {}, "lightning.json", forever=False)
+            m = re.match(r"^/frames/lightning/([NW]\d{10}_\d+)\.webp$", url.path)
+            if m:
+                path = os.path.join(cache, lightning.folder(), m.group(1) + ".webp")
+                if not os.path.exists(path):
+                    return self.send_error(404, "No lightning picture of that frame")
+                return self.send_file(path, "image/webp", parse_qs(url.query), f"Cassini_{m.group(1)}_lightning_enhanced.webp")
             if url.path == "/frames/color.webp":
                 query = parse_qs(url.query)
                 ids = query.get("ids", [""])[0].split(",")

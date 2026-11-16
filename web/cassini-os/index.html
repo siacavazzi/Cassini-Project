@@ -1993,6 +1993,21 @@ body.cutscene #mcov, body.ambient #mcov { display: none; }
 #placewin li .s { grid-column: 2 / span 2; font: 10px var(--hudf, monospace); color: var(--q-dim, #555); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #placewin .plnone { padding: 14px 12px; font-size: 12px; color: var(--q-dim, #555); }
 
+#lightwin { top: calc(env(safe-area-inset-top, 0px) + 36px); right: max(14px, env(safe-area-inset-right, 0px)); width: min(440px, calc(100% - 28px)); display: flex; flex-direction: column; }
+#lightwin .lthead { flex: none; padding: 8px 12px 6px; font-size: 13px; color: var(--q-text, #111); border-bottom: 1px solid var(--q-line, #ddd); }
+#lightwin .lthead small { display: block; margin-top: 2px; font: 10px/1.4 var(--hudf, monospace); color: var(--q-dim, #555); }
+#lightwin .ltpic { position: relative; background: #000; aspect-ratio: 1 / 1; }
+#lightwin .ltpic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+#lightwin .ltpic svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#lightwin .ltpic svg circle { fill: none; stroke: #ffd35a; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+#lightwin .ltpic .ltbadge { position: absolute; left: 8px; top: 8px; padding: 2px 6px; border-radius: 3px; font: 10px var(--hudf, monospace); color: #000; background: #ffd35a; }
+#lightwin .ltbar { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--q-line, #ddd); font: 11px var(--hudf, monospace); color: var(--q-text, #111); }
+#lightwin .ltbar button { border: 1px solid var(--q-line, #ccc); background: none; color: inherit; font: inherit; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+#lightwin .ltbar button[aria-pressed="false"] { opacity: .55; }
+#lightwin .ltnote { padding: 6px 12px 9px; font: 10px/1.45 var(--hudf, monospace); color: var(--q-dim, #555); }
+#lightwin .ltnote a { color: inherit; }
+body.cutscene #lightwin, body.ambient #lightwin { display: none; }
+
 #ambient { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
 #ambient[hidden] { display: none; }
 #ambient .amb-tl { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 1.6vh); transform: translateX(-50%); translate: var(--amb-dx, 0) var(--amb-dy, 0);
@@ -13088,6 +13103,7 @@ void main() {
     { key: "find", label: "Finds", c: "#9fd38a" },
     { key: "transit", label: "Transits", c: "#c49cf0" },
     { key: "plume", label: "Plumes", c: "#f3f0e2" },
+    { key: "lightning", label: "Lightning", c: "#ffd35a" },
     { key: "flyby", label: "Flybys", c: "#8ab6ff" },
     { key: "movie", label: "Movies", c: "#6fd6d0" },
   ];
@@ -13194,7 +13210,11 @@ void main() {
   // ---- a row ----
   function play(x) {
     const e = x.e;
-    if (e.kind === "flyby" || e.kind === "milestone" || e.kind === "observation") return jump(e);
+    if (e.kind === "observation") {
+      // a moment that holds a lightning pass also opens the Lightning window (lightning.html), which follows the clock
+      return Promise.resolve(jump(e)).then(() => window.cassiniLightning && cassiniLightning.open(e));
+    }
+    if (e.kind === "flyby" || e.kind === "milestone") return jump(e);
     // a potential moment opens like an imaging session; a movie also plays in movie mode, its camera's pictures only
     const session = { ...e, kind: "observation" };
     return Promise.resolve(jump(session)).then(() => {
@@ -13793,7 +13813,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3bf945a4deb1";
+  const BUILD = /*BUILD*/"3c9ac584a6ec";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -20374,6 +20394,114 @@ window.huygensModels = (() => {
   S.on("view.places", v => { placesOn = v; if (!v) closePlace(); });
   window.cassiniCoverage = { index: () => index, need, seen, pick, show, close: closePlace, place: () => place, ready: moon => !!(cov[moon] && cov[moon].tex), patched: moon => !!(cov[moon] && cov[moon].patched),
     held: () => Object.keys(cov).filter(m => cov[m].tex), covered };
+})();
+</script>
+<script>
+// ---------- lightning on Saturn: the published flashes, on pictures enhanced to show them ----------
+(function () {
+  const L = { doc: null, asked: 0, pass: null, i: -1, marks: true, win: null, raf: 0 };
+  const base = () => (window.cassiniFeeds && cassiniFeeds.frames) || "";
+  async function load() {
+    if (L.doc) return L.doc;
+    if (Date.now() - L.asked < 60000) return null;     // a failed ask is tried again after a minute
+    L.asked = Date.now();
+    try {
+      const r = await fetch(`${base()}/frames/lightning.json`);
+      if (!r.ok) return null;
+      L.doc = await r.json();
+    } catch (e) { return null; }
+    return L.doc;
+  }
+  function passFor(entry) {
+    const obs = new Set(entry && entry.obs || []);
+    return (L.doc && L.doc.passes || []).find(p => p.obs.some(o => obs.has(o))) || null;
+  }
+  const NOTE = {
+    night: "Enhanced: black and white set on Saturn's night side around the storm's latitude, and the ring-lit " +
+           "glow across the night side taken off, so the storm cloud and its flashes fill the range. The rings and " +
+           "sky are left black. Specks and short streaks are cosmic-ray hits on the camera.",
+    day: "Enhanced: the picture as taken, tinted warm where it is brighter than both pictures taken about ten " +
+         "minutes before and after (redrawn to match by Saturn's turning). Lightning comes and goes; clouds stay. " +
+         "Some tints are clouds that changed; the rings mark the flashes the paper found.",
+  };
+  function win() {
+    if (L.win) return L.win;
+    const el = L.win = document.createElement("aside");
+    el.className = "win"; el.id = "lightwin"; el.dataset.name = "Lightning"; el.setAttribute("aria-label", "Lightning on Saturn");
+    el.innerHTML = `<div class="titlebar"><span class="lights"><button class="close" aria-label="Close">×</button><button class="min" aria-label="Minimize">–</button><button class="zoom" aria-label="Zoom">+</button></span>Lightning on Saturn</div>
+      <div class="lthead"></div>
+      <div class="ltpic"><img alt=""><svg viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid meet"></svg><span class="ltbadge">ENHANCED</span></div>
+      <div class="ltbar"><button class="ltprev" aria-label="Previous picture">◀</button><span class="ltwhen"></span><button class="ltmarks" aria-pressed="true" title="Show the published flashes (M)">Flashes</button><button class="ltnext" aria-label="Next picture">▶</button></div>
+      <div class="ltnote"></div>`;
+    const dock = document.getElementById("dock"); dock.parentNode.insertBefore(el, dock);
+    if (window.cassiniWM) cassiniWM.wire(el);
+    el.querySelector(".close").addEventListener("click", e => { e.stopImmediatePropagation(); close(); }, true);
+    el.querySelector(".ltprev").addEventListener("click", () => step(-1));
+    el.querySelector(".ltnext").addEventListener("click", () => step(1));
+    el.querySelector(".ltmarks").addEventListener("click", toggleMarks);
+    document.addEventListener("keydown", e => {
+      if (el.hidden || e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(e.target.tagName)) return;
+      if (e.key === "m" || e.key === "M") toggleMarks();
+    });
+    return el;
+  }
+  function toggleMarks() {
+    L.marks = !L.marks;
+    if (L.win) L.win.querySelector(".ltmarks").setAttribute("aria-pressed", String(L.marks));
+    draw(true);
+  }
+  function step(d) {
+    const p = L.pass; if (!p) return;
+    const i = Math.max(0, Math.min(p.frames.length - 1, (L.i < 0 ? 0 : L.i) + d));
+    if (typeof setPlaying === "function") setPlaying(false);
+    if (typeof setTime === "function") setTime(p.frames[i].et);
+    L.i = -1; draw();
+  }
+  // the pass's picture taken last before the clock (its first one before the pass starts)
+  function index() {
+    const p = L.pass, et = state.et; let i = 0;
+    for (let k = 0; k < p.frames.length; k++) if (p.frames[k].et <= et + 1) i = k;
+    return i;
+  }
+  function draw(force) {
+    const p = L.pass, el = L.win; if (!p || !el || el.hidden) return;
+    const i = index();
+    if (i === L.i && !force) return;
+    L.i = i;
+    const f = p.frames[i];
+    const img = el.querySelector("img"), src = `${base()}/frames/lightning/${f.id}.webp?v=${encodeURIComponent(L.doc.version)}`;
+    if (img.getAttribute("src") !== src) img.src = src;
+    el.querySelector("svg").innerHTML = L.marks ? f.markers.map(m => `<circle cx="${m.x}" cy="${m.y}" r="38"><title>Flash at ${Math.abs(m.lat).toFixed(1)}° ${m.lat < 0 ? "S" : "N"}, about ${m.energy} billion J of light</title></circle>`).join("") : "";
+    const n = f.markers.length;
+    el.querySelector(".ltwhen").textContent = `${f.utc.slice(11, 19)} UTC · ${i + 1}/${p.frames.length} · ${f.exposure_s >= 1 ? f.exposure_s.toFixed(0) : f.exposure_s} s${n ? ` · ${n} flash${n > 1 ? "es" : ""}` : ""}`;
+  }
+  function loop() {
+    L.raf = 0;
+    if (!L.win || L.win.hidden || !L.pass) return;
+    draw();
+    L.raf = requestAnimationFrame(loop);
+  }
+  async function open(entry) {
+    const doc = await load(); if (!doc) return false;
+    const p = passFor(entry);
+    if (!p) { if (L.pass) close(); return false; }   // another moment: the window goes with its pass
+    L.pass = p; L.i = -1;
+    const el = win();
+    el.hidden = false; delete el.dataset.min;
+    if (window.cassiniWM) { cassiniWM.front(el); cassiniWM.syncMenu(); }
+    const fl = p.frames.reduce((a, f) => a + f.markers.length, 0);
+    el.querySelector(".lthead").innerHTML = `${p.label.replace(/^Lightning on Saturn, /, "")}<small>${fl} flash${fl === 1 ? "" : "es"} at ${Math.abs(p.storm_lat).toFixed(0)}° ${p.storm_lat < 0 ? "south" : "north"}, ${p.view === "night" ? "night side" : "day side, blue filter"} · ${p.frames.length} narrow-angle pictures</small>`;
+    el.querySelector(".ltnote").innerHTML = `${NOTE[p.view]} Flashes: <a href="${doc.source.open_copy}" target="_blank" rel="noopener">Dyudina et al. 2013</a>, placed by SPICE.`;
+    if (!L.raf) L.raf = requestAnimationFrame(loop);
+    draw(true);
+    return true;
+  }
+  function close() {
+    if (L.win) L.win.hidden = true;
+    L.pass = null;
+    if (window.cassiniWM) cassiniWM.syncMenu();
+  }
+  window.cassiniLightning = { open, close, passes: async () => ((await load()) || { passes: [] }).passes };
 })();
 </script>
 <script>
