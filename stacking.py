@@ -186,7 +186,7 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False, deep=
     frames = [lbl.resize_image()]
     masks = [lbl.valid_mask()] if valid else None
     codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE) if deep else None
-    scale = cal.stored_range(codes, lbl.info) if deep and ds.lut8() else None
+    scale = cal.value_range(codes, lbl.info) if deep and ds.lut8() else None
     deeps = [cal.depth_image(codes, lbl.info)] if deep else None
     if not cal.step("stack"):   # Settings > Processing: the frame alone
         max_frames = 1

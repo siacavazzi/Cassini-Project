@@ -76,6 +76,7 @@ stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, vali
     (made[path][0], made[path][1].copy(), 1) + ((made[path][0].valid_mask(),) if valid else ()) + \
     ((np.asarray(made[path][1], np.float32)[..., 0] if np.ndim(made[path][1]) == 3 else np.asarray(made[path][1], np.float32),) if deep else ())
 cal.calibrate = lambda png, info, image=None: next(v[2] for v in made.values() if v[0].info is info)
+cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 cal.ds.imread = lambda path, flags=None: made[path][1]
 
 

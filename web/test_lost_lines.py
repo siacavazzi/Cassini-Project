@@ -126,6 +126,7 @@ stacking.ic.find_shift = lambda a, b, r: None
 stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing, so merged unmatched
 stacking.ds.imread = lambda path, flags=None: pngs[path][..., 0]
 cal.calibrate = lambda codes, info, image=None: codes.astype(np.float32) / 1000
+cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 _, iof, n, valid = stacking.load_hdr("a.png", valid=True)
 assert n == 2 and valid.all()
