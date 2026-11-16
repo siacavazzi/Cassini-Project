@@ -5906,6 +5906,8 @@ DISK_DETAIL_REACH = ((1.15, 1.4), (1.5, 1.85))   # stills (detail_on_disk): x th
                             # the edge where backdrop is told from it (round, or irregular, DISK_DETAIL_IRREGULAR:
                             # Hyperion's long axis is 1.33 x its mean radius) ...
 DISK_DETAIL_SLACK = 12.0    # ... each at least this many px further (SPICE's place is off by up to 10 px) ...
+DISK_DETAIL_TEXTURE = 0.003   # ... skipped on a body this smooth at the pixel scale (its fine texture over its level)
+DISK_DETAIL_TERMINATOR = 0.2  # ... and eased off where its brightness falls by this share of its bright level per patch
 DISK_DETAIL_TOP = 251.0     # ... and raised toward white only up to this level ...
 DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
 DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
@@ -5972,8 +5974,27 @@ def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None):
     fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit
     weight = cv2.GaussianBlur(lit, (0, 0), sigma)
     mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
+    # nothing to raise: a body whose lit surface is this smooth at the pixel scale (Titan's haze, 0.0007 of its
+    # brightness against an icy moon's 0.006 or more) is left as it is (Sam, 11-16: Titan's haze has nothing to sharpen)
+    sel = cv2.erode(lit, np.ones((7, 7), np.uint8)) > 0
+    if sel.sum() >= 100:
+        fine = lum - cv2.GaussianBlur(lum, (0, 0), 2.0)
+        texture = float(np.median(np.abs(fine[sel]))) * 1.48 / max(float(np.median(lum[sel])), 1.0)
+        if texture < DISK_DETAIL_TEXTURE:
+            return rgba
     x = lum - mean
     d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE)) * fade
+    if DISK_DETAIL_TERMINATOR:
+        # eased off across the terminator (Sam, 11-16: the light-to-dark transition looked overprocessed while the rest
+        # of the body looked good): where the body's brightness, smoothed over half the filter's patch, falls by more
+        # than DISK_DETAIL_TERMINATOR of its bright level across one patch, the change shrinks as 1 / (1 + g^2)
+        ref = max(float(np.percentile(lum[lit > 0], 90)), 1.0)
+        # (over SPICE's disk only, night side included: the fall from the disk to the sky at the limb is no terminator)
+        disk = (rr <= radius).astype(np.float32)
+        s2 = max(1.5, sigma / 2)
+        big = cv2.GaussianBlur(lum * disk, (0, 0), s2) / np.maximum(cv2.GaussianBlur(disk, (0, 0), s2), 1e-3)
+        g = np.hypot(cv2.Sobel(big, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(big, cv2.CV_32F, 0, 1, ksize=3)) / 8 * sigma / ref
+        d = d / (1 + (g / np.float32(DISK_DETAIL_TERMINATOR)) ** 2)
     # (up only to DISK_DETAIL_TOP: the roll-off toward white never lands a raised pixel on 254-255, which read as
     # clipped on the brightest crater rims; the image benchmark's clip measure, review of #495)
     room = np.where(d > 0, np.maximum(DISK_DETAIL_TOP - rgb.max(axis=2), 0), rgb.min(axis=2))

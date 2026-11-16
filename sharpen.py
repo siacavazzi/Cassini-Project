@@ -22,7 +22,7 @@ filters slightly off each other do not turn into color fringes):
 import numpy as np
 import cv2
 
-AMOUNT = 2.4        # how much fine detail is raised where it is well over the noise, on a clean picture (about Cassini
+AMOUNT = 1.6        # how much fine detail is raised where it is well over the noise, on a clean picture (about Cassini
                     # Studio's Sharpness slider at 80 there: 2.5 x 80/100 = 2.0 on its 4-neighbour kernel, which raises
                     # the finest detail a little more than SIGMA 0.8 does); a grainy, stretched or lossy picture takes less
 SIGMA = 0.8         # px: the blur the detail is measured against

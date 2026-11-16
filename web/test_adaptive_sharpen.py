@@ -23,7 +23,7 @@ def test_detail_over_noise():
     assert r["weight"][:, :240].mean() < 0.01, r["weight"][:, :240].mean()        # sky grain: untouched
     assert r["weight"][:, 270:].mean() > 0.3, r["weight"][:, 270:].mean()          # detail: raised
     assert abs(o[:, :240].astype(float).std() - t[:, :240].std()) < 0.1
-    assert o[:, 270:].std() > 1.2 * t[:, 270:].std()
+    assert o[:, 270:].std() > 1.1 * t[:, 270:].std()
     print("detail over the noise raised, sky grain left as it is")
 
 
@@ -135,7 +135,37 @@ def test_detail_on_disk():
     print("detail on a small disk: shading kept (%.0f vs %.0f), craters raised, the sky untouched" % (out[..., 0][inner].mean(), px[..., 0][inner].mean()))
 
 
+def test_terminator_and_smooth_bodies():
+    """Sam, 11-16 (taste call 1, strength 1.6): the terminator gets less disk detail than the rest of the body, and a
+    body with no fine texture (Titan's haze) is left as it is"""
+    import obs_mosaic as om
+    h = w = 400; cx = cy = 199.5; r = 120.0
+    r2 = (xx[:h, :w] - cx) ** 2 + (yy[:h, :w] - cy) ** 2
+    disk = r2 <= r * r
+    shade = np.clip((cx + 0.3 * r - xx[:h, :w]) / (0.6 * r), 0, 1)   # lit on the left, a terminator at the middle
+    tex = 10 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3)
+    lum = np.where(disk, 8 + 170 * shade + tex * shade, 4.0)
+    px = np.dstack([np.clip(lum, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    term = disk & (np.abs(xx[:h, :w] - cx) < 0.15 * r)
+    bright = disk & (xx[:h, :w] < cx - 0.5 * r) & (r2 < (0.8 * r) ** 2)
+    keep = om.DISK_DETAIL_TERMINATOR
+    try:
+        om.DISK_DETAIL_TERMINATOR = None
+        hard = np.abs(om.detail_on_disk(px, cx, cy, r).astype(int) - px)[..., 0]
+        om.DISK_DETAIL_TERMINATOR = keep
+        soft = np.abs(om.detail_on_disk(px, cx, cy, r).astype(int) - px)[..., 0]
+    finally:
+        om.DISK_DETAIL_TERMINATOR = keep
+    assert soft[term].mean() < 0.6 * hard[term].mean(), (soft[term].mean(), hard[term].mean())
+    assert soft[bright].mean() > 0.8 * hard[bright].mean(), (soft[bright].mean(), hard[bright].mean())
+    smooth = np.dstack([np.clip(np.where(disk, 8 + 170 * shade, 4.0), 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    assert (om.detail_on_disk(smooth, cx, cy, r) == smooth).all()
+    print("disk detail eased off across the terminator (%.1f vs %.1f levels), kept on the lit body; a smooth body untouched"
+          % (soft[term].mean(), hard[term].mean()))
+
+
 if __name__ == "__main__":
+    test_terminator_and_smooth_bodies()
     test_detail_on_disk()
     test_detail_over_noise()
     test_guards()
