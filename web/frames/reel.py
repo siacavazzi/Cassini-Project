@@ -412,14 +412,15 @@ def mosaic_scale(group, cache):
     path = os.path.join(cache, version(), "scales", key + ".json")
 
     def make():
-        tiles = []
+        tiles, summing = [], []
         for ids in group:
-            iofs = [stacking.load_hdr(f"{FOLDERS[i[0]]}/{i}.png", REPEAT_GAP)[1] for i in ids]
-            if all(iof is not None for iof in iofs):
-                tiles.append(iofs)
+            got = [stacking.load_hdr(f"{FOLDERS[i[0]]}/{i}.png", REPEAT_GAP) for i in ids]
+            if all(g[1] is not None for g in got):
+                tiles.append([g[1] for g in got])
+                summing.append([calibration.summing_of(g[0].get_info()) for g in got])
         if not tiles:
             return b"null"
-        return json.dumps(calibration.tiles_scale(tiles)).encode()
+        return json.dumps(calibration.tiles_scale(tiles, summing=summing)).encode()
 
     with _lock:
         lock = _scale_locks.setdefault(key, threading.Lock())

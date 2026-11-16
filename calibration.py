@@ -2062,13 +2062,27 @@ def picture_scale(iofs, sky_fraction=0.1, sky_percentile=98, floor=True, sky=Non
             blacks = [np.percentile(iof[sky], sky_percentile) for iof in iofs]
         # One white point for all channels: the brightest channel's brightest pixel, after a
         # 3x3 median so a single cosmic ray hit or hot pixel can't set it
-        white = max(_despeckled(iof - np.float32(black), s).max()
-                    for iof, black, s in zip(iofs, blacks, summing or [1] * len(iofs)))
+        white = max(cv2.medianBlur(iof - np.float32(black), 3).max() for iof, black in zip(iofs, blacks))
+        if summing and max(summing) > 1:
+            # (at the camera's own pixel size on a summed frame, but only on a sunlit picture, as _balanced_scale's guard)
+            native = max(_despeckled(iof - np.float32(black), s).max() for iof, black, s in zip(iofs, blacks, summing))
+            if native < white:
+                sunlit = _sunlit(iofs)
+                white = native * sunlit + white * (1 - sunlit)
         return blacks, white, measured
     # the sky just measured, not measured again (a percentile of every pixel of each channel)
     levels, margin, white, measured = _balanced_scale(iofs, sky_fraction, sky_percentile, sky=sky, floor=floor,
                                                       summing=summing)
     return [level + margin for level in levels], white, measured
+
+
+"""
+How much a picture is sunlit surface rather than lit sky, 0 to 1: its median I/F (its brightest channel's) on GLOW_IOF's
+log scale, as the glow black reads it (under GLOW_IOF[0] lit sky: an aurora stare, a night sky)
+"""
+def _sunlit(iofs):
+    median = max(max(float(np.median(i)) for i in iofs), 1e-12)
+    return float(np.clip(np.log(median / GLOW_IOF[0]) / np.log(GLOW_IOF[1] / GLOW_IOF[0]), 0, 1))
 
 
 """
@@ -2153,8 +2167,7 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
     brightest = max(float(b.max()) for b in blurred)
     if max(summing) > 1:
         native = max(float(_despeckled(iof - np.float32(black), s).max()) for iof, black, s in zip(iofs, blacks, summing))
-        median = max(max(float(np.median(i)) for i in iofs), 1e-12)
-        sunlit = float(np.clip(np.log(median / GLOW_IOF[0]) / np.log(GLOW_IOF[1] / GLOW_IOF[0]), 0, 1))
+        sunlit = _sunlit(iofs)
         brightest = native * sunlit + brightest * (1 - sunlit) if native < brightest else brightest
     white = max(white, brightest / MAX_STRETCH)
     return levels, margin, white, measured
@@ -2347,14 +2360,17 @@ tile's white, above its own black, that much higher on the shared one. Each tile
 alone, but all are on one scale, so they meet without brightness or colour steps.
 pictures = one list of channel I/F images per tile (stacking.load_hdr)
 """
-def tiles_scale(pictures, gamma=2.2):
-    scales = [picture_scale([iof.astype(np.float32) for iof in iofs], floor=False) for iofs in pictures]
+def tiles_scale(pictures, gamma=2.2, summing=None):
+    # summing: one list per picture, summing_of each of its frames (a summed tile's white guard at the camera's size)
+    summing = summing or [None] * len(pictures)
+    scales = [picture_scale([iof.astype(np.float32) for iof in iofs], floor=False, summing=sm)
+              for iofs, sm in zip(pictures, summing)]
     measured = [s for s in scales if s[2]]
     if measured:
         blacks = [float(np.median([s[0][c] for s in measured])) for c in range(len(pictures[0]))]
         white = max(float(s[1]) for s in scales)
     else:
-        scales = [picture_scale([iof.astype(np.float32) for iof in iofs]) for iofs in pictures]
+        scales = [picture_scale([iof.astype(np.float32) for iof in iofs], summing=sm) for iofs, sm in zip(pictures, summing)]
         blacks = [min(float(s[0][c]) for s in scales) for c in range(len(pictures[0]))]
         white = max(float(s[1]) + float(np.mean(s[0])) - float(np.mean(blacks)) for s in scales)
     scale = {"blacks": blacks, "white": white, "gamma": gamma}

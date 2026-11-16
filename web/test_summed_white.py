@@ -21,6 +21,11 @@ sky = (2e-5 + 2e-6 * rng.standard_normal((1024, 1024))).astype(np.float32); sky[
 _, _, w4, _ = cal._balanced_scale([sky], summing=[4])
 _, _, w1, _ = cal._balanced_scale([sky], summing=[1])
 assert abs(w4 - w1) < 1e-12, (w4, w1)
+# the classic look's white and a reel mosaic's tiles_scale, the same
+with cal.looking("classic"):
+    assert cal.picture_scale([hot], summing=[4])[1] < 0.3 and cal.picture_scale([hot], summing=[1])[1] > 1.0
+    assert abs(cal.picture_scale([sky], summing=[4])[1] - cal.picture_scale([sky], summing=[1])[1]) < 1e-12
+assert cal.tiles_scale([[hot]], summing=[[4]])["white"] < cal.tiles_scale([[hot]])["white"]
 # a 4x4 cosmic ray in a summed movie frame is found and taken out (its neighbours do not have it)
 frame = (100 + rng.standard_normal((1024, 1024))).astype(np.float32)
 before, after = frame + rng.standard_normal(frame.shape).astype(np.float32), frame + rng.standard_normal(frame.shape).astype(np.float32)
