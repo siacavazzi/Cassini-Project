@@ -68,6 +68,10 @@ def _faded(E, dt):
 
 
 NEAREST = 5   # a carried frame takes the median correction of this many C-smithed frames nearest it in time
+AGREE_PX = 5.0   # and only where they agree: their median distance from that median at most this many of the frame's
+#                  own pixels; where JPL's own corrections scatter more (ring mosaics: tens of px), no carried value is
+#                  better than raw, and the frame keeps its raw pointing (the mosaic's joint solve places its tiles)
+PIXEL = {"N": 6.0e-6, "W": 6.0e-5}   # rad per pixel, NAC and WAC
 
 
 def _rotvec(E):
@@ -75,14 +79,18 @@ def _rotvec(E):
     return np.asarray(axis) * angle
 
 
-def local_error(refs, t):
+def local_error(refs, t, pixel):
     """The error rotation at t from an observation's (time, E) list: the component-wise median of the NEAREST
     C-smithed frames' corrections (as rotation vectors), faded by the time to the nearest of them (_faded). JPL
     navigated each image on its own, and on a ring mosaic the corrections of one pointing's frames scatter by tens of
     pixels and sometimes hundreds (ISS_260RI_HIPHASEFA001: 2 to 76 px, one 482 px); a median of the nearby ones is
-    what they agree on, where carrying the nearest one (or blending the two either side) copied its own error."""
+    what they agree on, where carrying the nearest one (or blending the two either side) copied its own error. None
+    where they do not agree (AGREE_PX)."""
     near = sorted(refs, key=lambda r: abs(r[0] - t))[:NEAREST]
-    v = np.median(np.array([_rotvec(E) for _, E in near]), axis=0)
+    vs = np.array([_rotvec(E) for _, E in near])
+    v = np.median(vs, axis=0)
+    if np.median(np.linalg.norm(vs - v, axis=1)) > AGREE_PX * pixel:
+        return None
     a = float(np.linalg.norm(v))
     E = sp.axisar(v / a, a) if a > 0 else np.eye(3)
     return sp.q2m(_faded(E, abs(near[0][0] - t)))
@@ -143,7 +151,7 @@ for year, rows in index.groupby("year"):
     if YEARS and year not in YEARS: continue
     t0 = time.time()
     year_kernels(year)
-    records = []
+    records, scattered = [], 0
     for f, o in zip(rows["frame"], rows["OBSERVATION_ID"]):
         if f in smithed_frames or f in skip or f not in pointing_of: continue
         # only from C-smithed frames of the same pointing: the attitude error changes with the attitude, so a mosaic's
@@ -158,7 +166,10 @@ for year, rows in index.groupby("year"):
         near = sorted(near.items())
         if not near: continue
         t = ets[f]
-        E = local_error(near, t)
+        E = local_error(near, t, PIXEL[f[0]])
+        if E is None:
+            scattered += 1
+            continue
         try: cs = [E @ sp.pxform("J2000", BODY, t + d) for d in (-PAD, 0.0, PAD)]
         except Exception: continue
         records.append((f, t, cs))
@@ -166,7 +177,7 @@ for year, rows in index.groupby("year"):
         ticks = [sp.sce2c(-82, t + d) for d in (-PAD, 0.0, PAD)]
         sp.ckw03(handle, ticks[0], ticks[-1], -82000, "J2000", False, f, 3, ticks, np.array([sp.m2q(c) for c in cs]), np.zeros((3, 3)), 1, [ticks[0]])
         written.append(f)
-    print(f"{year}: {len(records)} frames carried over ({time.time()-t0:.0f} s)", flush=True)
+    print(f"{year}: {len(records)} frames carried over, {scattered} left raw where JPL's corrections scatter ({time.time()-t0:.0f} s)", flush=True)
 sp.ckcls(handle); ba.unload_kernels()
 open(OUT[:-3] + ".lis", "w").writelines(f + "\n" for f in written)
 # and the frames JPL's own per-image pointing covers (bootleg_autonav.own_pointing_frames)
