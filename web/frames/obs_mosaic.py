@@ -10000,11 +10000,22 @@ def rolling_restart(u, size, cache, laps=1, fade=(0, 0), last=None, fmt="webp", 
     with _lock:
         if any(k[0] == u["key"] for k in _rolled):
             return 0   # (this process is growing the pass already: a later stretch of it continues the chain)
-    paths = []
-    for n in range(len(u["frames"]) if last is None else last + 1):
+    count = len(u["frames"]) if last is None else last + 1
+
+    def path(n):
         made = rolling_layout(u, n, cache, laps, fade=fade)   # (as _rolling_picture lays it out for prebuild: wait)
-        if made:
-            paths.append(_rolling_path(u, made, size, cache, fmt, out))
+        return _rolling_path(u, made, size, cache, fmt, out) if made else None
+    # (pictures are made in frame order: the last one kept means all are, the first one missing means none are; only a
+    # part-made pass has every frame laid out)
+    if count == 0:
+        return 0
+    end = path(count - 1)
+    if end is not None and os.path.exists(end):
+        return 0
+    start = next((x for x in map(path, range(count)) if x is not None), None)
+    if start is None or not os.path.exists(start):
+        return 0
+    paths = [x for x in map(path, range(count)) if x is not None]
     have = [os.path.exists(x) for x in paths]
     if not any(have) or all(have):
         return 0
