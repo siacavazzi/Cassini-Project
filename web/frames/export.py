@@ -131,7 +131,7 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = get("size", "1024")
-    size = FULL if size == FULL else min(SIZES + BUCKETS[1:], key=lambda s: abs(s - int(size)))
+    size = FULL if size == FULL else min(SIZES + BUCKETS[1:], key=lambda s: (abs(s - int(size)), -s))   # (the larger of two as near: 768 is 1024)
     look, colors = get("look", calibration.LOOKS[0]), get("colors", calibration.COLORS[0])
     # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
     movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),

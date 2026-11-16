@@ -8794,6 +8794,9 @@ function targetLabel(k) {
   // (no 768: no picture is kept at 768, so a film at it had every picture drawn on the request; a size kept before reads
   // as the nearest here and on the server)
   const SIZES = [512, 1024, 1536, 2048, "full"];
+  // the size kept on this device as one the picker offers: the nearest, the larger of two as near (a 768 kept before it
+  // went is 1024), for the label, the slider and the film's request alike (export.py takes the nearest the same way)
+  const sizeOf = () => { const sz = +opt("export.size", 1024) || 1024; return SIZES.slice(0, -1).reduce((m, v) => (Math.abs(v - sz) <= Math.abs(m - sz) ? v : m)); };
   const CANVAS_S = 0.7;   // seconds a mosaic picture takes up to 2048 (the windows' canvas: about as 1024)
   // measured on the Mac Mini (bench_fullres_movie.py): seconds to draw a mosaic picture at Full, per million pixels
   // (hexagon mosaic movies 2012-11-27 and 2013-06-26: 5.5-7.4 s a picture of 2400-3100 px, two made at once)
@@ -8926,7 +8929,7 @@ function targetLabel(k) {
   const bgQ = () => (bg().toLowerCase() === "#000000" ? "" : `&bg=${bg().slice(1)}`);
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
-      size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
+      size: opt("export.full", false) ? "full" : String(sizeOf()), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Boomerang (export.py boom=): only when on, so a film made without it keeps its name
     if (opt("export.boomerang", false)) q.set("boom", "1");
     // HDR film (export.py hdr=): only when on, made by the server (filmHere)
@@ -9507,8 +9510,7 @@ function targetLabel(k) {
     $("exauto").checked = opt("export.adaptive", true);
     $("exfps").value = opt("export.fps", 12); $("exfps").disabled = $("exauto").checked;
     $("exfpsv").textContent = $("exauto").checked ? "adaptive" : `${opt("export.fps", 12)} fps`;
-    const full = opt("export.full", false), sz = opt("export.size", 1024);
-    const near = SIZES.slice(0, -1).reduce((m, v, i) => (Math.abs(v - sz) < Math.abs(SIZES[m] - sz) ? i : m), 0);
+    const full = opt("export.full", false), near = SIZES.indexOf(sizeOf()), sz = SIZES[near];
     $("exsize").value = full ? SIZES.length - 1 : near; $("exsizev").textContent = full ? "Full" : sz > 1024 ? `≤ ${sz} px` : `${sz} px`;
     $("exsound").checked = opt("export.sound", false); $("excap").checked = opt("export.caption", true); $("exboom").checked = opt("export.boomerang", false); $("exhdr").checked = opt("export.hdr", false);
     segs();
@@ -13795,7 +13797,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"feab59fae91d";
+  const BUILD = /*BUILD*/"bf89d84adf63";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

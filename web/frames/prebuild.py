@@ -868,7 +868,7 @@ def segment_options(q):
         raise ValueError("until= must come after from=")
     cams = "".join(c for c in "NW" if c in (get("cams") or "NW"))
     try:
-        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
+        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: (abs(z - int(x)), -z)) for x in (get("sizes") or "1024").split(",") if x})
         trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
         steady, exposure = int(get("steady_smooth", "0") or 0), int(get("exposure", "0") or 0)
         most = max(0, int(get("most", "0") or 0))
