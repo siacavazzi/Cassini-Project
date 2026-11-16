@@ -3762,6 +3762,34 @@
     "download": false,
     "family": "pass"
    }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/lightning.json",
+   "note": "lightning window list: not published yet",
+   "expect": {
+    "route": "lightning_list",
+    "store": "refused",
+    "refused": "route: the Lightning window (lightning.py, PR #488) is not published yet: a follow-up adds its pre-built files as an R2 family; until then the page leaves the window closed",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
+   "url": "/frames/lightning/N1638307355_1.webp",
+   "note": "lightning enhanced picture: not published yet",
+   "expect": {
+    "route": "lightning_picture",
+    "store": "refused",
+    "refused": "route: as lightning_list",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
   }
  ]
 }

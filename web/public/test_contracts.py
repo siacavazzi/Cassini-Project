@@ -104,6 +104,8 @@ SAMPLES = {
     "==/stats/usage.json": ("GET", "/stats/usage.json"), "==/health": ("GET", "/health"),
     "==/frames/slices.json": ("GET", "/frames/slices.json"), "==/frames/color.webp": ("GET", "/frames/color.webp"),
     "==/frames/thumb.webp": ("GET", "/frames/thumb.webp"), "==/reel/bodies.json": ("GET", "/reel/bodies.json"),
+    "==/frames/lightning.json": ("GET", "/frames/lightning.json"),
+    "^/frames/lightning/([NW]\\d{10}_\\d+)\\.webp$": ("GET", "/frames/lightning/N1638307355_1.webp"),
     "startswith/flags/": ("GET", "/flags/index.json"),
 }
 new = sorted(found - set(SAMPLES))
