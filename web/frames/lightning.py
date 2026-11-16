@@ -31,8 +31,8 @@ Markers: each listed flash, placed on its picture by SPICE from its latitude and
 
 Pictures are calibrated by the pipeline (calibration.calibrate) from the archive's stored codes, and placed by
 bootleg_autonav.find_target, as every other picture. Output, into the frame server's cache:
-  <cache>/LIGHTNING_VERSION/<ID>.webp   the enhanced picture, 1024 px (the frame's own pixels, scaled up)
-  <cache>/LIGHTNING_VERSION/lightning.json  the passes, their pictures, times, views and markers
+  <cache>/<folder()>/<ID>.webp   the enhanced picture, 1024 px (the frame's own pixels, scaled up)
+  <cache>/<folder()>/lightning.json  the passes, their pictures, times, views and markers
 which the frame server sends as they are (/frames/lightning.json, /frames/lightning/<ID>.webp): nothing is worked out
 at request time. A made picture is not made again.
 
@@ -56,6 +56,13 @@ REPLAY = os.path.join(ROOT, "web", "replay")
 FLASHES = os.path.join(REPLAY, "lightning_flashes.csv")
 MOMENTS_OUT = os.path.join(REPLAY, "lightning_moments.csv")
 LIGHTNING_VERSION = "lightning-v1"
+
+
+def folder():
+    """The cache folder's name: LIGHTNING_VERSION and the processed frames' version, which is bumped whenever the
+    calibration changes (frame_server.PROC_VERSIONS), so a calibration change makes these pictures again too."""
+    import frame_server
+    return f"{LIGHTNING_VERSION}-{frame_server.PROC_VERSIONS['balanced']}"
 SOURCE = {"title": "Dyudina et al. 2013, Saturn's visible lightning, its radio emissions, and the structure of the "
                    "2009-2011 lightning storms, Icarus 226, Table A1",
           "url": "https://doi.org/10.1016/j.icarus.2013.07.013",
@@ -362,12 +369,12 @@ def _write_webp(path, img):
 
 
 def build(cache, only=None, log=print):
-    """Makes every lightning pass's pictures and lightning.json in <cache>/LIGHTNING_VERSION (see the module
+    """Makes every lightning pass's pictures and lightning.json in <cache>/<folder()> (see the module
     docstring). only: a date (YYYY-MM-DD) to make one pass."""
     import spiceypy as sp
-    out = os.path.join(cache, LIGHTNING_VERSION)
+    out = os.path.join(cache, folder())
     os.makedirs(out, exist_ok=True)
-    doc = {"version": LIGHTNING_VERSION, "source": SOURCE, "passes": []}
+    doc = {"version": folder(), "source": SOURCE, "passes": []}
     for g in passes():
         if only and g["date"] != only:
             continue

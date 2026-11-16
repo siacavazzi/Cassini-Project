@@ -54,10 +54,10 @@ def main():
                 urllib.request.urlopen(url + path); raise AssertionError(path + " answered before it was made")
             except urllib.error.HTTPError as e:
                 assert e.code == 404
-        os.makedirs(os.path.join(cache, lightning.LIGHTNING_VERSION))
-        json.dump({"version": lightning.LIGHTNING_VERSION, "passes": []}, open(os.path.join(cache, lightning.LIGHTNING_VERSION, "lightning.json"), "w"))
-        open(os.path.join(cache, lightning.LIGHTNING_VERSION, "N1638307355_1.webp"), "wb").write(b"RIFFxxxxWEBP")
-        assert json.load(urllib.request.urlopen(url + "/frames/lightning.json"))["version"] == lightning.LIGHTNING_VERSION
+        os.makedirs(os.path.join(cache, lightning.folder()))
+        json.dump({"version": lightning.folder(), "passes": []}, open(os.path.join(cache, lightning.folder(), "lightning.json"), "w"))
+        open(os.path.join(cache, lightning.folder(), "N1638307355_1.webp"), "wb").write(b"RIFFxxxxWEBP")
+        assert json.load(urllib.request.urlopen(url + "/frames/lightning.json"))["version"] == lightning.folder()
         r = urllib.request.urlopen(url + "/frames/lightning/N1638307355_1.webp")
         assert r.headers["Content-Type"] == "image/webp" and r.read() == b"RIFFxxxxWEBP"
         try:

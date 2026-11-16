@@ -90,7 +90,7 @@ import reel  # noqa: E402
 import slices  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "lightning")
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview")
 ADDED = ("tables", "fullview")   # phases run on a finished cache, not recorded in slices.json
 
 
@@ -1166,7 +1166,7 @@ class Segments:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("phase", choices=PHASES + ("count",))
+    ap.add_argument("phase", choices=PHASES + ("lightning", "count"))   # lightning: no items, lightning.build makes it
     ap.add_argument("--cache", required=True, help="the frame server's --cache folder to fill")
     ap.add_argument("--status", help="folder for status.json and the progress page (e.g. web/cassini-os/prebuild)")
     ap.add_argument("--threads", type=int, default=3)

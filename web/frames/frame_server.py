@@ -1687,13 +1687,13 @@ def make_handler(site, cache, flags=None):
             # the lightning passes' enhanced pictures and their markers (lightning.py), made ahead by the pre-build:
             # sent as they are, nothing made here (404 when the pre-build has not made them)
             if url.path == "/frames/lightning.json":
-                path = os.path.join(cache, lightning.LIGHTNING_VERSION, "lightning.json")
+                path = os.path.join(cache, lightning.folder(), "lightning.json")
                 if not os.path.exists(path):
                     return self.send_error(404, "No lightning pictures built")
                 return self.send_file(path, "application/json", {}, "lightning.json", forever=False)
             m = re.match(r"^/frames/lightning/([NW]\d{10}_\d+)\.webp$", url.path)
             if m:
-                path = os.path.join(cache, lightning.LIGHTNING_VERSION, m.group(1) + ".webp")
+                path = os.path.join(cache, lightning.folder(), m.group(1) + ".webp")
                 if not os.path.exists(path):
                     return self.send_error(404, "No lightning picture of that frame")
                 return self.send_file(path, "image/webp", parse_qs(url.query), f"Cassini_{m.group(1)}_lightning_enhanced.webp")
