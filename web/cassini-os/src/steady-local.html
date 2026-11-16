@@ -489,7 +489,7 @@ onmessage = async e => {
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
       : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, m.eye ? t.eye : t.sets);
-    if (m.detail && t.headroom && t.disk) px = M.ringWhite(px, W, H, t.headroom, t.hgamma, t.shoulder, [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W]);
+    if (m.detail && t.headroom && t.disk) px = M.ringWhite(px, W, H, t.headroom, t.hgamma, t.shoulder, [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W * t.ringDisk]);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);

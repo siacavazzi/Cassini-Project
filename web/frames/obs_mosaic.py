@@ -5910,6 +5910,8 @@ def _part(path, w, h):
 
 
 RING_SOFT = 0.06   # ring_white: the disk's edge eased over this share of its radius each way
+RING_DISK = 0.9    # ... round a circle this share of the disk's (equatorial) radius: Saturn's polar radius, so the rings
+                   # beyond its poles, which the equatorial circle took in, keep today's white (235SA SATSTARE001)
 
 
 def ring_white(rgba, scale):
@@ -5925,6 +5927,7 @@ def ring_white(rgba, scale):
     knee = np.float32(scale.get("shoulder") or calibration.SHOULDER)
     room = np.float32(1) - knee
     cx, cy, r = disk
+    r = r * RING_DISK
     ys = np.arange(rgba.shape[0], dtype=np.float32)[:, None] - np.float32(cy)
     xs = np.arange(rgba.shape[1], dtype=np.float32)[None, :] - np.float32(cx)
     t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - RING_SOFT))) / np.float32(2 * RING_SOFT * r), 0, 1)
@@ -7773,7 +7776,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
                if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
                if dhow.get("lit") and radius and not follows(fp, rect) else {}),
-            **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2),
+            **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2), "ringDisk": RING_DISK,
                 "shoulder": p["display_scale"].get("shoulder") or calibration.SHOULDER}
                if p["display_scale"].get("headroom") and isinstance(p["display_scale"].get("gamma", 2.2), (int, float)) else {})}
 

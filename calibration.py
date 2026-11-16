@@ -1818,6 +1818,7 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
         if look.get("disk"):
             k = x.shape[2] / 1024
             cx, cy, r = (v * k for v in look["disk"])
+            r *= 0.9   # (obs_mosaic.RING_DISK: Saturn's polar radius, the rings beyond its poles as today)
             soft = 0.06
             ys = np.arange(x.shape[1], dtype=np.float32)[:, None] - np.float32(cy)
             xs = np.arange(x.shape[2], dtype=np.float32)[None, :] - np.float32(cx)
