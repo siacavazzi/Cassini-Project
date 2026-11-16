@@ -56,6 +56,13 @@ deep_s = cal.depth_image(big, info_s)
 assert deep_s.shape == (1024, 1024) and deep_s.dtype == np.float32
 assert len(np.unique(deep_s)) >= len(np.unique(cal.stored_values(big, info_s)))
 checks += 1
+# ... and a picture stored at a summed size under a label that says 1024 lines (N1855753770_1: NASA's IMG 256 x 256
+# under a FULL, 1024 line label) is resized too, as label.resize_image resizes its display copy; a synthetic array of
+# another size (the 64 px codes above) is left as it is
+small = np.kron(codes, np.ones((4, 4), np.uint8))   # 256 x 256
+assert small.shape == (256, 256) and cal.depth_image(small, dict(label)).shape == (1024, 1024)
+assert cal.depth_image(codes, dict(label)).shape == codes.shape
+checks += 1
 
 # 4. stacking at full depth: two identical repeats give the frame itself, a cosmic ray in one is left out of both stacks
 frame = np.dstack([gray] * 3)
