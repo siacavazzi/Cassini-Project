@@ -19,7 +19,7 @@ observation goes on, so the pass builds without its other frames flashing in bet
             spells linger, and longer gaps are cut (the caption says what was skipped)
 The video is always FPS frames a second; holds are rounded to whole frames with the rounding carried forward.
 
-Picture sizes 1536 and 2048 ("up to"): each mosaic and mosaic movie picture is drawn on the windows' own canvas
+Picture size 2048 ("up to"; "up to 1536" went 2026-11-16): each mosaic and mosaic movie picture is drawn on the windows' own canvas
 (obs_mosaic, CANVAS px) at the biggest of BUCKETS its pass has detail for (its native size, never more: a pass 1,400
 px across stays at 1024), and the panes are the stretch's biggest such bucket; about the same work as 1024.
 
@@ -77,9 +77,11 @@ ONLY = 1.5
 # pictures in a film at most, 0 for no limit (the default: a film is drawn a picture at a time, so a month of pictures
 # is only a longer film); a public site sets CASSINI_EXPORT_MAX. The Movie Editor's list (list=1) has no cap either way
 MAX_PICTURES = int(os.environ.get("CASSINI_EXPORT_MAX", "0") or 0)
-SIZES = (512, 768, 1024)
+SIZES = (512, 1024)       # the pane sizes a film is made at: the sizes the pictures are kept at (768 went 2026-11-16: no
+                          # picture is kept at it, so a film at 768 had every picture drawn on the request)
 FULL = "full"               # Picture size Full: mosaics at native resolution (module notes)
 BUCKETS = (1024, 1536, 2048)   # mosaic sizes up to the canvas: a pass is drawn at the biggest its native size fills
+UP_TO = (2048,)             # the "up to" sizes a film is asked at, over SIZES ("up to 1536" went 2026-11-16, with 768)
 FULL_MAX = int(os.environ.get("CASSINI_EXPORT_FULL_MAX", 4096))   # largest pane at Full, px (H.264 plays it)
 FULL_WORKERS = 2            # pictures made at once at Full (each is a native mosaic, hundreds of MB while drawn)
 CAPTION = 48                 # caption strip height at 1024 px panes (scaled with the pane)
@@ -130,7 +132,7 @@ def options(q):
     fps = get("fps", "auto")
     fps = "auto" if fps == "auto" else max(1, min(FPS, int(float(fps))))
     size = get("size", "1024")
-    size = FULL if size == FULL else min(SIZES + BUCKETS[1:], key=lambda s: abs(s - int(size)))
+    size = FULL if size == FULL else min(SIZES + UP_TO, key=lambda s: (abs(s - int(size)), -s))   # (the larger of two as near: 768 is 1024, 1536 is 2048)
     look, colors = get("look", calibration.LOOKS[0]), get("colors", calibration.COLORS[0])
     # how movie passes look, as the camera windows play them (Settings > Movie; the page's cassiniMovieStyle)
     movie = {"center": get("center", "1") != "0", "trail": max(0, min(12, int(get("trail", "0") or 0))),
@@ -483,7 +485,7 @@ NATIVE_KINDS = ("mosaic", "rolling")   # the tries drawn at native resolution at
 
 
 def big(opt):
-    """Whether the film's mosaics are drawn bigger than 1024: Full, or an "up to" size (1536, 2048)."""
+    """Whether the film's mosaics are drawn bigger than 1024: Full, or an "up to" size (2048)."""
     return opt["size"] == FULL or opt["size"] > max(SIZES)
 
 
@@ -493,7 +495,7 @@ def bucket(native, cap):
 
 
 def full_size(opt, pics, cache, work=False):
-    """Picture size Full or up to 1536 / 2048: the panes' side (opt["pane"]) and what it is made of: {pane, native
+    """Picture size Full or up to 2048: the panes' side (opt["pane"]) and what it is made of: {pane, native
     (the biggest pass's own side, px), passes [{obs, cam, side, drawn}], mosaic_pictures (pictures drawn bigger than
     1024 can hold), pending (passes whose size is not known yet: not pre-processed, work False)}. At Full the pane
     is the biggest pass at native resolution (at least 1024, at most FULL_MAX, even for the video's colour planes);
