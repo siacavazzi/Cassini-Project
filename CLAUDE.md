@@ -54,10 +54,13 @@ the disk full there was no room left for swap. Since then:
   `heavy-guard` pauses running jobs when either gets low. A job gets its own `TMPDIR`, which is deleted when the
   job ends. Don't start parallel work outside it.
 - **Each thread deletes what it created as soon as it is done with it**: experiment folders, scratch checkouts and
-  clones, benchmark worktrees, caches and results, temp files and old evidence. That is approved in advance (Sam,
-  2026-11-16), but for a thread's own files only. Never delete what another thread or Sam created. Never delete
-  the mission zips, the 12-bit originals, `cisscal`, the full-build or live caches, sparsebundles, or Sam's own
-  files. Push or bundle any unpushed commits first.
+  clones, benchmark worktrees, its scratch caches and results, temp files and old evidence (not evidence an open PR,
+  a review or the taste page still links: that stays until the PR is merged or closed or the taste call is
+  answered). That is approved in advance (Sam, 2026-11-16), but for a thread's own files only. Never delete what
+  another thread or Sam created, and a cache or result another thread may reuse stays (benchmark base results, the
+  SPICE cache, `geometry.sqlite`, the replay data, the attitude folders). Never delete the mission zips, the 12-bit
+  originals, `cisscal`, the full-build or live caches, sparsebundles, or Sam's own files. Push or bundle any
+  unpushed commits first.
 - **Evidence is kept only as small final files**: on the PR (committed under `evidence/`) or in the project's
   shared folder. Working renders and intermediate caches go once the evidence exists.
 - **When a thread finishes, it says what it deleted and how much disk is free** on each Mac it used
