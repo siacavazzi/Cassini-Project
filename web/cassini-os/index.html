@@ -3555,7 +3555,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     }
     // (the table's c.clip: obs_mosaic CLIP_FROM and CLIP_REACH, calibration FILL_NEAR, FILL_FLOOR and FILL_MOST, obs_mosaic CLIP_EDGE; these
     // for a table made before it had them)
-    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5, 2];
+    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5, 0];
     // np.percentile (linear) of a float32 array, sorted here in place
     function percentile(a, q) {
       a.sort();
@@ -14012,7 +14012,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"4df76fafe2fd";
+  const BUILD = /*BUILD*/"39f789f51e4e";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

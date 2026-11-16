@@ -6068,7 +6068,7 @@ def _despiked(planes, gamma):
 
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
-CLIP_EDGE = 2   # (colour_picture) px round a clipped band left out of the floor its fill keeps (fill_saturated's edge)
+CLIP_EDGE = 2   # (colour_picture, with saturation maps) px round a clipped band left out of the floor its fill keeps (fill_saturated's edge)
 SAT_EXCESS = 0.02   # (colour_picture) linear: a band whose saturation excess (sat) is over this is clipped there
 
 
@@ -6658,7 +6658,7 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
         # (away: the other bodies of a movie frame (_per_body_planes), whose color is not the clipped body's: Rhea
         # saturated over Titan took Titan's orange)
         filled, every = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]),
-                                                   where=None if away is None else ~away, edge=CLIP_EDGE)
+                                                   where=None if away is None else ~away, edge=CLIP_EDGE if sat is not None else 0)
         # never under what the band read: a clipped band is at least as bright as its clipped value, and the ratio
         # the fill reads is measured where the band did not clip, its dimmer part, so where most of a frame clipped
         # it came out under the band's own reading and turned the tile green, blue or flat yellow with ragged edges
@@ -7662,8 +7662,9 @@ def _colour_recipes(u, p, cache, ns, tiles):
 
 def _clip_fill():
     """colour_picture's clipped-band fill, as the page does it (steady-local.html fillClipped): [CLIP_FROM, CLIP_REACH,
-    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST, CLIP_EDGE]"""
-    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST, CLIP_EDGE]
+    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST, the rim left out of the floor: 0, as colour_picture without a
+    saturation map, the page's case: a set with one is drawn by the server]"""
+    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST, 0]
 
 
 def _colour_by(u, want, ns, tiles, grey):

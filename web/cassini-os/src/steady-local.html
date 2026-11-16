@@ -197,7 +197,7 @@
     }
     // (the table's c.clip: obs_mosaic CLIP_FROM and CLIP_REACH, calibration FILL_NEAR, FILL_FLOOR and FILL_MOST, obs_mosaic CLIP_EDGE; these
     // for a table made before it had them)
-    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5, 2];
+    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5, 0];
     // np.percentile (linear) of a float32 array, sorted here in place
     function percentile(a, q) {
       a.sort();
