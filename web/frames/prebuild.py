@@ -391,8 +391,12 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         # (a pass a stopped build left part made is made again from its first picture, as an uninterrupted build makes
         # it: each grows from the one before it in memory, obs_mosaic.rolling_restart)
         fade = (style.get("fade", 0), style.get("persist", 0))
-        for size in sizes:
-            gone = obs_mosaic.rolling_restart(u, size, cache, style.get("laps", 1), fade, last)
+        # (with full on, its full views too, at the pass's one full size: they are grown in frame order the same way)
+        restart = [(s, obs_mosaic.OUT) for s in sizes]
+        if full and u["frames"]:
+            restart.append((frame_server.FULL, frame_server.full_out(u["frames"][0][1], cache)))
+        for size, out in restart:
+            gone = obs_mosaic.rolling_restart(u, size, cache, style.get("laps", 1), fade, last, out=out)
             if gone:
                 print(f"{u['key'][1]} pass {u['key'][3]}: {gone} mosaic movie pictures at {size} a stopped build left "
                       "made again from the first", flush=True)
