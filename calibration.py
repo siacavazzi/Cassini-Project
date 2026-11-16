@@ -152,6 +152,16 @@ SENSITIVITY = {"ISSNA": (1.89457e-10, 1.47036e9), "ISSWA": (9.28360e-11, 1.51463
 ORBITS = {
     "JUPITER": (5.2026, 0.0484, datetime.datetime(1999, 5, 20), 11.862),
     "SATURN": (9.5549, 0.0555, datetime.datetime(2003, 7, 26), 29.457),
+    # the bodies of the cruise, which are not at Jupiter (sun_distance's rule for a target without an orbit before
+    # 2003): the Moon's 56 frames of 1999-08-18 were calibrated 24 times too bright in I/F, Venus's 24 of 1999-06-24
+    # 47 times (its clouds at I/F 36), Masursky's 106 of 2000-01-23 3.6 times. Earth's and Venus's elements as SPICE
+    # has them at the flybys (within 0.1% of its distances there); the Moon is at Earth's
+    "EARTH": (1.00000, 0.01674, datetime.datetime(1999, 1, 3), 1.00001),
+    "MOON": (1.00000, 0.01674, datetime.datetime(1999, 1, 3), 1.00001),
+    "VENUS": (0.72333, 0.00678, datetime.datetime(1999, 4, 20), 0.61520),
+    # asteroid 2685 Masursky has no ephemeris in the mission's kernels: its distance on the day Cassini passed it,
+    # 1.6 million km off (Cassini's own from SPICE), as a circle
+    "MASURSKY": (2.617, 0.0, datetime.datetime(2000, 1, 23), 1.0),
 }
 
 _filters = None
@@ -197,7 +207,12 @@ def sun_distance(info):
         date = datetime.datetime.strptime(time.replace("Z", "")[:17], "%Y-%jT%H:%M:%S")
     except ValueError:
         return None
-    if target not in ORBITS:
+    if target != "SATURN" and _value(info, "TARGET_DESC", "").upper().startswith("SATURN"):
+        # the label says what the picture is of: a frame named for another body with an orbit of its own but described
+        # as Saturn's ("Saturn-Rings": Earth seen through the rings in 2013 and 2017, a dot in a picture of the rings)
+        # is lit at Saturn's distance, as it always was
+        target = "SATURN"
+    elif target not in ORBITS:
         # Cassini spent the mission at Saturn, and was near Jupiter only in 2000-2001
         target = "JUPITER" if date.year < 2003 else "SATURN"
     a, e, perihelion, period = ORBITS[target]
