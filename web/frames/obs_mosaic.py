@@ -6180,11 +6180,15 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     ga = grey[..., 3].astype(np.float32) / 255
     rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None] / 1.0)
     rgb = np.clip(rgb, 0, None)
-    if TINT_BLUR > 0:
+    # (a picture smaller than the windows', exposure_chain's EXPOSURE_SIDE px: the same part of it, so it is the windows'
+    # picture small. TINT_BLUR px of a 160 px picture is 10 px of the windows': a small body's set smeared over its disk)
+    small = min(1.0, max(colour.shape[:2]) / OUT)
+    blur = TINT_BLUR * small
+    if blur > 0:
         # (premultiplied: blurred unweighted, the picture's edge took in the empty canvas past it, a colored seam)
         ca0 = ca
-        ca = cv2.GaussianBlur(ca0, (0, 0), TINT_BLUR)
-        rgb = cv2.GaussianBlur(rgb * ca0[..., None], (0, 0), TINT_BLUR) / np.maximum(ca, 1e-3)[..., None]
+        ca = cv2.GaussianBlur(ca0, (0, 0), blur)
+        rgb = cv2.GaussianBlur(rgb * ca0[..., None], (0, 0), blur) / np.maximum(ca, 1e-3)[..., None]
     y = rgb @ np.asarray([0.2126, 0.7152, 0.0722], np.float32)
     g = lin(grey[..., 0])
     # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
@@ -6200,7 +6204,7 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     # (dimmed to the match's floor, 0.25 for a set's own frame and 0.67 for the frames between) only where it was
     # measured, and the chain took that for the movie: every set's own frame of a Jupiter approach movie read 2.3 times
     # brighter than the frames between, which were drawn as bright (C23RI RMOV001, 2026-11-16)
-    need = LUM_MATCH_MIN * min(1.0, (max(colour.shape[:2]) / OUT) ** 2)
+    need = LUM_MATCH_MIN * small ** 2
     if lit.sum() >= need and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
@@ -6232,7 +6236,7 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     out = np.clip(h * (g * match)[..., None], 0, 1)
     # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
     # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
-    clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * TINT_BLUR, TINT_FEATHER * side)), 0, 1) * ca
+    clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * blur, TINT_FEATHER * side)), 0, 1) * ca
     if clip.any():
         # the set's picture brought to the frame's brightness round it, so the fill meets the frame without a seam
         # (the set was taken at another time and exposure: drawn as it is it made a patch of another brightness and
