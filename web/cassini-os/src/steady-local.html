@@ -98,7 +98,17 @@
       const t = new Uint8Array(256);
       const dec = v => gamma === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((Math.max(v, 0.04045) + 0.055) / 1.055, 2.4)) : Math.pow(v, gamma);
       const enc = x => gamma === "srgb" ? (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0.0031308), 1 / 2.4) - 0.055) : Math.pow(x, 1 / gamma);
-      for (let i = 0; i < 256; i++) t[i] = Math.trunc(enc(Math.min(Math.max(dec(i / 255) * g, 0), 1)) * 255 + 0.5);
+      for (let i = 0; i < 256; i++) {
+        const v = i / 255;
+        let lin = enc(Math.min(Math.max(dec(v) * g, 0), 1));
+        if (g < 1.0) {
+          // a gain under 1 leaves white white: a clipped level (CLIP_FROM, 240, and up, eased in to 255) keeps its
+          // brightness, as _shade does (the sun's glare in 028RG HIPHASE002 dimmed to a flat grey blob)
+          const w = Math.min(Math.max((v * 255 - 240) / (255 - 240), 0), 1);
+          lin = lin + w * w * (3 - 2 * w) * (v - lin);
+        }
+        t[i] = Math.trunc(lin * 255 + 0.5);
+      }
       return t;
     }
     // obs_mosaic.colour_picture on its planes (RGBA, each a filter's tile placed in the view, red channel = the

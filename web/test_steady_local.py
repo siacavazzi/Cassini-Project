@@ -8,6 +8,10 @@ the frame the server draws with both. Then both through WebP (q95, as served): h
 browser's picture and the server's are. Synthetic pass as web/test_movie_stabilize.py (one textured field the camera
 creeps across, SPICE a few px off each frame).
 Run: python web/test_steady_local.py"""
+# the page moves the frame drawn at SPICE's places by whole canvas pixels; the server draws tiles at their sub-pixel
+# places (obs_mosaic.SUBPIXEL, #396), so the two are equal pixel for pixel only with that off (with it on the page's
+# picture is at most half a pixel from the server's)
+import os as _os; _os.environ["CASSINI_SUBPIXEL"] = "0"
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import io, json, re, subprocess, tempfile  # noqa: E402
 import numpy as np  # noqa: E402

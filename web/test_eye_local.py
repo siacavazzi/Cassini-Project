@@ -5,6 +5,10 @@ frame drawn in the eye style (colour_picture with calibration.eye_mix), for a fa
 stare, WAC MT3 + CB2 + MT2) and a two-filter pass (CB2 + MT2: its longer filter's tile listed twice), so no picture
 of its own is ever made or cached for it. Synthetic passes as web/test_steady_local.py.
 Run: python web/test_eye_local.py"""
+# the page moves the frame drawn at SPICE's places by whole canvas pixels; the server draws tiles at their sub-pixel
+# places (obs_mosaic.SUBPIXEL, #396), so the two are equal pixel for pixel only with that off (with it on the page's
+# picture is at most half a pixel from the server's)
+import os as _os; _os.environ["CASSINI_SUBPIXEL"] = "0"
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, subprocess, tempfile  # noqa: E402
 import numpy as np  # noqa: E402
