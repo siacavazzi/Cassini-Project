@@ -27,3 +27,9 @@ science TIFF download gives.
 
 Sky, star and dark frames without a body (SKY, NONE, SPICA, FOMALHAUT, UNK) still take the planet's distance; an
 I/F means nothing for them.
+
+Earth photographed from Saturn (13 frames filed under EARTH: 9 of 2013, ISS_195RI_HIPHASEC001, and 4 of 2017,
+ISS_269RI_HIPHASEFB001) keeps Saturn's distance, as before. The rule rests on the frame's own label, not on the
+year: all 13 carry `TARGET_DESC = "Saturn-Rings"`, the planners' statement of what the picture is of, and a frame
+named for another body but described as Saturn's is lit at Saturn's distance. Every frame of the Moon, Venus and
+Masursky has `TARGET_DESC = "UNK"`, and no frame before 2003 has a Saturn description.
