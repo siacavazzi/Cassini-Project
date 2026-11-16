@@ -45,6 +45,7 @@ Frames that can't be unstretched return None and the caller keeps the old behavi
 """
 import collections
 import contextlib
+import functools
 import contextvars
 import datetime
 import gzip
@@ -610,6 +611,8 @@ def calibrate(png, info, image=None, smooth=True):
     if dn is None:
         return None
 
+    # CISSCAL's step 1, the bit weights: the camera's 12-bit converter's uneven steps (bitweighted), before the bias
+    dn = bitweighted(dn, info)
     bias = bias_of(png, info)
     if _value(info, "DATA_CONVERSION_TYPE") == "TABLE":
         dn = np.interp(dn, np.arange(256), LUT)
@@ -722,6 +725,38 @@ def calibrate(png, info, image=None, smooth=True):
     if step("geom"):
         per_second = gc.correct(per_second, info)
     return per_second
+
+
+"""
+CISSCAL's bit weight correction (cisscal main.cpp BitweightCorrect, step 1 of Calibrate; ground calibration,
+bitweight/<nac|wac>g<gain state><m10|p5|p25>_bwt.tab): each DN the camera's analog-to-digital converter gave, as the
+level it truly stands for (its steps are not all one DN wide: up to about a tenth of a DN apart from it). As cisscal:
+on frames neither lossy nor TABLE converted (12BIT and 8LSB), gain states 1 to 3 (none for 215 e/DN), the table chosen
+by camera, gain state and front optics temperature (below -5 C m10, below 25 C p5, else p25), before the bias comes
+off. dn = the frame's values (any shape, or the 256-code table calibrate works per code). Unchanged when the tables
+are not there.
+"""
+def bitweighted(dn, info):
+    if (_value(info, "INST_CMPRS_TYPE", "").upper() == "LOSSY"
+            or _value(info, "DATA_CONVERSION_TYPE", "") not in ("12BIT", "8LSB")):
+        return dn
+    gain = GAIN_STATES.get(_value(info, "GAIN_MODE_ID", "").split("ELECTRONS")[0].strip())
+    if not gain:
+        return dn
+    table = _bitweights(_value(info, "INSTRUMENT_ID", ""), gain, ff.temperature_name(info))
+    return dn if table is None else np.interp(dn, np.arange(len(table), dtype=np.float64), table)
+
+
+@functools.lru_cache(maxsize=None)
+def _bitweights(camera, gain, temp):
+    name = f"{'nac' if camera == 'ISSNA' else 'wac'}g{gain}{temp}_bwt.tab"
+    path = os.path.join(ff.ROOT, "bitweight", name)
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        text = f.read().split("\\begindata", 1)[-1]
+    values = np.array([float(v) for v in re.split(r"[,\s]+", text) if v], np.float64)
+    return values if len(values) == 4096 else None
 
 
 LOSSY_RATIO = (6.0, 20.0)  # a lossy frame compressed more than LOSSY_RATIO[0] times has its compression blocks smoothed, all of
