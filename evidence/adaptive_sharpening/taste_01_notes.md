@@ -27,3 +27,5 @@ Every centred still and color composite gets today's close-up detail filter (str
 - taste_01_backdrop-pan-encke-gap_23.jpg: Pan in the Encke gap among the rings (2017). Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.
 - taste_01_backdrop-pan-encke-gap-far_24.jpg: Pan in the Encke gap, farther (2017). Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.
 - taste_01_backdrop-daphnis-keeler-gap_25.jpg: Daphnis in the Keeler gap (2017). Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.
+- taste_01_backdrop-dione-at-saturn-limb_26.jpg: Dione half across Saturn's limb (2005). Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.
+- taste_01_backdrop-mimas-at-saturn-limb_27.jpg: Mimas at Saturn's limb (2016). Left: today; middle: SPICE-disk detail filter + fine sharpening 1.6; right: + fine 2.4. Top full picture, bottom 1:1 crop.

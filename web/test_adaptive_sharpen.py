@@ -96,6 +96,12 @@ def test_detail_on_disk():
         ob = om.detail_on_disk(pb, cx, cy, r, target=target)
         far = r2 > (1.05 * r) ** 2
         assert np.abs(ob[..., 0][far].astype(int) - pb[..., 0][far]).max() == 0, target
+    # SPICE's limb 3 px off and a backdrop on one side only (a moon at Saturn's limb, a ring arc): untouched
+    part = disk | (xx[:h, :w] < cx - 1.1 * r)
+    pl = np.where(disk, lum, np.where(part, 90 + 30 * np.sin(yy[:h, :w] / 6.0), 4.0))
+    pp = np.dstack([np.clip(pl, 0, 255).astype(np.uint8)] * 3 + [np.full((h, w), 255, np.uint8)])
+    op = om.detail_on_disk(pp, cx + 3, cy, r, target="DIONE")
+    assert np.abs(op[..., 0][~disk].astype(int) - pp[..., 0][~disk]).max() == 0
     # an elongated moon over black sky: its far ends (past 1.15 x its mean radius) are raised too
     ell = ((xx[:h, :w] - cx) / (1.33 * r)) ** 2 + ((yy[:h, :w] - cy) / (0.75 * r)) ** 2 <= 1
     le = np.where(ell, 120 + 10 * np.sin(xx[:h, :w] / 2.0) * np.sin(yy[:h, :w] / 2.3), 4.0)
