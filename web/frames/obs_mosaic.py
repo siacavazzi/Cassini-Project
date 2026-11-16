@@ -6180,15 +6180,11 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     ga = grey[..., 3].astype(np.float32) / 255
     rgb = lin(colour[..., :3] / np.maximum(ca, 1 / 255)[..., None] / 1.0)
     rgb = np.clip(rgb, 0, None)
-    # (a picture smaller than the windows', exposure_chain's EXPOSURE_SIDE px: the same part of it, so it is the windows'
-    # picture small. TINT_BLUR px of a 160 px picture is 10 px of the windows': a small body's set smeared over its disk)
-    small = min(1.0, max(colour.shape[:2]) / OUT)
-    blur = TINT_BLUR * small
-    if blur > 0:
+    if TINT_BLUR > 0:
         # (premultiplied: blurred unweighted, the picture's edge took in the empty canvas past it, a colored seam)
         ca0 = ca
-        ca = cv2.GaussianBlur(ca0, (0, 0), blur)
-        rgb = cv2.GaussianBlur(rgb * ca0[..., None], (0, 0), blur) / np.maximum(ca, 1e-3)[..., None]
+        ca = cv2.GaussianBlur(ca0, (0, 0), TINT_BLUR)
+        rgb = cv2.GaussianBlur(rgb * ca0[..., None], (0, 0), TINT_BLUR) / np.maximum(ca, 1e-3)[..., None]
     y = rgb @ np.asarray([0.2126, 0.7152, 0.0722], np.float32)
     g = lin(grey[..., 0])
     # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
@@ -6198,18 +6194,11 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
     top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
     lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g)
-    # the lit pixels the match needs: LUM_MATCH_MIN of a picture the windows' size (OUT), and as much of a smaller one's
-    # area. exposure_chain measures the movie on pictures EXPOSURE_SIDE px a side, where a body that fills 7,600 px of
-    # the windows' picture fills 180: under LUM_MATCH_MIN as a count, so the frame was drawn without its match and hue
-    # (dimmed to the match's floor, 0.25 for a set's own frame and 0.67 for the frames between) only where it was
-    # measured, and the chain took that for the movie: every set's own frame of a Jupiter approach movie read 2.3 times
-    # brighter than the frames between, which were drawn as bright (C23RI RMOV001, 2026-11-16)
-    need = LUM_MATCH_MIN * small ** 2
-    if lit.sum() >= need and np.median(g[lit]) > 0:
+    if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
     else:
-        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= need else 1.0
+        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
         hue = np.ones(3, np.float32)
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within TINT_MATCH)
@@ -6236,7 +6225,7 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     out = np.clip(h * (g * match)[..., None], 0, 1)
     # where the frame clipped (a clear frame over-exposed on the planet behind the body it was exposed for) its
     # brightness says nothing: the set's own picture there, fading in from CLIP_FROM, so no flat white blotch
-    clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * blur, TINT_FEATHER * side)), 0, 1) * ca
+    clip = np.clip(cv2.GaussianBlur(near, (0, 0), max(4 * TINT_BLUR, TINT_FEATHER * side)), 0, 1) * ca
     if clip.any():
         # the set's picture brought to the frame's brightness round it, so the fill meets the frame without a seam
         # (the set was taken at another time and exposure: drawn as it is it made a patch of another brightness and
@@ -7403,6 +7392,18 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
             im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady, per_body=False)
             if im is None:
                 continue
+            if rep.get("tint"):
+                # a frame drawn in its set's colour (tinted_frame) is measured on the picture the windows show, made
+                # small: drawn EXPOSURE_SIDE px a side it is another picture. The tint matches the frame to its set over
+                # LUM_MATCH_MIN lit pixels, a count, and a body that fills 7,600 px of the windows' picture fills 180 of
+                # this one: without the match the frame fell to its floor, 0.25 for a set's own frame and 0.67 for the
+                # frames between, and the chain took that for the movie. Every set's own frame of a Jupiter approach
+                # movie read 2.3 times brighter than the frames between, all as bright in the windows, and was drawn at
+                # 0.43; the pass's last frames at 1.41 (C23RI RMOV001, 2026-11-16)
+                im, rep = movie_frame(u, n, cache, 0, colour, out=OUT, centre=centre, steady=steady, per_body=False)
+                if im is None:
+                    continue
+                im = im.resize((max(1, round(im.width * EXPOSURE_SIDE / max(im.size))), max(1, round(im.height * EXPOSURE_SIDE / max(im.size)))), Image.BOX)
             a, kind = np.asarray(im), tuple(rep.get("color") or ())
             if last is None:
                 logs[n], hows[n] = [0.0, stretch, bool(kind)], "first"
