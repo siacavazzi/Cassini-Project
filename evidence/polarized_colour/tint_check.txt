@@ -1,0 +1,18 @@
+Tint check (evidence/polarized_colour/tint.py): observations taking BL2, GRN and CB1 both through the visible
+polarizers and plainly. Per filter: three-angle polarized mean / POLARIZED_SHARE over the nearest plain frame
+(disk-integrated I/F, the repo calibration). Equal numbers = the polarized set has the plain set's colour.
+Run with GRN 0.355; the last columns rescale GRN to the adopted 0.350.
+
+observation                        target     BL2    GRN    CB1 | rel. GRN @0.350:    BL2    CB1
+ISS_023TI_1X1PT150001_PRIME        TITAN    0.999  0.983  1.000 |                   1.002  1.003
+ISS_037TI_COMPMAP012_CIRS          TITAN    0.994  0.987  0.999 |                   0.993  0.998
+ISS_044TI_1X1PHOT30001_PRIME       TITAN    1.002  0.987  1.001 |                   1.001  1.000
+ISS_045TI_1X1PHOT30001_PRIME       TITAN    1.001  0.987  1.001 |                   1.000  1.000
+ISS_047TI_1X1PHOT30001_PRIME       TITAN    1.001  0.911  1.001 |                   1.083  1.083
+ISS_107IC_POLCAL002_PRIME          TITAN    1.018  0.996  1.011 |                   1.008  1.001
+ISS_218IC_TISTARE001_PRIME         TITAN    0.975  0.981  0.992 |                   0.980  0.997
+ISS_C34IC_SATURN001_PRIME          SATURN   1.009  0.989  1.005 |                   1.006  1.002
+
+047TI GRN (0.911) is the one outlier: its nearest plain GRN frame is minutes from the triple on a turning view.
+CISSCAL pol_correction.tab (GRN 3.43011, CB1 3.2588, no BL2) applied to the same frames would leave CB1 about 5%
+under GRN relative to the plain sets (3.2588*0.349 / (3.43011*0.350) = 0.947): a tint the direct factors avoid.
