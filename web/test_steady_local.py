@@ -77,7 +77,7 @@ for c in range(12):
         logs[str(n)] = [round(float(crng.normal(0, 0.3) + (0.8 if crng.random() < 0.05 else 0)), 5), stretch,
                         colour and stretch % 3 != 0]
     CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
-                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE})
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE, "held": True})
 # and scenes that brighten or darken steadily (the rolling scale), with noise and a flash or two
 for c in range(6):
     M = int(crng.integers(20, 130))
@@ -85,7 +85,18 @@ for c in range(6):
     logs = {str(n): [round(slope * n / M + float(crng.normal(0, 0.15)) + (0.8 if crng.random() < 0.04 else 0), 5), 0, False]
             for n in range(M)}
     CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
-                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE})
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE, "held": True})
+# and chains that hold their pictures (a colour set held until the next is complete: the same log brightness for a run of
+# frames), with steps between the runs and now and then a picture shown once among them: one gain for each run (held_gains)
+for c in range(6):
+    logs, level, n = {}, 0.0, 0
+    while n < 20 + 12 * c:
+        level = round(level + float(crng.normal(0.05, 0.15)), 5)
+        for _ in range(1 if crng.random() < 0.25 else int(crng.integers(2, 8))):
+            logs[str(n)] = [level, 0, True]
+            n += 1
+    CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE, "held": True})
 
 
 def server_gains(chain, smooth):

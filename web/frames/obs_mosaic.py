@@ -7344,7 +7344,7 @@ EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measure
 EXPOSURE_FILE = "exposure7-{}-" + PLAN_FILE   # exposure7: a tinted frame measured on the windows' picture made small; exposure6: measured on movie-3's views (movie_footprint2, follow_view)
 EXPOSURE_ROLL = 0.75     # of a stretch's slow drift past EXPOSURE_FREE: how much the rolling scale takes out (evened_gains)
 EXPOSURE_FREE = 0.26     # log brightness (about 30% either way of the stretch's middle): slow drift kept as it is
-EXPOSURE_RULE = 9        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp); 9: from exposure7's chains
+EXPOSURE_RULE = 10       # the way the gains are worked out from the chain: in the movie frames' names (movie_webp); 10: one gain for a held picture (held_gains); 9: from exposure7's chains
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -7473,7 +7473,7 @@ def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre
             gains.update((n, 1.0) for n in ns)
             del stretches[key]
     for ns in stretches.values():
-        gains.update(zip(ns, evened_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
+        gains.update(zip(ns, held_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
     return gains
 
 
@@ -7483,15 +7483,46 @@ def evened_gains(logs, smooth):
     EXPOSURE_FLASH frames taken out by a running median, the rest smoothed with a Gaussian over smooth frames and put
     through the rolling scale (rolled), the gain the smoothed brightness over the frame's own, within EXPOSURE_GAIN either way, to 1/200 (the movie frame's lookup
     table is made once per gain)."""
+    L, target = _evened_targets(logs, smooth)
+    return [_evened_gain(own, want) for own, want in zip(L, target)]
+
+
+def _evened_targets(logs, smooth):
+    """(evened_gains, held_gains) The frames' log brightnesses as an array, and the log brightness each is brought to."""
     L = np.asarray(logs, float)
     h = EXPOSURE_FLASH // 2
     pad = np.concatenate([np.repeat(L[:1], h), L, np.repeat(L[-1:], h)])
     steady = np.array([np.median(pad[k:k + EXPOSURE_FLASH]) for k in range(len(L))])
     # (a line through the frames round each, so a pass brightening all through keeps its brightening at its ends)
     target = _gaussian_line(steady, smooth)
-    target = rolled(target)
-    return [round(float(np.clip(math.exp(want - own), 1 / EXPOSURE_GAIN, EXPOSURE_GAIN)) * 200) / 200
-            for own, want in zip(L, target)]
+    return L, rolled(target)
+
+
+def _evened_gain(own, want):
+    """(evened_gains, held_gains) The gain that takes a log brightness to the one wanted: within EXPOSURE_GAIN, to 1/200."""
+    return round(float(np.clip(math.exp(want - own), 1 / EXPOSURE_GAIN, EXPOSURE_GAIN)) * 200) / 200
+
+
+def held_gains(logs, smooth):
+    """evened_gains for a movie pass's stretch (exposure_gains), with one gain for each picture: frames in a row that
+    show the same picture (a colour set held until the next is complete: the chain gives them the same log brightness,
+    exposure_chain's "1.000 x") take the mean of what evened_gains wants for them, so a held picture does not change
+    under the eye. Frame by frame, each step between two held pictures was spread over smooth frames either side: the
+    picture brightened towards the step while it was held, then dropped after it (149HE HELENCLOS001, whose sets are
+    held five or six frames while Helene nears: gains 1.015, 1.02, 1.025, 1.03, 1.04, then 0.97, 2026-11-16). The
+    flashes and the smoothing are still counted in frames, the movie's own time: a picture shown once among held ones
+    (a set's own frame) is still brought to them. A pass that holds nothing is evened as before, to the same gains."""
+    L, target = _evened_targets(logs, smooth)
+    out, k = [], 0
+    while k < len(L):
+        j = k
+        while j + 1 < len(L) and L[j + 1] == L[k]:
+            j += 1
+        # (summed in order, as the page does)
+        want = sum(float(v) for v in target[k:j + 1]) / (j + 1 - k)
+        out += [_evened_gain(L[k], want)] * (j + 1 - k)
+        k = j + 1
+    return out
 
 
 def rolled(target):
@@ -7552,7 +7583,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
         exposure = {"local": all(tiles[m].get("gain", 1.0) == 1.0 for m in ns),
                     "logs": {str(m): v for m, v in logs.items()}, "gamma": p["display_scale"].get("gamma", 2.2),
                     "flash": EXPOSURE_FLASH, "gain": EXPOSURE_GAIN, "greyRun": EXPOSURE_GREY_RUN, "most": EXPOSURE_MOST,
-                    "roll": EXPOSURE_ROLL, "free": EXPOSURE_FREE}
+                    "roll": EXPOSURE_ROLL, "free": EXPOSURE_FREE, "held": True}   # (held: one gain for a held picture, held_gains)
     else:
         warm_movie(u, n, 6, cache, exposure=how)
     tile_of = lambda j: tiles.get(j) or {}
