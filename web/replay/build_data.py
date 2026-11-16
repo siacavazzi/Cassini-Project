@@ -161,7 +161,7 @@ def slim_catalog(data, year, groups=None):
 
 def load_groups():
     """Each frame's filter set and pass by the frame server's one rule (web/frames/sets_passes.py): ({id: (set,
-    pass)}, sets {set: [kind, [channel ids]]}, passes {pass: [kind, observation, pass number, last frame id, frames]})."""
+    pass)}, sets {set: [kind, [channel ids]]}, passes {pass: [kind, observation, pass number, last frame id, frames, tossup]})."""
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frames"))
     import sets_passes
