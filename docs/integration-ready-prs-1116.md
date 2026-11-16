@@ -2,7 +2,7 @@
 
 **Branch** `integration/ready-prs-1116`, head `9d61a0c2` (the commit before this file), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 60 PRs, each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 2 follow-up merges of reviewed new heads (#524, #488).
+**In it:** 60 PRs, each as its own merge commit at its reviewed READY head, plus 3 integration commits (one code fix, two test-only stubs) and 4 follow-up merges of reviewed new heads (#524, #488, #483, #484). #483 and #484 have newer heads again (75194327, 69e38b33: _polarized_pass with no frames) that are not on this branch until review clears them.
 **Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history); #527, #534, #536, #537 (READY only once a running benchmark passes). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
@@ -17,7 +17,7 @@
   - #508 test_set_matching: the test's `_match` stub does not take #508's new `filled` argument.
   - #506 test_color_register: #506 splits `_register` into `_register` and `_register_match`, so the test's source check no longer finds its line.
 - **Fixed by the PRs' reviewed new heads, merged on top as follow-up merge commits:** #524 test_segment_progress (5e755992) and #488 test_contracts (89ccffaa). Both now pass on the branch.
-- **Environment only, not a defect on the Macs:** #483 test_sets_passes fails in the cloud because the cloud has pandas 3.0.5, where `astype(str)` keeps a missing filter name as NaN. It passes on the MacBook at 95986eb0. It is a latent bug if the Macs move to pandas 3.
+- **Fixed by #483's reviewed new head a26e24dd** (merged on top, with #484's 9cf636e2): #483 test_sets_passes failed in the cloud only, because pandas 3.0.5 keeps a missing filter name as NaN in `astype(str)`; it now passes.
 - **Failures caused by the merge, now fixed with test-only commits:** test_repeat_range (#497 x #491: the stub lacked `depth_image`) and test_calibration_let_go (#533 x #481/#524: the stub lacked `steady_chain` and `rolling_restart`).
 - The other 178 test files pass.
 
@@ -113,3 +113,6 @@ How to read this:
 | 65 | [#doc](https://github.com/siacavazzi/Cassini-Project/pull/doc) Picture-change map (docs) | `f85e3909` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
 | 66 | [#524](https://github.com/siacavazzi/Cassini-Project/pull/524) Mosaic movies: a resumed build makes a part-made pass again from its first picture (new head) | `b3284092` | no | #524's reviewed new head: its test_segment_progress stubs rolling_restart. Test only. | Nothing. | none | - | integration commit |
 | 67 | [#488](https://github.com/siacavazzi/Cassini-Project/pull/488) Lightning on Saturn: Moments and an enhanced Lightning window (new head) | `7f7a87d5` | no | #488's reviewed new head: the public site's contract knows the two lightning routes (refused until published). No picture change. | Nothing. | none | - | integration commit |
+| 68 | [#doc](https://github.com/siacavazzi/Cassini-Project/pull/doc) Picture-change map (docs) | `f42f0367` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 69 | [#483](https://github.com/siacavazzi/Cassini-Project/pull/483) Polarizer-only observations in true color (2004-2007 Saturn polarimetry) (new head) | `78a488dc` | no | #483's reviewed new head a26e24dd: polarized_index reads missing index values as missing under pandas 3 (same pictures). | Nothing. | none | - | integration commit |
+| 70 | [#484](https://github.com/siacavazzi/Cassini-Project/pull/484) Titan: a pass taking its CB3 pair once shows in the pair's color (new head) | `74b97b20` | no | #484's reviewed new head 9cf636e2: brings in #483's pandas 3 fix; nothing new of its own. | Nothing. | none | - | integration commit |
