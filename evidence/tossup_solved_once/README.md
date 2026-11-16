@@ -136,6 +136,4 @@ Saturn, 100 of Titan, 17 of Jupiter, 16 of Enceladus, 18 of other moons and the 
 
 ## Image benchmark
 
-The 51-picture set (against 1a35acb4, `web/frames/image_bench.py`) holds no toss-up's mosaic view, so its run on
-this branch can only show that nothing else moved; it is queued on the shared MacBook and its report is added here
-when it finishes. The views this change moves are the two items #509 adds, run above.
+The 51-picture set (`web/frames/image_bench.py`): **PASS (nothing changed): 51 of 51 items identical** to main 1a35acb4 on this branch at 721736e1 (`image_benchmark/report.md`, `summary.json`; run 2026-11-16). As expected, since the set holds no toss-up's mosaic view: it shows nothing else moved. The views this change does move are #509's two items, run above.
