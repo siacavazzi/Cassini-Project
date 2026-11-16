@@ -305,7 +305,11 @@ def export_catalog(kdir, out, index_csv, years, data=None, geometry=None):
     df = pd.read_csv(index_csv, low_memory=False)
     df = df[df.year.notna()]
     mks = {int(re.search(r"cas_(\d{4})", m).group(1)): m for m in glob.glob(f"{kdir}/mk/*.tm")}
-    ifov = {"ISSNA": 5.9897e-6, "ISSWA": 5.9907e-5}   # NAC: 12 um pixels at the kernel's 2003.44 mm focal length
+    # NAC: 12 um pixels at the kernel's 2003.44 mm focal length. WAC: as its frames are drawn, after CISSCAL's geometric
+    # correction has resampled them onto a pinhole camera of 200.956 mm (geometric_correction.F_LINEAR, the scale
+    # obs_mosaic.IFOV["W"] has and bootleg_autonav.linear_ratio grows SPICE's shifts to); the kernel's 200.77 mm
+    # (5.9770e-5) is the uncorrected frame's
+    ifov = {"ISSNA": 5.9897e-6, "ISSWA": 5.9715e-5}
     summed = summing(data, df.path)
     print(f"summing: {sum(v == 2 for v in summed.values())} SUM2 and {sum(v == 4 for v in summed.values())} SUM4 frames "
           f"of {len(df)} ({len(summed)} labels read{'' if summed else ': no archive, km/px at full resolution'})", flush=True)

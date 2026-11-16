@@ -5,7 +5,7 @@ import math, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import export_tracks as et
 
-W = 5.9907e-5
+W = 5.9715e-5   # the WAC's pixel as its frames are drawn (12 um at geometric_correction.F_LINEAR, 200.956 mm)
 
 
 def close(a, b, tol=1e-6):

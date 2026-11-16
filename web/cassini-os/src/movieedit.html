@@ -359,7 +359,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     // (on the 1024 px grid, from the distance to the body's center: the catalog's km_per_px is the label's, one of the
     // frame's own pixels at the ground in its middle, summed frames 2 or 4 times as coarse)
     const k = catIds.get(id), b = k == null ? null : bodies[String(catalog.target[k] || "").toUpperCase()];
-    const kp = k == null || !catalog.range_km ? 0 : +catalog.range_km[k] * (catalog.cam[k] === "W" ? 5.9907e-5 : 5.9897e-6);
+    const kp = k == null || !catalog.range_km ? 0 : +catalog.range_km[k] * (catalog.cam[k] === "W" ? 5.9715e-5 : 5.9897e-6);
     return b && b.radii && kp > 0 ? b.radii.reduce((a, v) => a + v, 0) / b.radii.length / kp : null;
   }
   function smallFilm() {
