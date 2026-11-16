@@ -774,7 +774,8 @@ def centred(ids, view):
     haze = target in obs_mosaic.DISK_DETAIL_HAZE and not any(
         calibration.SURFACE_WINDOW.get(target) in _filters(i) for i in ids)
     if view.get("centre") and radius and target not in obs_mosaic.DISK_DETAIL_SKIP and not haze:
-        out = obs_mosaic.detail_on_disk(out, cx - left, cy - top, radius, target=target)
+        out = obs_mosaic.detail_on_disk(out, cx - left, cy - top, radius, target=target,
+                                         haze=target in obs_mosaic.DISK_DETAIL_HAZE)
         report["disk_detail"] = {"radius": round(float(radius), 1)}
     # one frame on its one channel; the last step, noise-aware fine sharpening (_sharpened), on the view as shown
     if len(ids) == 1:
