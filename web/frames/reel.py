@@ -109,7 +109,13 @@ def load_index():
         return _index
     cols = ["path", "INSTRUMENT_ID", "TARGET_NAME", "OBSERVATION_ID", "FILTER_NAME", "filter1", "filter2", "seconds_1970"]
     idx = pd.read_csv(os.path.join(REPO, "Image_index.csv"), usecols=cols, low_memory=False)
-    idx = idx[idx["path"].notna()].sort_values("seconds_1970", kind="stable").reset_index(drop=True)
+    idx = idx[idx["path"].notna()]
+    # frames that hold no picture (not_pictures: darks, lamp frames) are no frames of the pipeline's
+    import not_pictures
+    dark = not_pictures.ids()
+    if dark:
+        idx = idx[[p.rsplit("/", 1)[-1].replace(".png", "") not in dark for p in idx["path"].tolist()]]
+    idx = idx.sort_values("seconds_1970", kind="stable").reset_index(drop=True)
     # the string steps of .str.rsplit("/", n=1).str[-1].str.replace(".png", "") on each path, without pandas' per
     # element machinery (a sixth of the time; the paths are all strings)
     idx["id"] = [p.rsplit("/", 1)[-1].replace(".png", "") for p in idx["path"].tolist()]

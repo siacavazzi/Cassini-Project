@@ -90,13 +90,28 @@ def repeat_of(kept, t, place, window):
     return None
 
 
+def _not_pictures():
+    """{frame id: why} of the frames that hold no picture (web/frames/not_pictures.py)."""
+    import sys
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "frames")
+    if here not in sys.path:
+        sys.path.append(here)
+    import not_pictures
+    return not_pictures.ids()
+
+
 def load_index():
     global index, groups, columns
     if index is None:
         # read once, even when several threads (the frame server's) ask at the same time
         with _index_lock:
             if index is None:
-                idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
+                idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False)
+                # a dark or lamp frame is no repeat of a picture (web/frames/not_pictures.py: nothing of the scene in it)
+                dark = _not_pictures()
+                if dark:
+                    idx = idx[[frame_id(p) not in dark if isinstance(p, str) else True for p in idx["path"].tolist()]]
+                idx = idx.set_index("path", drop=False)
                 # a frame that shows another body than the archive's target is grouped with that body's frames, as its
                 # label and places have it (ba.shown_targets)
                 shown = ba.shown_targets()
