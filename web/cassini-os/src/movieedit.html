@@ -642,10 +642,12 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   const name = t => (t || "Unknown").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   const hms = e => new Date(e.t * 1000).toISOString().slice(11, 19);
   const KIND = { mosaic: "MOS", rolling: "MOS", movie: "MOV", color: "COL", processed: "", frame: "" };
-  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
+  // (128: the size the build stores every frame at for strips; 256 is stored for no frame, so each was drawn on request;
+  // the stand-in below asks 512, stored for every kind of picture)
+  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=128`;
   // a frame's pictures for the strip, best first: as the stage shows it (As in the movie: the film's picture, the
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
-  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
+  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=512`] : [])] : tries(e, 1024);
   function thumb(img, e) {
     const urls = thumbTries(e); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
