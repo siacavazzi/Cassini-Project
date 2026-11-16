@@ -28,7 +28,7 @@ for q, (w, h, H, g, disk) in enumerate(CASES):
 js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), C = " + json.dumps(CASES) + ";\n"
       "C.forEach(([w, h, H, g, disk], q) => { const px = new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + q + '.bin'));"
       " fs.writeFileSync('" + tmp + "/' + q + '.out', M.ringWhite(px, w, h, g, 0.8, disk)); });")
-js = js.replace("M.ringWhite(px, w, h, g, 0.8, disk)", "M.ringWhite(px, w, H, g, 0.8, disk)")
+js = js.replace("M.ringWhite(px, w, h, g, 0.8, disk)", "M.ringWhite(px, w, H, g, 0.8, [disk[0], disk[1], disk[2] * " + str(om.RING_DISK) + "])")
 with open(f"{tmp}/t.js", "w") as fh:
     fh.write(js)
 subprocess.run(["node", f"{tmp}/t.js"], check=True)
