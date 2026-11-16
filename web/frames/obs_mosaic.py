@@ -3151,7 +3151,77 @@ def _colour_filters(u):
     return u["_colour_filters"]
 
 
+# a filter's match onto its pointing's other filter (C8, _register_match) checked on the body's lit limb, where the
+# picture shows one: a match that puts the two tiles' limbs further apart than this, across the limb, is a false one,
+# and the tile goes back to SPICE's place moved across the limb onto its reference's (limb_place), or stays at SPICE's
+# place when that does not line the limbs up either. The 2004 approach movie 00ASA 2X2MOVIEA001 (Saturn, 10 filters a
+# pointing, methane bands among them): with JPL's corrected pointing every filter's limb lay within 0.3 px of the
+# others' as taken, but one false match per pointing (CB2 onto the methane MT2, phase correlation on cloud bands that
+# look different in each band) moved it 10 to 25 px, every filter registered after it followed it down the chain, and
+# the movie drew each limb and ring edge two or three times, 13 to 16 px apart, with a step at every seam. A limb's
+# height differs a little with the filter (its haze: Saturn's within about 1 px, the solve's LIMB_HAZE_PRIOR), less
+# than this
+LIMB_REGISTER = 2.0      # px
+LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
+
+
 def _register(u, n, out, crop, cache, scale):
+    """C8 (_register_match), then checked on the limb (_limb_register)."""
+    got = _register_match(u, n, out, crop, cache, scale)
+    if got is not None:
+        _limb_register(u, got[0], got[1], out, crop)
+
+
+def _limb_register(u, q, ref, out, crop):
+    """Tile out (its picture crop) checked against its reference tile q (picture ref) on the body's lit limb
+    (LIMB_REGISTER): out's offset and "registered" changed when the two limbs disagree. Nothing where either shows no
+    lit limb SPICE can place (limb_place), or the body is none of LIMB_BODIES."""
+    if u["key"][0] not in LIMB_BODIES or not calibration.step("align"):
+        return
+    disk = _disk_geometry(u)
+    if disk is None:
+        return
+    lq = limb_place(disk, q, ref)
+    if lq is None:
+        return
+    reg = out.get("registered") or {}
+    now = limb_place(disk, out, crop)
+    if now is None or float(np.dot(lq[1], now[1])) < LIMB_REGISTER_TURN:
+        return
+    off = now[0] - lq[0]
+    if abs(off) <= LIMB_REGISTER:
+        return
+    spice = out.get("spice_offset", out["offset"])
+    at_spice = dict(out, offset=spice)
+    was = {k: reg[k] for k in ("how", "shift") if k in reg}
+    l0 = now if "spice_offset" not in out else limb_place(disk, at_spice, crop)
+    place, how = spice, "SPICE's place"
+    if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
+        e = l0[0] - lq[0]
+        v = (-e * l0[1][0], -e * l0[1][1])
+        if math.hypot(*v) <= REGISTER_MAX * FRAME:
+            moved = [spice[0] + v[0], spice[1] + v[1]]
+            check = limb_place(disk, dict(out, offset=moved), crop)
+            if check is not None and abs(check[0] - lq[0]) <= LIMB_REGISTER:
+                place, how = moved, f"limb {-e:+.1f} across"
+            elif abs(e) <= LIMB_REGISTER:
+                how = "SPICE's place (limbs agree there)"
+    out.pop("spice_offset", None)
+    if place is not spice:
+        out["spice_offset"] = spice
+    out["offset"] = list(place)
+    shift = [round(spice[0] - place[0], 2), round(spice[1] - place[1], 2)]
+    out["registered"] = {"to": q["id"], "how": how, "limb_off": round(off, 2), "match": was}
+    if place is not spice:
+        out["registered"]["shift"] = shift
+    else:
+        # (a tile its match left unaligned stays so named: astray leaves such colour tiles out where they land apart)
+        if was.get("how") == "not aligned":
+            out["registered"]["how"] = "not aligned"
+        out["registered"]["kept"] = "SPICE's place"
+
+
+def _register_match(u, n, out, crop, cache, scale):
     """C8, the filters registered to each other: SPICE places each frame on its own, and the few pixels its pointing
     is off differ from frame to frame, so the filters of one pointing landed a little apart and every limb had a red
     and a cyan rim (Dione). Tile n (its report out, crop its picture as made) is moved onto the tile it is registered
@@ -3161,11 +3231,11 @@ def _register(u, n, out, crop, cache, scale):
     shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
     j = _register_to(u, n)
     if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
-        return
+        return None
     q = tile(u, j, cache, scale)
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
     if "offset" not in q or not os.path.exists(path):
-        return
+        return None
     with _lock:
         ref = _made_pictures.get(path)
     if ref is None:
@@ -3182,7 +3252,7 @@ def _register(u, n, out, crop, cache, scale):
             shift, how = wide, said
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
-        return
+        return q, ref
     if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
         # SPICE's pointing of a moon can jump tens of px between frames seconds apart: Dione's 038DI ZEROPHASE001 20 to
         # 45 px (N1549196942_1 sits 42 px from the frames either side), Hyperion's 153HY 70 to 110 px, Helene's 149HE
@@ -3202,17 +3272,18 @@ def _register(u, n, out, crop, cache, scale):
             c = None if how.startswith("centroid") else _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
             if not same(c):
                 out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-                return
+                return q, ref
             how = f"{how}, centroid agrees ({c[0]:+.1f},{c[1]:+.1f})"
     elif shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
         if how is not None:
             out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-        return
+        return q, ref
     # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
     dx, dy = shift
     out["spice_offset"] = out["offset"]
     out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
+    return q, ref
 
 
 def _tile_overlap(q, ref, at_q, t, crop, at_t, around=None, where=None):
