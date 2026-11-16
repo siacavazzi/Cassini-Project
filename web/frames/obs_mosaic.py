@@ -5210,7 +5210,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                     return n, (limb_place(disk, by_n[n], im) if im is not None else None)
                 with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
                     for n, got_l in ex.map(limb, sorted(by_n)):
-                        if got_l is not None:
+                        # (a tile whose pointing's root is not among the tiles solved, as an anchor's is skipped above:
+                        # its limb anchors no unknown of the solve. 023SA 1X2PLRNCQ001's tile 901 failed the
+                        # mosaic with KeyError 901 in _solve_moves, 2026-11-15)
+                        if got_l is not None and rootmap.get(n) in by_n:
                             o, nv, count = got_l
                             meas.append(("limb", rootmap[n], by_n[n]["filter"], nv, o, LIMB_WEIGHT))
                             seen[f"limb-{n}"] = {"limb": round(o, 2), "normal": [round(float(v), 4) for v in nv]}
