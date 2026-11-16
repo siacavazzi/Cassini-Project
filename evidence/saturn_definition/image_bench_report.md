@@ -1,0 +1,64 @@
+# Image benchmark: 94293dd6d406 against 85d2a2a975bf
+
+**FAIL**. 51 items: 47 identical, 4 changed (0 outside the target), 0 not built.
+
+- target items that did not change (the rule needs the target better): satellorb-centre, saturn05-movie
+- target items with a measure worse (look at them): approach-movie, approach-composite, storm-composite, hexagon-composite
+
+Built in 30 min (base) and 36 min (candidate). Targets: approach-composite, approach-movie, hexagon-composite, satellorb-centre, saturn05-movie, storm-composite.
+
+| item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
+|---|---|---|---|---|---|---|---|
+| ringsFB-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| ringsFA-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| earthsmiled-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| ringmosaic04-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| shadow-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| photlit039-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| jupiter-atmos-mosaic | hard | identical | 0/1 | 0.00% |  |  |  |
+| enceladus-spol-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| satellorb-centre | target | identical | 0/1 | 0.00% |  |  |  |
+| daphnis09-movie | hard | identical | 0/70 | 0.00% |  |  |  |
+| ringclose124-movie | hard | identical | 0/10 | 0.00% |  |  |  |
+| gring-still | hard | identical | 0/1 | 0.00% |  |  |  |
+| plume-bloom-still | hard | identical | 0/1 | 0.00% |  |  |  |
+| approach-movie | target | changed | 96/96 | 7.25% | 53 | evened000.webp: detail 0.1665 -> 0.2082 (+25%) |  |
+| ringmovie04-movie | hard | identical | 0/44 | 0.00% |  |  |  |
+| telesto-composite | hard | identical | 0/1 | 0.00% |  |  |  |
+| moon99-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| venus99-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| masursky-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| jupiter-portrait-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| jupiter-rmov-movie | plain | identical | 0/142 | 0.00% |  |  |  |
+| approach-composite | target | changed | 1/1 | 6.19% | 56 | composite.webp: detail 0.1456 -> 0.2155 (+48%) |  |
+| phoebe-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| phoebe-movie | plain | identical | 0/44 | 0.00% |  |  |  |
+| titan04-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| saturn05-movie | target | identical | 0/27 | 0.00% |  |  |  |
+| rhea-glocol-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| hyperion-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| rhea-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| titan-globmap-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| equinox-shadow-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| kiviuq-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| prometheus-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| pan07-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| iapetus-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| iapetus-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| enceladus-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| mimas-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| storm-composite | target | changed | 1/1 | 21.29% | 33 | composite.webp: detail 0.0401 -> 0.1365 (+240%) |  |
+| helene-movie | plain | identical | 0/64 | 0.00% |  |  |  |
+| methone-movie | plain | identical | 0/30 | 0.00% |  |  |  |
+| hexagon-composite | target | changed | 1/1 | 22.07% | 26 | composite.webp: detail 0.028 -> 0.071 (+154%) |  |
+| dione-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| enceladus15-movie | plain | identical | 0/74 | 0.00% |  |  |  |
+| telesto-movie | plain | identical | 0/36 | 0.00% |  |  |  |
+| daphnis17-movie | plain | identical | 0/64 | 0.00% |  |  |  |
+| pan17-movie | plain | identical | 0/38 | 0.00% |  |  |  |
+| titan-cloud-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
+| earth-fb-still | plain | identical | 0/1 | 0.00% |  |  |  |
+| enceladus15-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+| titan17-composite | plain | identical | 0/1 | 0.00% |  |  |  |
+
+Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of the place that changed most).

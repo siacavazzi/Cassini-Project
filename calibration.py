@@ -1774,7 +1774,7 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
             if full is not None and full.any():
-                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale["white"], gamma,
+                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale.get("sat_white") or scale["white"], gamma,
                                                                             scale.get("shoulder"), toe)[..., 0])
         sink = _hdr_sink.get()
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
@@ -2079,6 +2079,9 @@ not is filled from those (fill_saturated), so channels that clipped at different
 cyan (a saturated limb, Hyperion's bright side) and the surface the others saw stays; where every channel saturated,
 neutral white.
 """
+still_look = contextvars.ContextVar("still_look", default=None)   # color_image.load_aligned: a Saturn picture's look
+
+
 def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None):
     every = None
     if saturated is not None and any(m is not None and m.any() for m in saturated):
@@ -2105,6 +2108,25 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
         if TOE_NEUTRAL and (k < 1).any():
             gray = x.mean(axis=0)
             x += (gray - x) * (1 - k * k * (3 - 2 * k))
+    look = still_look.get()
+    if look and look.get("headroom"):
+        # Saturn's atmosphere (obs_mosaic.saturn_look): white given headroom over the disk's, so its bright half is not
+        # rolled off by the shoulder into a few levels (what the camera saturated is still drawn white, below)
+        # ... on the body's disk only where SPICE puts it (look["disk"]: x, y, radius px at 1024; obs_mosaic.ring_white
+        # for a movie): the rings and the sky round it keep today's white, eased over RING_SOFT of the radius at the limb
+        h = np.float32(1 / look["headroom"])
+        if look.get("disk"):
+            k = x.shape[2] / 1024
+            cx, cy, r = (v * k for v in look["disk"])
+            r *= 1.0   # (obs_mosaic.RING_DISK)
+            soft = 0.06   # (obs_mosaic.RING_SOFT; obs_mosaic imports this module, so the value is kept here too)
+            ys = np.arange(x.shape[1], dtype=np.float32)[:, None] - np.float32(cy)
+            xs = np.arange(x.shape[2], dtype=np.float32)[None, :] - np.float32(cx)
+            t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - soft))) / np.float32(2 * soft * r), 0, 1)
+            on = 1 - t * t * (3 - 2 * t)
+            x *= (1 - (1 - h) * on).astype(np.float32)
+        else:
+            x *= h
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
     # HDR (hdr_capture): the picture's brightness before the shoulder and the clip below, white = 1 (a new array:
     # x itself is not touched, so the picture drawn is the same with HDR on or off)
