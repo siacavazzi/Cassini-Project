@@ -8322,16 +8322,15 @@ def _place(u, t, rect, k, W, H, cache, scale):
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     frame = np.zeros((H, W, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
-    moved = None
+    moved, drew = None, _hdr_drawn.get()
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         if SUBPIXEL:
             whole = part
             part = _subpixel_at(part, t, rect, k, left, top)
-            if part is not whole and not t.get("turn"):
+            if drew is not None and part is not whole and not t.get("turn"):
                 moved = np.ascontiguousarray(part[..., 3])   # (the tile's alpha as moved by the part of a pixel, for hdr_map)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
-    drew = _hdr_drawn.get()
     if drew is not None:
         frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
         # (with the alpha drawn here when the tile was moved by that part of a pixel and nothing else: hdr_map moved the
