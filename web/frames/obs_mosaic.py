@@ -5349,6 +5349,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             turn = haze.get(("turn", r), 0.0) if r in linked else 0.0
             if abs(turn) >= 0.01:
                 out[n].append(round(turn, 4))
+        misfit = _solve_misfit(meas, keep, {r: out[r] for r in roots if r in out})
         if rings is not None and RING_FILTERS:
             # a pointing's filters on the rings, each lined up across the rings on its pointing's first tile by their
             # radial profiles (the filters' detail: the ringlets and gaps are where they are in every filter), where C8's
@@ -5375,7 +5376,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                         out[n] = [round(out[n][0] + got_r[0][0], 2), round(out[n][1] + got_r[0][1], 2)] + out[n][2:]
                         seen[f"filter-{n}"] = {"shift": [round(v, 2) for v in got_r[0]], "ncc": got_r[1]["ncc"]}
         if report is not None:
-            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
+            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots), "misfit": misfit})
         # (a solve of tiles another solve does not hold is used, not kept over the one kept: the one in memory, or the one
         # on disk, read again here in case another process, the pre-build, wrote a larger one meanwhile)
         latest = _read_solve(path) if os.path.exists(path) else {}
@@ -5385,7 +5386,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             return {n: v for n, v in out.items() if v != [0, 0]}
         part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
         new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
-               "kept": len(keep), "measured": len(meas)}
+               "kept": len(keep), "measured": len(meas), "misfit": misfit}
         if rec is not None:
             rec[name] = new
         try:
@@ -5396,6 +5397,35 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v for n, v in out.items() if v != [0, 0]}
+
+
+# a pass's solve (global_places) checked against the matches it kept, as the pointings are drawn: each match's
+# residual across what it measures (both ways for a panel match, across the edge or the rings for an edge or ring
+# match), and the pass flagged when more than SOLVE_MISFIT_SHARE of them (and at least SOLVE_MISFIT_LEAST) are off by
+# over SOLVE_MISFIT px: tiles drawn where their own matches say they are not, a seam the eye sees. Kept in the solve's
+# file ("misfit") and listed by solve_check.py, which the cache rebuild's checks run (finding 14 of the 2026-11-16
+# pipeline audit: the 2004 approach movies' seams)
+SOLVE_MISFIT = 2.0        # px
+SOLVE_MISFIT_SHARE = 0.1
+SOLVE_MISFIT_LEAST = 5
+
+
+def _solve_misfit(meas, keep, moves):
+    """{"kept", "over", "share", "worst", "flag"}: the kept matches (meas[k] for k in keep, as _solve_moves takes them;
+    limb and turn rows left out) against the pointings' moves as drawn ({root: [dx, dy, ...]})."""
+    res = []
+    for k in keep:
+        m = meas[k]
+        if m[0] in ("limb", "turn") or m[1] not in moves or (m[0] is not None and m[0] not in moves):
+            continue
+        a_, b_, d, P = m[:4]
+        mb = np.array(moves[b_][:2], float)
+        ma = np.array(moves[a_][:2], float) if a_ is not None else np.zeros(2)
+        res.append(float(np.linalg.norm(P @ (mb - ma) - P @ np.asarray(d, float))))
+    over = sum(r > SOLVE_MISFIT for r in res)
+    share = over / len(res) if res else 0.0
+    return {"kept": len(res), "over": over, "share": round(share, 3), "worst": round(max(res), 2) if res else 0.0,
+            "flag": bool(over >= SOLVE_MISFIT_LEAST and share > SOLVE_MISFIT_SHARE)}
 
 
 def _read_solve(path):
