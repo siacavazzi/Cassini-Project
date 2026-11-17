@@ -382,6 +382,15 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         # request time)
         obs_mosaic.steady_chain(u, cache, p)
     kind, n = u.get("kind"), 0
+    if kind == "mosaic_movie":
+        # (a pass a stopped build left part made is made again from its first picture, as an uninterrupted build makes
+        # it: each grows from the one before it in memory, obs_mosaic.rolling_restart)
+        fade = (style.get("fade", 0), style.get("persist", 0))
+        for size in sizes:
+            gone = obs_mosaic.rolling_restart(u, size, cache, style.get("laps", 1), fade, last)
+            if gone:
+                print(f"{u['key'][1]} pass {u['key'][3]}: {gone} mosaic movie pictures at {size} a stopped build left "
+                      "made again from the first", flush=True)
 
     def movie(f, size):
         obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
