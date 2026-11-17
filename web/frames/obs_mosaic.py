@@ -5003,6 +5003,14 @@ def surface_pictures(u, cache, p, tiles):
                 continue
             picture, box = ring_redrawn(rp, image, t, dx, dy, weight, reach, epoch, view, km_px, view_turn(u)) if rung \
                 else surface_redrawn(rp, image, t, dx, dy, weight, reach)
+            # (where its camera saturated, the tile as the light it saturated on, redrawn the same way, beside it: the
+            # picture its mosaic's saturation excess is measured against, _light_part, _filter_excess)
+            lit = _light_image(image, os.path.join(there, f"{t['n']}.sat.webp")) if t.get("sat") else None
+            if lit is not None:
+                lp, lbox = ring_redrawn(rp, lit, t, dx, dy, weight, reach, epoch, view, km_px, view_turn(u)) if rung \
+                    else surface_redrawn(rp, lit, t, dx, dy, weight, reach)
+                if lp.shape == picture.shape:
+                    Image.fromarray(lp).save(path[:-len(".png")] + ".light.png", compress_level=1)
             # (about the tile's own place, as surface_box answers it: _ring_motion's move is in the box)
             box = [box[0] + moved[0], box[1] + moved[1]] + list(box[2:])
             # (the box first, so a picture never sits there without it)
@@ -5981,19 +5989,35 @@ def _window(u, p, mine, rect, cache, light=False):
     return window, shown
 
 
-def _light_part(path, w, h, u, cache, scale, t):
-    """Tile t (its picture at path) at w x h as _part has it, but where its camera saturated drawn as the light it
-    saturated on (its <n>.sat.webp, _keep_tile_sat) rather than as drawn (white for a patch with an edge): the picture a
-    mosaic's saturation excess is measured against (_filter_excess). The tile as _part has it when it has no map."""
-    sat = os.path.join(_tiles(u, cache, scale), f"{t['n']}.sat.webp")
-    if not t.get("sat") or not os.path.exists(sat):
-        return _part(path, w, h)
-    pic = np.array(Image.open(path).convert("RGBA"))
-    level = np.asarray(Image.open(sat).convert("L"))
-    if level.shape != pic.shape[:2]:
-        return _part(path, w, h)
+def _light_image(image, sat_path):
+    """A tile's picture (RGBA) where its camera saturated drawn as the light it saturated on (its <n>.sat.webp,
+    _keep_tile_sat) rather than as drawn (white for a patch with an edge); None when it has no map that fits."""
+    if not os.path.exists(sat_path):
+        return None
+    level = np.asarray(Image.open(sat_path).convert("L"))
+    if level.shape != image.shape[:2]:
+        return None
+    pic = np.array(image)
     at = (level > 0) & (pic[..., 0] > level)
     pic[..., :3][at] = level[at][:, None]
+    return pic
+
+
+def _light_part(path, w, h, u, cache, scale, t):
+    """Tile t (its picture at path) at w x h as _part has it, but where its camera saturated drawn as the light it
+    saturated on (_light_image): the picture a mosaic's saturation excess is measured against (_filter_excess). A
+    redrawn picture (t["pic"]: surface_pictures, the rings as at the epoch) has its light picture beside it (.light.png,
+    redrawn the same way). The picture as _part has it when there is none."""
+    if not t.get("sat"):
+        return _part(path, w, h)
+    if t.get("pic"):
+        light = path[:-len(".png")] + ".light.png"
+        if not os.path.exists(light):
+            return _part(path, w, h)
+        return np.asarray(Image.open(light).convert("RGBA").resize((w, h), Image.LANCZOS))
+    pic = _light_image(np.asarray(Image.open(path).convert("RGBA")), os.path.join(_tiles(u, cache, scale), f"{t['n']}.sat.webp"))
+    if pic is None:
+        return _part(path, w, h)
     return np.asarray(Image.fromarray(pic).resize((w, h), Image.LANCZOS))
 
 
