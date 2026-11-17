@@ -81,7 +81,7 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-# obs-v137/v120/v106: a true colour pass's bands share one height over the sky, the largest (SKY_TOP_SHARED): 195RI's
+# obs-v137/v120/v106: a true colour pass's drawn bands share one height over the sky, the largest of theirs (SKY_TOP_SHARED): 195RI's
 # scattered light and E ring wings no longer a wide green-grey glow at full depth (taste call 28); numbered past
 # #558-#563, renumber at merge
 VERSIONS = {"balanced": "obs-v137", "raw": "obs-v120", "eye": "obs-v137-eye", "false": "obs-v137-false", "classic": "obs-v106-classic"}
@@ -2504,7 +2504,7 @@ SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky 
 SKY_FLOOR_PCT = 90
 SKY_TOP_PCT = 99     # ... and each band's black at least this percentile of that dark sky (a single picture's SKY_DARK)
 SKY_SMOOTH = 9      # ... on the sky less its mean over this many pixels (of the quarter-size frames, 36 full size)
-SKY_TOP_SHARED = True   # ... and in a true colour pass every band at the largest of those heights (pass_scale)
+SKY_TOP_SHARED = True   # ... and in a true colour pass the drawn bands at the largest of their heights (pass_scale)
 SKY_TOE = 1.0    # ... and the soft toe above those blacks, this many times the black's height over the sky wide
                  # (calibration.display): the sky's scan lines, not its pixel noise, set how far grain reaches
 LONG_EXPOSURE = 10   # pass_scale: frames of a pass exposed this many times longer than the frame that sets its white ...
@@ -2944,14 +2944,18 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                 else:
                     top = float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0
                     tops[f] = max(margin, top)
-            if true_colour and SKY_TOP_SHARED and not sky_tops:
-                # a true colour pass: every band one height over its sky, the largest, as the colour's black and white
-                # are shared where the body fills the frames. Each band's height is its own grain, and at full depth
-                # (#491) that is its noise alone, a third to a half of what the 8-bit copy's code steps made it and
-                # different in each band: the smooth light the height keeps above black (scattered light, the E ring's
-                # wings) rose a different amount in each, 195RI's wide green-grey glow (taste call 28). A false colour
-                # pass keeps a height per band (its dim bands' gains)
-                tops = dict.fromkeys(tops, max(tops.values()))
+            mine = [f for f in (drawn or []) if f in tops]
+            if true_colour and SKY_TOP_SHARED and not sky_tops and len(mine) > 1:
+                # a true colour pass: the colour's bands (drawn) one height over their sky, the largest of theirs, as
+                # the colour's black and white are shared where the body fills the frames. Each band's height is its
+                # own grain, and at full depth (#491) that is its noise alone, a third to a half of what the 8-bit
+                # copy's code steps made it and different in each band: the smooth light the height keeps above black
+                # (scattered light, the E ring's wings) rose a different amount in each, 195RI's wide green-grey glow
+                # (taste call 28). Only the drawn bands: a band the colour does not draw (a luminance base's VIO or
+                # IR3) can sit many times higher (269RI HIPHASEFB's, 18x), and shared, it put Saturn's dim half and
+                # the faint rings under black. A false colour pass keeps a height per band (its dim bands' gains)
+                top = max(tops[f] for f in mine)
+                tops = {f: (top if f in mine else v) for f, v in tops.items()}
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
     if calibration.look() == "balanced":
