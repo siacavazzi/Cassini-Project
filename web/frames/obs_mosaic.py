@@ -84,7 +84,10 @@ import label_handler  # noqa: E402
 # obs-v132/v115/v101: a band of a colour movie frame the camera saturated is floored at the light it saturated
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
-VERSIONS = {"balanced": "obs-v132", "raw": "obs-v115", "eye": "obs-v132-eye", "false": "obs-v132-false", "classic": "obs-v101-classic"}
+# obs-v133/v116/v102: a mosaic's colour picture takes each filter's saturation excess composed as its mosaic is
+# (_mosaic_sat): a thin saturated ring blended under CLIP_FROM is filled from the other bands (269RI HIPHASEFB001's
+# cyan F ring, yellow-green A ring edge); a transit's excess moves with its plane (_per_body_planes)
+VERSIONS = {"balanced": "obs-v133", "raw": "obs-v116", "eye": "obs-v133-eye", "false": "obs-v133-false", "classic": "obs-v102-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -6832,6 +6835,7 @@ def _despiked(planes, gamma):
 
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
+SAT_EXCESS = 0.02   # (colour_picture, a mosaic's sat) linear: a band whose saturation excess is over this is clipped there
 CLIP_EDGE = 2   # (colour_picture, with saturation maps) px round a clipped band left out of the floor its fill keeps (fill_saturated's edge)
 
 
@@ -7383,13 +7387,13 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None, wide=False):
     return float(best[1]), float(best[2])
 
 
-def colour_picture(u, p, colour, planes, away=None, sat=None):
+def colour_picture(u, p, colour, planes, away=None, sat=None, mark=False):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
     body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame).
-    sat: one saturation excess map per plane (_place_sat: linear, float32) or None (a mosaic: not yet carried): how much of the band's
+    sat: one saturation excess map per plane (_place_sat, a mosaic's _mosaic_sat with mark: linear, float32) or None: how much of the band's
     value there is the white its saturated pixels were drawn over the light they saturated on; the band is filled there
     and floored at what it read less that, not at its white."""
     scale = p["display_scale"]
@@ -7416,6 +7420,11 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     # (only a band drawn CLIP_FROM and up is clipped: the excess, resampled with the picture, spreads a pixel or two past
     # it, and marking those sky pixels clipped floored them bright: a ring's edge grew 1-3 px, 003SA 3X3MOVIEA002)
     clipped = [(rgb[..., i] >= CLIP_FROM) & (alpha > 0) for i in range(3)]
+    if mark:
+        # (a mosaic's sat, _mosaic_sat: composed as its picture is, so it lies under exactly the pixels the saturated
+        # tiles drew; there a band with any is clipped too, drawn under CLIP_FROM: a thin saturated ring blended into
+        # the canvas, 269RI HIPHASEFB001's F ring and A ring edge, BL1 and GRN saturated, drew cyan and yellow-green)
+        clipped = [c | ((e > SAT_EXCESS) & (alpha > 0)) if e is not None else c for c, e in zip(clipped, excess)]
     if any(c.any() for c in clipped) and not all(np.array_equal(clipped[0], c) for c in clipped[1:]):
         # a band clipped where another is not (the camera saturated in it, or it is past the scale's white): filled
         # from the bands that are not, as a colour set's camera window draws it (calibration.tone's fill_saturated),
@@ -7446,6 +7455,11 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
         w = np.moveaxis(w * w * (3 - 2 * w), -1, 0)
+        if mark:
+            # (and filled wholly where its excess is twice SAT_EXCESS: what the band read there is mostly that white)
+            for i, e in enumerate(excess):
+                if e is not None:
+                    w[i] = np.maximum(w[i], np.clip(e / (2 * SAT_EXCESS), 0, 1))
         x = x + w * (np.stack(filled) - x)
         if every is not None:
             every &= np.logical_and.reduce([c >= 255 for c in np.moveaxis(rgb, -1, 0)])
@@ -7511,7 +7525,9 @@ def so_far(u, n, cache, made=None, out=OUT):
     if len(used) > 1:
         colour = used
         acc = colour_planes(u, p, colour, tiles, rect, cache, ref, tag)
-        rgba, used = colour_picture(u, p, colour, acc), colour
+        # (each filter's saturation excess, composed as its mosaic: colour_picture's sat, marking clipped)
+        sats = [_mosaic_sat(u, p, f, visit_tiles(u, tiles, colour), rect, cache, a.shape) for f, a in zip(colour, acc)]
+        rgba, used = colour_picture(u, p, colour, acc, sat=sats if any(m is not None for m in sats) else None, mark=True), colour
         if base:
             grey = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
             if mixes(u, p, tiles, colour):
@@ -9304,6 +9320,63 @@ def _sat_excess(u, t, cache, scale, sw, sh):
     return ex
 
 
+def _excess_part(u, t, cache, scale, sw, sh):
+    """Tile t's saturation excess as a picture for a mosaic's compose (_mosaic_sat): RGBA at sw x sh, its grey the excess
+    (linear, 0-255 for 0-1, the tile's gain on it), its alpha the tile's, resized as _part resizes the tile itself
+    (Lanczos), so it falls where the tile's pixels do; None when the tile has no map."""
+    if not t.get("sat") or "offset" not in t:
+        return None
+    path = os.path.join(_tiles(u, cache, scale), f"{t['n']}.sat.webp")
+    if not os.path.exists(path):
+        return None
+    gamma = t.get("gamma", scale.get("gamma", 2.2))
+    level = np.asarray(Image.open(path).convert("L"))
+    pic = _part(_pic(u, cache, scale, t), level.shape[1], level.shape[0])
+    light = calibration.decode(level.astype(np.float32) / 255, gamma).astype(np.float32)
+    drawn = calibration.decode(pic[..., 0].astype(np.float32) / 255, gamma).astype(np.float32)
+    ex = np.where(level > 0, np.maximum(drawn - light, 0), 0) * np.float32(t.get("gain") or 1.0)
+    q = np.clip(ex * 255 + 0.5, 0, 255).astype(np.uint8)
+    im = Image.fromarray(np.dstack([q, q, q, pic[..., 3]]), "RGBA")
+    return np.asarray(im.resize((sw, sh), Image.LANCZOS))
+
+
+def _mosaic_sat(u, p, f, tiles, rect, cache, shape):
+    """Filter f's saturation excess on its mosaic's canvas (shape), float32 linear: its tiles' (_excess_part) composed as
+    _window and _compose place and blend the tiles themselves (a tile with no map composed as none, so it covers an
+    earlier one's excess where it is drawn over it), unlevelled; None when none of its tiles has a map. colour_picture's
+    sat for a mosaic (so_far)."""
+    mine = _mine(u, p, tiles, f)
+    if not any(t.get("sat") for t in mine):
+        return None
+    k, scale = p["k"], p["display_scale"]
+    H, W = shape[:2]
+    window = []
+    for t in under_first(mine):
+        if "offset" not in t:
+            continue
+        bx, by, bw, bh = t["box"]
+        left, top = round((t["offset"][0] + bx - rect[0]) * k), round((t["offset"][1] + by - rect[1]) * k)
+        sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
+        if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
+            continue
+        part = _excess_part(u, t, cache, scale, sw, sh)
+        if part is None:
+            a = _part(_pic(u, cache, scale, t), sw, sh)[..., 3]
+            part = np.dstack([np.zeros_like(a)] * 3 + [a])
+        if SUBPIXEL:
+            part = _subpixel_at(part, t, rect, k, left, top)
+        frame = np.zeros((H, W, 4), np.uint8)
+        x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+        frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
+        window.append((frame, None, None, None))
+    if not window:
+        return None
+    n = len(window)
+    rgba = _compose(window, k, pin=None, corrections=(np.ones((n, 3)), np.zeros((n, 3))), level=False)
+    out = rgba[..., 0].astype(np.float32) / 255
+    return out if out.any() else None
+
+
 def _place_sat(u, t, rect, k, W, H, cache, scale):
     """Tile t's saturation excess (_sat_excess) placed as _place places its picture: W x H float32, 0 where the camera
     did not saturate; None when the tile has no map."""
@@ -10045,6 +10118,20 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if moved:
             away = moved.pop("_away", None)
             rep["per_body"] = moved
+            if sats is not None:
+                # (each saturation excess moved as its plane was: a plane lined up on the shown one's target limb by
+                # the same shift; where another body's copy was moved (away), none: what is drawn there is the body's
+                # own, from the shown plane)
+                for i, m in enumerate(sats):
+                    if m is None:
+                        continue
+                    off = (moved.get("_target") or [None] * len(sats))[i]
+                    if off and any(off):
+                        m = cv2.warpAffine(m, np.float32([[1, 0, off[0]], [0, 1, off[1]]]), (m.shape[1], m.shape[0]),
+                                           flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                    if away is not None and away.shape == m.shape:
+                        m = np.where(away, 0, m).astype(np.float32)
+                    sats[i] = m
         # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
         # its own filter either side to take its cosmic rays out against (_around): the set's planes are cleaned as a
         # still composite's channels are (calibration._clean_spikes), or each hit is a bright dot through the mix
