@@ -2619,6 +2619,22 @@ def _floor_cap(top):
     return (1.0 - 1.0 / FLOOR_GAIN) * max(top, 0.0)
 
 
+"""
+How much of a picture without sky is lit sky, as _floor's glow measures it (the same rule, written out for
+obs_mosaic.pass_scale; _floor keeps its own arithmetic): 0 to 1, how dim its median brightness middle is between
+GLOW_IOF[1] and GLOW_IOF[0] (on a log scale) times how smooth it is (GLOW_FINE), on lum, the picture less its sky level
+"""
+def glow_share(lum, middle):
+    dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
+    if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
+        # a picture brighter than lit sky (most): none of its glow whatever its fine structure, a finite share for
+        # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
+        # sign) without measuring it (two blurs, ~35 ms)
+        return dim
+    smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
+    return dim * min(max(smooth, 0.0), 1.0)
+
+
 """The pixels of a picture of shape (rows, columns) at least FLOOR_BORDER (scaled from 1024 px) from its edge"""
 def _inner(shape):
     border = max(1, int(round(FLOOR_BORDER * shape[1] / 1024)))

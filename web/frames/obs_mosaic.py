@@ -84,7 +84,8 @@ import label_handler  # noqa: E402
 # obs-v132/v115/v101: a band of a colour movie frame the camera saturated is floored at the light it saturated
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
-VERSIONS = {"balanced": "obs-v132", "raw": "obs-v115", "eye": "obs-v132-eye", "false": "obs-v132-false", "classic": "obs-v101-classic"}
+# obs-v134/v117/v103: a pass of lit sky (no dark sky, no body on its frames) has its blacks raised by its glow share with a soft toe (obs_mosaic.pass_scale; #299 redone; numbered past #552)
+VERSIONS = {"balanced": "obs-v134", "raw": "obs-v117", "eye": "obs-v134-eye", "false": "obs-v134-false", "classic": "obs-v103-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2498,6 +2499,7 @@ FILLED_TOE = 0.04   # filled passes (balanced look) with no sky toe of their own
                     # over black (calibration.display), black lowered by half of it so the midtones are where they were
 
 
+GLOW_WHITE = 0.1   # a pass of lit sky (pass_scale): its white keeps at least this share when its blacks rise to the glow
 SKY_MIN = 0.05   # balanced: the share of a pass's pixels that must be dark sky for its blacks to be set from the sky
 # ... measured on the darker half of the sky: the noise floor at this percentile above its median (a single
 # picture's is the 98th; lower here, since a long-exposure pass's whole sky can glow faintly, Saturn's Shadow's E ring)
@@ -2804,6 +2806,14 @@ def undrawn_blacks(blacks, drawn, tops):
     return {f: max(v, least) if f not in drawn and tops.get(f, np.inf) <= least else v for f, v in blacks.items()}
 
 
+def _glow_share(iof):
+    """How much of a frame (I/F, its own size) is lit sky, a glow of stray or ring light with no dark sky in it, as a single
+    picture measures it (calibration.glow_share), above its 1st percentile (pass_scale)"""
+    q = iof[::4, ::4]
+    floor = np.float32(np.percentile(q, 1))
+    return calibration.glow_share(np.ascontiguousarray(iof, dtype=np.float32) - floor, float(np.median(q)) - float(floor))
+
+
 def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_levels=None):
     """The display scale of every tile of the pass (calibration.shared_scale over its frames merged in I/F, as
     mosaic_benchmark.display_scale): {"blacks": {filter: I/F}, "white": I/F, "gamma"}. Where the body fills
@@ -2815,7 +2825,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     (the measured values come back as "sky_tops", with the soft "toe" above black). lit_levels: a dict given here gets
     each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
     scale itself is the same with or without it."""
-    by, disks, each, bodies = {}, {}, [], {}
+    by, disks, each, bodies, glows = {}, {}, [], {}, {}
     # the frames read and calibrated MOVIE_WORKERS at once (in order: the same scale), so a cold pass's plan is not
     # one frame after another (021TI REGMAPNA001: 67 frames, 28 s of a 100 s first movie frame)
     mode = calibration.mode()
@@ -2841,7 +2851,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             else:
                 lbl, iof, _ = stacking.load_hdr(fr[0], gap)
             # (only the quarter size picture kept, the frame's size and its exposure: pass_scale's long exposures)
-            got = None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape, _exposure(lbl))
+            got = None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape, _exposure(lbl), _glow_share(iof))
             if got is not None:
                 # (the share of the frame the camera saturated, for the Saturn look's headroom: saturn_clipped)
                 clip = whole[4] if whole is not None and not note.get("differ") and len(whole) > 4 else None
@@ -2854,8 +2864,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     for fr, got in zip(frames, read_all):
         path, _, f, _, _, x, y, z = fr
         if got is not None:
-            q, shape, exposure = got
+            q, shape, exposure, share = got
             by.setdefault(f, []).append(q)
+            glows.setdefault(f, []).append(share)
             each.append((f, q, exposure, on_disk(u, fr), fr[3]))
             body = None
             if z:
@@ -2945,6 +2956,26 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+    glow_toe = None
+    if calibration.look() == "balanced" and toe is None and not filled and not on:
+        # no dark sky and no body in the frames (a moon's disk on them, on: the 141EN plume movie, whose jets' faint
+        # edge, a step in its frames, came out a hard speckled line once the black rose to it; Sam, 11-05): where the
+        # frames are lit sky (stray light, a ring's glow at high phase, the E ring), each band's black rises by that
+        # share of the way to its median, as a single picture's does (calibration._floor's glow), so the sky goes near
+        # black and only the glow brighter than it shows; the top stays where it was. 033RI HIPHAMOVB001's 2 s NAC frames
+        # of faint glow came out a lifted gray square, speckled with noise at its dark end, where their single pictures
+        # are black sky with the glow at the top (#299, redone on the code of 2026-11-17)
+        lifts = {}
+        for f, iofs in by.items():
+            share = float(np.median(glows.get(f) or [0.0]))
+            if share > 0:
+                lifts[f] = share * max(float(np.median(np.concatenate([i.ravel() for i in iofs]))) - blacks[f], 0.0)
+        if lifts and max(lifts.values()) > 0:
+            blacks = {f: blacks[f] + lifts.get(f, 0.0) for f in blacks}
+            white = max(white - max(lifts.values()), GLOW_WHITE * white)
+            # with the soft toe a sky's black has (SKY_TOE times its height over the sky), so the glow's noise fades
+            # into the black instead of breaking into speckle at it
+            glow_toe = SKY_TOE * max(lifts.values())
     if calibration.look() == "balanced":
         blacks = undrawn_blacks(blacks, drawn, {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), UNDRAWN_TOP))
                                                 for f, iofs in by.items()})
@@ -3007,6 +3038,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         out["long"] = long
     if toe:
         out["toe"], out["sky_tops"] = toe, tops
+    elif glow_toe:
+        out["toe"] = glow_toe
     if calibration.look() == "balanced":
         # the brightest of the pass rolls off past the shoulder instead of clipping flat at white, as a single
         # picture's does (calibration.display): a filled pass's white is its 99.5th percentile, so its sunlit crater
