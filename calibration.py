@@ -749,8 +749,10 @@ A summed frame's calibrated picture enlarged smoothly. The camera summed its pix
 pixels and lost lines per camera pixel (enlarged smoothly before them, the repairs left short streaks). Here, after all
 of them and before the geometric correction, the blocks are taken back to the camera's own pixels (each block's mean:
 the flat field and the smoothing above vary inside one) and enlarged with SUMMED_ENLARGE. A frame at its own size (the
-science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped.
-iof = the calibrated frame (2-D), info = its label
+science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped,
+and the lost and the saturated pixels themselves keep the values they had: only what the camera measured is enlarged.
+iof = the calibrated frame (2-D), info = its label; lost, clipped = its lost and its saturated pixels at the camera's
+own size (label.valid_mask(camera=True) inverted, clipped_codes), or None
 """
 def enlarged(iof, info, lost=None, clipped=None):
     s = summing_of(info)
@@ -758,11 +760,13 @@ def enlarged(iof, info, lost=None, clipped=None):
     if s <= 1 or iof.ndim != 2 or h % s or w % s or h != s * int(_value(info, "LINES", "0") or 0):
         return iof
     small = np.ascontiguousarray(iof).reshape(h // s, s, w // s, s).mean(axis=(1, 3))
+    gone = None
     if lost is not None and np.shape(lost) == small.shape and np.any(lost):
         # the pixels lost in downlink (zeros, or garbage after a lost packet) bridged first: enlarged with them, a lost
         # line bled two camera pixels into the rows on each side of it, which the line fill that comes later (on
         # the picture, with its block shaped mask) does not reach (the Iapetus 049IA mosaic: a band of streaks)
-        small = bridged(small, np.asarray(lost, bool))
+        gone = np.asarray(lost, bool)
+        small = bridged(small, gone)
     out = cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE)
     if clipped is not None and np.shape(clipped) == small.shape and np.any(clipped):
         # what the camera saturated is not a measurement, and enlarged with its neighbors it would put part of its
@@ -774,6 +778,14 @@ def enlarged(iof, info, lost=None, clipped=None):
         near = cv2.dilate(np.asarray(clipped, np.uint8), np.ones((side, side), np.uint8)).astype(np.float32)
         keep = np.clip(cv2.resize(near, (w, h), interpolation=cv2.INTER_LINEAR), 0, 1)
         out = keep * iof + (1 - keep) * out
+    if gone is not None:
+        # and the lost pixels themselves keep what they held (their blocks, as in a frame not enlarged): the bridge is
+        # only there so that they do not bleed. Left bridged they changed what is measured on the frame before its
+        # fills: a pass's black sits over its sky's fine structure (obs_mosaic.pass_scale's sky_tops), which counts
+        # the lost pixels too, and without them it fell by a quarter to a half on the 4x4 filters of the Grand Finale
+        # ring mosaics (269RI HIPHASEFB001: VIO 3.4e-4 to 1.5e-4, IR3 2.8e-4 to 2.1e-4), so the mosaic drew 14% brighter
+        # with its faint rings and their seams lifted. With their own values back it is within 1% of what it was
+        out = np.where(np.repeat(np.repeat(gone, s, 0), s, 1), iof, out)
     return out.astype(iof.dtype, copy=False)
 
 

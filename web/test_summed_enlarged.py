@@ -66,11 +66,13 @@ for lines in (512, 256):
     beside[97 * s:100 * s, 45 * s:-3 * s] = beside[102 * s:105 * s, 45 * s:-3 * s] = True
     assert np.abs(bled - clean)[beside].max() > 0.005          # as it was without the mask: the zeros bleed
     assert np.abs(got - clean)[beside].max() < 2e-4, np.abs(got - clean)[beside].max()
-    # and what was lost reads as its neighbours do, not as zeros (the picture's own fill takes it from there)
-    inside = np.zeros((1024, 1024), bool)
-    inside[100 * s:102 * s, 45 * s:-3 * s] = True
-    assert np.abs(got - clean)[inside].max() < 0.01 and got[inside].min() > 0.04
-    assert got[-1, 12 * s:18 * s].min() > 0.04
+    # and the lost pixels themselves keep what they held (zeros here), block for block, as in a frame not enlarged:
+    # what is measured on the frame before its fills (a pass's sky, obs_mosaic.pass_scale) and the fills themselves
+    # meet what they met before
+    big = np.repeat(np.repeat(lost, s, 0), s, 1)
+    assert np.array_equal(got[big], blocks[big]) and not got[big].any()
+    assert np.abs(got - clean)[~big & beside].max() < 2e-4
+    assert np.abs(got - clean)[(lines - 3) * s:, 12 * s:18 * s][~big[(lines - 3) * s:, 12 * s:18 * s]].max() < 2e-3
     # a mask of another size, or none lost: as without one
     assert np.array_equal(cal.enlarged(blocks, info, np.zeros((7, 7), bool)), bled)
     assert np.array_equal(cal.enlarged(blocks, info, np.zeros((lines, lines), bool)), bled)
@@ -118,13 +120,16 @@ for lines in (512, 256):
     archive = scene.copy()
     archive[:, [0, -1]] *= 1.05                   # the archive's edge columns: a little brighter, and not used
     archive[lines // 2, 60:] = 0
-    got = cal.enlarged(np.repeat(np.repeat(archive, s, 0), s, 1), info, edges)
-    assert np.abs(got[:, :30 * s] - 0.30).max() < 1e-9, np.abs(got[:, :30 * s] - 0.30).max()   # to the edge, exact
+    stored = np.repeat(np.repeat(archive, s, 0), s, 1)
+    got = cal.enlarged(stored, info, edges)
+    big = np.repeat(np.repeat(edges, s, 0), s, 1)
+    assert np.array_equal(got[big], stored[big])                  # the lost pixels' own values, edge columns too
+    assert np.abs(got[:, s:30 * s] - 0.30).max() < 1e-9, np.abs(got[:, s:30 * s] - 0.30).max()   # beside the edge: exact
     want = cal.enlarged(np.repeat(np.repeat(scene, s, 0), s, 1), info)
-    far = np.ones((1024, 1024), bool)
+    far = ~big
     far[(lines // 2 - 3) * s:(lines // 2 + 4) * s, 57 * s:] = False     # (the lost line's end is another matter: above)
     assert np.abs(got - want)[far].max() < 1e-9, np.abs(got - want)[far].max()
-    assert np.abs(got - want).max() < 0.002       # and where the lost line meets the lost column: from its neighbours
+    assert np.abs(got - want)[~big].max() < 0.002   # and where the lost line meets the lost column: from its neighbours
 # a full size frame is never touched
 full = rng.random((1024, 1024))
 assert cal.enlarged(full, {"LINES": "1024", "LINE_SAMPLES": "1024"}) is full
