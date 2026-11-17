@@ -115,6 +115,8 @@ SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they h
 SCAN_TURN = 30       # degrees
 SET_COLOUR = "_c1"   # the folder suffix, after the others, of a movie that plays in its colour sets' filters where its
                      # tile counts alone made it grey (_set_colour), so its plan and frames are made again
+ONE_PAIR = "_o1"     # the folder suffix, after SET_COLOUR's place, of a mosaic coloured by its one pair set (_pair_colour),
+                     # so its plan is made again (a movie so coloured takes SET_COLOUR's)
 POLARIZED = "_p1"    # the folder suffix, after all the others, of a pass holding a polarized colour frame
                      # (sets_passes.polarized_index): its colour sets and plan are made anew (_polarized_pass)
 PLAYED_PAIR = "_c2"  # the folder suffix, in SET_COLOUR's place, of a movie whose colours would not play and that plays in
@@ -1480,7 +1482,8 @@ def folder(u, cache):
               + (LAID if u.get("laid") else STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
-              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else "")
+              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else
+                 ONE_PAIR if u.get("one_pair") else "")
               + (POLARIZED if _polarized_pass(u) else "")
               + (REPOINTED if _repointed(u) else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
@@ -1664,7 +1667,7 @@ def _filters(u):
     aside = _aside(frames, u)
     count = {f: c for f, c in count.items() if f not in aside} or count
     colour = colour_of(count, nms)
-    u["set_colour"] = u["played_pair"] = False
+    u["set_colour"] = u["played_pair"] = u["one_pair"] = False
     # a movie plays only a colour set holding every colour filter (set_of): colours that no set of its holds together
     # never play, and it stayed grey. Janus ISS_059JA_GEOLOG001_PRIME takes RED and BL1 once each, side by side, and
     # GRN only in its two UV3, GRN, IR1, IR3 sets: its counts made it true colour, and none of its 49 frames was in
@@ -1705,15 +1708,26 @@ PAIR_SETS = 2   # sets of a pair (_pair_colour) a pass takes at least, as a movi
 def _pair_colour(u, count, nms):
     """The two colour filters, [longer, shorter], of a pass whose sets (colour_sets) take a pair drawn in approximate
     color (calibration.approximate_pair: a body's surface window pair, Titan's CB3 with MT1, IR1, RED...), at least
-    PAIR_SETS times: the pair taken most; None without one."""
-    seen = {}
-    for run in colour_sets(u["frames"]):
+    PAIR_SETS times, or once in a pass taking fewer than STEP_FRAMES frames of its grey filter, as plays_colour lets one
+    set play, its frames shown (none lost past MOVIE_HOLD_LOST, unfit): the pair taken most; None without one. 579
+    Titan passes, most a cloud watch's one CB3, CB3, CB3, MT1 visit, took their pair once and stayed grey (Sam
+    2026-11-16)."""
+    seen, whole = {}, {}
+    frames = u["frames"]
+    for run in colour_sets(frames):
         fs = tuple(sorted({f for f, _ in run}, key=lambda f: -nms[f]))
         if len(fs) == 2 and all(f in count for f in fs) and \
                 calibration.approximate_pair(u["key"][2], list(fs), u["key"][0]):
             seen[fs] = seen.get(fs, 0) + 1
+            if all(lost_share(frames[j][1]) <= MOVIE_HOLD_LOST for _, j in run):
+                whole[fs] = whole.get(fs, 0) + 1
     best = max(seen, key=seen.get) if seen else None
-    return list(best) if best and seen[best] >= PAIR_SETS else None
+    if best and seen[best] >= PAIR_SETS:
+        return list(best)
+    if best and whole.get(best) and count.get(max(count, key=count.get), 0) < STEP_FRAMES:
+        u["one_pair"] = True
+        return list(best)
+    return None
 
 
 def _set_coloured(u):
