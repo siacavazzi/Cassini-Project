@@ -2381,10 +2381,10 @@ def _tile_exposure(t, paths=None):
 
 def bracket_shorts(tiles, u=None):
     """The tiles (n) of a grey filter's exposure brackets that go under: a short exposure at a place where the same
-    filter took one BRACKET_STEP times as long within SAME_PLACE of it and MIX_SPAN of its time, that long one not
-    over-exposed (over_exposed: saturated over OVER_EXPOSED of the frame, or of its lit part when that is OVER_LEAST of
-    the frame: a ring arc over sky whose rings it drew flat white keeps the short frame on top). The long one shows the faint rings and ground the short
-    one barely measured; where it saturated, the camera's own saturated pixels are drawn as ever. Which went on top
+    filter took one BRACKET_STEP times as long within SAME_PLACE of it and MIX_SPAN of its time, that long one saturated
+    over less than OVER_EXPOSED of the whole frame. (Not over_exposed's test of its lit part: 036RI's 120 s frames
+    saturated 33-35 % of the frame on a 57-63 % lit part, past it, yet the accepted picture before #491 draws them on
+    top, their saturated B ring white.) The long one shows the faint rings and ground the short one barely measured; where it saturated, the camera's own saturated pixels are drawn as ever. Which went on top
     was left to dim_under's overlap ratio, a median over sparse lit pixels that is no rule for one place taken twice:
     036RI DRING001 alternates 120 s and 10 s frames, and calibrated at full depth (#491) one 10 s frame's ratio went
     from 0.60 to 0.74, past DIM_UNDER, and its faint C ring came out on top of the 120 s frame's, a soft band with a
