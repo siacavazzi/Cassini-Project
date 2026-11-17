@@ -367,6 +367,20 @@
       }
       return out;
     }
+    // a plane's saturation excess (Float32Array, one per pixel) from its frame's kept .sat.webp (sd: RGBA, its grey the
+    // excess in 1/255 steps) and the plane as drawn (d: RGBA, before its gain); with a gain over 1 on the plane (L, its
+    // lookup table) its white stays white and the light it saturated on scales by the gain, as obs_mosaic._sat_excess
+    // has it, in 1/255 steps again
+    function gainedExcess(sd, d, L, gain, gamma) {
+      const f = Math.fround, e = new Float32Array(sd.length / 4);
+      const dec = v => gamma === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)) : Math.pow(v, gamma);
+      for (let i = 0, k = 0; k < e.length; i += 4, k++) {
+        let v = sd[i] / 255;
+        if (v > 0 && L) v = Math.round(Math.max(0, dec(L[d[i]] / 255) - gain * (dec(d[i] / 255) - v)) * 255) / 255;
+        e[k] = f(v);
+      }
+      return e;
+    }
     // obs_mosaic._shade_rgb: a colour picture (RGBA) times exposure gain g on linear brightness, white kept white by
     // its brightest band under a gain of 1 (movie_frame puts a gain under 1 on the mixed set, not on its planes)
     function shadeRgb(px, g, gamma, clipFrom = CLIP_DEFAULT[0]) {
@@ -595,7 +609,7 @@
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, heldGains, gains, lut, mix, setPicture, shadeRgb, fillClipped, resizeArea, percentile, median, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+    return { pyRound, pyRound2, places, shift, evenedGains, heldGains, gains, lut, mix, setPicture, shadeRgb, gainedExcess, fillClipped, resizeArea, percentile, median, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
       gaussKernel, detailInputs, detailFinish, blurCPU, ringWhite, diskBlend };
   };
   window.cassiniSteadyMath = STEADY_MATH;
@@ -724,15 +738,7 @@ onmessage = async e => {
       const sc = new OffscreenCanvas(W, H), sg = sc.getContext("2d", { willReadFrequently: true });
       sg.drawImage(p.sat, dx, dy);
       p.sat.close();
-      const sd = sg.getImageData(0, 0, W, H).data, e = new Float32Array(W * H), f = Math.fround;
-      const gm = t.exposure ? t.exposure.gamma : 2.2, dec = v => gm === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)) : Math.pow(v, gm);
-      for (let i = 0, k = 0; k < e.length; i += 4, k++) {
-        let v = sd[i] / 255;
-        // (a gain over 1 on the plane: its white stays white, the light it saturated on scales, as _sat_excess has it)
-        if (v > 0 && L && !late) v = Math.round(Math.max(0, dec(L[d[i]] / 255) - gain * (dec(d[i] / 255) - v)) * 255) / 255;
-        e[k] = f(v);
-      }
-      sats[q] = e;
+      sats[q] = M.gainedExcess(sg.getImageData(0, 0, W, H).data, d, L && !late ? L : null, gain, t.exposure ? t.exposure.gamma : 2.2);
     }
     if (L && !late) for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
     if (!mixing) { g.putImageData(im, 0, 0); return c; }
