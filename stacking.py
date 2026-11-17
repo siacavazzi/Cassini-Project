@@ -10,8 +10,11 @@ pointings a minute apart) is not a repeat, however close in time. Where SPICE ca
 frame, the repeat must line up with it (image_correction.find_shift) to be merged.
 """
 
+import atexit
 import math
 import os
+import shutil
+import socket
 import threading
 import cv2
 import numpy as np
@@ -236,13 +239,32 @@ merged in I/F (obs_mosaic.pass_scale: every frame of a pass of up to 96 a filter
 again (color_image.load_aligned): the same frames read, calibrated and merged twice, minutes apart in one process.
 pass_scale now asks for the merge as the tile will (valid, clipped) and hands it on (hand_on); the tile's load_hdr call,
 the same path, window and display model, takes it (once: it is the tile's own from then on) instead of working it
-out. Up to HANDED_MB of them wait at a time (CASSINI_HDR_HANDED_MB; a 1024 px frame is 6 MB: the first 21 frames of
-a pass at 128), and a new pass's plan lets go of what the last one's tiles did not take (handing). The merge is the
-one load_hdr returns, so every tile is the same to the bit.
+out. Up to HANDED_MB of them wait at a time in memory (CASSINI_HDR_HANDED_MB; a 1024 px frame is 6 MB: the first 21
+frames of a pass at 128), and a new pass's plan lets go of what the last one's tiles did not take (handing). The merge
+is the one load_hdr returns, so every tile is the same to the bit.
+
+Past that room a merge waits in a file instead (hand_to: a folder for them, which the pre-build gives; without one, as
+before, the frames past the room are merged again by their tiles). Of the mission's 362,515 pass frames the plans
+read 289,365 (a long pass's scale is measured on SCALE_FRAMES a filter), 140,352 of them past the first 21 of their
+pass: those were read, calibrated and merged twice (2026-11-16). A file holds the merge's
+arrays as they are (the I/F as float32, the masks a bit a pixel: 4.3 MB a 1024 px frame), the label and the count stay
+in memory, and the tile gets back arrays equal to the bit; a file that cannot be written or read back costs only the
+hand-over (the tile merges the frame itself). Up to HANDED_DISK_MB of them wait at a time (CASSINI_HDR_HANDED_DISK_MB),
+each removed as its tile takes it, the rest when the next pass's plan begins and when the process ends.
 """
 HANDED_MB = int(os.environ.get("CASSINI_HDR_HANDED_MB", "128"))
+HANDED_DISK_MB = int(os.environ.get("CASSINI_HDR_HANDED_DISK_MB", "4096"))
 _handed, _handed_lock = {}, threading.Lock()
-_handed_state = {"bytes": 0, "pass": None}
+_handed_state = {"bytes": 0, "pass": None, "disk": 0, "root": None, "folder": None, "serial": 0}
+
+
+class _Filed:
+    """A merge waiting in a file (hand_on past the memory's room): the file, its arrays' sizes in memory, and the
+    answer with each array's place (how it reads back) instead of the array."""
+    __slots__ = ("path", "size", "parts")
+
+    def __init__(self, path, size, parts):
+        self.path, self.size, self.parts = path, size, parts
 
 
 def _handed_key(path, window, max_frames):
@@ -256,31 +278,162 @@ def _handed_size(result):
     return sum(a.nbytes for a in result if isinstance(a, np.ndarray))
 
 
+def hand_to(root):
+    """Merges past the memory's room wait in files under root from here on (None or "": none do, as before). Each
+    process keeps its own folder there (<host>-<pid>, made with its first file, removed when it ends); folders left by
+    processes of this machine that are gone (killed before they could tidy up) are removed here."""
+    with _handed_lock:
+        _handed_state.update(root=os.path.abspath(os.path.expanduser(root)) if root else None, folder=None)
+    if not root:
+        return
+    host = _host()
+    try:
+        names = os.listdir(_handed_state["root"])
+    except OSError:
+        return
+    for name in names:
+        owner, _, pid = name.rpartition("-")
+        if owner != host or not pid.isdigit() or int(pid) == os.getpid() or _alive(int(pid)):
+            continue
+        shutil.rmtree(os.path.join(_handed_state["root"], name), ignore_errors=True)
+
+
+def _host():
+    return "".join(c if c.isalnum() else "_" for c in socket.gethostname().split(".")[0]) or "host"
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True   # (there, and not ours to signal)
+    return True
+
+
+def _handed_folder():
+    """(holding _handed_lock) This process's folder for filed merges, made on first use; None when there is none."""
+    if _handed_state["folder"] is None and _handed_state["root"]:
+        folder = os.path.join(_handed_state["root"], f"{_host()}-{os.getpid()}")
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError:
+            _handed_state["root"] = None   # (cannot be made: no files, as without a folder)
+            return None
+        _handed_state["folder"] = folder
+        atexit.register(_tidy, folder, _handed_state["root"])
+    return _handed_state["folder"]
+
+
+def _tidy(folder, root):
+    """(as the process ends) Its folder of filed merges removed, and the folder they are all in once it is empty."""
+    shutil.rmtree(folder, True)
+    try:
+        os.rmdir(root)
+    except OSError:
+        pass
+
+
+def _file_room():
+    """(holding _handed_lock) True while another merge can wait in a file."""
+    return bool(_handed_state["root"]) and _handed_state["disk"] < HANDED_DISK_MB * 2 ** 20
+
+
 def handing(key):
     """A pass's plan begins (key: the pass's): what an earlier pass handed on and no tile took is let go."""
     with _handed_lock:
-        if _handed_state["pass"] != key:
-            _handed.clear()
-            _handed_state.update(bytes=0)
-            _handed_state["pass"] = key
+        if _handed_state["pass"] == key:
+            return
+        left = [v.path for v in _handed.values() if isinstance(v, _Filed)]
+        _handed.clear()
+        _handed_state.update(bytes=0, disk=0)
+        _handed_state["pass"] = key
+    for path in left:
+        _remove(path)
+
+
+def _remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def hand_room():
-    """True while another frame's merge can wait for its tile."""
+    """True while another frame's merge can wait for its tile (in memory, or in a file: hand_to)."""
     with _handed_lock:
-        return _handed_state["bytes"] < HANDED_MB * 2 ** 20
+        return _handed_state["bytes"] < HANDED_MB * 2 ** 20 or _file_room()
 
 
 def hand_on(path, window, result, max_frames=8):
     """Keeps result, load_hdr(path, window, max_frames, valid=True, clipped=True)'s answer in this display model, for
-    the next such call (the tile's), while there is room; False when there is none."""
+    the next such call (the tile's), while there is room: in memory, and past that in a file (hand_to); False when
+    there is none."""
     key, size = _handed_key(path, window, max_frames), _handed_size(result)
     with _handed_lock:
-        if key in _handed or _handed_state["bytes"] + size > HANDED_MB * 2 ** 20:
+        if key in _handed:
             return False
-        _handed[key] = result
-        _handed_state["bytes"] += size
-        return True
+        if _handed_state["bytes"] + size <= HANDED_MB * 2 ** 20:
+            _handed[key] = result
+            _handed_state["bytes"] += size
+            return True
+        folder = _handed_folder() if _file_room() and _handed_state["disk"] + size <= HANDED_DISK_MB * 2 ** 20 else None
+        if folder is None:
+            return False
+        _handed_state["serial"] += 1
+        _handed_state["disk"] += size   # (its room held while it is written, outside the lock)
+        name, of = os.path.join(folder, f"{_handed_state['serial']}.merge"), _handed_state["pass"]
+    filed = _file(name, size, result)
+    with _handed_lock:
+        # (kept unless it could not be written, or another pass's plan began meanwhile, or another thread handed it on)
+        if filed is not None and key not in _handed and _handed_state["pass"] == of:
+            _handed[key] = filed
+            return True
+        if _handed_state["pass"] == of:
+            _handed_state["disk"] = max(0, _handed_state["disk"] - size)
+    _remove(name)
+    return False
+
+
+def _file(name, size, result):
+    """result's arrays written to the file name, each as it is (a mask a bit a pixel): the _Filed that reads them
+    back, or None when the file cannot be written (a full disk: no hand-over, the tile merges the frame itself)."""
+    parts = []
+    try:
+        with open(name, "wb") as fh:
+            for x in result:
+                if not isinstance(x, np.ndarray):
+                    parts.append(("as is", x))
+                elif x.dtype == np.bool_:
+                    np.save(fh, np.packbits(x, axis=None), allow_pickle=False)
+                    parts.append(("bits", x.shape))
+                else:
+                    np.save(fh, x, allow_pickle=False)
+                    parts.append(("array", None))
+    except (OSError, ValueError):
+        _remove(name)
+        return None
+    return _Filed(name, size, parts)
+
+
+def _unfile(filed):
+    """A filed merge read back as it was handed on (and its file removed); None when it cannot be read."""
+    out = []
+    try:
+        with open(filed.path, "rb") as fh:
+            for kind, x in filed.parts:
+                if kind == "as is":
+                    out.append(x)
+                elif kind == "bits":
+                    count = int(np.prod(x))
+                    out.append(np.unpackbits(np.load(fh, allow_pickle=False), count=count).view(np.bool_).reshape(x))
+                else:
+                    out.append(np.load(fh, allow_pickle=False))
+    except (OSError, ValueError, EOFError):
+        out = None
+    _remove(filed.path)
+    return None if out is None else tuple(out)
 
 
 def _handed_take(path, window, max_frames):
@@ -289,9 +442,15 @@ def _handed_take(path, window, max_frames):
     key = _handed_key(path, window, max_frames)
     with _handed_lock:
         result = _handed.pop(key, None)
-        if result is not None:
+        if isinstance(result, _Filed):
+            _handed_state["disk"] = max(0, _handed_state["disk"] - result.size)
+        elif result is not None:
             _handed_state["bytes"] -= _handed_size(result)
-    return result
+    return _unfile(result) if isinstance(result, _Filed) else result
+
+
+if os.environ.get("CASSINI_HDR_HANDED_DIR"):
+    hand_to(os.environ["CASSINI_HDR_HANDED_DIR"])   # (any process: a server's too, when its environment says so)
 
 
 """
