@@ -1,0 +1,34 @@
+    0.0 s        11 MB  start
+    1.2 s       183 MB  imported
+    1.2 s       183 MB  zip index
+    1.2 s       183 MB  27 highlights
+   10.4 s      1420 MB  thumb 0 color N1352055787_2: 9 s, +1238 MB, peak so far 1627 MB; {"picked": "color", "ids": ["N1352055787_2", "N1352055720_2", "N1352055683_2"]}
+  126.9 s      1759 MB  thumb 1 mosaic+frame N1356763606_1: 116 s, +339 MB, peak so far 1961 MB; {"picked": "mosaic", "id": "N1356763606_1", "tiles": 5}
+  129.6 s      1723 MB  thumb 2 mosaic+color+frame N1462871424_1: 3 s, -37 MB, peak so far 1961 MB; {"picked": "color", "ids": ["N1462841759_1", "N1462841725_1", "N1462841800_1"]}
+  129.6 s      1723 MB  thumb 3 frame N1465669778_2: 0 s, +0 MB, peak so far 1961 MB; {"picked": "frame", "id": "N1465669778_2"}
+  134.0 s      2006 MB  thumb 4 color W1473170667_1: 4 s, +283 MB, peak so far 2136 MB; {"picked": "color", "ids": ["W1473170667_1", "W1473170740_1", "W1473170829_1"]}
+  155.6 s      2367 MB  thumb 5 mosaic+frame N1506389783_2: 22 s, +361 MB, peak so far 2438 MB; {"picked": "mosaic", "id": "N1506389783_2", "tiles": 15}
+  155.6 s      2367 MB  thumb 6 frame W1507744658_2: 0 s, -0 MB, peak so far 2438 MB; {"picked": "frame", "id": "W1507744658_2"}
+  291.7 s      2100 MB  thumb 7 mosaic+frame W1537033109_1: 136 s, -266 MB, peak so far 2785 MB; {"picked": "mosaic", "id": "W1537033109_1", "tiles": 5}
+  295.6 s      2012 MB  thumb 8 color W1564338762_1: 4 s, -89 MB, peak so far 2785 MB; {"picked": "color", "ids": ["W1564338762_1", "W1564338716_1", "W1564338611_1"]}
+  339.0 s      2423 MB  thumb 9 mosaic N1568162506_3: 43 s, +412 MB, peak so far 2785 MB; {"picked": "mosaic", "id": "N1568162506_3", "tiles": 3}
+  341.1 s      2191 MB  thumb 10 color W1628768766_1: 2 s, -233 MB, peak so far 2785 MB; {"picked": "color", "ids": ["W1628768766_1", "W1628768799_1", "W1628768832_1"]}
+  341.1 s      2190 MB  thumb 11 frame N1669801856_1: 0 s, -1 MB, peak so far 2785 MB; {"picked": "frame", "id": "N1669801856_1"}
+  352.1 s      2424 MB  thumb 12 mosaic N1644781904_1: 11 s, +234 MB, peak so far 2785 MB; {"picked": "mosaic", "id": "N1644781904_1", "tiles": 21}
+  352.1 s      2424 MB  thumb 13 frame W1673423216_1: 0 s, +0 MB, peak so far 2785 MB; {"picked": "frame", "id": "W1673423216_1"}
+  473.6 s      2618 MB  thumb 14 mosaic W1689165372_1: 121 s, +194 MB, peak so far 2785 MB; {"picked": "mosaic", "id": "W1689165372_1", "tiles": 156}
+  476.3 s      2277 MB  thumb 15 color N1732688579_1: 3 s, -341 MB, peak so far 2785 MB; {"picked": "color", "ids": ["N1732688579_1", "N1732688530_1", "N1732688497_1"]}
+  566.6 s      2177 MB  thumb 16 mosaic+color+frame W1750962990_1: 90 s, -100 MB, peak so far 3097 MB; {"picked": "color", "ids": ["W1750962915_1", "W1750962932_1", "W1750962898_1"]}
+  793.2 s      2010 MB  thumb 17 mosaic+color+frame W1752982722_16: 227 s, -167 MB, peak so far 3097 MB; {"picked": "color", "ids": ["W1752967401_1", "W1752967345_1", "W1752967313_1"]}
+  828.8 s      2248 MB  thumb 18 mosaic+color+frame W1760119678_1: 36 s, +238 MB, peak so far 3097 MB; {"picked": "color", "ids": ["W1760115769_1", "W1760115829_3", "W1760115889_1"]}
+  904.5 s      2495 MB  thumb 19 mosaic W1859483408_1: 76 s, +247 MB, peak so far 3097 MB; {"picked": "mosaic", "id": "W1859483408_1", "tiles": 93}
+  904.5 s      2495 MB  thumb 20 frame N1863267232_1: 0 s, -0 MB, peak so far 3097 MB; {"picked": "frame", "id": "N1863267232_1"}
+  907.9 s      2257 MB  thumb 21 mosaic+color+frame N1864505170_1: 3 s, -238 MB, peak so far 3097 MB; {"picked": "color", "ids": ["N1864502733_1", "N1864502700_1", "N1864502667_1"]}
+  907.9 s      2257 MB  thumb 22 mosaic+frame N1867607239_1: 0 s, +0 MB, peak so far 3097 MB; {"picked": "frame", "id": "N1867604669_1"}
+ 1147.6 s      2086 MB  thumb 23 mosaic+color+frame W1870777525_1: 240 s, -171 MB, peak so far 3097 MB; {"picked": "color", "ids": ["W1870777525_1", "W1870777493_1", "W1870777476_1"]}
+ 1147.6 s      2062 MB  thumb 24 frame W1871888258_1: 0 s, -24 MB, peak so far 3097 MB; {"picked": "frame", "id": "W1871888258_1"}
+ 1197.4 s      2383 MB  thumb 25 mosaic+color+frame W1884011258_5: 50 s, +321 MB, peak so far 3097 MB; {"picked": "color", "ids": ["W1884003665_2", "W1884003632_2", "W1884003599_2"]}
+ 1200.1 s      2244 MB  STOPPED: over 1200 s; what holds it:
+  live numpy arrays: 14, 0 MB owned (footprint 2247 MB)
+ 1200.9 s      2240 MB  thumb 26 color W1884113453_1: 3 s, -143 MB, peak so far 3097 MB; {"picked": "color", "ids": ["W1884113453_1", "W1884113391_1", "W1884113423_1"]}
+ 1201.0 s      2240 MB  DONE thumbs: peak 3097 MB

@@ -312,12 +312,23 @@ def exists(path):
     return os.path.exists(_folder_path(path))
 
 
-def read_bytes(path):
+def _stored_bytes(path):
+    """The member's bytes as the archive holds them (a lean archive's stub too, lean_stub)"""
     source = source_of(path)
     if using_zip(source):
         return _read_member(_find_existing(path), source)
     with open(_folder_path(path), "rb") as f:
         return f.read()
+
+
+def read_bytes(path):
+    data = _stored_bytes(path)
+    kind = lean_stub(data)
+    if kind is not None:
+        # a frame a lean archive left out: its PNG made again from its original (the same pixels; the bytes are cv2's)
+        ok, png = cv2.imencode(".png", lean_codes(path, kind))
+        return png.tobytes()
+    return data
 
 
 def read_text(path):
@@ -378,10 +389,16 @@ def imread(path, flags=cv2.IMREAD_COLOR):
         if gray is not None:
             _decoded.move_to_end(key)
     if gray is None:
-        data = read_bytes(path)
-        if not _plain_gray_png(data):
+        data = _stored_bytes(path)
+        kind = lean_stub(data)
+        if kind is not None:
+            # (a frame a lean archive left out: lean_archive.py stubbed only frames whose PNG was plain 8-bit gray and
+            # held exactly these codes, so this is what the PNG decoded to)
+            gray = lean_codes(path, kind)
+        elif not _plain_gray_png(data):
             return cv2.imdecode(np.frombuffer(data, dtype=np.uint8), flags)
-        gray = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+        else:
+            gray = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             return None
         # the kept picture is never handed out, only copies of it
@@ -479,10 +496,20 @@ def check_originals():
     if ORIGINALS is None:
         raise OriginalsMissing("CASSINI_ORIGINALS is not set: the 12-bit originals (the orig12 folder) are needed for a "
                                "build; CASSINI_ORIGINALS=off builds on the squeezed codes (test passes only)")
+    if ORIGINALS_OFF and lean():
+        raise OriginalsMissing(f"{get_source()} is a lean archive (helper programs/lean_archive.py): its frames the "
+                               f"originals cover are read from them, so CASSINI_ORIGINALS=off can't be used with it "
+                               f"(use the full archive for a build on the squeezed codes)")
     if ORIGINALS_OFF:
         print("Originals: off (CASSINI_ORIGINALS=off): 12BIT frames calibrated from the archive's squeezed codes", flush=True)
         return {"frames": 0, "volumes": 0}
     _originals_index()
+    if _originals_info.get("volumes", 0) < ORIGINALS_VOLUMES and lean():
+        # (a lean archive's left-out frames are read from the originals: one missing would stop the build at that
+        # frame, or be dropped by a caller that carries on without it, so a partial download is never enough)
+        raise OriginalsMissing(f"{get_source()} is a lean archive and {ORIGINALS} holds {_originals_info.get('volumes', 0)} "
+                               f"of {ORIGINALS_VOLUMES} complete volumes: it needs them all (CASSINI_ORIGINALS_PARTIAL "
+                               f"does not apply)")
     if (_originals_info.get("volumes", 0) < ORIGINALS_VOLUMES
             and os.environ.get("CASSINI_ORIGINALS_PARTIAL", "") not in ("1", "yes", "true")):
         raise OriginalsMissing(f"{ORIGINALS} holds {_originals_info.get('volumes', 0)} of {ORIGINALS_VOLUMES} complete "
@@ -551,6 +578,67 @@ def original_dn(path, shape=None):
     if shape is not None and tuple(dn.shape) != tuple(shape[:2]):
         return None
     return dn
+
+
+"""
+Lean archives (helper programs/lean_archive.py): a copy of the lean archive that leaves out the PNG of every frame the
+12-bit originals cover, about 28 of its 73 GB. Such a frame's PNG is replaced by a stub, a few bytes that name its
+conversion, and its codes are made again from its original exactly as convert_archive.py made them: a 12BIT frame's
+DN squeezed to the 256 square-root codes (encode, calibration.ORIGINAL_MIDS), an 8LSB frame's low 8 bits stretched as
+the old PNGs were (calibration.display_stretch). The tool stubs a frame only when what this gives equals its PNG pixel
+for pixel, so every reader (imread, read_bytes) sees the frame as before; its label and prefix stay in the archive.
+Reading a stub needs CASSINI_ORIGINALS (the folder): without it, or with it off, it stops with LeanFrameMissing.
+"""
+LEAN_STUB = b"CASSINI-LEAN-STUB v1 "   # + the frame's DATA_CONVERSION_TYPE (12BIT or 8LSB) + newline
+LEAN_KINDS = ("12BIT", "8LSB")
+
+
+class LeanFrameMissing(OriginalsMissing):
+    pass
+
+
+def lean():
+    """True when the data is a lean archive (it has the tool's LEAN_ARCHIVE.txt)"""
+    try:
+        return exists("LEAN_ARCHIVE.txt")
+    except FileNotFoundError:   # (no data at all: not a lean archive)
+        return False
+
+
+def lean_stub(data):
+    """The conversion a lean archive's stub names, or None when data is not a stub"""
+    if len(data) < 64 and data.startswith(LEAN_STUB):
+        kind = data[len(LEAN_STUB):].split(b"\n")[0].decode("ascii", "replace")
+        if kind not in LEAN_KINDS:
+            raise ValueError(f"unknown lean archive stub {data!r}")
+        return kind
+    return None
+
+
+def lean_stub_bytes(kind):
+    assert kind in LEAN_KINDS
+    return LEAN_STUB + kind.encode("ascii") + b"\n"
+
+
+def codes_from_original(dn, kind):
+    """A frame's stored codes as convert_archive.py made them from its original's DN (dn, as original_dn reads it)"""
+    import calibration as cal
+    if kind == "12BIT":
+        return np.searchsorted(cal.ORIGINAL_MIDS, dn).astype(np.uint8)
+    return cal.display_stretch(np.asarray(dn).astype(np.uint8), {"DATA_CONVERSION_TYPE": "TABLE"})
+
+
+def lean_codes(path, kind):
+    """The codes of a frame whose PNG a lean archive left out (a fresh, writable array)"""
+    if not ORIGINALS or ORIGINALS_OFF:
+        raise LeanFrameMissing(f"{relative(path)} is left out of the lean archive {source_of(path)}: it is read from its "
+                               f"12-bit original, so CASSINI_ORIGINALS must name the originals folder (it is "
+                               f"{os.environ.get('CASSINI_ORIGINALS')!r}); use the full archive otherwise")
+    dn = original_dn(path)
+    if dn is None:
+        raise LeanFrameMissing(f"{relative(path)} is left out of the lean archive {source_of(path)}, and its original is "
+                               f"not in {ORIGINALS} (or can't be read)")
+    return codes_from_original(dn, kind)
 
 
 """
@@ -631,7 +719,23 @@ def extract_to_cache(path):
         with open(part, "wb") as dst:
             for data in _member_chunks(i, source=source):
                 dst.write(data)
-        os.replace(part, out)
+        # never swap a whole kernel under a process that has it loaded (several builds share the cache): a file
+        # already there whole (another process finished first) is kept and the part dropped; only a wrong one is
+        # replaced. SPICE reopening a loaded kernel whose file was replaced failed "reconnect logical unit" (11-17),
+        # and that failure was stored as frames' geometry (bootleg_autonav.transient)
+        size = int(_zip_index(source)["sizes"][i])
+        try:
+            os.link(part, out)
+        except FileExistsError:
+            if os.path.getsize(out) != size:
+                os.replace(part, out)
+                part = None
+        except OSError:
+            # (a volume without hard links, exFAT and some mounts: the old replace)
+            os.replace(part, out)
+            part = None
+        if part and os.path.exists(part):
+            os.remove(part)
     return out
 
 

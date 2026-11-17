@@ -122,6 +122,13 @@ def machine_config(name="local"):
     return cfg
 
 
+# stored geometry errors that are the run's failure, not the frame's (as bootleg_autonav.TRANSIENT_SPICE has them; the
+# tool runs any commit, older ones without that list, so it keeps its own)
+TRANSIENT = ("FILEOPENFAIL", "NOMOREUNITS", "TOOMANYFILES", "NOSUCHFILE", "NOLOADEDFILES", "FILEREADFAILED",
+             "DAFNOSUCHHANDLE", "FILARCHMISMATCH", "reconnect logical unit", "MemoryError", "OSError",
+             "PermissionError", "FileNotFoundError")
+
+
 def set_key(items, env):
     """The hash naming a commit's results: the item list and the inputs' sizes (a different archive or calibration
     folder makes different pictures from the same code)."""
@@ -139,8 +146,34 @@ def set_key(items, env):
                 n += 1
                 b += os.path.getsize(os.path.join(d, f))
         h.update(f"cisscal={n},{b}".encode())
+    # the geometry by its content (rows, not file size: the same rows make different files on two machines): a
+    # result built on other places (a refilled frame, a stored failure) is another set's
+    h.update(f"geometry={geometry_fingerprint(env.get('CASSINI_GEOMETRY_CACHE'))}".encode())
     h.update(TOOL_VERSION.encode())
     return h.hexdigest()[:10]
+
+
+def geometry_fingerprint(path):
+    """The geometry cache's content as a build's private copy holds it (private_geometry), as a short hash: its target
+    rows (frame, version, place, error) but the transient failures that copy drops, and its pointing rows (frame,
+    kernels tag), in frame order, read only; '' without one."""
+    if not path or not os.path.isfile(path):
+        return ""
+    import sqlite3
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    h, n = hashlib.sha256(), 0
+    try:
+        # (the rows as a build's private copy has them, private_geometry: without the transient failures it drops)
+        keep = " AND ".join(["error NOT LIKE ?"] * len(TRANSIENT))
+        for row in db.execute("SELECT frame, version, x, y, z, angle, camera, target, scale, error FROM target "
+                              f"WHERE error IS NULL OR ({keep}) ORDER BY frame", [f"%{t}%" for t in TRANSIENT]):
+            h.update(repr(row).encode())
+            n += 1
+        for row in db.execute("SELECT frame, kernels FROM pointing ORDER BY frame"):
+            h.update(repr(row).encode())
+    finally:
+        db.close()
+    return f"{n}-{h.hexdigest()[:16]}"
 
 
 def job_env(cfg, workers=2):
@@ -379,11 +412,29 @@ class Builder:
         src = self.cfg["env"]["CASSINI_GEOMETRY_CACHE"]
         dst = os.path.join(self.cache, "geometry.sqlite")
         if not os.path.exists(dst):
-            a, b = sqlite3.connect(f"file:{src}?mode=ro", uri=True), sqlite3.connect(dst)
+            part = dst + ".part"
+            a, b = sqlite3.connect(f"file:{src}?mode=ro", uri=True), sqlite3.connect(part)
             a.backup(b)
             a.close()
+            # rows holding a failure of the run that stored them (a kernel file that would not open...), not a frame's
+            # answer, are dropped: every commit works those frames out again in its own copy, the older code too,
+            # which trusted them (bootleg_autonav.transient; 11-17: 31 frames drew unplaced in every MacBook build)
+            gone = b.execute("DELETE FROM target WHERE error IS NOT NULL AND (" + " OR ".join(
+                ["error LIKE ?"] * len(TRANSIENT)) + ")", [f"%{t}%" for t in TRANSIENT]).rowcount
+            b.commit()
             b.close()
+            os.replace(part, dst)
+            if gone:
+                print(f"private geometry: {gone} rows holding a transient failure dropped (worked out again)", flush=True)
         self.cfg = {**self.cfg, "env": {**self.cfg["env"], "CASSINI_GEOMETRY_CACHE": dst}}
+        # the copy refreshed at this commit, once, before any item is built: frames stored with other pointing than
+        # the commit's worked out again (bootleg_autonav.refresh_stale, where the commit has it), so the commit plans
+        # the same in a cold build and a warm one
+        code = os.path.join(self.wt, "web", "frames")
+        if os.path.exists(os.path.join(self.wt, "bootleg_autonav.py")):
+            subprocess.run([self.cfg["python"], "-c", "import bootleg_autonav as ba; f = getattr(ba, 'refresh_stale', None); "
+                            "n = f() if f else 0; print(f'private geometry: {n} stale frames worked out again')"],
+                           cwd=self.wt, env=job_env(self.cfg), check=False)
 
     def done_items(self):
         """Items build.json lists AND whose folder still holds meta.json.

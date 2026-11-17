@@ -188,7 +188,25 @@ def test_terminator_and_smooth_bodies():
           % (soft[term].mean(), hard[term].mean()))
 
 
+def test_haze_takes_no_fine_sharpening():
+    """Sam, 11-17: Titan's atmosphere looked harsh; the fine step raised the haze limb's 2-pixel pattern into a grid"""
+    import frame_server as fs
+    real = (fs._target, fs._lossy)
+    try:
+        px = np.dstack([textured(24), np.full((512, 512), 255, np.uint8)])
+        fs._lossy = lambda i: False
+        fs._target = lambda i: "TITAN"
+        rep = {}
+        assert (fs._sharpened(px, ["N1655966005_1"], rep) == px).all() and rep["sharpen"] == {"skipped": "haze"}
+        fs._target = lambda i: "RHEA"
+        assert (fs._sharpened(px, ["N1499996986_6"], {}) != px).any()
+    finally:
+        fs._target, fs._lossy = real
+    print("Titan takes no fine sharpening, other bodies do")
+
+
 if __name__ == "__main__":
+    test_haze_takes_no_fine_sharpening()
     test_terminator_and_smooth_bodies()
     test_detail_on_disk()
     test_detail_over_noise()

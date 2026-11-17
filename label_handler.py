@@ -386,9 +386,25 @@ class label:
     it, a frame with MISSING_LINES has its trailing zero runs of 16+ pixels marked instead
     (packets hold whole multiples of 16 pixels).
     """
-    def valid_mask(self):
-        base = self.info["path"].split('.')[0]
+    def valid_mask(self, camera=False):
+        # camera = True: at the camera's own size (512 or 256 px for a summed frame), not resized to the picture's nor
+        # moved by the geometric correction: what calibration.enlarged fills before it enlarges a summed frame
         lines, samples = int(self.info["LINES"]), int(self.info["LINE_SAMPLES"])
+        mask = getattr(self, "_camera_valid", None)
+        if mask is None:
+            mask = self._camera_valid = self._valid_camera(lines, samples)
+        mask = mask.copy()   # (the kept one is not handed out)
+        if camera:
+            return mask
+        if lines < 1024:
+            mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
+        # moved as the WAC's calibrated frames are by the geometric correction (the "geom" step), so it still falls
+        # on their pixels; the edge the correction reached past is not valid
+        import geometric_correction as gc
+        return gc.correct_mask(mask, self.info)
+
+    def _valid_camera(self, lines, samples):
+        base = self.info["path"].split('.')[0]
         mask = np.ones((lines, samples), bool)
         if ds.exists(base + ".prefix.gz"):
             prefix = np.frombuffer(gzip.decompress(ds.read_bytes(base + ".prefix.gz")), np.uint8).reshape(lines, -1)
@@ -420,11 +436,7 @@ class label:
             # archive (3-7 levels in the 256 px ring frames of ISS_034RI_SPKDKFORM001), which the display stretch
             # turns into a bright line down each side: those columns count as lost, so they are filled and left out
             mask[:, [0, -1]] = False
-            mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
-        # moved as the WAC's calibrated frames are by the geometric correction (the "geom" step), so it still falls
-        # on their pixels; the edge the correction reached past is not valid
-        import geometric_correction as gc
-        return gc.correct_mask(mask, self.info)
+        return mask
 
     """
     Traslates image
@@ -508,9 +520,11 @@ class label:
     def target_loc(self):
         im_year = int(self.info["IMAGE_TIME"].split('-')[0])
 
-        def load_year():
+        def load_year(force=False):
+            # force: load the year's kernels afresh even when they are the ones loaded (a retry after a transient
+            # SPICE failure, bootleg_autonav.find_target_cached: the same handles would fail the same way)
             global cur_year
-            if cur_year != im_year:
+            if force or cur_year != im_year:
                 ba.unload_kernels()
                 # set first: a year whose kernels fail to load is not reloaded for every frame
                 cur_year = im_year

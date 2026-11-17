@@ -1,0 +1,1 @@
+stopped at the cap: footprint 10148 MB over 10 GB after 52 s

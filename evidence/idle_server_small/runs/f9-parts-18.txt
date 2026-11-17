@@ -1,0 +1,8 @@
+    0.0 s        11 MB  start
+    0.3 s        55 MB    in <module>:35 < <module>:59 < <module>:246
+    1.1 s       180 MB  imported
+    1.1 s       180 MB  zip index
+    1.1 s       180 MB  27 highlights
+    5.5 s      1273 MB    in _part:5854 < hdr_map:8232 < _mosaic_map:6753 < so_far:6722 < kept:6682 < make:10598 < _cached:342
+    6.7 s      1303 MB  thumb 18 mosaic+color+frame W1760119678_1: 6 s, +1123 MB, peak so far 1297 MB; {"picked": "mosaic", "id": "W1760119678_1", "tiles": 36}
+    6.8 s      1303 MB  DONE thumbs: peak 1297 MB

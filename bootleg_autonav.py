@@ -491,6 +491,8 @@ def cached_target(label):
     if row[8] is not None:
         if UNKNOWN_NAME in row[8] and _known(label.info["TARGET_NAME"]):
             return None
+        if transient(row[8]):
+            return None   # (a failure of the run that stored it, not the frame's answer: worked out again)
         raise ValueError(row[8])
     label.geometry = {"et": row[4], "camera": row[5], "target": row[6], "center": CCD_CENTER, "scale": row[7]}
     return list(row[:4])
@@ -504,6 +506,23 @@ def _needs_usgs(frame):
         return False
     return _geometry_db().execute("SELECT 1 FROM pointing WHERE frame = ? AND kernels = ?",
                                   (frame, tag)).fetchone() is None
+
+
+# SPICE errors that say something of the run, not of the frame: a kernel file that could not be opened or was swapped
+# under it (another build replacing the shared SPICE cache's copy), no logical unit or file slot left, a kernel not
+# loaded. Stored as a frame's geometry, such an error was served to every later build as truth (11-17: 31 frames of the
+# benchmark geometry held "SpiceFILEOPENFAIL ... reconnect logical unit" and drew unplaced). A frame's own answers stay
+# errors: no coverage at its time (SPKINSUFFDATA, NOFRAMECONNECT), a target SPICE cannot name, a body behind the camera.
+TRANSIENT_SPICE = ("FILEOPENFAIL", "NOMOREUNITS", "TOOMANYFILES", "NOSUCHFILE", "NOLOADEDFILES", "FILEREADFAILED",
+                   "DAFNOSUCHHANDLE", "FILARCHMISMATCH", "reconnect logical unit", "MemoryError", "OSError",
+                   "PermissionError", "FileNotFoundError")
+
+
+def transient(error):
+    """Whether an error (an exception or its stored text) is the run's, not the frame's (TRANSIENT_SPICE): worked out
+    again, never stored."""
+    text = error if isinstance(error, str) else f"{type(error).__name__}: {error}"
+    return any(t in text for t in TRANSIENT_SPICE)
 
 
 def _known(target):
@@ -520,6 +539,9 @@ def _store_rows(rows):
     db.executemany("INSERT OR REPLACE INTO target VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     db.executemany("INSERT OR REPLACE INTO pointing VALUES (?, ?)",
                    [(row[0], pointing_tag(row[0])) for row in rows if pointing_tag(row[0]) is not None])
+    # (a frame stored with the mission kernels' own pointing loses any tag kept from extra kernels it was worked out
+    # with before: left, the row said those kernels and the frame stayed stale for ever, stale_frames)
+    db.executemany("DELETE FROM pointing WHERE frame = ?", [(row[0],) for row in rows if pointing_tag(row[0]) is None])
     db.execute("COMMIT")
 
 
@@ -584,9 +606,22 @@ def find_target_cached(label, load_year=None):
         if load_year:
             load_year()
         try:
-            target_loc = find_target(label, False, "graphs")
+            try:
+                target_loc = find_target(label, False, "graphs")
+            except Exception as e:
+                if not transient(e):
+                    raise
+                # (the run's failure: once more with the year's kernels unloaded and loaded afresh, not on the same
+                # handles: label_handler's load_year does nothing for the year already loaded unless forced)
+                if load_year:
+                    try:
+                        load_year(force=True)
+                    except TypeError:   # (a loader without force)
+                        unload_kernels()
+                        load_year()
+                target_loc = find_target(label, False, "graphs")
         except Exception as e:
-            if GEOMETRY_CACHE:
+            if GEOMETRY_CACHE and not transient(e):
                 _store_rows([_row(frame_id(label), error=f"{type(e).__name__}: {e}")])
             raise
         if GEOMETRY_CACHE:
@@ -628,7 +663,7 @@ IMAGE_MID_TIME, camera and target (the same fields find_target reads from a labe
 Frames already cached are skipped, so it can be stopped and run again; frames the USGS Titan
 kernels cover are worked out again once after those kernels are added (--usgs-titan does only them).
 """
-def build_geometry_cache(years=None, target=None, usgs_only=False):
+def build_geometry_cache(years=None, target=None, usgs_only=False, frames=None):
     import contextlib
     import io
     import time
@@ -660,6 +695,12 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
         "SELECT frame FROM pointing WHERE kernels = ?", (pointing_tags()[1],))}
     if usgs_only:
         index = index[index["frame"].isin(usgs)]
+    if frames is not None:
+        # (a refresh of some frames, refresh_stale: those, each worked out again)
+        index = index[index["frame"].isin(set(frames))]
+        retry |= set(frames)
+    # rows holding a failure of the run that stored them (transient), not the frame's answer: worked out again
+    retry |= {frame for frame, error in cached if error and transient(error)}
     done = {frame for frame, _ in cached} - retry - unnamed
     for year, rows in index.groupby("year"):
         if years and year not in years:
@@ -681,6 +722,20 @@ def build_geometry_cache(years=None, target=None, usgs_only=False):
                     out.append(_row(frame, find_target(label, False, "graphs"), label.geometry))
             except Exception as e:
                 error = f"{type(e).__name__}: {e}"
+                if transient(error):
+                    # (the run's failure, not the frame's: once more with the year's kernels loaded afresh; still
+                    # failing, it is left out and worked out by the next fill)
+                    try:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            unload_kernels()
+                            load_kernels(year, year)
+                            out.append(_row(frame, find_target(label, False, "graphs"), label.geometry))
+                        continue
+                    except Exception as e2:   # noqa: BLE001
+                        error = f"{type(e2).__name__}: {e2}"
+                        if transient(error):
+                            print(f"{frame}: {error[:120]} (not stored)", flush=True)
+                            continue
                 body = None
                 if UNKNOWN_NAME in error:
                     # an archive target SPICE cannot name: the body the frame shows and its place on it (seen_body),
@@ -737,6 +792,59 @@ def _place_seen():
     print(f"seen rule: {len(placed)} frames placed on the body they show, {len(unplaced)} left unplaced", flush=True)
 
 
+def stale_frames():
+    """Frames whose stored place was worked out with other pointing than the current code's (pointing_tag): a USGS
+    or ISS neighbours frame stored untagged or under an earlier kernel's tag, or a frame stored with extra kernels that
+    no longer give its pointing. Read as they are, they gave a pass a different plan in the first build after a
+    pointing change than in every later one, whose tiles had worked the frames out again meanwhile (cached_target):
+    Titan 108TI REGMAP001's angle -1.5669 against -1.5711, 11-17. Read only; [] without a cache."""
+    if not GEOMETRY_CACHE or not os.path.exists(GEOMETRY_CACHE):
+        return []
+    db = _geometry_db()
+    stored = dict(db.execute("SELECT frame, kernels FROM pointing"))
+    placed = {f for f, in db.execute("SELECT frame FROM target WHERE version = ?", (GEOMETRY_VERSION,))}   # (rows held)
+    tagged = usgs_titan_frames() | iss_neighbours_frames()
+    out = [f for f in tagged if f in placed and stored.get(f) != pointing_tag(f)]
+    out += [f for f, k in stored.items() if f not in tagged and k is not None and f in placed]
+    return sorted(set(out))
+
+
+def refresh_stale(quiet=False):
+    """Works out again, with the current pointing, every frame stale_frames lists, and stores them: run once by the
+    process that starts a build, before anything reads the cache to group or plan passes (prebuild.main, the frame
+    server, image_bench's private copy), so a pass plans the same in its first build and every later one. One writer
+    at a time: the refresh holds a lock beside the cache file (a second process waits, then finds nothing stale). The
+    count worked out again; 0 when nothing was stale."""
+    if not stale_frames():
+        return 0
+    import fcntl
+    with open(GEOMETRY_CACHE + ".refresh.lock", "a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            stale = stale_frames()   # (again: another process may have refreshed them while this one waited)
+            if stale:
+                if not quiet:
+                    print(f"geometry: {len(stale)} frames stored with other pointing than this code's, worked out again",
+                          flush=True)
+                build_geometry_cache(frames=stale)
+                # a stale frame the fill cannot work out (not in the index, or in a year's last seconds, which it leaves
+                # to find_target_cached): its rows dropped, so it is worked out on demand with this code's pointing
+                # instead of listed again at every start
+                left = set(stale) & set(stale_frames())
+                if left:
+                    db = _geometry_db()
+                    db.execute("BEGIN")
+                    db.executemany("DELETE FROM target WHERE frame = ?", [(f,) for f in left])
+                    db.executemany("DELETE FROM pointing WHERE frame = ?", [(f,) for f in left])
+                    db.execute("COMMIT")
+                    if not quiet:
+                        print(f"geometry: {len(left)} of them not worked out by the fill, left to be worked out on demand",
+                              flush=True)
+            return len(stale)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 """
 Works out again every frame the geometry cache holds as behind the camera, with its label's exposure: the fill knows
 no exposures (it looks only POINTING_SLACK past the middle), and rows from before exposure_pointing never looked. A
@@ -770,7 +878,8 @@ def recheck_behind():
                 placed += 1
                 print(f"placed {frame_id(label)}", flush=True)
             except Exception as e:
-                out.append(_row(frame_id(label), error=f"{type(e).__name__}: {e}"))
+                if not transient(e):
+                    out.append(_row(frame_id(label), error=f"{type(e).__name__}: {e}"))
     _store_rows(out)
     unload_kernels()
     print(f"{len(out)} behind-the-camera frames worked out again, {placed} placed", flush=True)
@@ -1147,6 +1256,8 @@ if __name__ == "__main__":
     ap.add_argument("--target", help="only frames of this target, e.g. ENCELADUS")
     ap.add_argument("--observations", nargs="*", help="bodies: only the frames of these OBSERVATION_IDs")
     ap.add_argument("--usgs-titan", action="store_true", help="only the frames the USGS Titan kernels cover")
+    ap.add_argument("--stale", action="store_true", help="geometry: work out again only the frames stored with other "
+                    "pointing than this code's (refresh_stale)")
     ap.add_argument("--behind", action="store_true", help="geometry: work out again the frames cached as behind the "
                     "camera, with their labels' exposures (recheck_behind)")
     args = ap.parse_args()
@@ -1161,7 +1272,9 @@ if __name__ == "__main__":
     else:
         if args.usgs_titan and not usgs_titan_frames():
             ap.error(f"no USGS Titan kernels in {USGS_TITAN_DIR} (or CASSINI_USGS_TITAN=0)")
-        if args.behind:
+        if args.stale:
+            print(f"{refresh_stale()} frames worked out again")
+        elif args.behind:
             recheck_behind()
         else:
             build_geometry_cache(years, args.target, args.usgs_titan)

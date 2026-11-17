@@ -110,35 +110,76 @@ VISIBLE_POLARIZERS = ("P0", "P60", "P120")
 # stay out of colour
 POLARIZED_SHARE = {"BL2": 0.332, "GRN": 0.350, "CB1": 0.349}
 VISIBLE_COLOURS = ("RED", "GRN", "BL1", "BL2", "VIO", "CB1")   # an observation taking one of these plainly keeps its polarizers grey
+# The wide-angle camera's infrared polarizers (IRP0, IRP90, in its second wheel) behind a near-infrared band in its first
+# (CB2, CB3, MT2, MT3, IR4): an observation taking its bands only through them (about 170 Saturn, moon, Titan and
+# Jupiter sequences: 00ASA COMPSITB013, the 2006 1X2PLRNC Saturn WACs, the moons' photometry) has no visible band, so it
+# is false colour (calibration.color_mix: balanced on the body's measured colour), and played grey. Sam 2026-11-17 (taste
+# call 9, "it looks fine"): those play in it. A frame through one is its band's frame there, IRP0 and IRP90 stacked
+# (their mean is the unpolarized light), in an observation whose every non-clear frame is IR-polarized and that takes
+# two bands or more (ir_polarized_ok). IR_POLARIZED_SHARE: the IRP0 and IRP90 mean over a plain (CL2) frame of the band,
+# measured as POLARIZED_SHARE is (polarized_share.py CAM=W, 2026-11-17): CB2 0.477 (IQR 0.475-0.478, 15 pairs), CB3
+# 0.492 (0.489-0.493, 15), MT2 0.468 (Saturn's 007SA 1X2WPH pairs 0.468-0.473; 017SA 1X2WPH140's 0.11, Saturn cut at
+# the frame's edge and the plain frame at another pointing, left out), MT3 0.485 (Titan's nine whole-disk pairs,
+# 0.430-0.508; 017SA's 0.17-0.19 left out as for MT2), IR4 0.500 (Rhea, Enceladus 0.497, 0.503)
+IR_POLARIZERS = ("IRP0", "IRP90")
+IR_POLARIZED_SHARE = {"CB2": 0.477, "CB3": 0.492, "MT2": 0.468, "MT3": 0.485, "IR4": 0.500}
 
 
 def polarized_filter(cam, f1, f2):
-    """The colour filter a visible polarizer frame of camera cam ("ISSNA" or "N") stands for, or None."""
-    return f2 if cam in ("ISSNA", "N") and f1 in VISIBLE_POLARIZERS and f2 in POLARIZED_SHARE else None
+    """The band a polarizer frame of camera cam stands for, or None: a visible polarizer frame of the NAC ("ISSNA" or
+    "N": P0, P60, P120 with a POLARIZED_SHARE filter, the filter), or an infrared polarizer frame of the WAC ("ISSWA" or
+    "W": an IR_POLARIZED_SHARE band with IRP0 or IRP90, the band)."""
+    if cam in ("ISSNA", "N"):
+        return f2 if f1 in VISIBLE_POLARIZERS and f2 in POLARIZED_SHARE else None
+    if cam in ("ISSWA", "W"):
+        return f1 if f2 in IR_POLARIZERS and f1 in IR_POLARIZED_SHARE else None
+    return None
 
 
-def polarized_as_colour(cams, targets, obs, f1s, f2s):
+def polarized_share(cam, f1, f2):
+    """The share of its plain frame's I/F a polarized colour frame calibrates to (calibration.polarized_share)."""
+    band = polarized_filter(cam, f1, f2)
+    return None if band is None else (POLARIZED_SHARE if cam in ("ISSNA", "N") else IR_POLARIZED_SHARE)[band]
+
+
+def polarized_as_colour(cams, targets, obs, f1s, f2s, ts=None):
     """For each frame (columns, as filter_sets takes them), whether it is a polarizer frame that counts as its colour
     filter: a visible polarizer frame of a POLARIZED_SHARE filter in an observation (camera, target, observation)
     that takes every filter of POLARIZED_SHARE through the visible polarizers (true colour) and no visible colour
     (VISIBLE_COLOURS) without one. Its plain frames of other bands (a methane, ultraviolet or near-infrared band:
-    018SA 1X2PLRNCJ's CL1 MT2) are its own, as before."""
+    018SA 1X2PLRNCJ's CL1 MT2) are its own, as before.
+    WAC frames: an IR_POLARIZED_SHARE band through IRP0 or IRP90 in an observation whose every non-clear frame is
+    such a frame and that takes at least two of those bands (a false colour or two-band set).
+    ts (the frames' times, seconds), when given: only an observation where its polarized frames, read as their bands,
+    make a colour set (runs: two bands or more within SET_GAP) counts, so a sequence that gains no colour is not
+    changed at all (C24JU 2X2ATM043, its WAC bands minutes apart, stayed grey and its sky came out lifted, its two
+    angles stacked)."""
     keys = list(zip(cams, targets, obs))
     pol = [polarized_filter(c, str(a), str(b)) for c, a, b in zip(cams, f1s, f2s)]
     took, plain = {}, set()
-    for k, p, a, b in zip(keys, pol, f1s, f2s):
+    for k, c, p, a, b in zip(keys, cams, pol, f1s, f2s):
         if p:
             took.setdefault(k, set()).add(p)
+        elif c in ("ISSWA", "W"):
+            if colour_filter(str(a), str(b)) or str(b) in IR_POLARIZERS:
+                plain.add(k)   # (a plain band, or another band through an IR polarizer: not all of its colour is ours)
         elif any(x in VISIBLE_COLOURS for x in str(colour_filter(str(a), str(b)) or "").split("/")):
             plain.add(k)
-    ok = {k for k, fs in took.items() if fs >= set(POLARIZED_SHARE) and k not in plain}
+    ok = {k for k, fs in took.items() if k not in plain
+          and (fs >= set(POLARIZED_SHARE) if k[0] in ("ISSNA", "N") else len(fs) >= 2)}
+    if ts is not None and ok:
+        rows = [(k[0], k[1], k[2], p, float(t)) for k, p, t in zip(keys, pol, ts) if p and k in ok]
+        rows.sort(key=lambda r: r[4])
+        formed = {(rows[run[0]][0], rows[run[0]][1], rows[run[0]][2]) for run in runs(rows)}
+        ok &= formed
     return [p is not None and k in ok for k, p in zip(keys, pol)]
 
 
 def polarized_index(idx, filter_cols=True):
     """idx (Image_index rows with INSTRUMENT_ID, TARGET_NAME, OBSERVATION_ID, FILTER_NAME, and filter1 and filter2 when
-    filter_cols) with its polarized colour frames (polarized_as_colour) read as CL1 and their colour filter, in place:
-    FILTER_NAME "(CL1,GRN)", filter1 "CL1", and a column "polarized" marking them. The index loaders (reel.load_index, stacking.load_index) read it so, so
+    filter_cols) with its polarized colour frames (polarized_as_colour) read as their band, in place: a NAC frame CL1
+    and its filter (FILTER_NAME "(CL1,GRN)", filter1 "CL1"), a WAC frame its band and CL2 ("(MT2,CL2)", filter2 "CL2"),
+    and a column "polarized" marking them. The index loaders (reel.load_index, stacking.load_index) read it so, so
     sets, passes, plans and repeat stacking all take the frame as its colour. Returns idx."""
     # (each value as text, a missing one as "": pandas 3's astype(str) keeps a missing value as NaN, a float)
     text = lambda col: [v if isinstance(v, str) else "" for v in idx[col].tolist()]
@@ -147,12 +188,15 @@ def polarized_index(idx, filter_cols=True):
     f1s = text("filter1") if filter_cols else [p[0] for p in parts]
     f2s = text("filter2") if filter_cols else [p[1] for p in parts]
     use = polarized_as_colour(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
-                              f1s, f2s)
+                              f1s, f2s, idx["seconds_1970"].tolist() if "seconds_1970" in idx else None)
     idx["polarized"] = use
     if any(use):
-        idx["FILTER_NAME"] = [f"(CL1,{b})" if u else n for u, n, b in zip(use, idx["FILTER_NAME"].tolist(), f2s)]
+        wac = [c in ("ISSWA", "W") for c in idx["INSTRUMENT_ID"].tolist()]
+        idx["FILTER_NAME"] = [(f"({a},CL2)" if w else f"(CL1,{b})") if u else n
+                              for u, w, n, a, b in zip(use, wac, idx["FILTER_NAME"].tolist(), f1s, f2s)]
         if filter_cols:
-            idx["filter1"] = ["CL1" if u else a for u, a in zip(use, idx["filter1"].tolist())]
+            idx["filter1"] = ["CL1" if u and not w else a for u, w, a in zip(use, wac, idx["filter1"].tolist())]
+            idx["filter2"] = ["CL2" if u and w else b for u, w, b in zip(use, wac, idx["filter2"].tolist())]
     return idx
 
 

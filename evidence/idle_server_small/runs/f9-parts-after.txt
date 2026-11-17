@@ -1,0 +1,58 @@
+    0.0 s        11 MB  start
+    0.3 s        49 MB    in <module>:34 < <module>:59 < <module>:246
+    1.6 s       136 MB  imported
+    1.6 s       136 MB  zip index
+    1.6 s       136 MB  27 highlights
+    5.3 s      1325 MB    in smooth_sky:649 < calibrate:554 < calibrated_each:1605 < load_aligned:295 < composite:577 < _recent_composite:759 < make:789
+    7.0 s      1488 MB  thumb 0 color N1352055787_2: 5 s, +1352 MB, peak so far 1486 MB; {"picked": "color", "ids": ["N1352055787_2", "N1352055720_2", "N1352055683_2"]}
+    9.9 s      1788 MB  thumb 1 mosaic+frame N1356763606_1: 3 s, +301 MB, peak so far 1860 MB; {"picked": "mosaic", "id": "N1356763606_1", "tiles": 54}
+   10.3 s      1811 MB    in smooth_sky:670 < calibrate:554 < calibrated_each:1605 < load_aligned:295 < composite:577 < _recent_composite:759 < make:789
+   12.4 s      1316 MB  thumb 2 mosaic+color+frame N1462871424_1: 3 s, -473 MB, peak so far 1870 MB; {"picked": "color", "ids": ["N1462841759_1", "N1462841725_1", "N1462841800_1"]}
+   12.4 s      1316 MB  thumb 3 frame N1465669778_2: 0 s, +0 MB, peak so far 1870 MB; {"picked": "frame", "id": "N1465669778_2"}
+   15.4 s      1823 MB    in smooth_sky:670 < calibrate:554 < calibrated_each:1605 < load_aligned:295 < composite:577 < _recent_composite:759 < make:789
+   16.2 s      1873 MB  thumb 4 color W1473170667_1: 4 s, +557 MB, peak so far 1873 MB; {"picked": "color", "ids": ["W1473170667_1", "W1473170740_1", "W1473170829_1"]}
+   16.5 s      1878 MB  thumb 5 mosaic+frame N1506389783_2: 0 s, +5 MB, peak so far 1878 MB; {"picked": "mosaic", "id": "N1506389783_2", "tiles": 15}
+   16.5 s      1878 MB  thumb 6 frame W1507744658_2: 0 s, +0 MB, peak so far 1878 MB; {"picked": "frame", "id": "W1507744658_2"}
+   16.5 s      1878 MB  thumb 7 mosaic+frame W1537033109_1: 0 s, +0 MB, peak so far 1878 MB; {"picked": "mosaic", "id": "W1537033109_1", "tiles": 75}
+   19.6 s      1967 MB  thumb 8 color W1564338762_1: 3 s, +89 MB, peak so far 1967 MB; {"picked": "color", "ids": ["W1564338762_1", "W1564338716_1", "W1564338611_1"]}
+   19.7 s      1967 MB  thumb 9 mosaic N1568162506_3: 0 s, +0 MB, peak so far 1967 MB; {"picked": "mosaic", "id": "N1568162506_3", "tiles": 54}
+   20.6 s      1729 MB    in repair_hot:545 < calibrate:548 < calibrated_each:1605 < load_aligned:295 < composite:577 < _recent_composite:759 < make:789
+   21.4 s      1794 MB  thumb 10 color W1628768766_1: 2 s, -173 MB, peak so far 2035 MB; {"picked": "color", "ids": ["W1628768766_1", "W1628768799_1", "W1628768832_1"]}
+   21.5 s      1794 MB  thumb 11 frame N1669801856_1: 0 s, +0 MB, peak so far 2035 MB; {"picked": "frame", "id": "N1669801856_1"}
+   21.5 s      1795 MB  thumb 12 mosaic N1644781904_1: 0 s, +0 MB, peak so far 2035 MB; {"picked": "mosaic", "id": "N1644781904_1", "tiles": 21}
+   21.5 s      1795 MB  thumb 13 frame W1673423216_1: 0 s, +0 MB, peak so far 2035 MB; {"picked": "frame", "id": "W1673423216_1"}
+   25.7 s      2313 MB    in ring_plane:260 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10432
+   30.8 s      2122 MB    in sky_to_surface:232 < ring_plane:262 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945
+   36.0 s      2228 MB    in ring_plane:263 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10432
+   41.1 s      2326 MB    in sky_to_surface:232 < ring_plane:262 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945
+   46.2 s      2268 MB    in sky_to_surface:235 < ring_plane:262 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945
+   51.3 s      2314 MB    in picture:3812 < ring_places:3719 < ring_moves:3816 < layout:5945 < mosaic_webp:10432 < _thumb_mosaic:881 < pick_thumb:900
+   56.5 s      2387 MB    in ring_plane:254 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10432
+   61.6 s      2409 MB    in ring_plane:263 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10432
+   66.0 s      2415 MB  thumb 14 mosaic W1689165372_1: 44 s, +621 MB, peak so far 2734 MB; {"picked": "mosaic", "id": "W1689165372_1", "tiles": 156}
+   66.7 s      2987 MB    in _parameters:334 < _dark:350 < dark_dn:344 < calibrate:500 < calibrated_each:1605 < load_aligned:295 < composite:577
+   69.1 s      2239 MB  thumb 15 color N1732688579_1: 3 s, -176 MB, peak so far 2987 MB; {"picked": "color", "ids": ["N1732688579_1", "N1732688530_1", "N1732688497_1"]}
+   71.9 s      2479 MB    in _subpixel:8259 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+   77.0 s      3562 MB    in _subpixel:8259 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+   82.2 s      4423 MB    in _part:5854 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   87.3 s      5025 MB    in _subpixel:8264 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+   92.4 s      5623 MB    in _subpixel:8266 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+   97.6 s      6372 MB    in _subpixel:8267 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+  102.8 s      7250 MB    in _subpixel:8267 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+  107.9 s      8291 MB    in _subpixel:8267 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+  113.1 s      9503 MB    in _subpixel:8265 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+  114.9 s     10023 MB  STOPPED: footprint over the cap of 10 GB; what holds it:
+  thread in _part:5854 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682 < make:10624 < _cached:342 < _make_mosaic:10656 < _mosaic_at:10583 < mosaic_webp:10436
+  live numpy arrays: 14, 0 MB owned (footprint 10022 MB)
+        508 MB  data_source._indexes  (dict, 2 entries, 12 arrays)
+        263 MB  obs_mosaic._parts  (OrderedDict, 40 entries, 40 arrays)
+        232 MB  dark_current._parameters  (_lru_cache_wrapper, 8 arrays)
+        129 MB  geometric_correction._plan  (_lru_cache_wrapper, 33 arrays)
+         61 MB  dark_current._dark  (_lru_cache_wrapper, 16 arrays)
+         50 MB  flat_field._map  (_lru_cache_wrapper, 15 arrays)
+         44 MB  flat_field._correction  (_lru_cache_wrapper, 12 arrays)
+         39 MB  reel._index  (tuple, 2 entries, 9 arrays)
+         39 MB  stacking.index  (DataFrame, 443177 entries, 10 arrays)
+         34 MB  geometric_correction._map  (_lru_cache_wrapper, 4 arrays)
+         21 MB  stacking.columns  (dict, 6 entries, 3 arrays)
+  largest arrays: 
