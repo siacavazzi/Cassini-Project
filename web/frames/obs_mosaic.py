@@ -7211,7 +7211,10 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
     # (the bodies in front of it left out; one behind it, Saturn behind Titan in 165TI, is what its limb is seen on)
     ex = [(tr[0] + x * k, tr[1] + y * k, r * k * 1.2 + PER_BODY_GROW) for x, y, r, behind in named[ref].values() if not behind]
     for i in range(len(planes)):
-        if i == ref:
+        # (not Saturn: the ring 0.8 to 1.3 of its radius round its limb is its rings' edges, which matched 57 px off the
+        # limb in one plane of the 2005 Saturn movie, a double Saturn, 003SA 3X3MOVIEA002 frame 14; its planes are held
+        # on it by SPICE and the hold, as a bigger Saturn's are)
+        if i == ref or u["key"][0] == "SATURN":
             continue
         off = _target_off(gray[ref], gray[i], tr, radius * k, exclude=ex, wide=True)
         if off is None or math.hypot(*off) < 1.0:
@@ -7476,17 +7479,6 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None, wide=False):
     best = min(((cost(bx + dx, by + dy), bx + dx, by + dy) for dx in np.arange(-0.75, 0.8, 0.25) for dy in np.arange(-0.75, 0.8, 0.25)))
     if wide and best[0] > cost(0.0, 0.0) - PER_BODY_BETTER_TARGET:
         return 0.0, 0.0
-    if wide and math.hypot(best[1], best[2]) > PER_BODY_TARGET * r:
-        # (a move past the narrow search must also line up clearly better than the best within it: a ringed Saturn's
-        # ring edges matched 57 px off its limb once the faint sky beside the limb changed, a double Saturn in the
-        # 2005 movie, 003SA 3X3MOVIEA002 frame 14; 158TI's Titan, 37 px a filter, wins by far more)
-        inner = PER_BODY_TARGET * r
-        held = [(cost(dx, dy), dx, dy) for dx in np.arange(-inner, inner + 0.5, step) for dy in np.arange(-inner, inner + 0.5, step)
-                if math.hypot(dx, dy) <= inner]
-        if held and best[0] > min(held)[0] - PER_BODY_BETTER_TARGET:
-            _, hx, hy = min(held)
-            return min(((cost(hx + dx, hy + dy), hx + dx, hy + dy) for dx in np.arange(-1.0, 1.05, 0.25)
-                        for dy in np.arange(-1.0, 1.05, 0.25)))[1:]
     if guess != (0.0, 0.0) and best[0] > cost(gx, gy) - PER_BODY_BETTER:
         # (SPICE's guess stands unless the pictures line up clearly better elsewhere: Titan under the ring line and
         # Tethys, 158TE, was matched on the ring)
