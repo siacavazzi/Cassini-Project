@@ -56,7 +56,9 @@ ba._iss_frames = None
 sys.path.insert(0, os.path.join(ROOT, "web", "frames"))
 import obs_mosaic as om  # noqa: E402
 om._repointed_frames = None
-u = lambda ids: {"key": ("SATURN", "X", "N", 0), "frames": [("p", i, "CL1/CL2", 0.0, 650.0, 0, 0, 1e6) for i in ids]}
+# (a ring observation's key, "XRI", so the Saturn look's suffix, _sl, which saturn_look adds after REPOINTED on any
+# other Saturn pass since #527, is not in the name: the test is of REPOINTED alone)
+u = lambda ids: {"key": ("SATURN", "ISS_000RI_X001_PRIME", "N", 0), "frames": [("p", i, "CL1/CL2", 0.0, 650.0, 0, 0, 1e6) for i in ids]}
 assert om._repointed(u([other, carried])) and not om._repointed(u([other]))
 assert om.folder(u([other, carried]), "/c").endswith("_sp1")
 print("repointed passes: ok")

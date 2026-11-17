@@ -1,0 +1,9 @@
+200 1562488 bytes 0.01 s  http://127.0.0.1:8975/
+200 61 bytes 0.00 s  http://127.0.0.1:8975/health
+200 1451 bytes 0.00 s  http://127.0.0.1:8975/version.json
+200 97685 bytes 0.00 s  http://127.0.0.1:8975/data/mission.json
+200 13365 bytes 0.00 s  http://127.0.0.1:8975/data/highlights.json
+200 10140 bytes 0.00 s  http://127.0.0.1:8975/frames/thumb.webp?mosaic=W1750962990_1&color=W1750962915_1,W1750962932_1,W1750962898_1&frame=W1750962990_1
+200 16098 bytes 0.00 s  http://127.0.0.1:8975/frames/thumb.webp?mosaic=N1644781904_1
+200 8800 bytes 0.00 s  http://127.0.0.1:8975/frames/thumb.webp?mosaic=W1859483408_1
+200 3654 bytes 0.00 s  http://127.0.0.1:8975/frames/W1750962990_1.webp?size=256

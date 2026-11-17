@@ -1,0 +1,18 @@
+heavy: queued behind earlier waiters (deepopt: idle server on the preview copy)
+heavy: got 2 slots after 1633 s
+05:37:35 parts before
+thumbnail 16 exit 3 05:38:29
+thumbnail 17 exit 0 05:38:37
+thumbnail 18 exit 0 05:38:45
+thumbnail 19 exit 0 05:41:48
+thumbnail 23 exit 0 05:41:59
+thumbnail 25 exit 0 05:42:05
+thumbnail 20,21,22,24,26 exit 0 05:42:17
+05:42:17 before
+stopped at the cap: footprint 10108 MB over 10 GB after 52 s
+05:43:12 after
+stopped at the cap: footprint 10148 MB over 10 GB after 52 s
+05:44:08 parts after
+parts after exit 3 05:46:06
+05:46:06 done
+IDLE HEAVY2 DONE

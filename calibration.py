@@ -554,13 +554,12 @@ def overclock_bias(info):
 
 
 """
-The share of its plain frame's I/F a polarized colour frame calibrates to (sets_passes.POLARIZED_SHARE), or None for
-any other frame: a narrow-angle frame through P0, P60 or P120 and a colour filter of that table, in an observation the
-index loaders read as that colour (sets_passes.polarized_index, which stacking.load_index's FILTER_NAME carries).
+The share of its plain frame's I/F a polarized colour frame calibrates to (sets_passes.polarized_share:
+POLARIZED_SHARE, IR_POLARIZED_SHARE), or None for any other frame: a narrow-angle frame through P0, P60 or P120 and a
+colour filter, or a wide-angle frame through a near-infrared band and IRP0 or IRP90, in an observation the index loaders
+read as that band (sets_passes.polarized_index: stacking.load_index's "polarized" column).
 """
 def polarized_share(info, camera):
-    if camera != "ISSNA":
-        return None
     names = _filters_of(info)
     import stacking
     sp = stacking._sets_passes()
@@ -569,16 +568,25 @@ def polarized_share(info, camera):
     global _polarized
     if _polarized is None:
         idx = stacking.load_index()
-        got = {}
-        for path, name in zip(idx["path"].tolist(), idx["FILTER_NAME"].tolist()):
-            if isinstance(path, str) and path.startswith("nac") and str(name).startswith("(CL1,"):
-                got[stacking.frame_id(path)] = str(name)
-        _polarized = got
+        _polarized = ({stacking.frame_id(p) for p, u in zip(idx["path"].tolist(), idx["polarized"].tolist())
+                       if u and isinstance(p, str)} if "polarized" in idx else set())
     frame = os.path.basename(str(info.get("path") or "")).split(".")[0]
-    return sp.POLARIZED_SHARE[names[1]] if _polarized.get(frame) == f"(CL1,{names[1]})" else None
+    return sp.polarized_share(camera, names[0], names[1]) if frame in _polarized else None
 
 
-_polarized = None   # {frame id: FILTER_NAME as stacking.load_index reads it} of the NAC's CL1 frames (polarized_share)
+"""
+The band a polarized colour frame stands for (polarized_share's frames), or None: band_of's name for it.
+"""
+def polarized_band(info):
+    camera = _value(info, "INSTRUMENT_ID", "")
+    if not polarized_share(info, camera):
+        return None
+    import stacking
+    names = _filters_of(info)
+    return stacking._sets_passes().polarized_filter(camera, names[0], names[1])
+
+
+_polarized = None   # the frame ids stacking.load_index reads as polarized colour frames (polarized_share)
 
 
 """
@@ -586,7 +594,9 @@ Calibrates one frame to I/F. Returns None if the frame can't be calibrated.
 png = the frame's PNG as stored in the dataset
 image = optional image on the same scale as png to calibrate instead (see unstretch)
 """
-def calibrate(png, info, image=None, smooth=True):
+def calibrate(png, info, image=None, smooth=True, lost=None):
+    # lost: for a summed frame whose picture still has the pixels it lost in downlink as stored (not filled yet), those
+    # pixels at the camera's own size (label.valid_mask(camera=True), inverted): bridged before the frame is enlarged
     camera = _value(info, "INSTRUMENT_ID", "")
     names = _filters_of(info)
     if any(name.startswith(("P", "IRP")) for name in names):
@@ -723,11 +733,127 @@ def calibrate(png, info, image=None, smooth=True):
     share = polarized_share(info, camera)
     if share:
         per_second /= share
+    # a summed frame drawn at the picture's size comes this far as blocks, each of the camera's pixels repeated (every
+    # step above works camera pixel by camera pixel on them): now enlarged smoothly from the camera's own pixels
+    per_second = enlarged(per_second, info, lost, clipped_codes(png, info))
     # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
     # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
     if step("geom"):
         per_second = gc.correct(per_second, info)
     return per_second
+
+
+SUMMED_ENLARGE = cv2.INTER_CUBIC   # how a summed frame's calibrated picture is enlarged from the camera's own pixels
+                                   # (enlarged): bicubic. Sam's taste call 23 (2026-11-17), of three shown on nine frames:
+                                   # each camera pixel a 2x2 or 4x4 block (as it was: stair steps along every limb and
+                                   # ring edge, plain at 4x4), bilinear (soft), bicubic (C: keeps a little more edge
+                                   # contrast, and goes slightly past its neighbors' brightness on 0.5 to 2% of pixels)
+
+
+"""
+A summed frame's calibrated picture enlarged smoothly. The camera summed its pixels 2x2 or 4x4 (512 or 256 lines:
+181,430 frames, 41% of the archive), and the picture is drawn at 1024 px with each camera pixel repeated as a block
+(depth_image, label.resize_image), which is what the calibration above works on: the bias and dark per camera line, hot
+pixels and lost lines per camera pixel (enlarged smoothly before them, the repairs left short streaks). Here, after all
+of them and before the geometric correction, the blocks are taken back to the camera's own pixels (each block's mean:
+the flat field and the smoothing above vary inside one) and enlarged with SUMMED_ENLARGE. A frame at its own size (the
+science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped,
+and the lost and the saturated pixels themselves keep the values they had: only what the camera measured is enlarged.
+iof = the calibrated frame (2-D), info = its label; lost, clipped = its lost and its saturated pixels at the camera's
+own size (label.valid_mask(camera=True) inverted, clipped_codes), or None
+"""
+def enlarged(iof, info, lost=None, clipped=None):
+    s = summing_of(info)
+    h, w = iof.shape[:2]
+    if s <= 1 or iof.ndim != 2 or h % s or w % s or h != s * int(_value(info, "LINES", "0") or 0):
+        return iof
+    small = np.ascontiguousarray(iof).reshape(h // s, s, w // s, s).mean(axis=(1, 3))
+    gone = None
+    if lost is not None and np.shape(lost) == small.shape and np.any(lost):
+        # the pixels lost in downlink (zeros, or garbage after a lost packet) bridged first: enlarged with them, a lost
+        # line bled two camera pixels into the rows on each side of it, which the line fill that comes later (on
+        # the picture, with its block shaped mask) does not reach (the Iapetus 049IA mosaic: a band of streaks)
+        gone = np.asarray(lost, bool)
+        small = bridged(small, gone)
+    out = cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE)
+    if clipped is not None and np.shape(clipped) == small.shape and np.any(clipped):
+        # what the camera saturated is not a measurement, and enlarged with its neighbors it would put part of its
+        # clipped value into them (the masks kept beside the frame are block shaped: a pixel beside a blown-out one
+        # then reads half blown and counts as measured; the Grand Finale ring mosaics' clipped patches changed).
+        # So the saturated camera pixels and the SUMMED_CLIPPED_NEAR round them (as far as the enlargement reaches)
+        # stay as they were, blocks, fading into the enlarged picture over one camera pixel more
+        side = 2 * (SUMMED_CLIPPED_NEAR + 1) + 1
+        near = cv2.dilate(np.asarray(clipped, np.uint8), np.ones((side, side), np.uint8)).astype(np.float32)
+        keep = np.clip(cv2.resize(near, (w, h), interpolation=cv2.INTER_LINEAR), 0, 1)
+        out = keep * iof + (1 - keep) * out
+    if gone is not None:
+        # and the lost pixels themselves keep what they held (their blocks, as in a frame not enlarged): the bridge is
+        # only there so that they do not bleed. Left bridged they changed what is measured on the frame before its
+        # fills: a pass's black sits over its sky's fine structure (obs_mosaic.pass_scale's sky_tops), which counts
+        # the lost pixels too, and without them it fell by a quarter to a half on the 4x4 filters of the Grand Finale
+        # ring mosaics (269RI HIPHASEFB001: VIO 3.4e-4 to 1.5e-4, IR3 2.8e-4 to 2.1e-4), so the mosaic drew 14% brighter
+        # with its faint rings and their seams lifted. With their own values back it is within 1% of what it was
+        out = np.where(np.repeat(np.repeat(gone, s, 0), s, 1), iof, out)
+    return out.astype(iof.dtype, copy=False)
+
+
+SUMMED_CLIPPED_NEAR = 2   # camera pixels round a saturated one left as blocks (enlarged): the bicubic's reach
+
+
+"""
+The pixels of a frame's stored codes the camera saturated, at the codes' own size and as the frame was taken (saturated's
+test on the codes, not moved by the geometric correction, which comes after enlarged), or None when codes is not the
+frame's stored picture (a 2-D array)
+"""
+def clipped_codes(codes, info):
+    codes = np.asarray(codes)
+    if codes.ndim != 2 or not codes.size:
+        return None
+    if ds.lut8() and _value(info, "DATA_CONVERSION_TYPE", "") in ("TABLE", "12BIT"):
+        top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
+        low, high = stored_range(codes, info)
+        if high < top:
+            return np.zeros(codes.shape, bool)
+        if low >= top:
+            return np.ones(codes.shape, bool)
+        return codes >= 250
+    return codes >= 254
+
+
+"""
+values (2-D) with its lost pixels (lost: True where lost) bridged down their columns: each from the nearest kept
+pixels above and below it, in proportion to how near each is (the one there is, at a frame's top or bottom). A column
+with nothing kept (a summed frame's first and last: label.valid_mask always counts them lost) is bridged along its
+rows the same way, from the nearest pixels left and right that are kept or were bridged down their columns. (It took
+the kept pixels' median: where a ring or a limb crosses the frame's edge that is the sky's value, and enlarged it put
+a band 1 to 2 camera pixels wide, a fifth to a third too dark and then a tenth too bright, down the valid pixels beside
+each edge: PR 566's review.) Only so they do not bleed when the frame is enlarged (enlarged): the picture's own fills
+(image_correction.fill_lines, fill_invalid) still take them as lost and fill them their way.
+"""
+def bridged(values, lost):
+    kept = ~np.asarray(lost, bool)
+    if not kept.any():
+        return values
+    fill, found = _bridged_down(values, kept)
+    if not found.all():
+        # (every row has a pixel found: a kept pixel's whole column is)
+        across, _ = _bridged_down(fill.T, found.T)
+        fill = np.where(found, fill, across.T)
+    return np.where(kept, values, fill)
+
+
+def _bridged_down(values, kept):
+    # (values with each pixel not kept taken down its column from the nearest kept ones, whether its column has one)
+    h, w = values.shape
+    rows = np.arange(h)[:, None]
+    cols = np.broadcast_to(np.arange(w), (h, w))
+    up = np.maximum.accumulate(np.where(kept, rows, -1), axis=0)                    # the nearest kept row above
+    down = np.minimum.accumulate(np.where(kept, rows, h)[::-1], axis=0)[::-1]       # ... and below
+    above, below = up >= 0, down < h
+    a, b = values[np.clip(up, 0, h - 1), cols], values[np.clip(down, 0, h - 1), cols]
+    t = (rows - up) / np.maximum(down - up, 1)
+    fill = np.where(above & below, a + (b - a) * t, np.where(above, a, b))
+    return np.where(kept, values, fill), above | below
 
 
 """
@@ -1699,9 +1825,10 @@ def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
 A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
 """
 def band_of(info):
-    if polarized_share(info, _value(info, "INSTRUMENT_ID", "")):
-        # a polarized colour frame is its colour filter's (sets_passes.polarized_index)
-        return _filters_of(info)[1]
+    band = polarized_band(info)
+    if band:
+        # a polarized colour frame is its band's (sets_passes.polarized_index)
+        return band
     return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 
@@ -1873,7 +2000,13 @@ def calibrated_each(labels, images, iofs=None, deep=None):
     for lbl, image, iof, picture in zip(labels, images, given, deep):
         if iof is None:
             png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-            iof = calibrate(png, lbl.get_info(), depth_image(png, lbl.get_info()) if picture is None else picture)
+            info = lbl.get_info()
+            if picture is None and summing_of(info) > 1:
+                # (a summed frame's own stored values still have what it lost in downlink, bridged before it is
+                # enlarged; a picture given is filled already)
+                iof = calibrate(png, info, depth_image(png, info), lost=~lbl.valid_mask(camera=True))
+            else:
+                iof = calibrate(png, info, depth_image(png, info) if picture is None else picture)
         iofs.append(iof)
     return iofs
 
@@ -1919,6 +2052,10 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
             sky = disk_sky
     levels, margin, white, measured = _balanced_scale(iofs, share, sky=sky, floor=floor, glow=glow,
                                                       summing=[summing_of(lbl.get_info()) for lbl in labels])
+    if white > 0 and all(overexposed(lbl.get_info()) for lbl in labels):
+        # frames the planners exposed past full well on purpose: white from what the camera did not saturate
+        white = unsaturated_white(iofs, levels, margin, white,
+                                  [saturated_of(lbl, iof.shape[:2]) for lbl, iof in zip(labels, iofs)])
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -2403,12 +2540,45 @@ def _despeckled(img, s=1):
 
 
 """
-Sky is where every channel is dark
+Sky is where every channel is dark: under SKY_CUT of its 99.9th percentile, or, where that cut runs through the sky's
+own noise (a frame of empty sky, nothing lit but stars: its cut sits at about the noise's middle once the noise is
+measured at full depth, #491, so half the sky was taken for lit and drawn as a gray floor with its line stripes,
+N1637448980_1, N1444023957_1), within SKY_NOISE times that noise of the sky's level. The noise is the dark pixels'
+spread below their median (their 16th percentile to it), which a glow or a body above the sky does not reach; the cut
+runs through it when the darkest pixels' top (the cut) is within SKY_SPLIT times it of their median, and only on a
+frame that is noise and stars alone (_noise_only): a faint ring band under one bright ring keeps its cut.
 """
+SKY_CUT = 0.05     # of the 99.9th percentile
+SKY_NOISE = 4.0    # the sky's noise times this above its level is sky too, where the cut runs through the noise ...
+SKY_SPLIT = 2.0    # ... (the cut within this many times the noise of the dark pixels' median)
+SKY_FLAT = 0.4     # ... and only on a frame of noise alone: blurred, it varies by at most this times the noise ...
+SKY_FLAT_PX = 32   # ... over this many pixels (sigma) (_noise_only)
+
+
+def _noise_only(iof, middle, noise):
+    """Whether a frame is its sky's noise and stars alone (middle, noise: its dark pixels' level and spread): blurred over
+    SKY_FLAT_PX with its stars and anything past SKY_NOISE times the noise clipped, it varies by at most SKY_FLAT times
+    the noise. A faint glow or ring band over part of the frame is large-scale structure the blur keeps (earth-fb-still,
+    the Grand Finale's faint rings under one bright ring that set the 99.9th percentile: 0.81, where the empty skies of
+    N1444023957_1, N1637448980_1 and six others measure 0.02 to 0.25 with their originals)."""
+    clipped = np.clip(np.nan_to_num(iof.astype(np.float32)), middle - SKY_NOISE * noise, middle + SKY_NOISE * noise)
+    big = cv2.GaussianBlur(clipped, (0, 0), SKY_FLAT_PX)
+    m = 2 * SKY_FLAT_PX
+    inner = big[m:-m, m:-m] if min(big.shape[:2]) > 4 * m else big
+    return float(np.std(inner)) <= SKY_FLAT * noise
+
+
 def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
-        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+        cut = SKY_CUT * float(np.percentile(iof, 99.9))
+        dark = iof[iof < cut]
+        if dark.size >= 1000:
+            low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
+            noise = middle - low
+            if noise > 0 and cut - middle < SKY_SPLIT * noise and _noise_only(iof, middle, noise):
+                cut = max(cut, middle + SKY_NOISE * noise)
+        sky &= iof < cut
     return sky
 
 
@@ -2463,6 +2633,64 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
         brightest = native * sunlit + brightest * (1 - sunlit) if native < brightest else brightest
     white = max(white, brightest / MAX_STRETCH)
     return levels, margin, white, measured
+
+
+OVEREXPOSED = 100.0   # a frame whose label forecasts its brightest signal past this share (%) of full well was exposed
+                      # past full well on purpose (EXPECTED_MAXIMUM's first value: the planners knew the bright body would
+                      # blow out and exposed that long for something faint beside it: Enceladus's plumes, Enceladus in
+                      # Saturn's shadow, the F and D ring movies; 24,789 frames)
+OVEREXPOSED_SATURATED = 0.05   # ... and under this share of the picture really saturated (with a third of it blown out
+                      # there is little left to show, and a lower white only sends more of it to white)
+OVEREXPOSED_GAIN = 4.0   # ... is drawn on the white of what the camera did not saturate, at most this many times brighter
+                      # (unsaturated_white). Sam's taste call 24 (2026-11-17), B of three shown on ten frames: as it was
+                      # (the plume a faint smudge under a white set by the blown-out crescent), at most 4 times (the plume
+                      # plain, the sky still dark), at most 16 times (banding and grain in the sky)
+OVEREXPOSED_NEAR = 4  # px round a saturated pixel left out with it (the charge it bled)
+
+
+"""
+The label's forecast of the frame's brightest signal, as a percent of full well (EXPECTED_MAXIMUM's first value), or
+None where the label has none ("UNK")
+"""
+def expected_maximum(info):
+    m = re.match(r"\(?\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)", _value(info, "EXPECTED_MAXIMUM", "") or "")
+    return float(m.group(1)) if m else None
+
+
+def overexposed(info):
+    """True for a frame its label says was exposed past full well on purpose (OVEREXPOSED)"""
+    forecast = expected_maximum(info)
+    return forecast is not None and forecast > OVEREXPOSED
+
+
+"""
+The white of a picture whose frames were all exposed past full well on purpose (overexposed), when little of it really
+saturated (OVEREXPOSED_SATURATED): the WHITE_PCT percentile of what the camera did not saturate (after the same 3x3
+median, above the picture's black, the saturated pixels and the OVEREXPOSED_NEAR px round them left out), no more than
+OVEREXPOSED_GAIN times under the white given, and never over it. The white given is set by the blown-out sliver of the
+body, which leaves the faint thing the frame was taken for near black; the saturated pixels are drawn white either way
+(draw_saturated). Passes (obs_mosaic.pass_scale) keep their own white.
+iofs, levels, margin, white = as _balanced_scale has them; masks = each frame's saturated pixels (saturated_of) or None
+"""
+def unsaturated_white(iofs, levels, margin, white, masks):
+    masks = [np.asarray(m, bool) for m in masks if m is not None and np.shape(m) == iofs[0].shape[:2]]
+    if not masks:
+        return white
+    blown = np.logical_or.reduce(masks)
+    if not 0 < blown.mean() < OVEREXPOSED_SATURATED:
+        return white
+    side = 2 * OVEREXPOSED_NEAR + 1
+    near = cv2.dilate(blown.astype(np.uint8), np.ones((side, side), np.uint8)) > 0
+    faint = None
+    for iof, level in zip(iofs, levels):
+        left = cv2.medianBlur(np.asarray(iof, np.float32) - np.float32(level + margin), 3)
+        seen = ~near & (left > 0)
+        if seen.sum() > 500:
+            top = float(np.percentile(left[seen], WHITE_PCT))
+            faint = top if faint is None else max(faint, top)
+    if faint is None:
+        return white
+    return min(white, max(faint, white / OVEREXPOSED_GAIN))
 
 
 """
