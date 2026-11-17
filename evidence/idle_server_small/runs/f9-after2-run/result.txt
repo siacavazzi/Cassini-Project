@@ -1,0 +1,1 @@
+idle, checked at 182 to 184 s and idle again after 305 s: peak footprint 1993 MB, 12 CPU seconds
