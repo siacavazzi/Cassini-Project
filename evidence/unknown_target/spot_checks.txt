@@ -1,0 +1,11 @@
+Spot checks on the private geometry copy after the fill and _place_seen (branch head):
+
+Disagreeing group (SKY, ISS_240SA_AURSTARE001_UVIS, ISSNA): 50 of its 63 frames see SATURN, 13 see nothing -> not relabelled.
+  N1850328993_1: target row unplaced ('...seen: SATURN, its group not relabelled'), cached_target raises as on main, not in shown_targets, units kind None.
+098ST URBETCRU001 (star-tracking): N1608806619_1 the same: unplaced, cached_target raises, not shown, kind None.
+
+units and centre_view, one frame mid-pass:
+ISS_098ST_URBETCRU001_UVIS pass 0 kind None frames 82 | centre_view N1608806619_1 {'centre': False, 'why': 'SPICE has no place for the frame'} | shown False
+ISS_240SA_AURSTARE001_UVIS pass 0 kind None frames 7 | centre_view N1850315560_1 {'centre': False, 'why': 'SPICE has no place for the frame'} | shown False
+ISS_240SA_AURSTARE001_UVIS pass 1 kind None frames 7 | centre_view N1850328937_1 {'centre': False, 'why': 'SPICE has no place for the frame'} | shown False
+ISS_240SA_AURSTARE001_UVIS pass 2 kind None frames 7 | centre_view N1850337508_1 {'centre': False, 'why': 'SPICE has no place for the frame'} | shown False
