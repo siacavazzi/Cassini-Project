@@ -291,7 +291,9 @@ def ground_range(rng, radius, off, ifov):
     """The distance to the ground in the frame's middle, km: along the camera's axis, off (radians) from the body's
     center seen rng km away, to where it meets a sphere of the body's mean radius; where the axis misses the body but
     its limb is in the frame (within FOV_HALF pixels of the middle), the limb's distance; else the center's, rng."""
-    if not radius or rng <= radius:
+    if not radius or rng <= radius or off >= math.pi / 2:
+        # (off a quarter turn or more: the body beside or behind the camera, its shift a pinhole's millions of px; the
+        # root below of a negative number, as stacking.ground_range met on 2016-04-26's N1841132267_1)
         return rng
     side = rng * math.sin(off)
     if side < radius and math.cos(off) > 0:

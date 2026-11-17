@@ -26,6 +26,8 @@ def main():
     # the body out of the frame, or no radius: the center's distance, as before
     assert et.ground_range(24031.0, 2575.0, limb + et.FOV_HALF * W + 0.01, W) == 24031.0
     assert et.ground_range(24031.0, None, 0.0, W) == 24031.0
+    # a body a quarter turn or more off the axis (N1841132267_1: Saturn 1.9 million px off, 11 "radians"): its centre
+    assert et.ground_range(651889.9, 58232.0, 1883195.8 * 5.9897e-6, 5.9897e-6) == 651889.9
     # far away the ground is the center less a hair
     assert close(et.ground_range(1.2e9, 60268.0, 0.0, W), 1.2e9 - 60268.0)
     assert et.SUMMING == {"FULL": 1, "SUM2": 2, "SUM4": 4}
