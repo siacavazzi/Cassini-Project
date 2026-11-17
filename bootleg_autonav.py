@@ -520,6 +520,9 @@ def _store_rows(rows):
     db.executemany("INSERT OR REPLACE INTO target VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     db.executemany("INSERT OR REPLACE INTO pointing VALUES (?, ?)",
                    [(row[0], pointing_tag(row[0])) for row in rows if pointing_tag(row[0]) is not None])
+    # (a frame stored with the mission kernels' own pointing loses any tag kept from extra kernels it was worked out
+    # with before: left, the row said those kernels and the frame stayed stale for ever, stale_frames)
+    db.executemany("DELETE FROM pointing WHERE frame = ?", [(row[0],) for row in rows if pointing_tag(row[0]) is None])
     db.execute("COMMIT")
 
 
@@ -776,6 +779,19 @@ def refresh_stale(quiet=False):
                     print(f"geometry: {len(stale)} frames stored with other pointing than this code's, worked out again",
                           flush=True)
                 build_geometry_cache(frames=stale)
+                # a stale frame the fill cannot work out (not in the index, or in a year's last seconds, which it leaves
+                # to find_target_cached): its rows dropped, so it is worked out on demand with this code's pointing
+                # instead of listed again at every start
+                left = set(stale) & set(stale_frames())
+                if left:
+                    db = _geometry_db()
+                    db.execute("BEGIN")
+                    db.executemany("DELETE FROM target WHERE frame = ?", [(f,) for f in left])
+                    db.executemany("DELETE FROM pointing WHERE frame = ?", [(f,) for f in left])
+                    db.execute("COMMIT")
+                    if not quiet:
+                        print(f"geometry: {len(left)} of them not worked out by the fill, left to be worked out on demand",
+                              flush=True)
             return len(stale)
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
