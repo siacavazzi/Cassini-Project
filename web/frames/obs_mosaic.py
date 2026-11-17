@@ -7572,6 +7572,15 @@ def colour_picture(u, p, colour, planes, away=None, sat=None, mark=False):
         # filled from the camera's own saturated pixels, is neutral)
         reads = [c if e is None else np.maximum(c - e, 0) for c, e in zip(x, excess)]
         filled = [f if calibration.mostly_saturated(m, lit) else np.maximum(f, c) for f, c, m in zip(filled, reads, clipped)]
+        if mark and any(e is not None for e in excess):
+            # (a mosaic, where a band saturated (its excess over SAT_EXCESS): the colour round it, the band filled from
+            # the others by their ratio near it, with neither floor: what it read there and the top of what it read
+            # elsewhere are lower bounds that put it over or under its neighbours, cyan and yellow-green ring edges at
+            # its white (269RI HIPHASEFB001), magenta blocks floored at its saturation's light; taste call 18, b)
+            free, _ = calibration.fill_saturated(list(x), clipped, CLIP_REACH * max(x.shape[1:]),
+                                                 where=None if away is None else ~away, floor=False, edge=CLIP_EDGE)
+            filled = [f if e is None else np.where(e > SAT_EXCESS, g, f).astype(np.float32)
+                      for f, g, e in zip(filled, free, excess)]
         # (eased in from CLIP_FROM to white: a tile's clipped white, resampled and blended onto the canvas, comes in a
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
