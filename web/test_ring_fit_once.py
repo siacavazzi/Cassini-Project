@@ -1,7 +1,8 @@
 """obs_mosaic.ring_places (ring registration's fit of every tile to the pass's reference ring profile) against the
 form it replaced, copied below as it was at 58502ad: the same answers and the same reference, to the last digit, with
-each tile's profiles kept from one round for the next, kept only in part, or not kept at all (RING_PROFILES_MB), and
-with a reference too thin to match anything answered without a search. Made-up tiles: a ring pattern seen through
+each tile's profiles kept from one round for the next, kept only in part, or not kept at all (RING_PROFILES_MB), with
+a reference too thin to match anything answered without a search, and with each tile's radius grid let go as soon as
+its bins are made. Made-up tiles: a ring pattern seen through
 radius grids of their own, each put a few pixels off; tiles with rings at other radii; tiles fixed beforehand; a
 reference given (later tiles fitted to it alone); fewer tiles than a fit needs.
 Run: python web/test_ring_fit_once.py"""
@@ -187,6 +188,28 @@ try:
     assert not calls, len(calls)
     print(f"a reference of {np.count_nonzero(~np.isnan(ref6))} bins: no match for any tile, as the search answered, "
           "without one")
+    # a tile's radius grid is let go as soon as its bins are made: never a whole pass's grids at once
+    import weakref
+    for label, fit in (("before", None), ("now", om.ring_places)):
+        alive, most = [], [0]
+
+        def sampled(u, t, im, rings, reach):
+            most[0] = max(most[0], sum(r() is not None for r in alive))
+            got = tuple(x.copy() for x in tiles[t["n"]])
+            alive.append(weakref.ref(got[1]))
+            return got
+        om._ring_geometry = lambda u: object()
+        om._tile_ring_samples = sampled
+        if fit is None:
+            ns = dict(vars(om))
+            exec(BEFORE, ns)
+            fit = ns["ring_places_before"]
+        fit({}, [{"n": n, "offset": [0.0, 0.0]} for n in sorted(tiles)], lambda n: True)
+        if label == "before":
+            assert most[0] == len(tiles) - 1, most       # (every grid sampled so far still held)
+        else:
+            assert most[0] <= 1, most
+    print("radius grids held while a pass's tiles are sampled: every one before, one now")
     # fewer ring tiles than a fit needs
     assert run(make_tiles(om.RING_FIT_MIN - 1, 90000.0, 40.0, 900.0)) == ({}, None)
     # a round's profiles are read back in the next: the samples are binned about half as often
