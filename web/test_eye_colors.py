@@ -79,7 +79,7 @@ for t in ICY:
     assert rgb.max() / rgb.min() < ICY_SPREAD, (t, rgb)
 rgb = np.asarray(cal.eye_tint("ENCELADUS"))
 assert rgb.max() / rgb.min() < 1.06, rgb   # the whitest body: gray
-for t, least in (("TITAN", 1.6), ("SATURN", 1.4)):
+for t, least in (("TITAN", 1.6), ("SATURN", 1.6)):
     rgb = np.asarray(cal.eye_tint(t))
     assert rgb[0] / rgb[2] > least, (t, rgb)
 

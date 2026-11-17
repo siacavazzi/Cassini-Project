@@ -41,6 +41,10 @@ INNER_PX = 16       # ... less this many full resolution pixels for SPICE's erro
 # which decides whose color a storm watch filed under a rider moon takes (calibration.mix_target: Janus, Helene,
 # Prometheus... drawn in Saturn's color, not their own); a body is added here only with that checked
 BODIES = ("ATLAS", "DIONE", "ENCELADUS", "IAPETUS", "MIMAS", "RHEA", "SATURN", "TETHYS", "TITAN")
+# bodies whose color stays as it is (Sam's taste call): natural color itself draws with theirs, not only the emulation
+# (Titan's two-filter approximate color, pair_mix; Saturn's and Titan's methane sets, emulated), so a new measure of
+# them changes stored pictures. Measured in linear light Titan is a deeper orange [1.44, 1.03, 0.53] (11-17)
+KEEP = ("SATURN", "TITAN")
 SKIP = {"SKY", "UNK", "NONE", "DARK", "STAR", "PLAQUE", "CAL_LAMPS", "DARKSKY"}
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
 
@@ -192,7 +196,10 @@ if __name__ == "__main__":
     if os.path.exists(a.out):
         with open(a.out) as f:
             before = json.load(f)
-        table.update({t: v for t, v in before.items() if t in BODIES and t not in table})
+        for t in KEEP:
+            if t in table and t in before:
+                print(f"{t} keeps {before[t]['rgb']} (measured {table[t]['rgb']})")
+        table.update({t: v for t, v in before.items() if t in BODIES and (t not in table or t in KEEP)})
     out.update(dict(sorted(table.items())))
     with open(a.out, "w") as f:
         json.dump(out, f, indent=1)
