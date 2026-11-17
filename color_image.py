@@ -269,13 +269,13 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 return _linear(lh.label(p, as_png=True))
             except Exception as e:
                 print(f"Can't read {p} for spikes: {e}")
-        found = ic.spikes(_linear(lbls[0]), [neighbour(p) for p in around if p])
+        found = ic.spikes(_linear(lbls[0]), [neighbour(p) for p in around if p], cal.summing_of(lbls[0].info))
         if found.any():
-            imgs[0] = ic.unspike(imgs[0], found)
+            imgs[0] = ic.unspike(imgs[0], found, cal.summing_of(lbls[0].info))
             if deeps[0] is not None:
-                deeps[0] = ic.unspike(deeps[0], found)
+                deeps[0] = ic.unspike(deeps[0], found, cal.summing_of(lbls[0].info))
             if iofs[0] is not None:
-                iofs[0] = ic.unspike(iofs[0], found)
+                iofs[0] = ic.unspike(iofs[0], found, cal.summing_of(lbls[0].info))
             spiked = int(found.sum())
     lost = sum(int((~m).sum()) for m in masks)
     if fill and lost:

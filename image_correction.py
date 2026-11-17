@@ -235,10 +235,17 @@ peak within SPIKE_REACH of it. In a long dark stare a new set of them every fram
 frame's spikes are replaced by what is round them (unspike, color_image.load_aligned).
 returns a bool mask the size of img, True on the spikes and the pixel round each
 """
-def spikes(img, neighbours):
+def spikes(img, neighbours, summing=1):
     neighbours = [n for n in neighbours if n is not None and n.shape == img.shape]
     if not neighbours:
         return np.zeros(img.shape[:2], bool)
+    h, w = img.shape[:2]
+    if summing > 1 and h % summing == 0 and w % summing == 0:
+        # a summed frame at the camera's own pixel size: one of its pixels is a 2x2 or 4x4 block of the picture's, which
+        # the 5 px median below keeps whole, so a 4x4 cosmic ray was never found (SUM4 movies kept their hits)
+        down = lambda im: cv2.resize(np.asarray(im, np.float32), (w // summing, h // summing), interpolation=cv2.INTER_AREA)
+        found = spikes(down(img), [down(n) for n in neighbours])
+        return cv2.resize(found.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST) > 0
 
     def peaks(im):
         g = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
@@ -287,10 +294,17 @@ def _bgr(im):
 img with the pixels of found (spikes) replaced by the median of the 5 x 5 pixels round each: a spike a pixel or two
 wide (found takes in the pixel round it) is a few of those 25, so the median is what is round it.
 """
-def unspike(img, found):
+def unspike(img, found, summing=1):
     work = img if img.dtype in (np.uint8, np.float32) else img.astype(np.float32)
     out = img.copy()
-    out[found] = cv2.medianBlur(work, 5)[found]
+    h, w = work.shape[:2]
+    if summing > 1 and h % summing == 0 and w % summing == 0:
+        # (a summed frame: the median at the camera's own pixel size, spikes, so a 4x4 hit is not its own median)
+        small = cv2.resize(work, (w // summing, h // summing), interpolation=cv2.INTER_AREA)
+        med = cv2.resize(cv2.medianBlur(small, 5), (w, h), interpolation=cv2.INTER_NEAREST)
+    else:
+        med = cv2.medianBlur(work, 5)
+    out[found] = med[found]
     return out
 
 
