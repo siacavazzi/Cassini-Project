@@ -2403,12 +2403,29 @@ def _despeckled(img, s=1):
 
 
 """
-Sky is where every channel is dark
+Sky is where every channel is dark: under SKY_CUT of its 99.9th percentile, or, where that cut runs through the sky's
+own noise (a frame of empty sky, nothing lit but stars: its cut sits at about the noise's middle once the noise is
+measured at full depth, #491, so half the sky was taken for lit and drawn as a gray floor with its line stripes,
+N1637448980_1, N1444023957_1), within SKY_NOISE times that noise of the sky's level. The noise is the dark pixels'
+spread below their median (their 16th percentile to it), which a glow or a body above the sky does not reach; the cut
+runs through it when the darkest pixels' top (the cut) is within SKY_SPLIT times it of their median.
 """
+SKY_CUT = 0.05     # of the 99.9th percentile
+SKY_NOISE = 4.0    # the sky's noise times this above its level is sky too, where the cut runs through the noise ...
+SKY_SPLIT = 2.0    # ... (the cut within this many times the noise of the dark pixels' median)
+
+
 def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
-        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+        cut = SKY_CUT * float(np.percentile(iof, 99.9))
+        dark = iof[iof < cut]
+        if dark.size >= 1000:
+            low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
+            noise = middle - low
+            if noise > 0 and cut - middle < SKY_SPLIT * noise:
+                cut = max(cut, middle + SKY_NOISE * noise)
+        sky &= iof < cut
     return sky
 
 
