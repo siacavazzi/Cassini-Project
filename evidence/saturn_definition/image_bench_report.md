@@ -1,9 +1,9 @@
-# Image benchmark: 94293dd6d406 against 85d2a2a975bf
+# Image benchmark: e33b8bcf028d against 85d2a2a975bf
 
 **FAIL**. 51 items: 47 identical, 4 changed (0 outside the target), 0 not built.
 
 - target items that did not change (the rule needs the target better): satellorb-centre, saturn05-movie
-- target items with a measure worse (look at them): approach-movie, approach-composite, storm-composite, hexagon-composite
+- target items with a measure worse (look at them): storm-composite, hexagon-composite
 
 Built in 30 min (base) and 36 min (candidate). Targets: approach-composite, approach-movie, hexagon-composite, satellorb-centre, saturn05-movie, storm-composite.
 
@@ -22,7 +22,7 @@ Built in 30 min (base) and 36 min (candidate). Targets: approach-composite, appr
 | ringclose124-movie | hard | identical | 0/10 | 0.00% |  |  |  |
 | gring-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | plume-bloom-still | hard | identical | 0/1 | 0.00% |  |  |  |
-| approach-movie | target | changed | 96/96 | 7.25% | 53 | evened000.webp: detail 0.1665 -> 0.2082 (+25%) |  |
+| approach-movie | target | changed | 96/96 | 1.73% | 41 |  |  |
 | ringmovie04-movie | hard | identical | 0/44 | 0.00% |  |  |  |
 | telesto-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | moon99-composite | plain | identical | 0/1 | 0.00% |  |  |  |
@@ -30,7 +30,7 @@ Built in 30 min (base) and 36 min (candidate). Targets: approach-composite, appr
 | masursky-still | plain | identical | 0/1 | 0.00% |  |  |  |
 | jupiter-portrait-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | jupiter-rmov-movie | plain | identical | 0/142 | 0.00% |  |  |  |
-| approach-composite | target | changed | 1/1 | 6.19% | 56 | composite.webp: detail 0.1456 -> 0.2155 (+48%) |  |
+| approach-composite | target | changed | 1/1 | 1.52% | 47 |  |  |
 | phoebe-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | phoebe-movie | plain | identical | 0/44 | 0.00% |  |  |  |
 | titan04-composite | plain | identical | 0/1 | 0.00% |  |  |  |
@@ -47,10 +47,10 @@ Built in 30 min (base) and 36 min (candidate). Targets: approach-composite, appr
 | iapetus-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | enceladus-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | mimas-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
-| storm-composite | target | changed | 1/1 | 21.29% | 33 | composite.webp: detail 0.0401 -> 0.1365 (+240%) |  |
+| storm-composite | target | changed | 1/1 | 18.52% | 31 | composite.webp: detail 0.0401 -> 0.1333 (+232%) |  |
 | helene-movie | plain | identical | 0/64 | 0.00% |  |  |  |
 | methone-movie | plain | identical | 0/30 | 0.00% |  |  |  |
-| hexagon-composite | target | changed | 1/1 | 22.07% | 26 | composite.webp: detail 0.028 -> 0.071 (+154%) |  |
+| hexagon-composite | target | changed | 1/1 | 18.33% | 24 | composite.webp: detail 0.028 -> 0.0687 (+145%) |  |
 | dione-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | enceladus15-movie | plain | identical | 0/74 | 0.00% |  |  |  |
 | telesto-movie | plain | identical | 0/36 | 0.00% |  |  |  |
