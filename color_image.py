@@ -293,6 +293,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
         deeps = [None if d is None else ic.fill_invalid(d, mask) for d, mask in zip(deeps, masks)]
+    # (the pixels still lost after the fills, before the edges are trimmed: what a picture's own black leaves out,
+    # cal.load_channels' valid; None when nothing is lost, so a whole frame is measured as it always was)
+    unfilled = masks if left else None
     # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
     # aligned and drop out of every picture made of it
     masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
@@ -314,6 +317,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
             lbls, imgs, iofs, masks, stacked, clips, own, deeps = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own, deeps))
+            if unfilled is not None:
+                # (each channel kept keeps its own lost pixels: load_channels' valid goes label by label)
+                unfilled = [unfilled[j] for j in keep]
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
@@ -368,6 +374,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # (a set drawn on its own: its sky black in every channel, as the balanced look's, fix plan D)
             alone = scale is None and len(lbls) > 1 and cal.look() == "classic"
             imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None,
+                                     valid=unfilled if scale is not None else None,
                                      off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None, deep=deeps)
             calibrated = imgs is not before
 
