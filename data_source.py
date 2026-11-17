@@ -496,6 +496,10 @@ def check_originals():
     if ORIGINALS is None:
         raise OriginalsMissing("CASSINI_ORIGINALS is not set: the 12-bit originals (the orig12 folder) are needed for a "
                                "build; CASSINI_ORIGINALS=off builds on the squeezed codes (test passes only)")
+    if ORIGINALS_OFF and lean():
+        raise OriginalsMissing(f"{get_source()} is a lean archive (helper programs/lean_archive.py): its frames the "
+                               f"originals cover are read from them, so CASSINI_ORIGINALS=off can't be used with it "
+                               f"(use the full archive for a build on the squeezed codes)")
     if ORIGINALS_OFF:
         print("Originals: off (CASSINI_ORIGINALS=off): 12BIT frames calibrated from the archive's squeezed codes", flush=True)
         return {"frames": 0, "volumes": 0}
@@ -585,6 +589,11 @@ LEAN_KINDS = ("12BIT", "8LSB")
 
 class LeanFrameMissing(OriginalsMissing):
     pass
+
+
+def lean():
+    """True when the data is a lean archive (it has the tool's LEAN_ARCHIVE.txt)"""
+    return exists("LEAN_ARCHIVE.txt")
 
 
 def lean_stub(data):

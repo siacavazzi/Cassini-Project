@@ -120,6 +120,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
     want, got = read_all(full), read_all(lean)
     assert want[1:] == got[1:]
+    ds._source = full
+    assert not ds.lean()
+    ds._source = lean
+    assert ds.lean()
     for fid in frames:
         for a, b in zip(want[0][fid], got[0][fid]):
             assert (np.array_equal(a, b) if isinstance(a, np.ndarray) else a == b), fid
@@ -142,6 +146,11 @@ with tempfile.TemporaryDirectory() as tmp:
         except ds.LeanFrameMissing as e:
             assert "CASSINI_ORIGINALS" in str(e)
         assert np.array_equal(ds.imread("nac_data/N1000000005_1.png", cv2.IMREAD_GRAYSCALE), frames["N1000000005_1"][1])
+        if setting == "off":   # (a build's guard says so before it starts)
+            try:
+                ds.check_originals(); raise AssertionError("a build on a lean archive with the originals off")
+            except ds.OriginalsMissing as e:
+                assert "lean archive" in str(e)
     ds.ORIGINALS, ds.ORIGINALS_OFF, ds._originals = originals, False, None
     os.rename(os.path.join(originals, "volumes", "COISS_2001.zip"), os.path.join(tmp, "moved.zip"))
     ds._original_kept.clear(); ds._decoded.clear(); ds._original_zips.clear()
