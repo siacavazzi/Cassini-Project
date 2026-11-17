@@ -2416,12 +2416,45 @@ def _despeckled(img, s=1):
 
 
 """
-Sky is where every channel is dark
+Sky is where every channel is dark: under SKY_CUT of its 99.9th percentile, or, where that cut runs through the sky's
+own noise (a frame of empty sky, nothing lit but stars: its cut sits at about the noise's middle once the noise is
+measured at full depth, #491, so half the sky was taken for lit and drawn as a gray floor with its line stripes,
+N1637448980_1, N1444023957_1), within SKY_NOISE times that noise of the sky's level. The noise is the dark pixels'
+spread below their median (their 16th percentile to it), which a glow or a body above the sky does not reach; the cut
+runs through it when the darkest pixels' top (the cut) is within SKY_SPLIT times it of their median, and only on a
+frame that is noise and stars alone (_noise_only): a faint ring band under one bright ring keeps its cut.
 """
+SKY_CUT = 0.05     # of the 99.9th percentile
+SKY_NOISE = 4.0    # the sky's noise times this above its level is sky too, where the cut runs through the noise ...
+SKY_SPLIT = 2.0    # ... (the cut within this many times the noise of the dark pixels' median)
+SKY_FLAT = 0.4     # ... and only on a frame of noise alone: blurred, it varies by at most this times the noise ...
+SKY_FLAT_PX = 32   # ... over this many pixels (sigma) (_noise_only)
+
+
+def _noise_only(iof, middle, noise):
+    """Whether a frame is its sky's noise and stars alone (middle, noise: its dark pixels' level and spread): blurred over
+    SKY_FLAT_PX with its stars and anything past SKY_NOISE times the noise clipped, it varies by at most SKY_FLAT times
+    the noise. A faint glow or ring band over part of the frame is large-scale structure the blur keeps (earth-fb-still,
+    the Grand Finale's faint rings under one bright ring that set the 99.9th percentile: 0.81, where the empty skies of
+    N1444023957_1, N1637448980_1 and six others measure 0.02 to 0.25 with their originals)."""
+    clipped = np.clip(np.nan_to_num(iof.astype(np.float32)), middle - SKY_NOISE * noise, middle + SKY_NOISE * noise)
+    big = cv2.GaussianBlur(clipped, (0, 0), SKY_FLAT_PX)
+    m = 2 * SKY_FLAT_PX
+    inner = big[m:-m, m:-m] if min(big.shape[:2]) > 4 * m else big
+    return float(np.std(inner)) <= SKY_FLAT * noise
+
+
 def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
-        sky &= iof < 0.05 * np.percentile(iof, 99.9)
+        cut = SKY_CUT * float(np.percentile(iof, 99.9))
+        dark = iof[iof < cut]
+        if dark.size >= 1000:
+            low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
+            noise = middle - low
+            if noise > 0 and cut - middle < SKY_SPLIT * noise and _noise_only(iof, middle, noise):
+                cut = max(cut, middle + SKY_NOISE * noise)
+        sky &= iof < cut
     return sky
 
 
