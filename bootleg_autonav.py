@@ -608,9 +608,14 @@ def find_target_cached(label, load_year=None):
             except Exception as e:
                 if not transient(e):
                     raise
-                # (the run's failure: once more with the year's kernels loaded afresh)
+                # (the run's failure: once more with the year's kernels unloaded and loaded afresh, not on the same
+                # handles: label_handler's load_year does nothing for the year already loaded unless forced)
                 if load_year:
-                    load_year()
+                    try:
+                        load_year(force=True)
+                    except TypeError:   # (a loader without force)
+                        unload_kernels()
+                        load_year()
                 target_loc = find_target(label, False, "graphs")
         except Exception as e:
             if GEOMETRY_CACHE and not transient(e):

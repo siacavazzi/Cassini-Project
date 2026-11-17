@@ -59,14 +59,14 @@ try:
     ba.find_target = flaky
     ba.shown_place = lambda lbl, loc: loc
     ba.linearized = lambda lbl, loc: loc
-    assert ba.find_target_cached(label("N1465536850_1"), lambda: loads.append(1)) == [10.0, 20.0, 30.0, 0.0]
-    assert len(calls) == 2 and len(loads) == 2
+    assert ba.find_target_cached(label("N1465536850_1"), lambda force=False: loads.append(force)) == [10.0, 20.0, 30.0, 0.0]
+    assert len(calls) == 2 and loads == [False, True]   # (the retry loads the year afresh)
     got = db.execute("SELECT x, error FROM target WHERE frame = 'N1465536850_1'").fetchone()
     assert got == (10.0, None), got
     calls.clear()
     ba.find_target = failing
     try:
-        ba.find_target_cached(label("N1465536852_1"), lambda: None)
+        ba.find_target_cached(label("N1465536852_1"), lambda force=False: None)
         raise AssertionError("a failure that persists is raised")
     except RuntimeError:
         pass

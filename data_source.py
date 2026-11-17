@@ -642,6 +642,10 @@ def extract_to_cache(path):
             if os.path.getsize(out) != size:
                 os.replace(part, out)
                 part = None
+        except OSError:
+            # (a volume without hard links, exFAT and some mounts: the old replace)
+            os.replace(part, out)
+            part = None
         if part and os.path.exists(part):
             os.remove(part)
     return out

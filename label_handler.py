@@ -508,9 +508,11 @@ class label:
     def target_loc(self):
         im_year = int(self.info["IMAGE_TIME"].split('-')[0])
 
-        def load_year():
+        def load_year(force=False):
+            # force: load the year's kernels afresh even when they are the ones loaded (a retry after a transient
+            # SPICE failure, bootleg_autonav.find_target_cached: the same handles would fail the same way)
             global cur_year
-            if cur_year != im_year:
+            if force or cur_year != im_year:
                 ba.unload_kernels()
                 # set first: a year whose kernels fail to load is not reloaded for every frame
                 cur_year = im_year

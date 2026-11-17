@@ -154,15 +154,19 @@ def set_key(items, env):
 
 
 def geometry_fingerprint(path):
-    """The geometry cache's content, as a short hash: its target rows (frame, version, place, error) and pointing rows
-    (frame, kernels tag), in frame order, read only; '' without one."""
+    """The geometry cache's content as a build's private copy holds it (private_geometry), as a short hash: its target
+    rows (frame, version, place, error) but the transient failures that copy drops, and its pointing rows (frame,
+    kernels tag), in frame order, read only; '' without one."""
     if not path or not os.path.isfile(path):
         return ""
     import sqlite3
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     h, n = hashlib.sha256(), 0
     try:
-        for row in db.execute("SELECT frame, version, x, y, z, angle, camera, target, scale, error FROM target ORDER BY frame"):
+        # (the rows as a build's private copy has them, private_geometry: without the transient failures it drops)
+        keep = " AND ".join(["error NOT LIKE ?"] * len(TRANSIENT))
+        for row in db.execute("SELECT frame, version, x, y, z, angle, camera, target, scale, error FROM target "
+                              f"WHERE error IS NULL OR ({keep}) ORDER BY frame", [f"%{t}%" for t in TRANSIENT]):
             h.update(repr(row).encode())
             n += 1
         for row in db.execute("SELECT frame, kernels FROM pointing ORDER BY frame"):
