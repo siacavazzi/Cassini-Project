@@ -141,6 +141,11 @@ STRIP_LONG = 6       # frames: a ring mosaic of Saturn whose frames cover a stri
 STRIP_WIDE = 1.5     # this wide (_strip) plays as a movie, its mosaic the window's other choice (Sam, 2026-10-29: the
                      # long thin ring scans were awkward mosaics; 033RI_AZDKMRHPH001 18.0 x 1.2). No least width: a
                      # strip of gappy frames (077RF 0.89, 208RI_SHADSCANU 0.52) falls apart into fragments as a mosaic
+STRIP_SIZED_WIDE = 2.0   # frames: ... and its frames, each sized by its distance, stand no wider than this. Drawn one
+                     # frame across at every distance, the tiles of a mosaic Cassini drew away from spread apart with
+                     # hairline gaps, each counted as edge: the 2009 Equinox mosaic (116RI_EQXMOSAIC001, three rows of
+                     # six or seven WAC frames, 694,000 to 889,000 km) measured 19.3 x 0.9 and played as a movie (Sam
+                     # 11-16); sized, 8.1 x 2.6. Every other strip of the mission stands at most 1.7 wide sized
 STRIP_GRID = 8       # cells a frame, the grid _strip measures a pass's frames on
 STRIPPED = "_g8"     # the folder suffix, after PANNED's, of every pass of an observation where a ring strip is a movie
 JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
@@ -1018,23 +1023,38 @@ def _ring(u):
 def _strip(u):
     """(units) Pass u's frames, each a frame square at its place, cover a long thin strip: the rectangle with their
     union's area A and perimeter P (L + W = P / 2, L W = A, on a grid of STRIP_GRID cells a frame), which follows an
-    arc of ring as it does a straight strip, is at least STRIP_LONG frames long and at most STRIP_WIDE wide."""
-    pts = np.array([(-x * z / u["z"], -y * z / u["z"]) for *_, x, y, z in u["frames"] if z]) / FRAME
+    arc of ring as it does a straight strip, is at least STRIP_LONG frames long and at most STRIP_WIDE wide; and its
+    frames sized by their distance (_strip_shape's sized) are no more than STRIP_SIZED_WIDE wide."""
+    shape = _strip_shape(u)
+    if shape is None or not (shape[0] >= STRIP_LONG and shape[1] <= STRIP_WIDE):
+        return False
+    sized = _strip_shape(u, sized=True)
+    return sized is None or sized[1] <= STRIP_SIZED_WIDE
+
+
+def _strip_shape(u, sized=False):
+    """(length, width) in frames of the rectangle _strip measures pass u's frames on, or None. Each frame a square one
+    frame across at its place; sized, a square of the ground it covers at the pass's distance, z / u["z"] frames
+    across (as _ground sizes it)."""
+    fr = [(x, y, z) for *_, x, y, z in u["frames"] if z]
+    pts = np.array([(-x * z / u["z"], -y * z / u["z"]) for x, y, z in fr]) / FRAME
     if len(pts) < 2:
-        return False
+        return None
     k = STRIP_GRID
-    lo = pts.min(0) - 0.5
-    w, h = np.ceil((pts.max(0) + 0.5 - lo) * k).astype(int) + 2
+    side = np.array([z / u["z"] if sized else 1.0 for *_, z in fr])
+    lo = (pts - side[:, None] / 2).min(0)
+    w, h = np.ceil(((pts + side[:, None] / 2).max(0) - lo) * k).astype(int) + 2 + sized
     if w * h > 4e6:
-        return False
+        return None
     grid = np.zeros((h, w), bool)
-    for p in pts:
-        x, y = np.round((p - 0.5 - lo) * k).astype(int) + 1
-        grid[y:y + k, x:x + k] = True
+    for p, s in zip(pts, side):
+        x, y = np.round((p - s / 2 - lo) * k).astype(int) + 1
+        n = int(round(s * k))
+        grid[y:y + n, x:x + n] = True
     area = grid.sum() / k ** 2
     half = (np.sum(grid[:, 1:] != grid[:, :-1]) + np.sum(grid[1:] != grid[:-1])) / k / 2
     root = math.sqrt(max(half * half - 4 * area, 0))
-    return bool((half + root) / 2 >= STRIP_LONG and (half - root) / 2 <= STRIP_WIDE)
+    return (half + root) / 2, (half - root) / 2
 
 
 def _scan(xy, runs):
