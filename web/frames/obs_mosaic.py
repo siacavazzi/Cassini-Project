@@ -11560,7 +11560,7 @@ def _seam_of(u, p, tiles, rect, ref, t, cache, f=None):
 REPEAT_POINTING = 600   # s: a filter's tiles at one place are one pointing when taken within this of each other
 
 
-def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False, tune=None):
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False, tune=None, make=True):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
     the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
     with them in the background, so the next frames' mosaics are ready when the window asks for them. Never
@@ -11568,7 +11568,11 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
     how many frames short of frame_id it is). size
     "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
     instead. tune: the person's changes to its tiles (parse_tune), the tuned mosaic (tuned_layout) instead of
-    the pass's own; never made ahead."""
+    the pass's own; never made ahead.
+    make=False, for a caller no window is waiting on (a Highlights thumbnail, made as the server starts): the
+    mosaic of the tiles the cache already holds, None when it holds none (_made_so_far). No frame is processed,
+    no plan worked out and nothing started in the background (no tiles ahead, no tile map, no mosaics ahead): a
+    thumbnail of a pass that was never built must not set a whole pass drawing in the server."""
     found = unit_of(frame_id)
     if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
         return None
@@ -11581,8 +11585,11 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
     # the mosaic of the tiles made so far, when the clock has run past them (playing faster than a frame is
     # processed): the window gets a picture at once, a little behind, and catches up as the tiles behind it
     # (tiles_ahead) are made, instead of waiting for every tile up to n
-    m = _made_through(u, n, cache)
-    tiles_ahead(u, m + 1, cache)
+    if make:
+        m = _made_through(u, n, cache)
+        tiles_ahead(u, m + 1, cache)
+    else:
+        m, ahead = _made_so_far(u, n, cache), 0
     if m < n:
         if m < 0:
             return None
@@ -11599,7 +11606,7 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
         # outlines were kept in their reports are measured once here); a map worked out already needs no work
         with _lock:
             mapped = (folder(u, cache), laid[5]) in _maps
-        if not mapped:
+        if not mapped and make:
             _map_later(u, n, cache)
     if made and ahead and size != "full":
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
@@ -11669,6 +11676,25 @@ def _made_through(u, n, cache):
     with _lock:
         _made[key] = max(_made.get(key, -1), j)
     return min(j, n)
+
+
+def planned(u, cache):
+    """Whether the pass has its plan in this cache (in memory, or its plan file): it was built, or a window asked
+    for it, under this code's versions. Without one, plan() reads the pass's frames and draws a tile."""
+    return _record(u, cache) is not None or os.path.exists(_plan_path(u, cache))
+
+
+def _made_so_far(u, n, cache):
+    """_made_through for a caller that must draw nothing (mosaic_webp make=False): the last tile j <= n of the pass
+    with tiles 0..j in the cache already, -1 for none or for a pass with no plan here (planned). Tile 0 is not
+    made and the plan is only read."""
+    if not planned(u, cache):
+        return -1
+    p = plan(u, cache)
+    j = -1
+    while j < n and _has_tile(u, j + 1, cache, p):
+        j += 1
+    return j
 
 
 _asked = [0]   # mosaics a window is waiting for right now: work made ahead waits while there are any

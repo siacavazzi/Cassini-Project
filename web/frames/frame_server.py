@@ -954,14 +954,23 @@ def _count(v):
 
 
 def _thumb_mosaic(frame_id, size, cache):
-    """(WebP, report) of the mosaic the camera windows' route answers for frame_id, or None; nothing made ahead"""
+    """(WebP, report) of the mosaic the camera windows' route answers for frame_id, from the tiles the cache already
+    holds, or None. A thumbnail draws no pass and starts nothing (mosaic_webp make=False): the Highlights
+    thumbnails are made as the server starts (warm_thumbs), and with the mosaic route as a window asks it each of
+    the 15 highlight passes the cache did not hold under this code's versions was planned, had its first tile
+    drawn and its other tiles started in a thread, in a server nobody had asked for anything (2026-11-17: 20 GB in
+    70 s and 42 to 61 GB in half an hour on the Mini's 24 GB). A pass that is not built gives None here, so its
+    thumbnail is its colour set or its frame (pick_thumb)."""
     reel.target_of()   # the mosaic route's index, so the answer never depends on how long the server has been up
-    made = obs_mosaic.mosaic_webp(frame_id, size, cache, _mosaic_slots, ahead=0)
+    made = obs_mosaic.mosaic_webp(frame_id, size, cache, _mosaic_slots, ahead=0, make=False)
     if made:
         return made
     # a movie plays as frames: no rolling mosaic either, as on the mosaic route
     found = obs_mosaic.unit_of(frame_id)
     if found and found[0]["movie"]:
+        return None
+    # a mosaic pass this cache has no plan of: no reel mosaic of its frames is drawn in its place either
+    if found and found[0]["mosaic"] and not obs_mosaic.planned(found[0], cache):
         return None
     found = reel.mosaic_of(frame_id)
     return reel.shot_webp(*found, size, cache, True, _mosaic_slots) if found else None
@@ -1076,8 +1085,14 @@ def warm_icons(site, cache):
 
 
 def warm_site(site, cache):
-    warm_thumbs(site, cache)
-    warm_icons(site, cache)
+    """The Highlights thumbnails and the bodies' folder pictures the cache lacks, made as the server starts. What
+    their frames' calibration kept for a next frame (calibration.let_go: up to 0.5 GB of tables) is let go at the
+    end, so a server nobody asks anything of does not hold it; a frame asked for later makes its tables again."""
+    try:
+        warm_thumbs(site, cache)
+        warm_icons(site, cache)
+    finally:
+        calibration.let_go()
 
 
 def warm_prebuild():
