@@ -480,23 +480,48 @@
       return k;
     }
     // what is blurred: the alpha a and the luminance times it, float32 as numpy has them
-    function detailInputs(px) {
+    // lit (obs_mosaic.DETAIL_LIT, a Saturn pass's detail_how): each pixel weighted by how lit it is, and only the
+    // picture's whole pixels, so the sky and a tile's feathered edge neither count in the mean nor change
+    // disk (obs_mosaic.disk_weight): [x, y, radius] px of the body's disk, eased over soft of its radius, outside which
+    // nothing changes (the rings beside Saturn); W the picture's width
+    // litMean (obs_mosaic.DETAIL_LIT_MEAN): the pixels the mean is taken over, eased in (all but the sky); lit alone, the
+    // change's weight is also the mean's (before the terminator fix)
+    function detailInputs(px, lit, disk = null, W = 0, soft = 0.03, litMean = null) {
       const f = Math.fround, N = px.length / 4, a = new Float32Array(N), la = new Float32Array(N), lum = new Float32Array(N);
+      const w = lit ? new Float32Array(N) : null, lo = lit ? f(lit[0]) : 0, span = lit ? f(f(lit[1]) - lo) : 1, whole = f(250 / 255);
+      const mlo = litMean ? f(litMean[0]) : 0, mspan = litMean ? f(f(litMean[1]) - mlo) : 1;
+      const dr = disk ? f(disk[2] * (1 + soft)) : 0, dw = disk ? f(2 * soft * disk[2]) : 1;
       for (let p = 0, i = 0; p < N; p++, i += 4) {
         a[p] = f(px[i + 3] / 255);
         lum[p] = f((px[i] + px[i + 1] + px[i + 2]) / 3);
+        if (w) {
+          let wh = a[p] >= whole ? 1 : 0;
+          if (disk) {
+            const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+            const u = Math.min(1, Math.max(0, f(f(dr - d) / dw)));
+            wh = f(wh * f(f(u * u) * f(3 - f(2 * u))));
+          }
+          const l0 = f(f(f(px[i] + px[i + 1]) + px[i + 2]) / 3 / 255);
+          const t = Math.min(1, Math.max(0, f(f(l0 - lo) / span)));
+          w[p] = f(wh * f(f(t * t) * f(3 - f(2 * t))));
+          if (litMean) {
+            const tm = Math.min(1, Math.max(0, f(f(l0 - mlo) / mspan)));
+            a[p] = f(wh * f(f(tm * tm) * f(3 - f(2 * tm))));
+          } else a[p] = w[p];
+        }
         la[p] = f(lum[p] * a[p]);
       }
-      return { a, la, lum };
+      return { a, la, lum, w };
     }
     // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change (less on big differences,
     // DETAIL_EDGE) rolled off past knee of the room the pixel has left (obs_mosaic._soft_detail), clip, round half to even
-    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32) {
+    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32, w = null, top = 255) {
       const f = Math.fround, floor = f(1e-3), D = f(amount), K = f(knee), E = f(edge), tiny = f(1e-6);
       for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
         const mean = f(gla[p] / Math.max(ga[p], floor)), x = f(lum[p] - mean);
         let d = f(f(D * x) / f(1 + f(Math.abs(x) / E)));
-        const room = d > 0 ? f(255 - Math.max(px[i], px[i + 1], px[i + 2])) : f(Math.min(px[i], px[i + 1], px[i + 2]));
+        if (w) d = f(d * w[p]);
+        const room = d > 0 ? f(Math.max(top - Math.max(px[i], px[i + 1], px[i + 2]), 0)) : f(Math.min(px[i], px[i + 1], px[i + 2]));
         const k = f(K * room), mag = Math.abs(d);
         if (mag > k) {
           const rest = f(room - k), over = f(mag - k), soft = f(k + f(f(rest * over) / Math.max(f(over + rest), tiny)));
@@ -505,6 +530,67 @@
         for (let c = 0; c < 3; c++) px[i + c] = pyRound(Math.min(255, Math.max(0, f(px[i + c] + d))));
       }
       return px;
+    }
+    // obs_mosaic.ring_white: off the body's disk (disk: x, y, radius px, eased over soft of its radius) the picture
+    // back on the pass's own white (H: the Saturn look's headroom, g: its gamma, knee: the shoulder), so the rings and
+    // sky keep today's brightness; in place
+    function ringWhite(px, W, H, g, knee, disk, soft = 0.06) {
+      const f = Math.fround, room = f(1 - knee), K = f(knee), G = f(g), iG = f(1 / g), r0 = f(disk[2] * (1 - soft)), w2 = f(2 * soft * disk[2]);
+      const lut = new Float32Array(256);   // each code's linear value with the shoulder undone, times H, rolled off again
+      for (let v = 0; v < 256; v++) {
+        let x = f(Math.pow(f(v / 255), G));
+        if (x > K) x = f(K + f(room * f(Math.atanh(Math.min(f(f(x - K) / room), f(0.999999))))));
+        x = f(x * f(H));
+        if (x > K) x = f(K + f(room * f(Math.tanh(f(f(x - K) / room)))));
+        lut[v] = f(f(Math.pow(Math.min(Math.max(x, 0), 1), iG)) * 255);
+      }
+      for (let p = 0, i = 0; i < px.length; p++, i += 4) {
+        const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+        let t = Math.min(1, Math.max(0, f(f(d - r0) / w2)));
+        t = f(f(t * t) * f(3 - f(2 * t)));
+        if (t <= 0) continue;
+        for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] + f(f(lut[px[i + c]] - px[i + c]) * t)) + 0.5))));
+      }
+      return px;
+    }
+    // obs_mosaic.detail's blend: before off the disk, after on it, eased over soft of its radius (disk_weight); rounded
+    function diskBlend(before, after, W, disk, soft = 0.03) {
+      const f = Math.fround, out = new Uint8ClampedArray(after.length), dr = f(disk[2] * (1 + soft)), dw = f(2 * soft * disk[2]);
+      for (let p = 0, i = 0; i < after.length; p++, i += 4) {
+        const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+        let u = Math.min(1, Math.max(0, f(f(dr - d) / dw)));
+        u = f(f(u * u) * f(3 - f(2 * u)));
+        for (let c = 0; c < 3; c++) out[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(before[i + c] + f(f(after[i + c] - before[i + c]) * u)) + 0.5))));
+        out[i + 3] = after[i + 3];
+      }
+      return out;
+    }
+    // obs_mosaic.terminator_ease: w (the change's weight) times 1 / (1 + (g / T)^2), g the fall of the brightness (blurred
+    // over s2 = max(1.5, sigma / 2) by blurFn) across one patch over its bright level (the lower 90th percentile of the
+    // channels' sum where w > 0.5); cv2's 3x3 Sobel with BORDER_REFLECT_101; in place
+    function terminatorEase(px, w, W, H, sigma, T, blurFn) {
+      const f = Math.fround, N = W * H, lum = new Float32Array(N), sums = [];
+      for (let p = 0, i = 0; p < N; p++, i += 4) {
+        const t = px[i] + px[i + 1] + px[i + 2];
+        lum[p] = f(t / 3);
+        if (w[p] > 0.5) sums.push(t);
+      }
+      let ref = 255;
+      if (sums.length) { sums.sort((x, y) => x - y); ref = Math.max(sums[Math.floor(0.9 * (sums.length - 1))] / 3, 1); }
+      const big = blurFn(lum, gaussKernel(Math.max(1.5, sigma / 2)));
+      const refl = (i, n) => { while (i < 0 || i >= n) i = i < 0 ? -i : 2 * n - 2 - i; return i; };
+      const k = f(f(sigma / ref)), iT = f(1 / T);
+      for (let y = 0; y < H; y++) {
+        const y0 = refl(y - 1, H) * W, y1 = y * W, y2 = refl(y + 1, H) * W;
+        for (let x = 0; x < W; x++) {
+          const x0 = refl(x - 1, W), x2 = refl(x + 1, W);
+          const gx = f(f(f(big[y0 + x2] - big[y0 + x0]) + f(2 * f(big[y1 + x2] - big[y1 + x0]))) + f(big[y2 + x2] - big[y2 + x0]));
+          const gy = f(f(f(big[y2 + x0] - big[y0 + x0]) + f(2 * f(big[y2 + x] - big[y0 + x]))) + f(big[y2 + x2] - big[y0 + x2]));
+          const g = f(f(f(Math.hypot(gx, gy)) / 8) * k), q = f(g * iT);
+          w[y1 + x] = f(w[y1 + x] * f(1 / f(1 + f(q * q))));
+        }
+      }
+      return w;
     }
     // cv2's separable float32 blur (BORDER_REFLECT_101), on the processor: rows summed tap by tap, then columns
     // centre first and each pair of taps together, as cv2's RowFilter and SymmColumnFilter (the reference the GPU's
@@ -525,7 +611,7 @@
       return out;
     }
     return { pyRound, pyRound2, places, shift, evenedGains, heldGains, gains, lut, mix, setPicture, shadeRgb, fillClipped, resizeArea, percentile, median, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
-      gaussKernel, detailInputs, detailFinish, blurCPU };
+      gaussKernel, detailInputs, detailFinish, blurCPU, ringWhite, diskBlend, terminatorEase };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
@@ -605,9 +691,19 @@ void main() {
 let blur;   // the GPU blur, made when a filled pass first needs it
 const sharpen = (px, W, H, t) => {
   if (blur === undefined) blur = (${STEADY_GPU.toString()})();
-  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px);
-  const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
-  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge);
+  const disk = t.disk ? [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W] : null;
+  const one = (p, sigma, amount, lit, dk) => {
+    const k = M.gaussKernel(sigma), d = M.detailInputs(p, lit, dk, W, 0.03, lit ? t.litMean : null);
+    const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
+    if (lit && t.terminator) M.terminatorEase(p, d.w, W, H, sigma, t.terminator, (m, kk) => blur ? blur([m, m], W, H, kk)[0] : M.blurCPU(m, W, H, kk));
+    return M.detailFinish(p, d.lum, ga, gla, amount, t.knee, t.edge, d.w, lit ? (t.top ?? 255) : 255);
+  };
+  // obs_mosaic.detail, no disk limit: today's detail first, then the look's lit local contrast on top of it
+  if (t.base && t.lit && !disk) return one(one(px, t.base.sigma, t.base.amount, null, null), t.sigma, t.amount, t.lit, null);
+  if (!(t.base && disk && t.lit)) return one(px, t.sigma, t.amount, t.lit, disk);
+  // obs_mosaic.detail: today's detail off the disk (the rings as drawn before the Saturn look), the look's on it
+  const before = one(new Uint8ClampedArray(px), t.base.sigma, t.base.amount, null, null), after = one(px, t.sigma, t.amount, t.lit, disk);
+  return M.diskBlend(before, after, W, disk);
 };
 const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {
@@ -648,6 +744,7 @@ onmessage = async e => {
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
       : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.setPicture(planes, m.eye ? t.eye : t.sets, W, gain, t.exposure ? t.exposure.gamma : undefined);
+    if (m.detail && t.headroom && t.disk) px = M.ringWhite(px, W, H, t.headroom, t.hgamma, t.shoulder, [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W * t.ringDisk]);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
