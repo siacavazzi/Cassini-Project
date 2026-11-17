@@ -1,9 +1,9 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `8d7c19b4` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `7de29cdd` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 75 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548, #549, #550 and #553), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
-**Left out:** #551 and #552 (their benchmarks are running; versions reserved: export-v121/v122, levels-v83/v84, obs-v133 for #552); #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
+**In it:** 76 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548, #549, #550, #553 and #551), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**Left out:** #552 (its benchmark is running; it will take the next export and levels numbers here); #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
 1. **#483 x #491 stacking** (`image_correction.stack_frames`, `stacking.load_stacked`): #483's plain polarizer stack and #491's full-depth stack touch the same lines. The combined code is the 491 author's own trial rebase (branch `claude/full-depth-on-484`, 9b41e801). 491's later commits do not touch these files. Reviewed as correct (merge a0c25f1f).
@@ -33,7 +33,7 @@ How to read this:
 #474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, #548, #549, and the five integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547, #550, #553
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547, #550, #553, #551
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -168,3 +168,6 @@ How to read this:
 | 113 | Picture-change map (docs) | `3d65ff8c` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
 | 114 | [#553](https://github.com/siacavazzi/Cassini-Project/pull/553) Follow-ups to #550 (saturated bands in colour movie frames)
  | `8d7c19b4` | **YES (rare frames)** | #550 follow-ups: in a transit colour frame whose moving body saturated in a band, the saturation excess now moves with that body's plane (_per_body_planes); the page's gain over 1 excess is shared (gainedExcess) and tested. Export and levels bumped for #550's and this change to movie frames. Benchmark 51/51 identical (no item has such a transit). Its numbers skip #551/#552's. | Every pass (obs bump); films and levels (export, levels bump). | export-v123, levels-v85, obs-v134/v117 | - | clean |
+| 115 | Picture-change map (docs) | `f2498504` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 116 | [#551](https://github.com/siacavazzi/Cassini-Project/pull/551) Titan stills skip fine sharpening
+ | `7de29cdd` | **YES (Titan stills)** | Titan's stills (hazy bodies) are drawn without fine sharpening (frame_server._sharpened). Benchmark: only titan04-composite and titan17-composite change. | Titan's stills, composites and thumbnails (color, proc, thumb bumps); films and levels (export-v124, levels-v86 on this branch). | export-v124, levels-v86, color-v71/v54/v49, proc-v38/v32, thumb-v38 | - | resolved: web/frames/export.py VERSION = "export-v124"   # v124: Titan's stills drawn without fine sharpening (frame_serv;web/frames/export.py LEVELS_VERSION = "levels-v86"   # v86: measured on Titan's stills drawn without fine sharp; |
