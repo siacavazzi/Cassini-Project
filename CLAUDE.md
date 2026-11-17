@@ -41,15 +41,46 @@ default variant, and handles cold passes and exports. A page-side step is a line
 the Python (`web/test_steady_local.py`, `web/frames/test_studio_look.py`), never a second implementation. Read
 `docs/compute-on-viewer.md` before adding a setting that changes pictures.
 
-## Use every free core
+## Heavy jobs go through the limiter; clean up after yourself
 
-Sam's rule (2026-11-09): there is no one-core limit and no cap on parallel renders. Before a render, an
-evidence batch, a test sweep or a check, look at what is already running on each machine (`uptime`, `ps`,
-the farm dashboard) and size the job to the free cores: the MacBook Pro (M5, 18 cores) and the Mac Mini
-(10 cores), split across both when the job divides. When several threads need compute at once, share the
-cores between them rather than each taking one. Background cache builds give way to thread work.
+On 2026-11-16 the MacBook hard-crashed: more than 100 benchmark processes filled its 48 GB of memory, and with
+the disk full there was no room left for swap. Since then:
 
-`OPENBLAS_NUM_THREADS=1` / `OMP_NUM_THREADS=1` are still right where the parallelism comes from many
-processes (prebuild workers, the farm, long-running frame servers), so they don't oversubscribe; a
-one-off job run as a single process should leave BLAS threads at their default or start one process per
-free core.
+- **Every heavy job runs through `~/agents/bin/heavy`**, on both Macs: renders, evidence batches, benchmarks,
+  test sweeps and builds. Use `heavy -n <processes> --name "<thread>: <job>" -- <command>`, and `heavy --status`
+  shows who holds what. The limiter sets the slot count and the per-thread cap (`~/agents/heavy.max`,
+  `~/agents/heavy.cap`) and caps each job's worker counts at its slots. It also waits for disk and memory room: no
+  job starts under 60 GB free on the MacBook (50 GB on the Mini) or without about 2.5 GB of memory per slot, and
+  `heavy-guard` pauses running jobs when either gets low. A job gets its own `TMPDIR`, which is deleted when the
+  job ends. Don't start parallel work outside it.
+- **Each thread deletes what it created as soon as it is done with it**: experiment folders, scratch checkouts and
+  clones, benchmark worktrees, its scratch caches and results, temp files and old evidence (not evidence an open PR,
+  a review or the taste page still links: that stays until the PR is merged or closed or the taste call is
+  answered). That is approved in advance (Sam, 2026-11-16), but for a thread's own files only. Never delete what
+  another thread or Sam created, and a cache or result another thread may reuse stays (benchmark base results, the
+  SPICE cache, `geometry.sqlite`, the replay data, the attitude folders). Never delete the mission zips, the 12-bit
+  originals, `cisscal`, the full-build or live caches, sparsebundles, or Sam's own files. Push or bundle any
+  unpushed commits first.
+- **Evidence is kept only as small final files**: on the PR (committed under `evidence/`) or in the project's
+  shared folder. Working renders and intermediate caches go once the evidence exists.
+- **When a thread finishes, it says what it deleted and how much disk is free** on each Mac it used
+  (`df -h /System/Volumes/Data`).
+
+## Image changes need the benchmark report
+
+Sam's rule (2026-11-13): a pull request that can change a served picture (a picture version bump, or a change to the
+pipeline, calibration, `obs_mosaic`, `reel`, `color_image`, `mosaic`, `stacking` or `frame_server`'s makers) runs the
+image regression benchmark against the `main` it merges into, and attaches its report: the verdict, the table and the
+sheet of every changed item.
+
+```
+python web/frames/image_bench.py run --base origin/main --candidate HEAD --target <items it means to change> \
+    --notes notes.json --hosts local,mini
+```
+
+It merges only when every item builds on both commits, the target items look better, and nothing outside the target
+is worse, by the measures (clipped, crushed, lit, detail, seams, centre) or by eye. Every change outside the target
+must be explained in `--notes`, and the report must show no new over-processing. A `FAIL` verdict blocks the merge.
+`NEEDS EYES` means the reviewer looks at every changed sheet before approving. A defect a PR fixes that is not in the
+set goes into `web/frames/image_bench_items.json` in the same PR. The full rule and how the measures work are in
+`docs/image-benchmark.md`.

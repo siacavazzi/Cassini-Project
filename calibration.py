@@ -43,7 +43,9 @@ overclocks).
 
 Frames that can't be unstretched return None and the caller keeps the old behavior.
 """
+import collections
 import contextlib
+import functools
 import contextvars
 import datetime
 import gzip
@@ -234,13 +236,13 @@ to convert instead of png itself
 """
 def unstretch(png, info, image=None):
     conversion = _value(info, "DATA_CONVERSION_TYPE", "")
-    if conversion not in ("TABLE", "12BIT"):
-        return None  # 8LSB frames only kept the low 8 bits
+    if conversion not in ("TABLE", "12BIT") and original_values(png, info) is None:
+        return None  # 8LSB frames only kept the low 8 bits (and the archive only their stretched PNG)
     if ds.lut8():
-        # the lean archive keeps the camera's codes, so nothing has to be guessed
+        # the lean archive keeps the camera's codes (or the frame's original is at hand), so nothing has to be guessed
         if image is None:
-            return stored_values(png, info)
-        low, high = stored_range(png, info)
+            return full_values(png, info)
+        low, high = value_range(png, info)
         return np.asarray(image, dtype=np.float64) * (high - low) / 254.0 + low
     png = np.asarray(png, dtype=np.float64)
     span = recover_span(png)
@@ -340,6 +342,120 @@ def display_stretch(codes, info):
     return _lookup(codes, np.floor((stored - low) * 254.0 / span + 0.5).astype(np.uint8))
 
 
+ORIGINAL_CONVERSIONS = ("12BIT", "8LSB")   # the frames the lean archive could not keep at full depth (original_values)
+
+
+"""
+Lean archive only: a 12BIT frame's true 12-bit DN where an original of it is at hand (data_source.original_dn: the
+frames re-downloaded from the PDS, CASSINI_ORIGINALS), as float64 on the frame's own grid, else None: the lean archive
+squeezed every 12BIT frame to 256 square-root codes (stored_values), a few DN apart in the dark and 16 at the top.
+Also an 8LSB frame's (the camera sent the low 8 bits of each DN, for a faint scene): the archive has only the old
+stretched PNG of it, which can't be calibrated (unstretch), its original can.
+"""
+def original_values(codes, info):
+    if not ds.lut8() or _value(info, "DATA_CONVERSION_TYPE", "") not in ORIGINAL_CONVERSIONS:
+        return None
+    original = ds.original_dn(info.get("path"), np.shape(codes))
+    if original is None:
+        return None
+    top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
+    if original.min() < 0 or original.max() > top:
+        return None   # (garbled at the source, N1517057759_9: -30277..25243; the stored codes are what there is)
+    if top == 255 and _wrapped(original):
+        return None   # an 8LSB frame whose DN went past 255 kept only their low 8 bits: not the light, left out as before
+    if top == 4095 and not _same_codes(original, codes, info):
+        return None   # not the frame the archive squeezed (a wrong or garbled file): the stored codes are what there is
+    return original.astype(np.float64)
+
+
+ORIGINAL_MIDS = (LUT[:-1] + LUT[1:]) / 2   # the lean archive's squeeze (helper programs/convert_archive.py encode)
+_same = collections.OrderedDict()
+_same_lock = threading.Lock()
+
+
+def _same_codes(original, codes, info):
+    """Whether a 12BIT frame's original squeezes to exactly its stored codes, as the lean archive made them (37 of 37
+    comparison frames do): kept per frame for the last few asked (calibrate asks several times)."""
+    key = (str(info.get("path")), id(original))
+    with _same_lock:
+        if key in _same:
+            return _same[key]
+    codes = np.asarray(codes)
+    same = codes.dtype == np.uint8 and np.array_equal(np.searchsorted(ORIGINAL_MIDS, original).astype(np.uint8), codes)
+    if not same:
+        print(f"The original of {info.get('path')} doesn't squeeze to its stored codes: not used", flush=True)
+    with _same_lock:
+        _same[key] = same
+        while len(_same) > 16:
+            _same.popitem(last=False)
+    return same
+
+
+WRAP_JUMP = (200, 5e-4)   # an 8LSB frame wrapped past 255 DN: neighbouring pixels WRAP_JUMP[0] or more apart on over
+                          # WRAP_JUMP[1] of the frame (a bright patch's edge drops from 255 to 0; the picture pipeline
+                          # audit, 11-16: 301 of the 1,652 8LSB frames)
+
+
+def _wrapped(dn):
+    dn = np.asarray(dn, np.int32)
+    jumps = (np.abs(np.diff(dn, axis=1)) >= WRAP_JUMP[0]).sum() + (np.abs(np.diff(dn, axis=0)) >= WRAP_JUMP[0]).sum()
+    return jumps > WRAP_JUMP[1] * dn.size
+
+
+"""
+Lean archive only: what the camera sent for each pixel at full depth, the one input every picture is calibrated from
+(depth_image): a 12BIT frame's original DN where there is one (original_values), else its stored codes mapped back to
+DN (stored_values); a TABLE frame's codes, all the camera sent. codes = the frame's PNG as stored, info = its label.
+"""
+def full_values(codes, info):
+    original = original_values(codes, info)
+    return stored_values(codes, info) if original is None else original
+
+
+"""
+The smallest and largest of full_values(codes, info): the range depth_image puts on 0..254 and unstretch takes back
+"""
+def value_range(codes, info):
+    original = original_values(codes, info)
+    return stored_range(codes, info) if original is None else (float(original.min()), float(original.max()))
+
+
+"""
+The picture a frame is calibrated from (calibrate's image), at full depth: its stored values (full_values) on the
+scale of its display stretch (display_stretch: the frame's darkest stored code 0, its brightest 254; or those of
+scale = (low, high) in stored values: a repeat put on the scale of the frame it is stacked with), float32 and not
+rounded, resized to 1024 px as label.resize_image resizes a summed frame. calibrate turns it back into the very values
+(unstretch). The display copy (resize_image: 255 levels over the frame's range) is kept for aligning and matching
+frames only: calibrated, its levels were up to 16 DN apart on a 12-bit frame with anything bright in it (a median of
+14), and the darkest 60% of a plume frame went from 5 codes to 2 levels (picture pipeline audit, 11-16). Frames the
+lean archive keeps no camera values for (8LSB, or the old dataset PNGs) are their display copy, as before.
+codes = the frame's PNG as stored (gray)
+"""
+def depth_image(codes, info, scale=None):
+    codes = np.asarray(codes)
+    if codes.ndim == 3:
+        codes = codes[..., 0]
+    # (as label.resize_image sizes the display copy: by the label, and by the picture stored, smaller than its label
+    # says on N1855753770_1, NASA's own IMG 256 x 256 under a 1024 line label: kept at 256, its I/F met the 1024 line
+    # valid mask in load_aligned's line fill)
+    small = int(_value(info, "LINES", "1024") or 1024) < 1024 or codes.shape[0] in (256, 512)   # (the camera's summed sizes)
+    original = original_values(codes, info)
+    if not ds.lut8() or (_value(info, "DATA_CONVERSION_TYPE", "") not in ("TABLE", "12BIT") and original is None):
+        image = display_stretch(codes, info) if ds.lut8() else codes
+        return cv2.resize(image, (1024, 1024), interpolation=cv2.INTER_AREA) if small else image
+    low, high = value_range(codes, info) if scale is None else scale
+    span = float(high - low)
+    if span <= 0:
+        image = np.zeros(codes.shape, np.float32)
+    elif original is None:
+        # per code, looked up (_lookup), as display_stretch does: the same numbers, not rounded
+        table = ((stored_values(CODES, info) - low) * (254.0 / span)).astype(np.float32)
+        image = table[codes] if codes.dtype == np.uint8 else ((stored_values(codes, info) - low) * (254.0 / span)).astype(np.float32)
+    else:
+        image = ((original - low) * (254.0 / span)).astype(np.float32)
+    return cv2.resize(image, (1024, 1024), interpolation=cv2.INTER_AREA) if small else image
+
+
 """
 The frame's bias level, in the units of its stored values (DN for 12BIT frames, codes for TABLE ones): its bias
 strip's mean. A frame that lost lines in transmission can lose its bias strip with them (a strip mean of 0 or
@@ -352,7 +468,7 @@ def bias_of(png, info):
     if lossy and _fsw(info) <= 1.3:
         bias = 0  # the SIS: a lossy frame's strip mean is not valid with flight software 1.2 and 1.3
     if bias <= 0 and ds.lut8():
-        stored = stored_values(png, info)
+        stored = full_values(png, info)
         kept = stored[np.asarray(png) > 0]
         bias = float(np.percentile(kept, 0.1)) if kept.size else 0.0
     return bias
@@ -438,6 +554,34 @@ def overclock_bias(info):
 
 
 """
+The share of its plain frame's I/F a polarized colour frame calibrates to (sets_passes.POLARIZED_SHARE), or None for
+any other frame: a narrow-angle frame through P0, P60 or P120 and a colour filter of that table, in an observation the
+index loaders read as that colour (sets_passes.polarized_index, which stacking.load_index's FILTER_NAME carries).
+"""
+def polarized_share(info, camera):
+    if camera != "ISSNA":
+        return None
+    names = _filters_of(info)
+    import stacking
+    sp = stacking._sets_passes()
+    if len(names) < 2 or sp.polarized_filter(camera, names[0], names[1]) is None:
+        return None
+    global _polarized
+    if _polarized is None:
+        idx = stacking.load_index()
+        got = {}
+        for path, name in zip(idx["path"].tolist(), idx["FILTER_NAME"].tolist()):
+            if isinstance(path, str) and path.startswith("nac") and str(name).startswith("(CL1,"):
+                got[stacking.frame_id(path)] = str(name)
+        _polarized = got
+    frame = os.path.basename(str(info.get("path") or "")).split(".")[0]
+    return sp.POLARIZED_SHARE[names[1]] if _polarized.get(frame) == f"(CL1,{names[1]})" else None
+
+
+_polarized = None   # {frame id: FILTER_NAME as stacking.load_index reads it} of the NAC's CL1 frames (polarized_share)
+
+
+"""
 Calibrates one frame to I/F. Returns None if the frame can't be calibrated.
 png = the frame's PNG as stored in the dataset
 image = optional image on the same scale as png to calibrate instead (see unstretch)
@@ -463,11 +607,15 @@ def calibrate(png, info, image=None, smooth=True):
     # lean archive: every pixel of the 8-bit image (or PNG) is one of 256 codes, so the steps up to the shutter's
     # per column exposure are worked out for the 256 codes and looked up (_lookup): the same numbers, a third of the time
     pixels = np.asarray(png if image is None else image)
-    codes = ds.lut8() and pixels.dtype == np.uint8 and pixels.ndim == 2 and np.asarray(png).size > 0
+    # (a frame whose original is at hand is worked out per pixel: its values are not 256 codes)
+    codes = (ds.lut8() and pixels.dtype == np.uint8 and pixels.ndim == 2 and np.asarray(png).size > 0
+             and original_values(png, info) is None)
     dn = _unstretch_codes(png, info, image) if codes else unstretch(png, info, image)
     if dn is None:
         return None
 
+    # CISSCAL's step 1, the bit weights: the camera's 12-bit converter's uneven steps (bitweighted), before the bias
+    dn = bitweighted(dn, info)
     bias = bias_of(png, info)
     if _value(info, "DATA_CONVERSION_TYPE") == "TABLE":
         dn = np.interp(dn, np.arange(256), LUT)
@@ -548,10 +696,12 @@ def calibrate(png, info, image=None, smooth=True):
         dc.repair_hot(per_second, info, spots, raw == 0 if raw.ndim == 2 else None)
     if smooth:
         per_second = deblock(per_second, pixels, info)
-        if sky is not None and step("skysmooth"):
+        if sky is not None and step("skysmooth") and (SKY_SMOOTH_ORIGINALS or not _smooth_off(info)):
             # on the stored codes (the image a picture is calibrated from is their display stretch, a code several
             # levels apart there)
-            per_second = smooth_sky(per_second, png, sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
+            # (a frame with its original, when SKY_SMOOTH_ORIGINALS turns smoothing on for it: its true DN on the codes'
+            # scale, fractional, so the smoothing's code-step tests see no steps the squeeze made)
+            per_second = smooth_sky(per_second, _smooth_steps(png, info), sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -568,6 +718,11 @@ def calibrate(png, info, image=None, smooth=True):
     per_second *= SUM_FACTORS[mode]
     per_second *= sensitivity
     per_second *= distance ** 2
+    # a polarized colour frame (sets_passes.polarized_index: a visible polarizer frame standing for its colour filter)
+    # brought to its plain frame's I/F, so a set of them has a plain set's colour balance
+    share = polarized_share(info, camera)
+    if share:
+        per_second /= share
     # a summed frame drawn at the picture's size comes this far as blocks, each of the camera's pixels repeated (every
     # step above works camera pixel by camera pixel on them): now enlarged smoothly from the camera's own pixels
     per_second = enlarged(per_second, info)
@@ -588,11 +743,11 @@ SUMMED_ENLARGE = cv2.INTER_CUBIC   # how a summed frame's calibrated picture is 
 """
 A summed frame's calibrated picture enlarged smoothly. The camera summed its pixels 2x2 or 4x4 (512 or 256 lines:
 181,430 frames, 41% of the archive), and the picture is drawn at 1024 px with each camera pixel repeated as a block
-(label.resize_image), which is what the calibration above works on: the bias and dark per camera line, hot pixels and
-lost lines per camera pixel (enlarged smoothly before them, the repairs left short streaks). Here, after all of them and
-before the geometric correction, the blocks are taken back to the camera's own pixels (each block's mean: the flat field
-and the smoothing above vary inside one) and enlarged with SUMMED_ENLARGE. A frame at its own size (the science TIFF's,
-a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped.
+(depth_image, label.resize_image), which is what the calibration above works on: the bias and dark per camera line, hot
+pixels and lost lines per camera pixel (enlarged smoothly before them, the repairs left short streaks). Here, after all
+of them and before the geometric correction, the blocks are taken back to the camera's own pixels (each block's mean:
+the flat field and the smoothing above vary inside one) and enlarged with SUMMED_ENLARGE. A frame at its own size (the
+science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped.
 iof = the calibrated frame (2-D), info = its label
 """
 def enlarged(iof, info):
@@ -604,9 +759,44 @@ def enlarged(iof, info):
     return cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE).astype(iof.dtype, copy=False)
 
 
-LOSSY_RATIO = (6.0, 20.0)  # a lossy frame compressed more than LOSSY_RATIO[0] times has its compression blocks smoothed, all of
+"""
+CISSCAL's bit weight correction (cisscal main.cpp BitweightCorrect, step 1 of Calibrate; ground calibration,
+bitweight/<nac|wac>g<gain state><m10|p5|p25>_bwt.tab): each DN the camera's analog-to-digital converter gave, as the
+level it truly stands for (its steps are not all one DN wide: up to about a tenth of a DN apart from it). As cisscal:
+on frames neither lossy nor TABLE converted (12BIT and 8LSB), gain states 1 to 3 (none for 215 e/DN), the table chosen
+by camera, gain state and front optics temperature (below -5 C m10, below 25 C p5, else p25), before the bias comes
+off. dn = the frame's values (any shape, or the 256-code table calibrate works per code). Unchanged when the tables
+are not there.
+"""
+def bitweighted(dn, info):
+    if (_value(info, "INST_CMPRS_TYPE", "").upper() == "LOSSY"
+            or _value(info, "DATA_CONVERSION_TYPE", "") not in ("12BIT", "8LSB")):
+        return dn
+    gain = GAIN_STATES.get(_value(info, "GAIN_MODE_ID", "").split("ELECTRONS")[0].strip())
+    if not gain:
+        return dn
+    table = _bitweights(_value(info, "INSTRUMENT_ID", ""), gain, ff.temperature_name(info))
+    return dn if table is None else np.interp(dn, np.arange(len(table), dtype=np.float64), table)
+
+
+@functools.lru_cache(maxsize=None)
+def _bitweights(camera, gain, temp):
+    name = f"{'nac' if camera == 'ISSNA' else 'wac'}g{gain}{temp}_bwt.tab"
+    path = os.path.join(ff.ROOT, "bitweight", name)
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        text = f.read().split("\\begindata", 1)[-1]
+    values = np.array([float(v) for v in re.split(r"[,\s]+", text) if v], np.float64)
+    return values if len(values) == 4096 else None
+
+
+LOSSY_RATIO = (6.0, 10.0)  # a lossy frame compressed more than LOSSY_RATIO[0] times has its compression blocks smoothed, all of
                      # LOSSY_SMOOTH from LOSSY_RATIO[1]: at 52 to 1 (the 2005-11-27 Enceladus plumes, 0.22 s) a faint glow is
-                     # a staircase of flat 8 px blocks one code apart, which a picture stretched to show it draws as terraces
+                     # a staircase of flat 8 px blocks one code apart, which a picture stretched to show it draws as terraces.
+                     # Full from 10 to 1 (20 until 11-16): at 10.7 to 1 a third of it left the dim rings of 103RI
+                     # TDIFN45HP001 (W1613182176_1) in blocks a few codes apart, the darkest under the black, so they were
+                     # drawn as ragged dark patches
 LOSSY_SMOOTH = 4.0   # ... towards the frame blurred over this many pixels (sigma, at full resolution),
 LOSSY_STEP = 2.5     # ... only where the stored codes are within this many of that blur, so the blocks' one-code steps go
                      # and edges, stars and real detail (more codes apart) stay as they were
@@ -635,6 +825,31 @@ def deblock(iof, pixels, info):
     return iof + weight * (cv2.GaussianBlur(iof, (0, 0), sigma) - iof)
 
 
+SKY_SMOOTH_ORIGINALS = False  # smooth_sky on a frame calibrated from its true 12-bit original (original_values): off. It keys
+                           # on the archive's squeezed codes, and on the true DN (no code steps, the 2 Hz bands taken off
+                           # by the twohz step) it only painted those codes' contours back in as terraces (2017 plume
+                           # N1876463740_1, 11-16); TABLE frames (8-bit codes, all the camera sent) keep it
+                           # ... decided per build, not per frame: with originals in use (CASSINI_ORIGINALS set) every
+                           # 12BIT frame is left unsmoothed, also the few whose original is missing or rejected (a frame
+                           # its download marked "check"), so no frame of a movie looks smoothed among unsmoothed ones
+
+
+def _smooth_steps(png, info):
+    """What smooth_sky measures a frame's code steps on: its stored codes, or with its original its true values on the
+    codes' scale (fractional): a 12BIT frame's DN through the squeeze's table, an 8LSB frame's DN as they are (the camera's
+    own 0-255 scale; through the 12-bit table they would sit within 0-53 and real detail read as steps)"""
+    original = original_values(png, info)
+    if original is None:
+        return png
+    if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT":
+        return np.interp(original, LUT, np.arange(256.0)).astype(np.float32)
+    return original.astype(np.float32)
+
+
+def _smooth_off(info):
+    return bool(ds.ORIGINALS) and not ds.ORIGINALS_OFF and _value(info, "DATA_CONVERSION_TYPE", "") in ORIGINAL_CONVERSIONS
+
+
 SKY_SMOOTH = LOSSY_SMOOTH  # smooth_sky: the dark sky drawn towards its blur over this many pixels (sigma, at full resolution),
 SKY_STEP = LOSSY_STEP      # ... where the stored codes are within this many of that blur, as deblock does
 SKY_HOLE = 41              # ... with the holes in the dark sky up to about this many pixels across filled (stars)
@@ -648,6 +863,11 @@ SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move furth
                            # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14). Only on the
 SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets: every other frame keeps the smoothing as it was (on all of them,
                            # the change moved Jupiter's approach movie's evening and ring movies' registration)
+SKY_LINE = (32, 0.75)      # the glow's rise and reach are measured from each line's dark sky (its median over that line's
+                           # pixels of the measured dark sky, with at least SKY_LINE[0] of them; a line with fewer takes the
+                           # nearest lines') on a line less than SKY_LINE[1] dark sky, not the whole line's median: on a line mostly across Saturn that median is the
+                           # body, so the limb, cloud belts and ring edges counted as faint glow and were smoothed over
+                           # SKY_GLOW px (a second, darker limb about 10 px inside Saturn's; pipeline audit finding 12)
 
 
 """
@@ -686,8 +906,9 @@ def smooth_sky(iof, png, sky, slopes=False):
     # them it was drawn as flat terraces whose edges the 2 Hz bands scalloped (spot check 7: ISS_279EN_PLUME001_PIE
     # N1876460140_1, Enceladus's plume a stack of blocks); over SKY_GLOW they blend into its slope. A stray light
     # gradient across the frame, a few codes over its width, is smoothed as the rest of the sky
-    # (each line's median taken off first, so the 2 Hz bands themselves are no rise)
-    level = cv2.GaussianBlur(codes - np.median(codes, axis=1, keepdims=True), (0, 0), SKY_LEVEL * iof.shape[1] / 1024)
+    # (each line's dark sky level taken off first, so the 2 Hz bands themselves are no rise)
+    floor = _sky_lines(codes, sky)
+    level = cv2.GaussianBlur(codes - floor, (0, 0), SKY_LEVEL * iof.shape[1] / 1024)
     rise = np.hypot(*np.gradient(level)) * SKY_RAMP * 1024 / iof.shape[1]
     glow = np.clip(2.0 * rise - 1.0, 0, 1).astype(np.float32)
     if glow.any():
@@ -698,9 +919,11 @@ def smooth_sky(iof, png, sky, slopes=False):
         for _ in range(2):
             spread = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
             near = step * np.clip(1 - (np.abs(codes - spread) - 1) / (SKY_STEP - 1), 0, 1).astype(np.float32)
-        spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        # (near's own blur, the weight under both, worked out once)
+        under = np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / under
         # the codes that smoothing would give, against the pixel's own: past SKY_GLOW_MOVE it is a slope, not a step
-        smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / np.maximum(cv2.GaussianBlur(near, (0, 0), wide), 1e-6)
+        smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / under
         if slopes:
             moved = np.abs(smoothed - codes)
             near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
@@ -709,10 +932,31 @@ def smooth_sky(iof, png, sky, slopes=False):
         # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
         # fan was a hard grainy ring (Sam, 11-04: "hard looking artifacts"); a moon's lit side, far brighter, and its
         # texture (more than a code off the wider blur, near) stay as they are
-        over = smoothed - np.median(codes, axis=1, keepdims=True)
+        over = smoothed - floor
         faint = np.clip(2.0 - over / SKY_GLOW_TOP, 0, 1).astype(np.float32)
         weight = np.maximum(weight, glow * near * faint)
     return iof + weight * (blur - iof)
+
+
+"""
+Each line's dark sky level for smooth_sky: on a line less than SKY_LINE[1] dark sky, the median of its stored codes
+over the measured dark sky (sky), from lines with at least SKY_LINE[0] of those pixels (scaled to the frame's width;
+a line with fewer takes the level of the nearest lines that have them); a line mostly of dark sky, its own median. (lines, 1) float32; a frame with no such line falls back on each line's own median.
+"""
+def _sky_lines(codes, sky):
+    sky = np.asarray(sky, dtype=bool)
+    median = np.median(codes, axis=1, keepdims=True)
+    count = sky.sum(axis=1)
+    enough = count >= max(4, SKY_LINE[0] * codes.shape[1] // 1024)
+    if not enough.any():
+        return median
+    # (every line taken has sky pixels, so no all-NaN line)
+    level = np.nanmedian(np.where(sky[enough], codes[enough], np.nan), axis=1)
+    lines = np.arange(codes.shape[0])
+    level = np.interp(lines, lines[enough], level).astype(np.float32)[:, None]
+    # a line mostly of dark sky keeps its own median (its sky's level already): a frame of dark sky with a glow, a
+    # plume or a small moon in it is smoothed exactly as before
+    return np.where((count >= SKY_LINE[1] * codes.shape[1])[:, None], median, level)
 
 
 """
@@ -923,6 +1167,18 @@ def slope_guard(on):
 def slope_guarded(labels):
     return _slopes.get() and step("skysmooth") and any(
         _value(lbl.get_info(), "TARGET_NAME", "") in SKY_SLOPE_BODIES for lbl in labels)
+
+
+def let_go():
+    """What a frame's calibration keeps for the next frame, let go: the WAC distortion correction's plans and maps
+    (geometric_correction: up to 400 MB), the dark model's tables and darks (dark_current: 70 MB a camera mode, 4 MB
+    a readout) and the flat fields (flat_field: 4 MB a map). Each is made again, the same numbers, when a frame next
+    asks for it (a plan 70 ms, a camera mode's dark tables half a second). For the pre-build, which asks once a
+    pass's tiles are made: the pass's solve and the pictures drawn of its tiles calibrate nothing, and held these
+    beside the mosaic being composed, 0.5 GB of the 1.5 GB a WAC colour mosaic pass had allocated at its top
+    (2026-11-16)."""
+    for kept in (gc._plan, gc._map, dc._parameters, dc._dark, ff._map, ff._correction):
+        kept.cache_clear()
 
 
 def step(name):
@@ -1472,6 +1728,9 @@ def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
 A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
 """
 def band_of(info):
+    if polarized_share(info, _value(info, "INSTRUMENT_ID", "")):
+        # a polarized colour frame is its colour filter's (sets_passes.polarized_index)
+        return _filters_of(info)[1]
     return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 
@@ -1481,6 +1740,7 @@ Loads the frames of one color image and puts them on the same brightness scale.
 labels = label objects, one per channel
 images = the channels' images as label.resize_image (or stacking.load_stacked) returns
 them; loaded with resize_image if not given
+deep = optional list, one per label: the picture to calibrate that channel from at full depth (calibrated_each), or None
 iofs = optional list, one per label: an I/F image already calibrated (stacking.load_hdr) to use
 instead of calibrating that channel's image, or None
 scale = optional fixed display scale shared by every picture of a mosaic, a dict with "white"
@@ -1490,24 +1750,28 @@ saturated = with scale, optional list, one per label: the pixels the camera satu
 saturated_of), drawn white, or None
 off_disk = without scale, for a color set drawn in the classic look (color_image.load_aligned): as load_linear's, the
 sky its blacks are measured on when _sky finds too little, so that sky is black in every channel (fix plan D)
+valid = with scale, optional list, one per label: False where the frame lost a pixel in downlink that nothing filled;
+a picture's own black (the scale's black_of) is measured without them
 Returns one BGR uint8 image per label. If every frame calibrates, all channels share one
 stretch so their relative brightness is what the camera measured. Otherwise the images
 are returned unchanged, each with its own stretch as before.
 """
 def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamma=2.2, iofs=None, scale=None,
-                  saturated=None, off_disk=None):
+                  saturated=None, off_disk=None, deep=None, valid=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
-    iofs = _calibrated(labels, images, iofs)
+    iofs = _calibrated(labels, images, iofs, deep)
     if iofs is None:
         return images
     if scale is not None:
         # every picture of a mosaic on the same scale, so tiles and filters keep what the camera saw
         gamma = scale.get("gamma", gamma)
         out, drawn_at = [], []
-        for iof, black in zip(iofs, scale["blacks"]):
-            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale)
-            own = scale["black_of"](iof) if scale.get("black_of") else None
+        for i, (iof, black) in enumerate(zip(iofs, scale["blacks"])):
+            # a picture's own black where the scale measures one on it (obs_mosaic.tile_scale), on its valid pixels
+            # (valid: one mask per label, False where the frame lost a pixel in downlink that nothing filled)
+            mask = valid[i] if valid is not None and i < len(valid) else None
+            own = (scale["black_of"](iof, mask) if mask is not None else scale["black_of"](iof)) if scale.get("black_of") else None
             black, toe = (own["black"], own["toe"]) if own else (black, scale.get("toe"))
             out.append(display(iof, black, scale["white"], gamma, scale.get("shoulder"), toe, hdr=len(iofs) == 1))
             drawn_at.append((black, toe))
@@ -1524,7 +1788,7 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
             if full is not None and full.any():
-                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale["white"], gamma,
+                picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale.get("sat_white") or scale["white"], gamma,
                                                                             scale.get("shoulder"), toe)[..., 0])
         sink = _hdr_sink.get()
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
@@ -1583,7 +1847,10 @@ def saturated_code(iof, full, draw):
     level = np.zeros(count, np.float32)
     smooth = np.zeros(count, np.float32)
     if count > 1:
-        level[1:] = ndimage.median(iof, labels, index)
+        # (each patch's median from the saturated pixels alone: ndimage.median sorts every pixel it is given by label
+        # and value, and given the whole frame it sorted a million of them for a handful of saturated ones, 0.3 to
+        # 0.5 s a frame; a patch's pixels are the same either way, so is its median)
+        level[1:] = ndimage.median(iof[full], labels[full], index)
         near = near.astype(np.int32)
         on = ring & (near > 0)
         if on.any():
@@ -1623,16 +1890,19 @@ def neutral_display(imgs, gamma=2.2):
 
 
 """
-Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated
+Each channel's I/F image, calibrating those not given; None for a frame that can't be calibrated.
+Each is calibrated at full depth: from deep's picture for it (color_image.load_aligned: its stack at full depth,
+stacking.load_stacked's deep, filled as its display copy was), or where there is none from the frame's own stored
+values (depth_image), never from its display copy in images (255 levels over its range: the dark codes merged)
 """
-def calibrated_each(labels, images, iofs=None):
+def calibrated_each(labels, images, iofs=None, deep=None):
     given = iofs or [None] * len(labels)
+    deep = deep or [None] * len(labels)
     iofs = []
-    for lbl, image, iof in zip(labels, images, given):
+    for lbl, image, iof, picture in zip(labels, images, given, deep):
         if iof is None:
             png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-            iof = calibrate(png, lbl.get_info(), gray)
+            iof = calibrate(png, lbl.get_info(), depth_image(png, lbl.get_info()) if picture is None else picture)
         iofs.append(iof)
     return iofs
 
@@ -1640,8 +1910,8 @@ def calibrated_each(labels, images, iofs=None):
 """
 The channels' I/F images (float32), calibrating those not given; None if any frame can't be calibrated
 """
-def _calibrated(labels, images, iofs=None):
-    iofs = calibrated_each(labels, images, iofs)
+def _calibrated(labels, images, iofs=None, deep=None):
+    iofs = calibrated_each(labels, images, iofs, deep)
     if any(iof is None for iof in iofs):
         failed = [lbl.get_info().get("path") for lbl, iof in zip(labels, iofs) if iof is None]
         print(f"Can't calibrate {failed}, using the stretched frames")
@@ -1661,10 +1931,10 @@ off_disk = for a color set, a function of its channels' I/F giving where its sky
 asked only when _sky finds under a tenth of the frame is sky (color_image.dim_off_disk)
 returns (channels, margin, the channel mix (color_mix) or None), or None when a frame can't be calibrated or there is nothing to draw
 """
-def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=None):
+def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=None, deep=None):
     if images is None:
         images = [lbl.resize_image() for lbl in labels]
-    iofs = _calibrated(labels, images, iofs)
+    iofs = _calibrated(labels, images, iofs, deep)
     if iofs is None:
         return None
     # the sky is measured once, for the scale and the toe below
@@ -1823,6 +2093,9 @@ not is filled from those (fill_saturated), so channels that clipped at different
 cyan (a saturated limb, Hyperion's bright side) and the surface the others saw stays; where every channel saturated,
 neutral white.
 """
+still_look = contextvars.ContextVar("still_look", default=None)   # color_image.load_aligned: a Saturn picture's look
+
+
 def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None):
     every = None
     if saturated is not None and any(m is not None and m.any() for m in saturated):
@@ -1849,6 +2122,25 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
         if TOE_NEUTRAL and (k < 1).any():
             gray = x.mean(axis=0)
             x += (gray - x) * (1 - k * k * (3 - 2 * k))
+    look = still_look.get()
+    if look and look.get("headroom"):
+        # Saturn's atmosphere (obs_mosaic.saturn_look): white given headroom over the disk's, so its bright half is not
+        # rolled off by the shoulder into a few levels (what the camera saturated is still drawn white, below)
+        # ... on the body's disk only where SPICE puts it (look["disk"]: x, y, radius px at 1024; obs_mosaic.ring_white
+        # for a movie): the rings and the sky round it keep today's white, eased over RING_SOFT of the radius at the limb
+        h = np.float32(1 / look["headroom"])
+        if look.get("disk"):
+            k = x.shape[2] / 1024
+            cx, cy, r = (v * k for v in look["disk"])
+            r *= 1.0   # (obs_mosaic.RING_DISK)
+            soft = 0.06   # (obs_mosaic.RING_SOFT; obs_mosaic imports this module, so the value is kept here too)
+            ys = np.arange(x.shape[1], dtype=np.float32)[:, None] - np.float32(cy)
+            xs = np.arange(x.shape[2], dtype=np.float32)[None, :] - np.float32(cx)
+            t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - soft))) / np.float32(2 * soft * r), 0, 1)
+            on = 1 - t * t * (3 - 2 * t)
+            x *= (1 - (1 - h) * on).astype(np.float32)
+        else:
+            x *= h
     eased = eased_gamma(gamma, lit_median(x.max(axis=0)))
     # HDR (hdr_capture): the picture's brightness before the shoulder and the clip below, white = 1 (a new array:
     # x itself is not touched, so the picture drawn is the same with HDR on or off)

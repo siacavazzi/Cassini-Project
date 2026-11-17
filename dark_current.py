@@ -41,6 +41,7 @@ import functools
 import glob
 import math
 import os
+import threading
 import warnings
 
 import cv2
@@ -306,17 +307,34 @@ def _sum_blocks(p, lines):
     return p if k == 1 else p.reshape(p.shape[0], lines, k, lines, k).sum(axis=(2, 4))
 
 
-@functools.lru_cache(maxsize=4)
+_parameters_lock = threading.Lock()
+
+
 def _parameters(camera, lines, hot):
+    """_parameters_made's maps, made by one thread at a time: a pass's first frames are calibrated two at once
+    (obs_mosaic.pass_scale's read), and both threads found the maps not made yet and each made them (lru_cache keeps
+    an answer, it does not make a second caller wait for the first's)."""
+    with _parameters_lock:
+        return _parameters_made(camera, lines, hot)
+
+
+@functools.lru_cache(maxsize=4)
+def _parameters_made(camera, lines, hot):
     """The dark parameter maps (8, lines, samples) with the hot pixels put in, and their FFTs down each column. As
     cisscal's makedarkarray: the full resolution maps, each listed hot pixel's curve put in at its own pixel, the WAC's
     0 s map taken as none, then for a summed mode each k x k block summed (ISIS reads its pre-summed cubes and puts a
-    hot pixel's curve in place of the whole block's sum)."""
+    hot pixel's curve in place of the whole block's sum).
+    Made a map at a time where it can be, so making them takes little more memory than they do: all eight maps'
+    FFTs at once, in double precision, took 400 MB (the maps zero-padded to twice their lines, 134 MB, and their
+    spectra, 268 MB) to leave 67 MB: 537 MB at the highest point of making the 1024 line maps, 185 MB now. Two
+    threads doing so at once were the highest point of a build process's memory (2026-11-16; the same numbers to
+    the bit, web/test_dark_maps_once.py)."""
     path = os.path.join(ff.ROOT, "darkcurrent", f"{'nac' if camera == 'ISSNA' else 'wac'}_dark_parameters.full.cub")
     if not os.path.exists(path):
         ff._warn(f"{os.path.basename(path)} missing, no dark current")
         return None
-    full = np.nan_to_num(ff.read_cube(path).astype(np.float64))
+    full = ff.read_cube(path).astype(np.float64)
+    np.nan_to_num(full, copy=False)
     if camera == "ISSWA":
         full[0] = 0.0       # the WAC's dark at 0 s is taken as none (the NAC's has negatives near its left edge)
     p = _sum_blocks(full, lines)
@@ -331,8 +349,16 @@ def _parameters(camera, lines, hot):
                 curve = np.concatenate([[0.0], curve[1:]])
             # what the hot pixel adds over the map's own value there, onto its block
             p[:, y // k, x // k] += curve - full[:, y, x]
-    spectra = np.fft.rfft(p, n=2 * lines, axis=1).astype(np.complex64)
+    full = None
+    # (each map's transform on its own: the same transforms of the same columns as all eight at once)
+    spectra = np.empty((p.shape[0], lines + 1, p.shape[2]), np.complex64)
+    for b in range(p.shape[0]):
+        spectra[b] = np.fft.rfft(p[b], n=2 * lines, axis=0)
     return p[0].astype(np.float32), spectra
+
+
+# (as when _parameters was the cached function itself: what keeps the maps is cleared and read through it)
+_parameters.cache_clear, _parameters.cache_info = _parameters_made.cache_clear, _parameters_made.cache_info
 
 
 """
@@ -344,6 +370,8 @@ def dark_dn(info):
     return None if r is None else _dark(r)
 
 
+# (kept from frame to frame, as _parameters' tables above are: calibration.let_go lets both go once a pass's tiles
+# are made; a maker kept like these belongs in its list)
 @functools.lru_cache(maxsize=16)
 def _dark(r):
     camera, lines, gain = r[0], r[1], r[2]

@@ -1,0 +1,7 @@
+SATURN_ISS_108RI_MNRNGSHAD005_PRIME_N_0 kind movie tossup True mosaic False frames 29
+22 mosaic pictures at 1024 in the cache
+  frame 3 asks for CL1-CL24_mcd643078_5281_460_16628_12214-rr1-pr1.webp - not in the cache
+  frame 4 asks for CL1-CL25_mcd643078_5281_460_16628_12214-rr1-pr1.webp - not in the cache
+  frame 9 asks for CL1-CL210_m462e3fc2_5281_460_16628_12214-rr1-pr1.webp - not in the cache
+  frame 11 asks for CL1-CL212_m0b602647_5281_460_16628_12214-rr1-pr1.webp - not in the cache
+asked by a fresh process: 10 found, 19 not made, 0 with no mosaic yet

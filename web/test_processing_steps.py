@@ -13,12 +13,13 @@ import stacking  # noqa: E402
 # every step on: no variant, and the cache folders keep their names (the pre-built cache stays valid)
 assert cal.variant() == "" and all(cal.step(s) for s in cal.STEPS)
 assert reel.version() == reel.VERSIONS["balanced"] + "-q95"
+# (a Saturn pass that is not a ring observation has the Saturn look: SATURN_TAG after its name, #527)
 u = {"key": ("SATURN", "ISS_OBS", "N"), "repeat_gap": obs_mosaic.mosaic_benchmark.REPEAT_GAP}
-assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N"
+assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N" + obs_mosaic.SATURN_TAG
 # steps off: one name per set of steps whatever the order asked, unknown names ignored
 with cal.stepping("align,stack,bogus"):
     assert cal.variant() == "-off-stack-align" and not cal.step("stack") and cal.step("hdr")
-    assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-off-stack-align-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N"
+    assert obs_mosaic.folder(u, "/c") == f"/c/{obs_mosaic.VERSIONS['balanced']}-off-stack-align-q{obs_mosaic.QUALITY}/SATURN_ISS_OBS_N" + obs_mosaic.SATURN_TAG
     assert reel.version() == reel.VERSIONS["balanced"] + "-off-stack-align-q95"
     m = cal.mode()
 assert cal.variant() == ""
@@ -72,9 +73,11 @@ for t, (band, dx) in enumerate((("RED", 0), ("GRN", 6), ("BL1", 12))):
     png = np.clip(iof / 0.5 * 254, 0, 254).astype(np.uint8)
     png[40:44] = 0
     made[f"nac_data/N{t}_1.png"] = (Label(band, t), png, iof)
-stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False: \
-    (made[path][0], made[path][1].copy(), 1) + ((made[path][0].valid_mask(),) if valid else ())
+stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False, deep=False: \
+    (made[path][0], made[path][1].copy(), 1) + ((made[path][0].valid_mask(),) if valid else ()) + \
+    ((np.asarray(made[path][1], np.float32)[..., 0] if np.ndim(made[path][1]) == 3 else np.asarray(made[path][1], np.float32),) if deep else ())
 cal.calibrate = lambda png, info, image=None: next(v[2] for v in made.values() if v[0].info is info)
+cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 cal.ds.imread = lambda path, flags=None: made[path][1]
 
 
@@ -105,8 +108,8 @@ for p, lb in labels.items():
     made[p] = (lb, np.full((H, H), 100, np.uint8), np.full((H, H), 0.1, np.float32))
 stacking.find_repeats = lambda path, window=120, max_frames=5: asked.append(max_frames) or [p for p, _ in repeats[path]][:max_frames]
 stacking.lh.label = lambda p, as_png=True: labels[p]
-stacking.ic.find_shift = lambda a, b, r: None
-stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing, so merged unmatched
+stacking.ic.find_shift = lambda a, b, r: (0.0, 0.0)   # the frames line up as they are (one nothing lines up is left out)
+stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing
 cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 stacking.cal = cal
 _, _, n = stacking.load_hdr("a.png")

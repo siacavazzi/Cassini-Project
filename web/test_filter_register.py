@@ -3,6 +3,11 @@ a few pixels off lands on its pointing's first tile, through image_correction.al
 disk with a sharp limb, the second filter darker and placed (3.4, -2.2) px off. Run: python web/test_filter_register.py"""
 import sys; import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import numpy as np
 import cv2
 from PIL import Image
@@ -61,6 +66,9 @@ cyc = {"frames": [("m", "N1809549745_1", "MT3", 0.0, 889, 10.0, 10.0, 100000.0),
                   ("r", "N1809549801_1", "RED", 83.0, 649, 10.0, 10.0, 100000.0),
                   ("g", "N1809549856_1", "GRN", 138.0, 568, 10.0, 10.0, 100000.0),
                   ("b", "N1809549926_1", "BL1", 205.0, 451, 10.0, 10.0, 100000.0)], "z": 100000.0, "key": u["key"]}
+# (the rule under test is the wavelength one: no frame of the cycle is taken as carried, though two of these real ids
+# are in JPL's list (#543's own_pointing_frames), which C8's _carried, #506, would otherwise let lead)
+cyc["_carried"] = frozenset()
 assert [obs_mosaic._register_to(cyc, n) for n in range(4)] == [None, 0, 1, 2], [obs_mosaic._register_to(cyc, n) for n in range(4)]
 print("nearest band: ok")
 
