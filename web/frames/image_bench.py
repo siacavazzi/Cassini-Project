@@ -384,6 +384,14 @@ class Builder:
             a.close()
             b.close()
         self.cfg = {**self.cfg, "env": {**self.cfg["env"], "CASSINI_GEOMETRY_CACHE": dst}}
+        # the copy refreshed at this commit, once, before any item is built: frames stored with other pointing than
+        # the commit's worked out again (bootleg_autonav.refresh_stale, where the commit has it), so the commit plans
+        # the same in a cold build and a warm one
+        code = os.path.join(self.wt, "web", "frames")
+        if os.path.exists(os.path.join(self.wt, "bootleg_autonav.py")):
+            subprocess.run([self.cfg["python"], "-c", "import bootleg_autonav as ba; f = getattr(ba, 'refresh_stale', None); "
+                            "n = f() if f else 0; print(f'private geometry: {n} stale frames worked out again')"],
+                           cwd=self.wt, env=job_env(self.cfg), check=False)
 
     def done_items(self):
         """Items build.json lists AND whose folder still holds meta.json.

@@ -1296,6 +1296,10 @@ def main():
     _tables_out = args.tables_out
     if spans_of(args) or args.only:   # before any pass is listed: a slice's run lists its own observations' passes
         _scope[0] = (spans_of(args), args.only)
+    # frames stored with other pointing than this code's worked out again first, once (one writer: the lock in
+    # refresh_stale; the processes procs starts find nothing left), before any pass is grouped or planned
+    import bootleg_autonav
+    bootleg_autonav.refresh_stale()
     if args.phase == "count":
         ids, sets, passes, movies = frame_ids(), page_sets(), mosaic_passes(), movie_passes()
         spans = spans_of(args)

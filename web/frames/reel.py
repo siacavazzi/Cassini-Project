@@ -133,6 +133,14 @@ def load_index():
     # where SPICE puts each frame (the geometry cache, when there is one), so a set ends where the camera moves on to
     # the next pointing of a mosaic
     at = geometry(idx["id"].tolist())
+    # (a row worked out with other pointing than this code's groups and plans a pass otherwise than the same row
+    # worked out again: never read silently; refresh_stale is run by whatever starts a build, before this)
+    import bootleg_autonav as ba
+    stale = ba.stale_frames()
+    if stale:
+        print(f"WARNING: {len(stale)} frames of the geometry cache were stored with other pointing than this code's "
+              f"({stale[0]}...): run bootleg_autonav.py geometry --stale first; passes holding them plan otherwise once "
+              f"their tiles work them out again", flush=True)
     places = None
     if at:
         # a frame wholly on its target's disk has no place (sets_passes.pointing: on a close flyby the centre
