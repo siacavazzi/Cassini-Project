@@ -72,7 +72,8 @@ import label_handler  # noqa: E402
 # obs-v122/v105/v91: CISSCAL's bit weight step (#532, calibration.bitweighted)
 # obs-v123/v106/v92: flat fields for NAC UV2/CL2 from the PDS slope file and fallback flats for pairs with no slope file (#493; renumbered on the integration branch)
 # obs-v124/v107/v93: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges (#497; renumbered on the integration branch)
-VERSIONS = {"balanced": "obs-v124", "raw": "obs-v107", "eye": "obs-v124-eye", "false": "obs-v124-false", "classic": "obs-v93-classic"}
+# obs-v125/v108/v94: a repeat find_shift can't line up is matched near SPICE's place first (guided_shift phase or centroid), else merged as taken where SPICE puts it here; frames wholly on the disk sized by the ground's range (repeats and colour sets); v89/v103/v120: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges (#529; renumbered on the integration branch)
+VERSIONS = {"balanced": "obs-v125", "raw": "obs-v108", "eye": "obs-v125-eye", "false": "obs-v125-false", "classic": "obs-v94-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame

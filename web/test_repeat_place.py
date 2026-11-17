@@ -152,9 +152,15 @@ stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, b
 asked = {}
 stacking.find_repeats = lambda p, window=120, max_frames=5: asked[p]
 stacking.ic.find_shift = lambda a, b, r: None   # nothing lines up (faint frames of empty sky)
+stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: (None, "not aligned")   # ... not even near SPICE's place
 asked[path(bracket[0])] = [path(bracket[0]), path(bracket[1]), path(step), path(unplaced)]
 _, _, n = stacking.load_hdr(path(bracket[0]))
+assert n == 2, n   # the bracket's other exposure, as taken (SPICE puts it here); not the step, nor the unplaced frame
+# ... and lined up where the fallback near SPICE's place matches it (image_correction.guided_shift)
+stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: ((float(guess[0]), float(guess[1])), "phase near SPICE")
+_, _, n = stacking.load_hdr(path(bracket[0]))
 assert n == 2, n   # the bracket's other exposure; not the step, nor the frame SPICE couldn't place
+stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: (None, "not aligned")
 stacking.ic.find_shift = lambda a, b, r: (0.0, 0.0)   # everything lines up: still never the step's other pointing
 _, _, n = stacking.load_hdr(path(bracket[0]))
 assert n == 3, n
