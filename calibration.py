@@ -1647,6 +1647,10 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         if disk_sky is not None and disk_sky.mean() > share:
             sky = disk_sky
     levels, margin, white, measured = _balanced_scale(iofs, share, sky=sky, floor=floor, glow=glow)
+    if white > 0 and all(overexposed(lbl.get_info()) for lbl in labels):
+        # frames the planners exposed past full well on purpose: white from what the camera did not saturate
+        white = unsaturated_white(iofs, levels, margin, white,
+                                  [saturated_of(lbl, iof.shape[:2]) for lbl, iof in zip(labels, iofs)])
     if white <= 0:
         return None
     channels = [(iof - np.float32(level)) / np.float32(white) for iof, level in zip(iofs, levels)]
@@ -2103,6 +2107,64 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
     white = max(float(np.percentile(b[lit], WHITE_PCT)) for b in blurred)
     white = max(white, max(float(b.max()) for b in blurred) / MAX_STRETCH)
     return levels, margin, white, measured
+
+
+OVEREXPOSED = 100.0   # a frame whose label forecasts its brightest signal past this share (%) of full well was exposed
+                      # past full well on purpose (EXPECTED_MAXIMUM's first value: the planners knew the bright body would
+                      # blow out and exposed that long for something faint beside it: Enceladus's plumes, Enceladus in
+                      # Saturn's shadow, the F and D ring movies; 24,789 frames)
+OVEREXPOSED_SATURATED = 0.05   # ... and under this share of the picture really saturated (with a third of it blown out
+                      # there is little left to show, and a lower white only sends more of it to white)
+OVEREXPOSED_GAIN = 4.0   # ... is drawn on the white of what the camera did not saturate, at most this many times brighter
+                      # (unsaturated_white). Sam's taste call 24 (2026-11-17), B of three shown on ten frames: as it was
+                      # (the plume a faint smudge under a white set by the blown-out crescent), at most 4 times (the plume
+                      # plain, the sky still dark), at most 16 times (banding and grain in the sky)
+OVEREXPOSED_NEAR = 4  # px round a saturated pixel left out with it (the charge it bled)
+
+
+"""
+The label's forecast of the frame's brightest signal, as a percent of full well (EXPECTED_MAXIMUM's first value), or
+None where the label has none ("UNK")
+"""
+def expected_maximum(info):
+    m = re.match(r"\(?\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)", _value(info, "EXPECTED_MAXIMUM", "") or "")
+    return float(m.group(1)) if m else None
+
+
+def overexposed(info):
+    """True for a frame its label says was exposed past full well on purpose (OVEREXPOSED)"""
+    forecast = expected_maximum(info)
+    return forecast is not None and forecast > OVEREXPOSED
+
+
+"""
+The white of a picture whose frames were all exposed past full well on purpose (overexposed), when little of it really
+saturated (OVEREXPOSED_SATURATED): the WHITE_PCT percentile of what the camera did not saturate (after the same 3x3
+median, above the picture's black, the saturated pixels and the OVEREXPOSED_NEAR px round them left out), no more than
+OVEREXPOSED_GAIN times under the white given, and never over it. The white given is set by the blown-out sliver of the
+body, which leaves the faint thing the frame was taken for near black; the saturated pixels are drawn white either way
+(draw_saturated). Passes (obs_mosaic.pass_scale) keep their own white.
+iofs, levels, margin, white = as _balanced_scale has them; masks = each frame's saturated pixels (saturated_of) or None
+"""
+def unsaturated_white(iofs, levels, margin, white, masks):
+    masks = [np.asarray(m, bool) for m in masks if m is not None and np.shape(m) == iofs[0].shape[:2]]
+    if not masks:
+        return white
+    blown = np.logical_or.reduce(masks)
+    if not 0 < blown.mean() < OVEREXPOSED_SATURATED:
+        return white
+    side = 2 * OVEREXPOSED_NEAR + 1
+    near = cv2.dilate(blown.astype(np.uint8), np.ones((side, side), np.uint8)) > 0
+    faint = None
+    for iof, level in zip(iofs, levels):
+        left = cv2.medianBlur(np.asarray(iof, np.float32) - np.float32(level + margin), 3)
+        seen = ~near & (left > 0)
+        if seen.sum() > 500:
+            top = float(np.percentile(left[seen], WHITE_PCT))
+            faint = top if faint is None else max(faint, top)
+    if faint is None:
+        return white
+    return min(white, max(faint, white / OVEREXPOSED_GAIN))
 
 
 """
