@@ -58,7 +58,7 @@ labels = {p: Label(p) for p in EXPOSURES}
 stacking.find_repeats = lambda path, window=120, max_frames=5: ["long.png", "short.png"][:max_frames]
 stacking.lh.label = lambda p, as_png=True: labels[p]
 stacking.ic.find_shift = lambda a, b, r: (0.0, 0.0)
-stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}
+stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}
 stacking.ds.imread = lambda path, flags=None: codes_of(path)
 cal.calibrate = lambda codes, info, image=None: codes.astype(np.float32) / np.float32(info["EXPOSURE_DURATION"])
 cal.ds.lut8 = lambda: False   # cal.saturated as it is for 8 bit frames: codes at 254 and over
