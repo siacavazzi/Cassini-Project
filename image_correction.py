@@ -589,7 +589,8 @@ def _loop(orig, masks, ref, shifts, hows, guess):
     sa, sb = shifts[a], shifts[b]
     g = None
     if guess is not None and guess[a] is not None and guess[b] is not None:
-        g = (guess[b][0] - guess[a][0], guess[b][1] - guess[a][1])
+        fa, fb = getattr(guess[a], "fixed", (0.0, 0.0)), getattr(guess[b], "fixed", (0.0, 0.0))
+        g = Guess(guess[b][0] - guess[a][0], guess[b][1] - guess[a][1], (fb[0] - fa[0], fb[1] - fa[1]))
     if sa is None and sb is None:
         return
     sab, how = _match(orig[a], orig[b], g, masks[a], masks[b])
@@ -726,9 +727,27 @@ returns ((dx, dy), "SPICE") or (None, "not aligned")
 SPICE_SURE = 2.0   # px: an offset this small is taken as it is (no shift or SPICE's differ by less than a fringe)
 
 
+"""
+SPICE's offset of a frame (dx, dy) that also says how much of it is the camera's own (fixed: the wide-angle camera's
+filter offsets, color_image.WAC_FILTER_OFFSETS, known to a fraction of a pixel): spice_shift takes an offset whose
+remainder past that is under SPICE_SURE as it is, as it took a small offset before the filters were known. A WAC
+GRN/BL1 pair SPICE says moved 0.4 px is 3.5 px apart with the filters, and that is no less sure.
+"""
+class Guess(tuple):
+    def __new__(cls, dx, dy, fixed=(0.0, 0.0)):
+        guess = super().__new__(cls, (dx, dy))
+        guess.fixed = (float(fixed[0]), float(fixed[1]))
+        return guess
+
+    def __getnewargs__(self):
+        # (copy and pickle make it again from these: tuple's own would pass one argument)
+        return (self[0], self[1], self.fixed)
+
+
 def spice_shift(im1, im2, mask1, mask2, guess):
     gx, gy = float(guess[0]), float(guess[1])
-    if np.hypot(gx, gy) <= SPICE_SURE:
+    fx, fy = getattr(guess, "fixed", (0.0, 0.0))
+    if np.hypot(gx - fx, gy - fy) <= SPICE_SURE:
         return (gx, gy), "SPICE"
     if np.hypot(gx, gy) <= GUESS_MAX and \
             _agreement(im1, im2, mask1, mask2, (gx, gy)) > _agreement(im1, im2, mask1, mask2, (0.0, 0.0)) + AGREE_MARGIN:

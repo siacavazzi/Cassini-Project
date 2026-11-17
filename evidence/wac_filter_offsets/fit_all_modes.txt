@@ -1,0 +1,21 @@
+WAC channel matches used: 19931
+offset per filter (frame px as drawn, relative to CL1,GRN):
+   CL1,GRN    (+0.00, +0.00)   in 9458 matches
+   CL1,RED    (+2.00, +1.19)   in 8702 matches
+   CB2,CL2    (+2.36, -0.87)   in 6130 matches
+   CL1,BL1    (+2.08, -1.63)   in 5042 matches
+   MT2,CL2    (+2.49, -0.44)   in 3477 matches
+   CL1,VIO    (+2.15, -1.73)   in 1910 matches
+   CB3,CL2    (+2.61, -0.55)   in 1853 matches
+   MT3,CL2    (+2.64, -0.47)   in 1641 matches
+   CL1,IR1    (+2.19, +1.12)   in 917 matches
+   IR2,IR1    (+0.25, +0.27)   in 461 matches
+SPICE's offset against the picture match, all matches: before median 2.41 p90 5.05 px; with the table median 1.38 p90 4.45 px
+held-out half of the sets: before median 2.41 px; with a table fitted on the other half median 1.38 px, p90 4.40
+   2004-2008          n= 12392  own fit: RED (+2.0,+1.2), BL1 (+2.2,-1.4), VIO (+2.2,-1.8), CB2 (+2.4,-0.8), MT2 (+2.5,-0.3)   with the one table: median 1.15 px (before 2.35)
+   2009-2012          n=  2954  own fit: RED (+1.9,+1.0), BL1 (+2.0,-1.5), VIO (+1.2,-1.2), CB2 (+2.2,-1.2), MT2 (+2.4,-0.7)   with the one table: median 1.73 px (before 2.38)
+   2013-2017          n=  4585  own fit: RED (+1.7,+1.2), BL1 (+1.6,-2.5), VIO (+1.4,-2.0), CB2 (+1.5,-1.7), MT2 (+1.7,-1.5)   with the one table: median 1.91 px (before 2.77)
+   FULL               n= 14894  own fit: RED (+2.0,+1.2), BL1 (+2.1,-1.3), VIO (+2.2,-1.7), CB2 (+2.4,-0.8), MT2 (+2.5,-0.3)   with the one table: median 1.27 px (before 2.36)
+   SUM2               n=  2961  own fit: RED (+2.0,+1.3), BL1 (+1.6,-2.4), VIO (+2.1,-2.0), CB2 (+1.4,-0.7), MT2 (+1.6,-0.8)   with the one table: median 1.27 px (before 2.72)
+   SUM4               n=  2076  own fit: RED (+0.1,+0.0), BL1 (+0.2,-4.1), VIO (+0.1,-4.4), CB2 (+0.2,-4.4), MT2 (+0.2,-4.5)   with the one table: median 2.33 px (before 3.42)
+   2000-2001 Jupiter  n=  2594  own fit: RED (+2.1,+1.2), BL1 (+2.4,-2.1), VIO (+2.2,-1.8), CB2 (+2.6,-1.1), MT2 (+2.0,-2.0)   with the one table: median 0.38 px (before 2.69)
