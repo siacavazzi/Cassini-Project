@@ -142,7 +142,7 @@
     // filters, clip}; W: the planes' width. A two-filter set (its recipe lists the first filter's tile twice): green
     // the two's mean in linear light (calibration.two_bands). A band clipped where another is not: filled from the
     // others first (fillClipped), as colour_picture does
-    function mix(planes, c, W) {
+    function mix(planes, c, W, excess = null) {
       const f = Math.fround, N = planes[0].length, out = new Uint8ClampedArray(N), g = c.gamma, srgb = g === "srgb";
       const gf = srgb ? 0 : f(g), ig = srgb ? 0 : f(1 / g);
       const dec = new Float32Array(256);
@@ -182,7 +182,10 @@
       const clipped = rgb.map(b => { const m = new Uint8Array(P); let any = false; for (let p = 0; p < P; p++) if (b[p] >= CLIP_FROM && alpha[p] > 0) { m[p] = 1; any = true; } return any ? m : null; });
       const same = (a, b) => { if (!a || !b) return a === b; for (let p = 0; p < P; p++) if (a[p] !== b[p]) return false; return true; };
       if (clipped.some(m => m) && !(same(clipped[0], clipped[1]) && same(clipped[0], clipped[2]))) {
-        const lin = fillClipped(rgb, clipped.map(m => m || new Uint8Array(P)), dec, W, P / W, c.clip || CLIP_DEFAULT);
+        // (excess: each plane's saturation excess, its frame's kept .sat.webp, colour_picture's sat; a two-filter
+        // set's green has none)
+        const ex = excess && excess.some(e => e) ? [excess[0], c.filters && c.filters.length === 2 ? null : excess[1], excess[2]] : null;
+        const lin = fillClipped(rgb, clipped.map(m => m || new Uint8Array(P)), dec, W, P / W, c.clip || CLIP_DEFAULT, ex);
         for (let p = 0, i = 0; p < P; p++, i += 4) {
           const v = [lin.x[0][p], lin.x[1][p], lin.x[2][p]];
           if (M) for (let k = 0; k < 3; k++) y[k] = f(f(f(M[k][0] * v[0]) + f(M[k][1] * v[1])) + f(M[k][2] * v[2]));
@@ -286,8 +289,9 @@
     // and up) where another is not filled from the others (calibration.fill_saturated, reach CLIP_REACH of the
     // picture's side), never under what it read (away from its clipping's rim, EDGE px) unless it clipped over most of the lit picture (mostly_saturated),
     // eased in from CLIP_FROM to white. {x: the three bands, every: where all three clipped, or null}
-    function fillClipped(rgb, masks, dec, W, H, clip) {
-      const f = Math.fround, P = W * H, [CLIP_FROM, CLIP_REACH, FILL_NEAR, FILL_FLOOR, FILL_MOST] = clip, EDGE = clip.length > 5 ? clip[5] : 0;
+    function fillClipped(rgb, masks, dec, W, H, clip, excess = null) {
+      const f = Math.fround, P = W * H, [CLIP_FROM, CLIP_REACH, FILL_NEAR, FILL_FLOOR, FILL_MOST] = clip;
+      const EDGE = excess ? (clip.length > 6 ? clip[6] : 2) : (clip.length > 5 ? clip[5] : 0);
       const x = rgb.map(b => { const o = new Float32Array(P); for (let p = 0; p < P; p++) o[p] = dec[b[p]]; return o; });
       const top = new Float32Array(P);
       for (let p = 0; p < P; p++) top[p] = Math.max(x[0][p], x[1][p], x[2][p]);
@@ -337,9 +341,10 @@
       // colour_picture: never under what the band read (but a band clipped over most of it), eased in from CLIP_FROM
       const span = f(255 - CLIP_FROM);
       x.forEach((c, i) => {
-        const fl = filled[i], keep = mostly(masks[i]), b = rgb[i];
+        const fl = filled[i], keep = mostly(masks[i]), b = rgb[i], e = excess ? excess[i] : null;
         for (let p = 0; p < P; p++) {
-          const v = keep ? fl[p] : Math.max(fl[p], c[p]);
+          // (never under what the band read, less its saturation excess: the white its saturated pixels were drawn)
+          const v = keep ? fl[p] : Math.max(fl[p], e ? Math.max(f(c[p] - e[p]), 0) : c[p]);
           let w = Math.min(Math.max(f(f(b[p] - CLIP_FROM) / span), 0), 1);
           w = f(f(w * w) * f(3 - f(2 * w)));
           c[p] = f(c[p] + f(w * f(v - c[p])));
@@ -385,8 +390,8 @@
     }
     // movie_frame's colour set at exposure gain: planes gained (lut) for a gain over 1, then mixed; a gain under 1 on
     // the mixed picture (its planes come ungained)
-    function setPicture(planes, c, W, gain = 1, gamma = c.gamma) {
-      const px = mix(planes, c, W);
+    function setPicture(planes, c, W, gain = 1, gamma = c.gamma, excess = null) {
+      const px = mix(planes, c, W, excess);
       return gain < 1 ? shadeRgb(px, gain, gamma, (c.clip || CLIP_DEFAULT)[0]) : px;
     }
     // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
@@ -706,13 +711,29 @@ onmessage = async e => {
   // (a colour set at a gain under 1: the gain on the mixed picture, setPicture, as movie_frame does it)
   const late = mixing && !m.trail && gain < 1.0;
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
-  const planes = m.planes.map(p => {
+  // (and each plane's saturation excess, its frame's kept .sat.webp, moved with it: colour_picture's sat)
+  const sats = m.planes.map(() => null);
+  const planes = m.planes.map((p, q) => {
     const [dx, dy] = M.shift(t, placed.get(pk), p.i, base), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);
     if (!L && !mixing) return c;
     const im = g.getImageData(0, 0, W, H), d = im.data;
+    if (p.sat && mixing && !m.trail) {
+      const sc = new OffscreenCanvas(W, H), sg = sc.getContext("2d", { willReadFrequently: true });
+      sg.drawImage(p.sat, dx, dy);
+      p.sat.close();
+      const sd = sg.getImageData(0, 0, W, H).data, e = new Float32Array(W * H), f = Math.fround;
+      const gm = t.exposure ? t.exposure.gamma : 2.2, dec = v => gm === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)) : Math.pow(v, gm);
+      for (let i = 0, k = 0; k < e.length; i += 4, k++) {
+        let v = sd[i] / 255;
+        // (a gain over 1 on the plane: its white stays white, the light it saturated on scales, as _sat_excess has it)
+        if (v > 0 && L && !late) v = Math.round(Math.max(0, dec(L[d[i]] / 255) - gain * (dec(d[i] / 255) - v)) * 255) / 255;
+        e[k] = f(v);
+      }
+      sats[q] = e;
+    }
     if (L && !late) for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
     if (!mixing) { g.putImageData(im, 0, 0); return c; }
     return d;
@@ -722,7 +743,7 @@ onmessage = async e => {
     // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest;
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
-      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.setPicture(planes, m.eye ? t.eye : t.sets, W, gain, t.exposure ? t.exposure.gamma : undefined);
+      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.setPicture(planes, m.eye ? t.eye : t.sets, W, gain, t.exposure ? t.exposure.gamma : undefined, sats.some(e => e) ? sats : null);
     if (m.detail && t.headroom && t.disk) px = M.ringWhite(px, W, H, t.headroom, t.hgamma, t.shoulder, [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W * t.ringDisk]);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
@@ -838,8 +859,20 @@ onmessage = async e => {
       };
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
-      const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
+      // a colour set's planes whose tile keeps a saturation map (the table's "sat"): its frame's kept .sat.webp, the
+      // excess colour_picture floors a saturated band by (fetched as kept, never drawn; none: as before)
+      const satOf = new Set(T.sat || []);
+      const satLoad = async j => {
+        const own = j === e.n || j === held, tile = own ? held : j, fid = own ? T.ids[e.n] : T.ids[j];
+        if (!set || !satOf.has(tile)) return null;
+        try {
+          const r = await fetch(o.planeUrl(fid).replace(`/${fid}.webp?`, `/${fid}.sat.webp?`) + (o.raw ? "&detail=0" : ""));
+          return r.ok ? await createImageBitmap(await r.blob()) : null;
+        } catch (err) { return null; }
+      };
+      const satBitmaps = await Promise.all(tiles.map(satLoad));
+      const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q], sat: satBitmaps[q] }));
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, [...bitmaps, ...satBitmaps.filter(b => b)]); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);

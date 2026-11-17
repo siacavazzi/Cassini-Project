@@ -81,10 +81,10 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-# obs-v132/v115 (classic stays v100): a band of a colour movie frame the camera saturated is floored at the light it saturated
+# obs-v132/v115/v101: a band of a colour movie frame the camera saturated is floored at the light it saturated
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
-VERSIONS = {"balanced": "obs-v132", "raw": "obs-v115", "eye": "obs-v132-eye", "false": "obs-v132-false", "classic": "obs-v100-classic"}
+VERSIONS = {"balanced": "obs-v132", "raw": "obs-v115", "eye": "obs-v132-eye", "false": "obs-v132-false", "classic": "obs-v101-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -8455,9 +8455,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
         if tinted:
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
-        elif got and (_set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3]))
-                      or any(tile_of(j).get("sat") for j in got.values())):
-            # (or a tile of it keeps a saturation map, which the page has not: colour_picture's sat)
+        elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
             server.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
@@ -8467,7 +8465,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     return {"local": True, "fixed": True, "auto": STEADY_SMOOTH if auto_steady(u, cache) else 0,
             "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
-            "server": server, "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "server": server, "sat": [m for m in ns if tiles[m].get("sat")], "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
@@ -8553,9 +8551,9 @@ def _colour_recipes(u, p, cache, ns, tiles):
 
 def _clip_fill():
     """colour_picture's clipped-band fill, as the page does it (steady-local.html fillClipped): [CLIP_FROM, CLIP_REACH,
-    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST, the rim left out of the floor: 0, as colour_picture without a
-    saturation map, the page's case: a set with one is drawn by the server]"""
-    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST, 0]
+    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST, the rim left out of the floor without saturation maps (0) and with
+    them (CLIP_EDGE)]"""
+    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST, 0, CLIP_EDGE]
 
 
 def _colour_by(u, want, ns, tiles, grey):
@@ -9319,12 +9317,12 @@ def _place_sat(u, t, rect, k, W, H, cache, scale):
     out = np.zeros((H, W), np.float32)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     if x0 < x1 and y0 < y1:
+        # (in 1/255 steps, as kept beside a movie frame for the page, keep_picture_sat)
+        q = np.clip(ex * 255 + 0.5, 0, 255).astype(np.uint8)
         if SUBPIXEL:
-            # (moved by the part of a pixel _place moves the picture, so the excess lies under the pixels it belongs to:
-            # a pixel off, it fell on the sky beside a saturated ring's edge, 003SA 3X3MOVIEA002, and drew a dark line)
-            q = np.clip(ex * 255 + 0.5, 0, 255).astype(np.uint8)
-            q = _subpixel_at(np.dstack([q, q, q, np.full_like(q, 255)]), t, rect, k, left, top)
-            ex = q[..., 0].astype(np.float32) / 255
+            # (moved by the part of a pixel _place moves the picture, so the excess lies under the pixels it belongs to)
+            q = _subpixel_at(np.dstack([q, q, q, np.full_like(q, 255)]), t, rect, k, left, top)[..., 0]
+        ex = q.astype(np.float32) / 255
         out[y0:y1, x0:x1] = ex[y0 - top:y1 - top, x0 - left:x1 - left]
     return out
 
@@ -10085,8 +10083,13 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 rep["tint"] = True
         else:
             used = None
+    sat_one = None
     if not used:
         rgba = _place(u, t, rect, k, W, H, cache, p["display_scale"])
+        if not trail:
+            # (its tile's saturation excess, kept beside the picture (keep_picture_sat): the page's colour mix of the
+            # frames it draws as planes takes it, as colour_picture's sat does: steady-local.html)
+            sat_one = _place_sat(u, t, rect, k, W, H, cache, p["display_scale"])
         # the rolling trail: earlier frames of this filter under it, older ones fainter
         if trail:
             # (behind the frame shown, held or not, and without partial frames)
@@ -10115,6 +10118,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, on_disk)
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     im = Image.fromarray(rgba, "RGBA")
+    if sat_one is not None and not unturn and sat_one.shape == rgba.shape[:2]:
+        im.info["sat"] = np.clip(sat_one * 255 + 0.5, 0, 255).astype(np.uint8)
     if unturn:
         im.info["unturn"] = (unturn, drawn)   # (its recovery map turned back the same way, _with_hdr_map)
     return im, rep
@@ -10162,6 +10167,41 @@ def keep_picture_map(im, path):
         reel._cached(path[:-len(".webp")] + ".hdr.webp", buf.getvalue)
     except Exception as e:
         print(f"No HDR map kept for {path}: {e}")
+
+
+def keep_picture_sat(im, path):
+    """A one-frame movie picture's saturation excess (im.info["sat"]: its tile's, _place_sat, in 1/255 steps) beside it
+    at path, as <path less its extension>.sat.webp (grey, lossless), for the page's colour mix of the frames it draws
+    (steady-local.html, the steady table's "sat"); nothing when it has none"""
+    m = im.info.get("sat")
+    if m is None or not path.endswith(".webp"):
+        return
+    try:
+        if m.shape != (im.height, im.width):
+            m = cv2.resize(m, (im.width, im.height), interpolation=cv2.INTER_NEAREST)
+        buf = io.BytesIO()
+        Image.fromarray(np.ascontiguousarray(m), "L").save(buf, "WEBP", lossless=True, quality=80, method=4)
+        reel._cached(path[:-len(".webp")] + ".sat.webp", buf.getvalue)
+    except Exception as e:
+        print(f"No saturation map kept for {path}: {e}")
+
+
+def movie_sat(frame_id, size, cache, centre=True, sharpen=True):
+    """The kept saturation excess map (keep_picture_sat) of frame_id's movie picture at SPICE's places, drawn alone
+    (colour off, no exposure, steady 0): the bytes of its .sat.webp, or None when there is none or the picture is not
+    made. Never draws: the page asks for it only for frames whose tile has a map (steady table "sat")."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    u, n = found
+    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
+    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                        f"{n}_0_0{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}{'_d0' if filled else ''}.sat.webp")
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
 
 
 movie_frame = _with_hdr_map(movie_frame)
@@ -10386,6 +10426,12 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
                     with open(its_map, "rb") as fh:
                         return fh.read()
                 reel._cached(path[:-len(".webp")] + ".hdr.webp", read_map)
+            its_sat = twin[0][:-len(".webp")] + ".sat.webp"
+            if os.path.exists(its_sat):
+                def read_sat():
+                    with open(its_sat, "rb") as fh:
+                        return fh.read()
+                reel._cached(path[:-len(".webp")] + ".sat.webp", read_sat)
             return data
         # a strip (smaller than the sizes a window plays) of a frame already kept at one of them is that picture
         # shrunk (both are movie_frame at OUT, shrunk): the pass's tiles are not read again
@@ -10408,6 +10454,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
         buf = io.BytesIO()
         reel.save_webp(im, buf, quality=QUALITY, method=4)
         keep_picture_map(im, path)
+        keep_picture_sat(im, path)
         return buf.getvalue()
 
     try:
