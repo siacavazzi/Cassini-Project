@@ -103,6 +103,12 @@ def ground_range(place, km, scale):
     if not km or not z or not scale or x is None or z <= km:
         return z
     off = math.hypot(x, y) / scale
+    if off >= math.pi / 2:
+        # (the body's centre a quarter turn or more off the camera's axis: find_target's shift is a pinhole's, so a body
+        # nearly beside or behind the camera has a shift of millions of px, here tens of radians, whose sine can be
+        # negative and past the radius, and the root below of a negative number: 2016-04-26's N1841132155_1 to
+        # N1841132379_1, Saturn 8.5 million px off, stopped their pictures with a math domain error, 11-17)
+        return z
     side = z * math.sin(off)
     if side < km and math.cos(off) > 0:
         return z * math.cos(off) - math.sqrt(km * km - side * side)
