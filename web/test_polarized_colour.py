@@ -22,8 +22,10 @@ cams, targets, obs, f1s, f2s, ts = map(list, zip(*rows))
 use = sp.polarized_as_colour(cams, targets, obs, f1s, f2s)
 got = {o: [f"{a}/{b}" for o2, a, b, u in zip(obs, f1s, f2s, use) if o2 == o and u] for o in ("POL", "MIX", "TWO", "WAC")}
 assert got["POL"] == [f"{p}/{f}" for p, f in cycle if f != "CB2"], got["POL"]
-assert got["MIX"] == [] and got["TWO"] == [] and got["WAC"] == [], got
+assert got["MIX"] == [] and got["TWO"] == [], got
+assert got["WAC"] == ["CB2/IRP0", "CB2/IRP90", "MT2/IRP0", "MT2/IRP90"], got["WAC"]
 print("only an observation taking BL2, GRN and CB1 through polarizers, and no plain visible colour, is polarized colour")
+print("a WAC observation taking two bands only through the IR polarizers is too (taste call 9)")
 
 idx = pd.DataFrame({"INSTRUMENT_ID": cams, "TARGET_NAME": targets, "OBSERVATION_ID": obs, "filter1": f1s, "filter2": f2s,
                     "FILTER_NAME": [f"({a},{b})" for a, b in zip(f1s, f2s)]})
@@ -31,7 +33,10 @@ sp.polarized_index(idx)
 pol = idx[idx["OBSERVATION_ID"] == "POL"]
 assert pol["FILTER_NAME"].tolist() == ["(P0,CB2)", "(P60,CB2)", "(P120,CB2)"] + [f"(CL1,{f})" for _, f in cycle[3:]] + ["(CL1,MT2)"]
 assert pol["filter1"].tolist()[3:-1] == ["CL1"] * 9 and pol["polarized"].sum() == 9
-assert idx[idx["OBSERVATION_ID"] != "POL"]["FILTER_NAME"].tolist() == [f"({a},{b})" for a, b, o in zip(f1s, f2s, obs) if o != "POL"]
+assert idx[idx["OBSERVATION_ID"] == "WAC"]["FILTER_NAME"].tolist() == ["(CB2,CL2)", "(CB2,CL2)", "(MT2,CL2)", "(MT2,CL2)"]
+assert idx[idx["OBSERVATION_ID"] == "WAC"]["filter2"].tolist() == ["CL2"] * 4
+assert idx[~idx["OBSERVATION_ID"].isin(["POL", "WAC"])]["FILTER_NAME"].tolist() == \
+    [f"({a},{b})" for a, b, o in zip(f1s, f2s, obs) if o not in ("POL", "WAC")]
 print("the index reads them as CL1 and their colour; every other frame as it was")
 
 set_of, sets = sp.filter_sets(idx["INSTRUMENT_ID"].tolist(), targets, obs, idx["filter1"].tolist(), idx["filter2"].tolist(), ts,
