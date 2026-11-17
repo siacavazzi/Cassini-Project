@@ -81,8 +81,8 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-# (eye2: Natural color (emulated) with the icy moons' colors measured in linear light (eye_colors.json, #570); the eye look only)
-VERSIONS = {"balanced": "obs-v131", "raw": "obs-v114", "eye": "obs-v131-eye2", "false": "obs-v131-false", "classic": "obs-v100-classic"}
+# (v71/v132/v108, balanced and eye: the icy moons' colors measured in linear light (eye_colors.json, #570): Natural color (emulated), and Natural color's methane sets of those moons, which it draws through eye_mix)
+VERSIONS = {"balanced": "obs-v132", "raw": "obs-v114", "eye": "obs-v132-eye", "false": "obs-v131-false", "classic": "obs-v100-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
