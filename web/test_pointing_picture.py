@@ -5,6 +5,11 @@ and whose last place has only its red frame (drawn in the gray base): each point
 scale, is the mosaic's picture where that pointing is on top; one filter's channel is that filter's mosaic there; the
 links before pointings were numbered (frame.webp?ids=) find the same pointing. Run: python web/test_pointing_picture.py"""
 import os, sys, json, tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import numpy as np
 from PIL import Image
