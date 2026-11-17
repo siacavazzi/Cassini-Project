@@ -116,8 +116,9 @@ else:
     sys.path.insert(0, os.path.join(HERE, "frames"))
     import obs_mosaic
     # a WAC mosaic's tiles are searched only near SPICE's place (REGISTER_NEAR), their borders left out; the NAC's whole
-    # (the match is _register_match; _register adds the limb check after it)
-    assert "REGISTER_NEAR.get(u[\"key\"][2])" in inspect.getsource(obs_mosaic._register_match).replace("'", '"')
+    # (the match is _register_match_to, the tile onto one reference, which _register_match tries for the lead and its
+    # fallback; _register adds the limb check after it)
+    assert "REGISTER_NEAR.get(u[\"key\"][2])" in inspect.getsource(obs_mosaic._register_match_to).replace("'", '"')
     assert "N" not in obs_mosaic.REGISTER_NEAR and obs_mosaic.REGISTER_MAX == 0.04
     print("no guess, two frames: same as main")
 
