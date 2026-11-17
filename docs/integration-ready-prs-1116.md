@@ -1,8 +1,8 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `e04f252b` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `b39d4fa7` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 73 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548 and #549), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**In it:** 74 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548, #549 and #550), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
 **Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
@@ -33,7 +33,7 @@ How to read this:
 #474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, #548, #549, and the five integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547, #550
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -162,3 +162,6 @@ How to read this:
  | `a8e5fc7d` | no | Test only: test_prebuild_planes expects #487's evened frames for every pass. With it the whole test passes on the branch. | Nothing. | none | - | clean |
 | 110 | [#548](https://github.com/siacavazzi/Cassini-Project/pull/548) Auto-stabilized passes stay on the page: the steady table says what smoothing their frames are served at
  (new head) | `e04f252b` | no | #548's reviewed new head: a docstring in prebuild.make_planes. No picture change. | Nothing. | none | - | integration commit |
+| 111 | Picture-change map (docs) | `6c1e46df` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 112 | [#550](https://github.com/siacavazzi/Cassini-Project/pull/550) Saturated bands floored in colour movie frames (finding 20 lime and salmon patches)
+ | `b39d4fa7` | **YES** | Colour movie frames with a saturated band no longer draw lime or salmon patches (finding 20): the saturated band is floored from the frame's own saturation map (stored sat.webp beside colour=0 movie frames; the page floors from it too, no view-time drawing). Rhea 154RH and Saturn 150SA patches gone; other frames at most 28 levels. | Every pass (obs-v132/v115, obs-v101-classic): stored tiles remade with sat.webp and a sat key; new sat.webp beside colour=0 movie frames with saturation. | obs-v132/v115 | - | clean |
