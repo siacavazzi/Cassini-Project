@@ -1,9 +1,9 @@
 # Integration branch integration/ready-prs-1116: picture-change map
 
-**Branch** `integration/ready-prs-1116`, head `b39d4fa7` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
+**Branch** `integration/ready-prs-1116`, head `8d7c19b4` (the last merge; the map commit follows it), off main `85d2a2a9`. Main is untouched and every PR stays open. Built 2026-11-16 for Sam's before/after comparison; when Sam says merge to main, the same order and the recorded resolutions below can be reused.
 
-**In it:** 74 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548, #549 and #550), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
-**Left out:** #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
+**In it:** 75 PRs (with #541, #537, #542, #544, #545, #543, which contains #481, #534, #546, #536, #527, #547, #548, #549, #550 and #553), each as its own merge commit at its reviewed READY head, plus 5 integration commits (one code fix, three test-only, one page rebuild) and 14 follow-up merges of reviewed new heads (#548 08565dcf, #546 8d8f6435, #530 c6a5826d, #524 5e755992, #488 89ccffaa, #483 a26e24dd then 75194327, #484 9cf636e2 then 69e38b33, #508 26dac74c, #506 44d49412, and benchmark evidence for #515, #522, #520).
+**Left out:** #551 and #552 (their benchmarks are running; versions reserved: export-v121/v122, levels-v83/v84, obs-v133 for #552); #479 (it targets public-release; merging it here would pull in public-release's whole history). #530 and #533 went in after their reviews cleared.
 
 ### Resolutions (all reviewed as correct by the review thread, 19:32Z: pr-review-integration-1116/findings.md)
 1. **#483 x #491 stacking** (`image_correction.stack_frames`, `stacking.load_stacked`): #483's plain polarizer stack and #491's full-depth stack touch the same lines. The combined code is the 491 author's own trial rebase (branch `claude/full-depth-on-484`, 9b41e801). 491's later commits do not touch these files. Reviewed as correct (merge a0c25f1f).
@@ -33,7 +33,7 @@ How to read this:
 #474, #524, #528, #489, #490, #492, #499, #500, #535, #505, #496, #515, #522, #501, #502, #463, #509, #518, #539, #511, #512, #513, #514, #519, #520, #531, #540, #462, #465, #466, #467, #468, #533, #541, #542, #544, #545, #548, #549, and the five integration commits
 
 ## PRs that change pictures (in merge order)
-#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547, #550
+#476, #480, #481, #483, #484, #494, #507, #516, #491, #532, #493, #495, #530, #503, #497, #529, #498, #504, #506, #508, #517, #523, #526, #537, #543, #534, #530b, #546, #536, #527, #547, #550, #553
 
 ## New pictures only, or a different served size (nothing made before changes)
 #482, #487, #488, #510
@@ -165,3 +165,6 @@ How to read this:
 | 111 | Picture-change map (docs) | `6c1e46df` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
 | 112 | [#550](https://github.com/siacavazzi/Cassini-Project/pull/550) Saturated bands floored in colour movie frames (finding 20 lime and salmon patches)
  | `b39d4fa7` | **YES** | Colour movie frames with a saturated band no longer draw lime or salmon patches (finding 20): the saturated band is floored from the frame's own saturation map (stored sat.webp beside colour=0 movie frames; the page floors from it too, no view-time drawing). Rhea 154RH and Saturn 150SA patches gone; other frames at most 28 levels. | Every pass (obs-v132/v115, obs-v101-classic): stored tiles remade with sat.webp and a sat key; new sat.webp beside colour=0 movie frames with saturation. | obs-v132/v115 | - | clean |
+| 113 | Picture-change map (docs) | `3d65ff8c` | no | This map (docs/integration-ready-prs-1116.md). Documentation only. | Nothing. | none | - | integration commit |
+| 114 | [#553](https://github.com/siacavazzi/Cassini-Project/pull/553) Follow-ups to #550 (saturated bands in colour movie frames)
+ | `8d7c19b4` | **YES (rare frames)** | #550 follow-ups: in a transit colour frame whose moving body saturated in a band, the saturation excess now moves with that body's plane (_per_body_planes); the page's gain over 1 excess is shared (gainedExcess) and tested. Export and levels bumped for #550's and this change to movie frames. Benchmark 51/51 identical (no item has such a transit). Its numbers skip #551/#552's. | Every pass (obs bump); films and levels (export, levels bump). | export-v123, levels-v85, obs-v134/v117 | - | clean |
