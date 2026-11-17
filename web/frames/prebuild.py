@@ -914,7 +914,7 @@ SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the
 SEGMENT_MAX = int(os.environ.get("CASSINI_SEGMENT_MAX", "0") or 0)
 ETA_WINDOW, ETA_LEAST = 60.0, 8.0   # seconds of pace the time left is worked out from, and the least that says anything
 SEGMENT_KEEP = 12       # finished stretches the server keeps the status of (a stretch asked again past them is made again from the cache)
-SEGMENT_SIZES = (512, 768, 1024)
+SEGMENT_SIZES = (512, 1024)   # the sizes the windows ask for and the build keeps (sizes= takes the nearest)
 SEGMENT_ANSWER = 0.3    # seconds POST /prebuild waits for its stretch to be made before it answers how far it is
 
 
@@ -934,7 +934,7 @@ def segment_options(q):
         raise ValueError("until= must come after from=")
     cams = "".join(c for c in "NW" if c in (get("cams") or "NW"))
     try:
-        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
+        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: (abs(z - int(x)), -z)) for x in (get("sizes") or "1024").split(",") if x})
         trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
         steady, exposure = int(get("steady_smooth", "0") or 0), int(get("exposure", "0") or 0)
         most = max(0, int(get("most", "0") or 0))
