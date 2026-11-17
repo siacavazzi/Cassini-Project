@@ -47,8 +47,9 @@ def run(summed, saturated):
             shown[disk & (xx > 150)] = 255
         codes = shown[::H // side, ::H // side]
         made[f"nac_data/N{t}_2.png"] = (Label(band, t, side), np.dstack([shown] * 3), iof, codes)
-    stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False: \
-        (made[path][0], made[path][1], 1) + ((made[path][0].valid_mask(),) if valid else ())
+    stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False, deep=False: \
+        (made[path][0], made[path][1], 1) + ((made[path][0].valid_mask(),) if valid else ()) + \
+    ((np.asarray(made[path][1], np.float32)[..., 0] if np.ndim(made[path][1]) == 3 else np.asarray(made[path][1], np.float32),) if deep else ())
     cal.calibrate = lambda png, info, image=None: next(v[2] for v in made.values() if v[0].info is info)
     cal.ds.imread = lambda path, flags=None: made[path][3]
     with cal.looking("balanced"):

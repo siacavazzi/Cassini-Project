@@ -55,6 +55,7 @@ stacking.ic.find_shift = lambda a, b, r: None
 stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}
 stacking.ds.imread = lambda path, flags=None: pngs[path][..., 0]
 cal.calibrate = lambda codes, info, image=None: (calls.append(info["path"]), codes.astype(np.float32) / 1000)[1]
+cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 
 

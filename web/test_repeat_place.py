@@ -147,6 +147,7 @@ import calibration as cal  # noqa: E402
 stacking.lh.label = lambda p, as_png=True: Label(p)
 stacking.ds.imread = lambda p, flags=None: np.full((H, H), 100, np.uint8)
 stacking.cal.calibrate = lambda codes, info, image=None: codes.astype(np.float32) / 1000
+stacking.cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 asked = {}
 stacking.find_repeats = lambda p, window=120, max_frames=5: asked[p]
