@@ -5886,6 +5886,26 @@ def _filter_path(u, f, count, rect, cache, solved_on=""):
     return os.path.join(drawn(u, cache), "filters-level", name)
 
 
+def _places_tag(mine):
+    """(filter_mosaic, _grown) What a solve moved of these tiles, for the name of the filter's mosaic drawn of them:
+    "-m<hash>" of the moves (and turns) of those moved off SPICE's places (panel registration, the global solve, ring
+    registration: layout's "spice_place"), "" when none is. A filter's mosaic was kept under its count of tiles
+    alone, so one drawn where an earlier solve had the tiles was taken for the same tiles moved since. A mosaic grown
+    a frame at a time before its pass was solved whole (a toss-up's mosaic view in the pre-build, a cold pass on a
+    server, a stretch ending in the middle of a pass) so kept every tile where the solve on the tiles so far had put
+    it, under the picture name of the last solve (layout's _m, which says the moves are the last one's): on Enceladus
+    088EN SECLNX001, 14 of 22 tiles up to 5 px of the 1,024 px view from where its kept solve has them (2026-11-16)."""
+    moved = []
+    for t in mine:
+        if "spice_place" in t and "offset" in t:
+            m = [round(t["offset"][0] - t["spice_place"][0], 2), round(t["offset"][1] - t["spice_place"][1], 2)]
+            if t.get("turn"):
+                m.append(round(float(t["turn"]), 5))
+            if any(m):
+                moved.append((t["n"], m))
+    return "-m" + hashlib.sha1(json.dumps(sorted(moved)).encode()).hexdigest()[:8] if moved else ""
+
+
 def _png(rgba):
     out = io.BytesIO()
     Image.fromarray(rgba).save(out, "PNG", compress_level=1)
@@ -5994,8 +6014,10 @@ def _grown(u, p, f, mine, rect, cache, tag=""):
     each new tile costs one tile's compose, not all of them again, and what is drawn stays as it was drawn.
     Only the newest tile's part of the canvas (and a margin for its soft edge) is composed, since nothing
     outside it changes. Starts from the largest of those mosaics already made (the first GROW_FROM tiles
-    solved together otherwise) and keeps each one it makes on the way."""
-    named = lambda m: _filter_path(u, f, m, rect, cache)[:-len(".png")] + tag + ".png"
+    solved together otherwise) and keeps each one it makes on the way. "Already made" of the same tiles at the
+    same places (_places_tag in each one's name): when a solve has moved a tile since a smaller mosaic was drawn,
+    that one is not grown from, and the tile is drawn where it is now."""
+    named = lambda m: _filter_path(u, f, m, rect, cache)[:-len(".png")] + tag + _places_tag(mine[:m]) + ".png"
     m = len(mine) - 1
     while m > GROW_FROM and named(m) not in _grown_last and not os.path.exists(named(m)):
         m -= 1
@@ -6093,7 +6115,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     ref = the filter the seams are solved on (balanced look, seams). Past GROW_FROM tiles it grows from the
     one before (_grown) instead of composing every tile again. tag names a set of tiles that is not every tile
     up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
-    growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine)."""
+    growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine).
+    Kept under a name that says where a solve moved its tiles too (_places_tag), so it is only found again for the
+    same tiles at the same places."""
     mine = _mine(u, p, tiles, f)
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
@@ -6111,7 +6135,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     path = _filter_path(u, f, len(mine), rect, cache, solved_on)
     # (the base's saturated fills in its name: one can come and go as tiles arrive, at the same count, blown_fills)
     filled = "".join(f"-B{t['n']}" for t in mine if t.get("blown_fill"))
-    path = path[:-len(".png")] + tag + filled + ".png"
+    path = path[:-len(".png")] + tag + filled + _places_tag(mine) + ".png"
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
