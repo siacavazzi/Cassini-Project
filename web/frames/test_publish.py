@@ -114,9 +114,22 @@ def test_mirror(tmp):
 
 class FakeS3(http.server.BaseHTTPRequestHandler):
     objects, seen = {}, []
+    protocol_version = "HTTP/1.1"   # keeps connections open, as R2 does
+    drop_after = None               # the server closes the connection after this many answers on it (a stale keep-alive)
 
     def log_message(self, *a):
         pass
+
+    def end_headers(self):
+        self.answers = getattr(self, "answers", 0) + 1
+        super().end_headers()
+        if FakeS3.drop_after and self.answers >= FakeS3.drop_after:
+            self.close_connection = True   # closed without saying so (no Connection: close), as an idle timeout does
+
+    def _empty(self, status):
+        self.send_response(status)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _checks(self, body):
         auth = self.headers.get("Authorization", "")
@@ -124,8 +137,7 @@ class FakeS3(http.server.BaseHTTPRequestHandler):
         ok = auth.startswith("AWS4-HMAC-SHA256 Credential=AKIDTEST/") and "/auto/s3/aws4_request" in auth \
             and "Signature=" in auth and self.headers.get("x-amz-content-sha256") == hashlib.sha256(body).hexdigest()
         if not ok:
-            self.send_response(403)
-            self.end_headers()
+            self._empty(403)
         return ok
 
     def do_PUT(self):
@@ -134,13 +146,13 @@ class FakeS3(http.server.BaseHTTPRequestHandler):
             return
         import base64
         if self.headers.get("Content-MD5") != base64.b64encode(hashlib.md5(body).digest()).decode():
-            self.send_response(400)
-            self.end_headers()
+            self._empty(400)
             return
         meta = {k.lower(): v for k, v in self.headers.items() if k.lower().startswith("x-amz-meta-")}
         FakeS3.objects[urllib.parse.unquote(self.path)] = (body, self.headers.get("Content-Type"), meta)
         self.send_response(200)
         self.send_header("ETag", '"' + hashlib.md5(body).hexdigest() + '"')
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def _get(self, head):
@@ -148,8 +160,7 @@ class FakeS3(http.server.BaseHTTPRequestHandler):
             return
         got = FakeS3.objects.get(urllib.parse.unquote(self.path))
         if got is None:
-            self.send_response(404)
-            self.end_headers()
+            self._empty(404)
             return
         body, ctype, meta = got
         self.send_response(200)
@@ -202,6 +213,59 @@ def test_r2(tmp):
         check("/cassini-os/big" not in FakeS3.objects,
               "an object past one PUT's limit is refused, never sent as multipart (its ETag would not be its md5)")
     check(r2._url_path("a/b~c=1&d=2,3") == "/cassini-os/a/b~c%3D1%26d%3D2%2C3", "keys are escaped in the S3 path")
+
+    # the upload's speed: one kept-alive connection, no HEAD on a fresh bucket, puts from threads
+    r2 = publish.R2(env=env)
+    led = publish.Ledger(os.path.join(tmp, "r2fast", "ledger.sqlite"))
+    n = len(FakeS3.seen)
+    objs = [(f"frame/t1/frames/N15000000{i:02d}_1.webp~size=512", b"P%d" % i, "image/webp", {}, "whole") for i in range(20)]
+    for o in objs[:10]:
+        publish.store(r2, led, [o])
+    check(r2.connections == 1 and [x[0] for x in FakeS3.seen[n:]] == ["HEAD", "PUT"] * 10,
+          "one thread's requests share one kept-alive connection (no TLS handshake per object)")
+    n = len(FakeS3.seen)
+    for o in objs[10:]:
+        publish.store(r2, led, [o], fresh=True)
+    check([x[0] for x in FakeS3.seen[n:]] == ["PUT"] * 10 and all(FakeS3.objects.get("/cassini-os/" + o[0]) for o in objs),
+          "--fresh puts what the ledger lacks without asking R2 first (no HEAD)")
+    again = [publish.store(r2, led, [o], fresh=True)[0][3] for o in objs]
+    check(not any(again), "--fresh still skips what the ledger holds")
+    FakeS3.drop_after = 2
+    try:
+        r2b = publish.R2(env=env)
+        for i in range(5):
+            r2b.put(f"stale/{i}", b"S%d" % i, "image/webp", {})
+        check(all(FakeS3.objects.get(f"/cassini-os/stale/{i}") for i in range(5)) and r2b.connections >= 3,
+              "a kept-alive connection the server closed is replaced at once and the put goes through")
+    finally:
+        FakeS3.drop_after = None
+    up = publish.Uploader(4)
+    led2 = publish.Ledger(os.path.join(tmp, "r2up", "ledger.sqlite"))
+    many = [(f"processed/t1/frames/processed/N15000001{i:02d}_1.webp~center=1&size=512", b"Q%d" % i, "image/webp",
+             {"x-composite": '{"i":%d}' % i}, "whole") for i in range(40)]
+    rows = publish.store(r2, led2, many, fresh=True, uploader=up)
+    up.drain()
+    check(all(r[3] for r in rows) and all(FakeS3.objects.get("/cassini-os/" + o[0]) for o in many)
+          and all(led2.matches(k, publish.md5_hex(d), c, m) for k, d, c, m, _ in many) and r2.connections <= 1 + 4,
+          "puts from the upload threads all land, each noted in the ledger, one connection per thread")
+
+    class Broken:
+        def held(self, key):
+            return None
+
+        def put(self, key, data, ctype, custom):
+            if key.endswith("bad"):
+                raise RuntimeError("R2 PUT bad: 500")
+    up = publish.Uploader(2)
+    led3 = publish.Ledger(os.path.join(tmp, "r2bad", "ledger.sqlite"))
+    publish.store(Broken(), led3, [("ok", b"1", "image/webp", {}, "whole"), ("bad", b"2", "image/webp", {}, "whole")],
+                  fresh=True, uploader=up)
+    try:
+        up.drain()
+        check(False, "a put that fails in an upload thread fails the batch")
+    except RuntimeError:
+        check(not led3.matches("bad", publish.md5_hex(b"2"), "image/webp", {}),
+              "a put that fails in an upload thread fails the batch and is not noted in the ledger")
     srv.shutdown()
 
 
