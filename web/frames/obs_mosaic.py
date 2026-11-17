@@ -81,7 +81,8 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-VERSIONS = {"balanced": "obs-v131", "raw": "obs-v114", "eye": "obs-v131-eye", "false": "obs-v131-false", "classic": "obs-v100-classic"}
+# obs-v136/v119/v105: a grey filter's exposure bracket: a long exposure that saturated far more than the short one at its pointing goes under it (long_repeats, as a colour set's): 036RI DRING001's smeared band since #491 (numbered past #552, the lit-sky pass, #558 and #559)
+VERSIONS = {"balanced": "obs-v136", "raw": "obs-v119", "eye": "obs-v136-eye", "false": "obs-v136-false", "classic": "obs-v105-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -6226,6 +6227,15 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     Kept under a name that says where a solve moved its tiles too (_places_tag), so it is only found again for the
     same tiles at the same places."""
     mine = _mine(u, p, tiles, f)
+    if f != LUM and f not in (p.get("colour") or []) and not _rolling.get():
+        # a grey filter's exposure bracket goes under as a colour set's long repeat does (long_repeats): at a pointing
+        # with a short exposure, a long one that saturated OVER_STEP times as much is drawn under it, not left to
+        # dim_under's brightness ratio on their overlap, which is no rule for one place taken twice and swung on the
+        # few per cent full depth changed (036RI DRING001: 120 s frames of the moving rings, 35 % saturated, over the
+        # 10 s ones, a smeared band with a hard seam since #491)
+        longs = long_repeats(mine, [f])
+        if longs:
+            mine = [dict(t, long=True) if t["n"] in longs else t for t in mine]
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
     whole = plain in ("", PANEL_TAG, EDGE_TAG, RING_EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG, RING_REDRAW_TAG,
