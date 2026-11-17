@@ -584,9 +584,13 @@ def limb_shift(im1, im2, mask1, mask2, g=None):
     f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
     (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
     if response >= LIMB_RESPONSE:
+        # (a peak that stands out but whose move fails the checks is not searched past: the outlines disagree, and their
+        # least difference elsewhere is no better a place: N1633926412_1's Titan crescent, a 0.23 peak whose move left
+        # 0.9 % differing, took a place 10 px from it that drew a fringe flipping side along the arc)
         ok, before, after = checked((dx, dy))
-        if ok:
-            return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
+        if not ok:
+            return None, "not aligned"
+        return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
     # ... and where it does not, the place the outlines differ least
     got = _outline_search(l1, l2, mask1, mask2)
     if got is None:
