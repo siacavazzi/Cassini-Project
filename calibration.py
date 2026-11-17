@@ -438,6 +438,34 @@ def overclock_bias(info):
 
 
 """
+The share of its plain frame's I/F a polarized colour frame calibrates to (sets_passes.POLARIZED_SHARE), or None for
+any other frame: a narrow-angle frame through P0, P60 or P120 and a colour filter of that table, in an observation the
+index loaders read as that colour (sets_passes.polarized_index, which stacking.load_index's FILTER_NAME carries).
+"""
+def polarized_share(info, camera):
+    if camera != "ISSNA":
+        return None
+    names = _filters_of(info)
+    import stacking
+    sp = stacking._sets_passes()
+    if len(names) < 2 or sp.polarized_filter(camera, names[0], names[1]) is None:
+        return None
+    global _polarized
+    if _polarized is None:
+        idx = stacking.load_index()
+        got = {}
+        for path, name in zip(idx["path"].tolist(), idx["FILTER_NAME"].tolist()):
+            if isinstance(path, str) and path.startswith("nac") and str(name).startswith("(CL1,"):
+                got[stacking.frame_id(path)] = str(name)
+        _polarized = got
+    frame = os.path.basename(str(info.get("path") or "")).split(".")[0]
+    return sp.POLARIZED_SHARE[names[1]] if _polarized.get(frame) == f"(CL1,{names[1]})" else None
+
+
+_polarized = None   # {frame id: FILTER_NAME as stacking.load_index reads it} of the NAC's CL1 frames (polarized_share)
+
+
+"""
 Calibrates one frame to I/F. Returns None if the frame can't be calibrated.
 png = the frame's PNG as stored in the dataset
 image = optional image on the same scale as png to calibrate instead (see unstretch)
@@ -568,6 +596,11 @@ def calibrate(png, info, image=None, smooth=True):
     per_second *= SUM_FACTORS[mode]
     per_second *= sensitivity
     per_second *= distance ** 2
+    # a polarized colour frame (sets_passes.polarized_index: a visible polarizer frame standing for its colour filter)
+    # brought to its plain frame's I/F, so a set of them has a plain set's colour balance
+    share = polarized_share(info, camera)
+    if share:
+        per_second /= share
     # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
     # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
     if step("geom"):
@@ -1443,6 +1476,9 @@ def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
 A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
 """
 def band_of(info):
+    if polarized_share(info, _value(info, "INSTRUMENT_ID", "")):
+        # a polarized colour frame is its colour filter's (sets_passes.polarized_index)
+        return _filters_of(info)[1]
     return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 

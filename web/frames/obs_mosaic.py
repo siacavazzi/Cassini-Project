@@ -115,6 +115,8 @@ SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they h
 SCAN_TURN = 30       # degrees
 SET_COLOUR = "_c1"   # the folder suffix, after the others, of a movie that plays in its colour sets' filters where its
                      # tile counts alone made it grey (_set_colour), so its plan and frames are made again
+POLARIZED = "_p1"    # the folder suffix, after all the others, of a pass holding a polarized colour frame
+                     # (sets_passes.polarized_index): its colour sets and plan are made anew (_polarized_pass)
 PLAYED_PAIR = "_c2"  # the folder suffix, in SET_COLOUR's place, of a movie whose colours would not play and that plays in
                      # its pair's color instead (_filters, _pair_colour), so its plan and frames are made again
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
@@ -1453,6 +1455,24 @@ def _repointed(u):
     return u["_repointed"]
 
 
+def polarized_frame(frame_id):
+    """Whether the index reads frame frame_id as a polarized colour frame (sets_passes.polarized_index): its own
+    pictures (processed, centred, kept HDR) are named apart (frame_server.frame_name), as they are made anew."""
+    idx, row = _row_of()
+    q = row.get(frame_id)
+    return q is not None and "polarized" in idx and bool(idx["polarized"].iat[q])
+
+
+def _polarized_pass(u):
+    """Whether pass u holds a frame the index reads as a polarized colour frame (sets_passes.polarized_index)."""
+    if "_polarized" not in u:
+        idx, row = _row_of()
+        pol = idx["polarized"].to_numpy() if "polarized" in idx else None
+        u["_polarized"] = pol is not None and any(row.get(fr[1]) is not None and bool(pol[row[fr[1]]])
+                                                  for fr in u.get("all", u["frames"]))
+    return u["_polarized"]
+
+
 def folder(u, cache):
     # a movie's frames stacked with a shorter repeat window are other pictures than the ones made before it
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
@@ -1461,6 +1481,7 @@ def folder(u, cache):
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
               + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else "")
+              + (POLARIZED if _polarized_pass(u) else "")
               + (REPOINTED if _repointed(u) else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 

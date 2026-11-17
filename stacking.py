@@ -90,6 +90,16 @@ def repeat_of(kept, t, place, window):
     return None
 
 
+def _sets_passes():
+    """web/frames/sets_passes (the one rule for filter sets), imported from beside this module."""
+    import sys
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "frames")
+    if here not in sys.path:
+        sys.path.append(here)
+    import sets_passes
+    return sets_passes
+
+
 def load_index():
     global index, groups, columns
     if index is None:
@@ -103,11 +113,29 @@ def load_index():
                 if shown:
                     ids = [frame_id(p) if isinstance(p, str) else None for p in idx["path"].tolist()]
                     idx["TARGET_NAME"] = [shown[i][0] if i in shown else t for i, t in zip(ids, idx["TARGET_NAME"].tolist())]
+                # a polarized colour frame (sets_passes.polarized_index) stacks with its filter's other angles, its
+                # repeat exposures, as the index loaders all read it
+                _sets_passes().polarized_index(idx, filter_cols=False)
                 # row positions of every camera/target/observation/filter combination, for fast lookup
                 groups = idx.groupby(keys, sort=False).indices
                 columns = {k: idx[k].to_numpy() for k in keys + ["path", "seconds_1970"]}
                 index = idx
     return index
+
+
+def polarized(path):
+    """Whether the frame at path is a polarized colour frame (sets_passes.polarized_index, as load_index reads it):
+    its repeat exposures are its filter's other polarizer angles, stacked as their plain mean (stack_frames plain;
+    load_hdr's I/F merge is one already)."""
+    idx = load_index()
+    if "polarized" not in idx:
+        return False
+    key = path[len("data/"):] if path.startswith("data/") else path
+    try:
+        got = idx.at[key, "polarized"]
+    except KeyError:
+        return False
+    return bool(got if isinstance(got, (bool, np.bool_)) else list(got)[0])
 
 
 """
@@ -177,10 +205,12 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
                 masks.append(mask)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
+    # a polarized colour frame's repeats are its filter's other polarizer angles: their plain mean (stack_frames)
+    plain = len(frames) > 1 and polarized(path)
     if valid:
-        stacked, mask = ic.stack_frames(frames, masks=masks)
+        stacked, mask = ic.stack_frames(frames, masks=masks, plain=plain)
         return (lbl, stacked) + ((len(frames),) if count else ()) + (mask,)
-    stacked = ic.stack_frames(frames)
+    stacked = ic.stack_frames(frames, plain=plain)
     return (lbl, stacked, len(frames)) if count else (lbl, stacked)
 
 
