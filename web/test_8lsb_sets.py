@@ -14,6 +14,7 @@ rng = np.random.default_rng(9)
 yy, xx = np.mgrid[:H, :H]
 disk = (yy - 128) ** 2 + (xx - 128) ** 2 < 60 ** 2
 BODY = {"RED": 0.08, "GRN": 0.05, "BL1": 0.03}   # a dark red-brown moon, in I/F
+LOST = set()   # the bands whose frame lost a block of lines
 
 
 class Label:
@@ -27,7 +28,10 @@ class Label:
         return self.info
 
     def valid_mask(self):
-        return np.ones((H, H), bool)
+        m = np.ones((H, H), bool)
+        if self.band in LOST:
+            m[100:140] = False        # a block of lines lost in downlink, too tall to be filled
+        return m
 
     def export(self):
         return self.info["path"]
@@ -48,16 +52,17 @@ def frames(conversions):
     return out
 
 
-def run(conversions):
+def run(conversions, **how):
     made = frames(conversions)
-    stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False: \
-    (made[path][0], made[path][1], 1) + ((made[path][0].valid_mask(),) if valid else ())
+    stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False, deep=False: \
+    (made[path][0], made[path][1], 1) + ((made[path][0].valid_mask(),) if valid else ()) + \
+    ((np.asarray(made[path][1], np.float32)[..., 0] if np.ndim(made[path][1]) == 3 else np.asarray(made[path][1], np.float32),) if deep else ())
     # 8LSB frames can't be unstretched (calibration.unstretch); the others come back as their I/F
     cal.calibrate = lambda png, info, image=None: None if info["DATA_CONVERSION_TYPE"] == "8LSB" else \
         next(v[2] for v in made.values() if v[0].info is info)
     cal.ds.imread = lambda path, flags=None: made[path][1]
     cal.ds.lut8 = lambda: True
-    return color_image.load_aligned(list(made))
+    return color_image.load_aligned(list(made), **how)
 
 
 for look in ("balanced", "classic"):
@@ -81,4 +86,25 @@ for look in ("balanced", "classic"):
         # none calibrates: grey from the first (longest wavelength) frame, on its own stretch
         imgs, valid, lbl, report = run(["8LSB", "8LSB", "8LSB"])
         assert len(imgs) == 1 and not report["calibrated"] and report["dropped"] == ["N1_1", "N2_1"] and lbl.band == "RED"
+# a set drawn on a shared scale that leaves a channel out hands each kept channel its own lost pixels (load_channels'
+# valid, which a picture's own black is measured without): the mask list is filtered with the channels (#536's review)
+LOST.add("GRN")
+seen = {}
+drawn = cal.load_channels
+
+
+def spy(labels, images=None, *a, **k):
+    seen["bands"], seen["valid"] = [l.band for l in labels], k.get("valid")
+    return drawn(labels, images, *a, **k)
+
+
+cal.load_channels = spy
+with cal.looking("balanced"):
+    scale = {"blacks": [0.0005, 0.0005, 0.0005], "white": 0.1, "gamma": 2.2}
+    imgs, valid, lbl, report = run(["8LSB", "TABLE", "TABLE"], scale=scale)
+    assert report["dropped"] == ["N0_1"] and seen["bands"] == ["GRN", "BL1"], (report, seen["bands"])
+    lost = [bool((~m).any()) for m in seen["valid"]]
+    assert len(seen["valid"]) == 2 and lost == [True, False], lost    # GRN's lost block with GRN, none with BL1
+cal.load_channels = drawn
+LOST.clear()
 print("ok")

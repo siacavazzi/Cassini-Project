@@ -16,6 +16,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fra
 import prebuild  # noqa: E402
 import slices  # noqa: E402
 
+# (no wait for a busy machine: prebuild holds while the 1-minute load is over --max-load, 0.8 a core by default, so on
+# a Mac busy with other work the runs below never started and the test hung, 2026-11-16)
+CALM = ["--max-load", "1e9"]
 # a frame a month from 2003-12 to 2005-01, and two passes: one across New Year 2004/2005, one in 2003
 TIMES = {f"N{1070000000 + k * 2600000}_1": 1070000000 + k * 2600000 for k in range(15)}
 IDS = list(TIMES)
@@ -88,7 +91,7 @@ def main():
         argv = sys.argv
         for phase, years in (("frames", "2004"), ("processed", "2004")):
             sys.argv = ["prebuild.py", phase, "--cache", cache, "--status", status, "--live", "", "--years", years,
-                        "--pause", os.path.join(d, "pause")]
+                        "--pause", os.path.join(d, "pause")] + CALM
             prebuild.main()
         made = sorted(f for f in os.listdir(cache) if f.endswith(".frames"))
         assert made == sorted(f"{i}.frames" for i in IDS if year_of(i) == 2004), made
@@ -96,7 +99,7 @@ def main():
         assert got["spans"] == [["2004-01-01T00:00:00", "2005-01-01T00:00:00"]], got
         # only processed for 2005 as well: frames still 2004 only, so 2004 only
         sys.argv = ["prebuild.py", "processed", "--cache", cache, "--live", "", "--from", "2005-01-01",
-                    "--until", "2005-03-01", "--pause", os.path.join(d, "pause")]
+                    "--until", "2005-03-01", "--pause", os.path.join(d, "pause")] + CALM
         prebuild.main()
         assert slices.covered(cache, mine)["spans"] == [["2004-01-01T00:00:00", "2005-01-01T00:00:00"]]
         assert slices.covered(cache, mine)["phases"]["processed"] == [["2004-01-01T00:00:00", "2005-03-01T00:00:00"]]
@@ -108,12 +111,13 @@ def main():
             fh.write(IDS[3] + "\n")
         n = len(slices.read(cache)["records"])
         sys.argv = ["prebuild.py", "frames", "--cache", cache, "--live", "", "--only", os.path.join(d, "ids.txt"),
-                    "--pause", os.path.join(d, "pause")]
+                    "--pause", os.path.join(d, "pause")] + CALM
         prebuild.main()
         assert len(slices.read(cache)["records"]) == n
         # a whole-mission run of both phases: the whole mission again
         for phase in ("frames", "processed"):
             sys.argv = ["prebuild.py", phase, "--cache", cache, "--live", "", "--pause", os.path.join(d, "pause")]
+            sys.argv += CALM
             prebuild.main()
         assert slices.covered(cache, mine)["spans"] is None, slices.covered(cache, mine)
         sys.argv = argv

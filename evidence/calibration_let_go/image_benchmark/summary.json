@@ -1,0 +1,3690 @@
+{
+ "verdict": "PASS (nothing changed)",
+ "fails": [],
+ "identical": 51,
+ "changed": [],
+ "collateral": [],
+ "worse_target": [],
+ "unbuilt": [],
+ "items": 51,
+ "no_seams": [],
+ "base": "1a35acb4dd88747056a6ad624a996d037328f70e",
+ "candidate": "0c49c51f0c0322a88ba542f1f88f9b7b35ae6480",
+ "base_versions": {
+  "frame_server.QSUFFIX": "-q95",
+  "frame_server.FRAME_VERSION": "frames-q95",
+  "frame_server.COLOR_VERSIONS": {
+   "balanced": "color-v58",
+   "raw": "color-v41",
+   "eye": "color-v58-eye",
+   "false": "color-v58-false",
+   "classic": "color-v36"
+  },
+  "frame_server.PROC_VERSIONS": {
+   "balanced": "proc-v25",
+   "raw": "proc-v25",
+   "eye": "proc-v25",
+   "false": "proc-v25",
+   "classic": "proc-v19"
+  },
+  "frame_server.CENTRE_VERSION": "ctr10",
+  "frame_server.THUMB_VERSION": "thumb-v23",
+  "obs_mosaic.VERSIONS": {
+   "balanced": "obs-v119",
+   "raw": "obs-v102",
+   "eye": "obs-v119-eye",
+   "false": "obs-v119-false",
+   "classic": "obs-v88-classic"
+  },
+  "reel.VERSIONS": {
+   "balanced": "reel-v96",
+   "raw": "reel-v79",
+   "eye": "reel-v96-eye",
+   "false": "reel-v96-false",
+   "classic": "reel-v73"
+  }
+ },
+ "candidate_versions": {
+  "frame_server.QSUFFIX": "-q95",
+  "frame_server.FRAME_VERSION": "frames-q95",
+  "frame_server.COLOR_VERSIONS": {
+   "balanced": "color-v58",
+   "raw": "color-v41",
+   "eye": "color-v58-eye",
+   "false": "color-v58-false",
+   "classic": "color-v36"
+  },
+  "frame_server.PROC_VERSIONS": {
+   "balanced": "proc-v25",
+   "raw": "proc-v25",
+   "eye": "proc-v25",
+   "false": "proc-v25",
+   "classic": "proc-v19"
+  },
+  "frame_server.CENTRE_VERSION": "ctr10",
+  "frame_server.THUMB_VERSION": "thumb-v23",
+  "obs_mosaic.VERSIONS": {
+   "balanced": "obs-v119",
+   "raw": "obs-v102",
+   "eye": "obs-v119-eye",
+   "false": "obs-v119-false",
+   "classic": "obs-v88-classic"
+  },
+  "reel.VERSIONS": {
+   "balanced": "reel-v96",
+   "raw": "reel-v79",
+   "eye": "reel-v96-eye",
+   "false": "reel-v96-false",
+   "classic": "reel-v73"
+  }
+ },
+ "seconds": {
+  "base": 1828,
+  "candidate": 1762
+ },
+ "tool": "bench-v2",
+ "at": "2026-11-16T19:18:30Z",
+ "targets": [],
+ "rows": [
+  {
+   "name": "ringsFB-mosaic",
+   "group": "hard",
+   "watch": "ring seams and steps (#449, #457), saturated glow under Saturn (#456 cyan blob)",
+   "frame": "W1870777525_1",
+   "time": "2017-04-13T11:16:57",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    384.0,
+    403.0
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_269RI_HIPHASEFB001_PIE_W_0",
+    "SATURN_ISS_269RI_HIPHASEFB001_PIE_W_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "ringsFA-mosaic",
+   "group": "hard",
+   "watch": "outer ring steps (#457), green and pink tiles and the white block (#456)",
+   "frame": "W1865195196_7",
+   "time": "2017-02-07T20:38:47",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    465.3,
+    201.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_260RI_HIPHASEFA001_PRIME_W_0",
+    "SATURN_ISS_260RI_HIPHASEFA001_PRIME_W_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "earthsmiled-mosaic",
+   "group": "hard",
+   "watch": "ring seams, ring colour registration, lime patch by the limb (#403)",
+   "frame": "W1752967209_1",
+   "time": "2013-07-19T22:24:16",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    158.6,
+    162.3
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_195RI_HIPHASEC001_VIMS_W_0",
+    "SATURN_ISS_195RI_HIPHASEC001_VIMS_W_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "ringmosaic04-mosaic",
+   "group": "hard",
+   "watch": "ring steps at every seam (#449 ring epoch redraw)",
+   "frame": "W1477671380_1",
+   "time": "2004-10-28T15:50:17",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    193.2,
+    205.8
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_00ARI_COMPHIDRK001_VIMS_W_0",
+    "SATURN_ISS_00ARI_COMPHIDRK001_VIMS_W_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "shadow-mosaic",
+   "group": "hard",
+   "watch": "In Saturn's Shadow (PIA08329): rings, disk, E ring",
+   "frame": "W1537023863_1",
+   "time": "2006-09-15T14:32:39",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    88.5,
+    34.7
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_028RI_HIPHWAC001_PRIME_W_0",
+    "SATURN_ISS_028RI_HIPHWAC001_PRIME_W_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "photlit039-mosaic",
+   "group": "hard",
+   "watch": "black square on the disk (#396-#402 saturated fill)",
+   "frame": "W1550696891_1",
+   "time": "2007-02-20T20:35:00",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    138.4,
+    141.3
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_039RI_PHOTLIT004_PRIME_W_0",
+    "SATURN_ISS_039RI_PHOTLIT004_PRIME_W_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "jupiter-atmos-mosaic",
+   "group": "hard",
+   "watch": "gray ghost panel by the terminator (#455 undrawn blacks)",
+   "frame": "N1357045948_2",
+   "time": "2001-01-01T13:00:49",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "rolling.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    128.9,
+    124.8
+   ],
+   "seam_missing": [],
+   "pass": [
+    "JUPITER_ISS_C23JU_ATMOS02A000_PRIME_N_1",
+    "JUPITER_ISS_C23JU_ATMOS02A000_PRIME_N_1"
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "enceladus-spol-mosaic",
+   "group": "hard",
+   "watch": "the crescent must stay gray, not white (#456 edge test)",
+   "frame": "N1858933183_1",
+   "time": "2016-11-27T09:12:36",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    21.8,
+    10.1
+   ],
+   "seam_missing": [],
+   "pass": [
+    "ENCELADUS_ISS_250EN_ENCELSPOL001_CIRS_N_0",
+    "ENCELADUS_ISS_250EN_ENCELSPOL001_CIRS_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "satellorb-centre",
+   "group": "hard",
+   "watch": "centred on Saturn, not on a 1 px Enceladus (#450)",
+   "frame": "N1455663489_1",
+   "time": "2004-02-16T22:35:10",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.8,
+    4.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "daphnis09-movie",
+   "group": "hard",
+   "watch": "A ring must not go black (#400 speck veil)",
+   "frame": "N1627449306_1",
+   "time": "2009-07-28T04:33:05",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    },
+    "frame032.webp": {
+     "status": "identical"
+    },
+    "frame033.webp": {
+     "status": "identical"
+    },
+    "frame034.webp": {
+     "status": "identical"
+    },
+    "frame035.webp": {
+     "status": "identical"
+    },
+    "frame036.webp": {
+     "status": "identical"
+    },
+    "frame037.webp": {
+     "status": "identical"
+    },
+    "frame038.webp": {
+     "status": "identical"
+    },
+    "frame039.webp": {
+     "status": "identical"
+    },
+    "frame040.webp": {
+     "status": "identical"
+    },
+    "frame041.webp": {
+     "status": "identical"
+    },
+    "frame042.webp": {
+     "status": "identical"
+    },
+    "frame043.webp": {
+     "status": "identical"
+    },
+    "frame044.webp": {
+     "status": "identical"
+    },
+    "frame045.webp": {
+     "status": "identical"
+    },
+    "frame046.webp": {
+     "status": "identical"
+    },
+    "frame047.webp": {
+     "status": "identical"
+    },
+    "frame048.webp": {
+     "status": "identical"
+    },
+    "frame049.webp": {
+     "status": "identical"
+    },
+    "frame050.webp": {
+     "status": "identical"
+    },
+    "frame051.webp": {
+     "status": "identical"
+    },
+    "frame052.webp": {
+     "status": "identical"
+    },
+    "frame053.webp": {
+     "status": "identical"
+    },
+    "frame054.webp": {
+     "status": "identical"
+    },
+    "frame055.webp": {
+     "status": "identical"
+    },
+    "frame056.webp": {
+     "status": "identical"
+    },
+    "frame057.webp": {
+     "status": "identical"
+    },
+    "frame058.webp": {
+     "status": "identical"
+    },
+    "frame059.webp": {
+     "status": "identical"
+    },
+    "frame060.webp": {
+     "status": "identical"
+    },
+    "frame061.webp": {
+     "status": "identical"
+    },
+    "frame062.webp": {
+     "status": "identical"
+    },
+    "frame063.webp": {
+     "status": "identical"
+    },
+    "frame064.webp": {
+     "status": "identical"
+    },
+    "frame065.webp": {
+     "status": "identical"
+    },
+    "frame066.webp": {
+     "status": "identical"
+    },
+    "frame067.webp": {
+     "status": "identical"
+    },
+    "frame068.webp": {
+     "status": "identical"
+    },
+    "frame069.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    20.0,
+    22.2
+   ],
+   "seam_missing": [],
+   "pass": [
+    "DAPHNIS_ISS_115RI_MNRNGSHAD004_PRIME_N_0",
+    "DAPHNIS_ISS_115RI_MNRNGSHAD004_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 70,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "ringclose124-movie",
+   "group": "hard",
+   "watch": "ring close-up not drawn as glow (#401)",
+   "frame": "N1641890798_1",
+   "time": "2010-01-11T08:02:55",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    34.7,
+    15.9
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_124RI_RDHRCOMP001_VIMS_N_1",
+    "SATURN_ISS_124RI_RDHRCOMP001_VIMS_N_1"
+   ],
+   "changed": [],
+   "of": 10,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "gring-still",
+   "group": "hard",
+   "watch": "G ring frame keeps its glow rule (#401)",
+   "frame": "N1572059544_1",
+   "time": "2007-10-26T02:36:07",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    3.8,
+    4.0
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "plume-bloom-still",
+   "group": "hard",
+   "watch": "CCD column bloom and Saturnshine night side",
+   "frame": "N1831473782_1",
+   "time": "2016-01-14T13:38:46",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    3.9,
+    4.2
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "approach-movie",
+   "group": "hard",
+   "watch": "approach movie exposure from frame to frame (#445 evened frames)",
+   "frame": "N1455700978_1",
+   "time": "2004-02-17T08:59:50",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "evened019.webp": {
+     "status": "identical"
+    },
+    "evened020.webp": {
+     "status": "identical"
+    },
+    "evened021.webp": {
+     "status": "identical"
+    },
+    "evened022.webp": {
+     "status": "identical"
+    },
+    "evened023.webp": {
+     "status": "identical"
+    },
+    "evened024.webp": {
+     "status": "identical"
+    },
+    "evened025.webp": {
+     "status": "identical"
+    },
+    "evened026.webp": {
+     "status": "identical"
+    },
+    "evened027.webp": {
+     "status": "identical"
+    },
+    "evened028.webp": {
+     "status": "identical"
+    },
+    "evened029.webp": {
+     "status": "identical"
+    },
+    "evened030.webp": {
+     "status": "identical"
+    },
+    "evened031.webp": {
+     "status": "identical"
+    },
+    "evened032.webp": {
+     "status": "identical"
+    },
+    "evened033.webp": {
+     "status": "identical"
+    },
+    "evened034.webp": {
+     "status": "identical"
+    },
+    "evened035.webp": {
+     "status": "identical"
+    },
+    "evened036.webp": {
+     "status": "identical"
+    },
+    "evened037.webp": {
+     "status": "identical"
+    },
+    "evened038.webp": {
+     "status": "identical"
+    },
+    "evened039.webp": {
+     "status": "identical"
+    },
+    "evened040.webp": {
+     "status": "identical"
+    },
+    "evened041.webp": {
+     "status": "identical"
+    },
+    "evened042.webp": {
+     "status": "identical"
+    },
+    "evened043.webp": {
+     "status": "identical"
+    },
+    "evened044.webp": {
+     "status": "identical"
+    },
+    "evened045.webp": {
+     "status": "identical"
+    },
+    "evened046.webp": {
+     "status": "identical"
+    },
+    "evened047.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    },
+    "frame032.webp": {
+     "status": "identical"
+    },
+    "frame033.webp": {
+     "status": "identical"
+    },
+    "frame034.webp": {
+     "status": "identical"
+    },
+    "frame035.webp": {
+     "status": "identical"
+    },
+    "frame036.webp": {
+     "status": "identical"
+    },
+    "frame037.webp": {
+     "status": "identical"
+    },
+    "frame038.webp": {
+     "status": "identical"
+    },
+    "frame039.webp": {
+     "status": "identical"
+    },
+    "frame040.webp": {
+     "status": "identical"
+    },
+    "frame041.webp": {
+     "status": "identical"
+    },
+    "frame042.webp": {
+     "status": "identical"
+    },
+    "frame043.webp": {
+     "status": "identical"
+    },
+    "frame044.webp": {
+     "status": "identical"
+    },
+    "frame045.webp": {
+     "status": "identical"
+    },
+    "frame046.webp": {
+     "status": "identical"
+    },
+    "frame047.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    178.1,
+    64.8
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_C42SA_APPRMOV012_PRIME_N_0",
+    "SATURN_ISS_C42SA_APPRMOV012_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 96,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "ringmovie04-movie",
+   "group": "hard",
+   "watch": "ring movie brightness (#402 movie headroom)",
+   "frame": "N1477691357_1",
+   "time": "2004-10-28T21:23:54",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    },
+    "frame032.webp": {
+     "status": "identical"
+    },
+    "frame033.webp": {
+     "status": "identical"
+    },
+    "frame034.webp": {
+     "status": "identical"
+    },
+    "frame035.webp": {
+     "status": "identical"
+    },
+    "frame036.webp": {
+     "status": "identical"
+    },
+    "frame037.webp": {
+     "status": "identical"
+    },
+    "frame038.webp": {
+     "status": "identical"
+    },
+    "frame039.webp": {
+     "status": "identical"
+    },
+    "frame040.webp": {
+     "status": "identical"
+    },
+    "frame041.webp": {
+     "status": "identical"
+    },
+    "frame042.webp": {
+     "status": "identical"
+    },
+    "frame043.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    14.6,
+    26.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_00ARF_HIPHLFMOV001_PRIME_N_0",
+    "SATURN_ISS_00ARF_HIPHLFMOV001_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 44,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "telesto-composite",
+   "group": "hard",
+   "watch": "Telesto colour frame: no white crescent or ghost (sampler pre-existing defect)",
+   "frame": "N1831467690_1",
+   "time": "2016-01-14T11:57:20",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    5.5,
+    5.8
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "moon99-composite",
+   "group": "plain",
+   "watch": "Earth's Moon in colour, 1999 flyby",
+   "frame": "W1313634417_1",
+   "time": "1999-08-18T02:20:09",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    15.7,
+    7.0
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "venus99-still",
+   "group": "plain",
+   "watch": "Venus flyby flat field frame",
+   "frame": "N1308947228_1",
+   "time": "1999-06-24T20:20:51",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.1,
+    4.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "masursky-still",
+   "group": "plain",
+   "watch": "asteroid Masursky, a few pixels",
+   "frame": "N1327293041_1",
+   "time": "2000-01-23T04:22:22",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.1,
+    4.3
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "jupiter-portrait-composite",
+   "group": "plain",
+   "watch": "Jupiter in natural colour",
+   "frame": "N1356755399_1",
+   "time": "2000-12-29T04:18:22",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    12.8,
+    5.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "jupiter-rmov-movie",
+   "group": "plain",
+   "watch": "tinted Jupiter movie, WAC",
+   "frame": "W1355234327_1",
+   "time": "2000-12-11T13:47:20",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "evened019.webp": {
+     "status": "identical"
+    },
+    "evened020.webp": {
+     "status": "identical"
+    },
+    "evened021.webp": {
+     "status": "identical"
+    },
+    "evened022.webp": {
+     "status": "identical"
+    },
+    "evened023.webp": {
+     "status": "identical"
+    },
+    "evened024.webp": {
+     "status": "identical"
+    },
+    "evened025.webp": {
+     "status": "identical"
+    },
+    "evened026.webp": {
+     "status": "identical"
+    },
+    "evened027.webp": {
+     "status": "identical"
+    },
+    "evened028.webp": {
+     "status": "identical"
+    },
+    "evened029.webp": {
+     "status": "identical"
+    },
+    "evened030.webp": {
+     "status": "identical"
+    },
+    "evened031.webp": {
+     "status": "identical"
+    },
+    "evened032.webp": {
+     "status": "identical"
+    },
+    "evened033.webp": {
+     "status": "identical"
+    },
+    "evened034.webp": {
+     "status": "identical"
+    },
+    "evened035.webp": {
+     "status": "identical"
+    },
+    "evened036.webp": {
+     "status": "identical"
+    },
+    "evened037.webp": {
+     "status": "identical"
+    },
+    "evened038.webp": {
+     "status": "identical"
+    },
+    "evened039.webp": {
+     "status": "identical"
+    },
+    "evened040.webp": {
+     "status": "identical"
+    },
+    "evened041.webp": {
+     "status": "identical"
+    },
+    "evened042.webp": {
+     "status": "identical"
+    },
+    "evened043.webp": {
+     "status": "identical"
+    },
+    "evened044.webp": {
+     "status": "identical"
+    },
+    "evened045.webp": {
+     "status": "identical"
+    },
+    "evened046.webp": {
+     "status": "identical"
+    },
+    "evened047.webp": {
+     "status": "identical"
+    },
+    "evened048.webp": {
+     "status": "identical"
+    },
+    "evened049.webp": {
+     "status": "identical"
+    },
+    "evened050.webp": {
+     "status": "identical"
+    },
+    "evened051.webp": {
+     "status": "identical"
+    },
+    "evened052.webp": {
+     "status": "identical"
+    },
+    "evened053.webp": {
+     "status": "identical"
+    },
+    "evened054.webp": {
+     "status": "identical"
+    },
+    "evened055.webp": {
+     "status": "identical"
+    },
+    "evened056.webp": {
+     "status": "identical"
+    },
+    "evened057.webp": {
+     "status": "identical"
+    },
+    "evened058.webp": {
+     "status": "identical"
+    },
+    "evened059.webp": {
+     "status": "identical"
+    },
+    "evened060.webp": {
+     "status": "identical"
+    },
+    "evened061.webp": {
+     "status": "identical"
+    },
+    "evened062.webp": {
+     "status": "identical"
+    },
+    "evened063.webp": {
+     "status": "identical"
+    },
+    "evened064.webp": {
+     "status": "identical"
+    },
+    "evened065.webp": {
+     "status": "identical"
+    },
+    "evened066.webp": {
+     "status": "identical"
+    },
+    "evened067.webp": {
+     "status": "identical"
+    },
+    "evened068.webp": {
+     "status": "identical"
+    },
+    "evened069.webp": {
+     "status": "identical"
+    },
+    "evened070.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    },
+    "frame032.webp": {
+     "status": "identical"
+    },
+    "frame033.webp": {
+     "status": "identical"
+    },
+    "frame034.webp": {
+     "status": "identical"
+    },
+    "frame035.webp": {
+     "status": "identical"
+    },
+    "frame036.webp": {
+     "status": "identical"
+    },
+    "frame037.webp": {
+     "status": "identical"
+    },
+    "frame038.webp": {
+     "status": "identical"
+    },
+    "frame039.webp": {
+     "status": "identical"
+    },
+    "frame040.webp": {
+     "status": "identical"
+    },
+    "frame041.webp": {
+     "status": "identical"
+    },
+    "frame042.webp": {
+     "status": "identical"
+    },
+    "frame043.webp": {
+     "status": "identical"
+    },
+    "frame044.webp": {
+     "status": "identical"
+    },
+    "frame045.webp": {
+     "status": "identical"
+    },
+    "frame046.webp": {
+     "status": "identical"
+    },
+    "frame047.webp": {
+     "status": "identical"
+    },
+    "frame048.webp": {
+     "status": "identical"
+    },
+    "frame049.webp": {
+     "status": "identical"
+    },
+    "frame050.webp": {
+     "status": "identical"
+    },
+    "frame051.webp": {
+     "status": "identical"
+    },
+    "frame052.webp": {
+     "status": "identical"
+    },
+    "frame053.webp": {
+     "status": "identical"
+    },
+    "frame054.webp": {
+     "status": "identical"
+    },
+    "frame055.webp": {
+     "status": "identical"
+    },
+    "frame056.webp": {
+     "status": "identical"
+    },
+    "frame057.webp": {
+     "status": "identical"
+    },
+    "frame058.webp": {
+     "status": "identical"
+    },
+    "frame059.webp": {
+     "status": "identical"
+    },
+    "frame060.webp": {
+     "status": "identical"
+    },
+    "frame061.webp": {
+     "status": "identical"
+    },
+    "frame062.webp": {
+     "status": "identical"
+    },
+    "frame063.webp": {
+     "status": "identical"
+    },
+    "frame064.webp": {
+     "status": "identical"
+    },
+    "frame065.webp": {
+     "status": "identical"
+    },
+    "frame066.webp": {
+     "status": "identical"
+    },
+    "frame067.webp": {
+     "status": "identical"
+    },
+    "frame068.webp": {
+     "status": "identical"
+    },
+    "frame069.webp": {
+     "status": "identical"
+    },
+    "frame070.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    147.0,
+    150.5
+   ],
+   "seam_missing": [],
+   "pass": [
+    "JUPITER_ISS_C23RI_RMOV001_PRIME_W_0",
+    "JUPITER_ISS_C23RI_RMOV001_PRIME_W_0"
+   ],
+   "changed": [],
+   "of": 142,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "approach-composite",
+   "group": "plain",
+   "watch": "Saturn on approach in colour",
+   "frame": "N1455630732_1",
+   "time": "2004-02-16T13:29:12",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    5.3,
+    5.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "phoebe-mosaic",
+   "group": "plain",
+   "watch": "Phoebe close pass, no green or purple fringes (#396-#403)",
+   "frame": "N1465677502_2",
+   "time": "2004-06-11T20:14:17",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    75.1,
+    37.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "PHOEBE_ISS_000PH_HIRESC001_PRIME_N_3",
+    "PHOEBE_ISS_000PH_HIRESC001_PRIME_N_3"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "phoebe-movie",
+   "group": "plain",
+   "watch": "Phoebe rotation movie",
+   "frame": "N1465535189_1",
+   "time": "2004-06-10T04:42:23",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "evened019.webp": {
+     "status": "identical"
+    },
+    "evened020.webp": {
+     "status": "identical"
+    },
+    "evened021.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    92.9,
+    99.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "PHOEBE_ISS_000PH_FULROTIN001_PRIME_N_3",
+    "PHOEBE_ISS_000PH_FULROTIN001_PRIME_N_3"
+   ],
+   "changed": [],
+   "of": 44,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "titan04-composite",
+   "group": "plain",
+   "watch": "Titan's haze limb in colour",
+   "frame": "W1481651010_2",
+   "time": "2004-12-13T17:17:42",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    6.6,
+    6.7
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "saturn05-movie",
+   "group": "plain",
+   "watch": "Saturn 3x3 movie, WAC",
+   "frame": "W1486379273_1",
+   "time": "2005-02-06T10:41:33",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    391.3,
+    161.7
+   ],
+   "seam_missing": [],
+   "pass": [
+    "SATURN_ISS_003SA_3X3MOVIEA002_PRIME_W_0",
+    "SATURN_ISS_003SA_3X3MOVIEA002_PRIME_W_0"
+   ],
+   "changed": [],
+   "of": 27,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "rhea-glocol-composite",
+   "group": "plain",
+   "watch": "Rhea in colour",
+   "frame": "N1499996986_6",
+   "time": "2005-07-14T01:21:59",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    5.5,
+    5.8
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "hyperion-mosaic",
+   "group": "plain",
+   "watch": "Hyperion close flyby",
+   "frame": "N1506391196_2",
+   "time": "2005-09-26T01:31:28",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    23.8,
+    26.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "HYPERION_ISS_015HY_MORPHO003_PRIME_N_0",
+    "HYPERION_ISS_015HY_MORPHO003_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "rhea-mosaic",
+   "group": "plain",
+   "watch": "Rhea regional map, colour registration (Rhea REGCOL +22,-18 px)",
+   "frame": "N1511726777_2",
+   "time": "2005-11-26T19:37:15",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    43.0,
+    17.0
+   ],
+   "seam_missing": [],
+   "pass": [
+    "RHEA_ISS_018RH_REGMAP001_PRIME_N_0",
+    "RHEA_ISS_018RH_REGMAP001_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "titan-globmap-mosaic",
+   "group": "plain",
+   "watch": "Titan global map, a filled pass (detail filter)",
+   "frame": "N1536367860_1",
+   "time": "2006-09-08T00:19:04",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    11.3,
+    12.3
+   ],
+   "seam_missing": [],
+   "pass": [
+    "TITAN_ISS_028TI_GLOBMAPNA001_PRIME_N_0",
+    "TITAN_ISS_028TI_GLOBMAPNA001_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "equinox-shadow-still",
+   "group": "plain",
+   "watch": "rings at equinox, very dim",
+   "frame": "N1628666718_1",
+   "time": "2009-08-11T06:43:09",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.2,
+    4.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "kiviuq-still",
+   "group": "plain",
+   "watch": "outer irregular moon, a dot",
+   "frame": "N1557228457_1",
+   "time": "2007-05-07T10:53:04",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    9.4,
+    4.1
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "prometheus-still",
+   "group": "plain",
+   "watch": "Prometheus and the F ring",
+   "frame": "N1557124771_1",
+   "time": "2007-05-06T06:05:39",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.2,
+    4.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "pan07-still",
+   "group": "plain",
+   "watch": "Pan in the Encke gap, a speck",
+   "frame": "N1558590310_1",
+   "time": "2007-05-23T05:11:09",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.0,
+    4.2
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "iapetus-mosaic",
+   "group": "plain",
+   "watch": "Iapetus close flyby, dark material not black holes (#407)",
+   "frame": "N1568157369_2",
+   "time": "2007-09-10T22:41:08",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    58.7,
+    23.7
+   ],
+   "seam_missing": [],
+   "pass": [
+    "IAPETUS_ISS_049IA_REGMAPTRL001_PRIME_N_0",
+    "IAPETUS_ISS_049IA_REGMAPTRL001_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "iapetus-composite",
+   "group": "plain",
+   "watch": "Iapetus in colour",
+   "frame": "N1568131481_2",
+   "time": "2007-09-10T15:29:39",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    5.1,
+    5.3
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "enceladus-composite",
+   "group": "plain",
+   "watch": "Enceladus in colour",
+   "frame": "N1602286223_2",
+   "time": "2008-10-09T22:51:22",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    5.3,
+    5.5
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "mimas-mosaic",
+   "group": "plain",
+   "watch": "Mimas, small mosaic",
+   "frame": "N1644782658_1",
+   "time": "2010-02-13T19:20:15",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    22.5,
+    12.0
+   ],
+   "seam_missing": [],
+   "pass": [
+    "MIMAS_ISS_126MI_FP3DAYMAP001_CIRS_N_0",
+    "MIMAS_ISS_126MI_FP3DAYMAP001_CIRS_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "storm-composite",
+   "group": "plain",
+   "watch": "Saturn's 2011 storm in colour",
+   "frame": "N1677429213_1",
+   "time": "2011-02-26T15:45:44",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    5.6,
+    5.8
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "helene-movie",
+   "group": "plain",
+   "watch": "Helene close movie",
+   "frame": "N1687117735_1",
+   "time": "2011-06-18T19:00:05",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "evened019.webp": {
+     "status": "identical"
+    },
+    "evened020.webp": {
+     "status": "identical"
+    },
+    "evened021.webp": {
+     "status": "identical"
+    },
+    "evened022.webp": {
+     "status": "identical"
+    },
+    "evened023.webp": {
+     "status": "identical"
+    },
+    "evened024.webp": {
+     "status": "identical"
+    },
+    "evened025.webp": {
+     "status": "identical"
+    },
+    "evened026.webp": {
+     "status": "identical"
+    },
+    "evened027.webp": {
+     "status": "identical"
+    },
+    "evened028.webp": {
+     "status": "identical"
+    },
+    "evened029.webp": {
+     "status": "identical"
+    },
+    "evened030.webp": {
+     "status": "identical"
+    },
+    "evened031.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    169.6,
+    184.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "HELENE_ISS_149HE_HELENCLOS001_PRIME_N_1",
+    "HELENE_ISS_149HE_HELENCLOS001_PRIME_N_1"
+   ],
+   "changed": [],
+   "of": 64,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "methone-movie",
+   "group": "plain",
+   "watch": "Methone, egg-shaped small moon",
+   "frame": "N1716193864_1",
+   "time": "2012-05-20T07:39:10",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    144.0,
+    63.2
+   ],
+   "seam_missing": [],
+   "pass": [
+    "METHONE_ISS_166ME_METHONE001_PIE_N_2",
+    "METHONE_ISS_166ME_METHONE001_PIE_N_2"
+   ],
+   "changed": [],
+   "of": 30,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "hexagon-composite",
+   "group": "plain",
+   "watch": "north polar vortex in colour",
+   "frame": "N1732691523_1",
+   "time": "2012-11-27T06:18:18",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.7,
+    4.9
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "dione-mosaic",
+   "group": "plain",
+   "watch": "Dione regional map",
+   "frame": "N1820404446_1",
+   "time": "2015-09-08T10:51:07",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    12.9,
+    14.3
+   ],
+   "seam_missing": [],
+   "pass": [
+    "DIONE_ISS_221DI_REGMAP001_PIE_N_0",
+    "DIONE_ISS_221DI_REGMAP001_PIE_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "enceladus15-movie",
+   "group": "plain",
+   "watch": "Enceladus movie",
+   "frame": "N1820439208_1",
+   "time": "2015-09-08T20:30:29",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "evened019.webp": {
+     "status": "identical"
+    },
+    "evened020.webp": {
+     "status": "identical"
+    },
+    "evened021.webp": {
+     "status": "identical"
+    },
+    "evened022.webp": {
+     "status": "identical"
+    },
+    "evened023.webp": {
+     "status": "identical"
+    },
+    "evened024.webp": {
+     "status": "identical"
+    },
+    "evened025.webp": {
+     "status": "identical"
+    },
+    "evened026.webp": {
+     "status": "identical"
+    },
+    "evened027.webp": {
+     "status": "identical"
+    },
+    "evened028.webp": {
+     "status": "identical"
+    },
+    "evened029.webp": {
+     "status": "identical"
+    },
+    "evened030.webp": {
+     "status": "identical"
+    },
+    "evened031.webp": {
+     "status": "identical"
+    },
+    "evened032.webp": {
+     "status": "identical"
+    },
+    "evened033.webp": {
+     "status": "identical"
+    },
+    "evened034.webp": {
+     "status": "identical"
+    },
+    "evened035.webp": {
+     "status": "identical"
+    },
+    "evened036.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    },
+    "frame032.webp": {
+     "status": "identical"
+    },
+    "frame033.webp": {
+     "status": "identical"
+    },
+    "frame034.webp": {
+     "status": "identical"
+    },
+    "frame035.webp": {
+     "status": "identical"
+    },
+    "frame036.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    363.7,
+    151.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "ENCELADUS_ISS_221EN_ENCELADUS001_PIE_N_0",
+    "ENCELADUS_ISS_221EN_ENCELADUS001_PIE_N_0"
+   ],
+   "changed": [],
+   "of": 74,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "telesto-movie",
+   "group": "plain",
+   "watch": "Telesto close movie",
+   "frame": "N1831466328_1",
+   "time": "2016-01-14T11:34:38",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    42.1,
+    46.6
+   ],
+   "seam_missing": [],
+   "pass": [
+    "TELESTO_ISS_230TL_TELESTO001_PRIME_N_0",
+    "TELESTO_ISS_230TL_TELESTO001_PRIME_N_0"
+   ],
+   "changed": [],
+   "of": 36,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "daphnis17-movie",
+   "group": "plain",
+   "watch": "Daphnis in the Keeler gap, ring waves",
+   "frame": "N1863267115_1",
+   "time": "2017-01-16T13:04:21",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "evened019.webp": {
+     "status": "identical"
+    },
+    "evened020.webp": {
+     "status": "identical"
+    },
+    "evened021.webp": {
+     "status": "identical"
+    },
+    "evened022.webp": {
+     "status": "identical"
+    },
+    "evened023.webp": {
+     "status": "identical"
+    },
+    "evened024.webp": {
+     "status": "identical"
+    },
+    "evened025.webp": {
+     "status": "identical"
+    },
+    "evened026.webp": {
+     "status": "identical"
+    },
+    "evened027.webp": {
+     "status": "identical"
+    },
+    "evened028.webp": {
+     "status": "identical"
+    },
+    "evened029.webp": {
+     "status": "identical"
+    },
+    "evened030.webp": {
+     "status": "identical"
+    },
+    "evened031.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    },
+    "frame019.webp": {
+     "status": "identical"
+    },
+    "frame020.webp": {
+     "status": "identical"
+    },
+    "frame021.webp": {
+     "status": "identical"
+    },
+    "frame022.webp": {
+     "status": "identical"
+    },
+    "frame023.webp": {
+     "status": "identical"
+    },
+    "frame024.webp": {
+     "status": "identical"
+    },
+    "frame025.webp": {
+     "status": "identical"
+    },
+    "frame026.webp": {
+     "status": "identical"
+    },
+    "frame027.webp": {
+     "status": "identical"
+    },
+    "frame028.webp": {
+     "status": "identical"
+    },
+    "frame029.webp": {
+     "status": "identical"
+    },
+    "frame030.webp": {
+     "status": "identical"
+    },
+    "frame031.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    86.7,
+    94.1
+   ],
+   "seam_missing": [],
+   "pass": [
+    "DAPHNIS_ISS_257DA_DAPHNIS001_PIE_N_3",
+    "DAPHNIS_ISS_257DA_DAPHNIS001_PIE_N_3"
+   ],
+   "changed": [],
+   "of": 64,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "pan17-movie",
+   "group": "plain",
+   "watch": "Pan close flyby",
+   "frame": "N1867599811_1",
+   "time": "2017-03-07T16:35:30",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "evened000.webp": {
+     "status": "identical"
+    },
+    "evened001.webp": {
+     "status": "identical"
+    },
+    "evened002.webp": {
+     "status": "identical"
+    },
+    "evened003.webp": {
+     "status": "identical"
+    },
+    "evened004.webp": {
+     "status": "identical"
+    },
+    "evened005.webp": {
+     "status": "identical"
+    },
+    "evened006.webp": {
+     "status": "identical"
+    },
+    "evened007.webp": {
+     "status": "identical"
+    },
+    "evened008.webp": {
+     "status": "identical"
+    },
+    "evened009.webp": {
+     "status": "identical"
+    },
+    "evened010.webp": {
+     "status": "identical"
+    },
+    "evened011.webp": {
+     "status": "identical"
+    },
+    "evened012.webp": {
+     "status": "identical"
+    },
+    "evened013.webp": {
+     "status": "identical"
+    },
+    "evened014.webp": {
+     "status": "identical"
+    },
+    "evened015.webp": {
+     "status": "identical"
+    },
+    "evened016.webp": {
+     "status": "identical"
+    },
+    "evened017.webp": {
+     "status": "identical"
+    },
+    "evened018.webp": {
+     "status": "identical"
+    },
+    "frame000.webp": {
+     "status": "identical"
+    },
+    "frame001.webp": {
+     "status": "identical"
+    },
+    "frame002.webp": {
+     "status": "identical"
+    },
+    "frame003.webp": {
+     "status": "identical"
+    },
+    "frame004.webp": {
+     "status": "identical"
+    },
+    "frame005.webp": {
+     "status": "identical"
+    },
+    "frame006.webp": {
+     "status": "identical"
+    },
+    "frame007.webp": {
+     "status": "identical"
+    },
+    "frame008.webp": {
+     "status": "identical"
+    },
+    "frame009.webp": {
+     "status": "identical"
+    },
+    "frame010.webp": {
+     "status": "identical"
+    },
+    "frame011.webp": {
+     "status": "identical"
+    },
+    "frame012.webp": {
+     "status": "identical"
+    },
+    "frame013.webp": {
+     "status": "identical"
+    },
+    "frame014.webp": {
+     "status": "identical"
+    },
+    "frame015.webp": {
+     "status": "identical"
+    },
+    "frame016.webp": {
+     "status": "identical"
+    },
+    "frame017.webp": {
+     "status": "identical"
+    },
+    "frame018.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    47.1,
+    24.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    "PAN_ISS_264PN_PAN001_PIE_N_0",
+    "PAN_ISS_264PN_PAN001_PIE_N_0"
+   ],
+   "changed": [],
+   "of": 38,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "titan-cloud-mosaic",
+   "group": "plain",
+   "watch": "Titan clouds near the end of the mission",
+   "frame": "N1883839650_1",
+   "time": "2017-09-11T15:37:28",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "mosaic.webp": {
+     "status": "identical"
+    },
+    "mosaic_full.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    14.1,
+    16.1
+   ],
+   "seam_missing": [],
+   "pass": [
+    "TITAN_ISS_292TI_CLOUD002_PIE_N_0",
+    "TITAN_ISS_292TI_CLOUD002_PIE_N_0"
+   ],
+   "changed": [],
+   "of": 2,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "earth-fb-still",
+   "group": "plain",
+   "watch": "Earth seen from Saturn, a dot",
+   "frame": "N1870757502_1",
+   "time": "2017-04-13T05:43:20",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "still.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.2,
+    4.4
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "enceladus15-composite",
+   "group": "plain",
+   "watch": "Enceladus in colour, 2015",
+   "frame": "N1820444140_1",
+   "time": "2015-09-08T21:52:40",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    13.5,
+    5.5
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  },
+  {
+   "name": "titan17-composite",
+   "group": "plain",
+   "watch": "Titan two-filter colour (approximate colour)",
+   "frame": "N1883848034_1",
+   "time": "2017-09-11T17:57:19",
+   "target": false,
+   "note": "",
+   "pictures": {
+    "composite.webp": {
+     "status": "identical"
+    }
+   },
+   "seconds": [
+    4.8,
+    5.1
+   ],
+   "seam_missing": [],
+   "pass": [
+    null,
+    null
+   ],
+   "changed": [],
+   "of": 1,
+   "worse": {},
+   "status": "identical"
+  }
+ ]
+}

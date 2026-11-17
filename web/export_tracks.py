@@ -28,6 +28,7 @@ import math
 import os
 import re
 import struct
+import sys
 
 import numpy as np
 import pandas as pd
@@ -247,6 +248,12 @@ def export_tracks(kdir, out, years, only=None):
 def export_catalog(kdir, out, index_csv, years):
     df = pd.read_csv(index_csv, low_memory=False)
     df = df[df.year.notna()]
+    # frames that hold no picture (darks, lamp frames: frames/not_pictures.py) are left out, as the pipeline leaves them
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
+    import not_pictures
+    dark = not_pictures.ids()
+    if dark:
+        df = df[[os.path.splitext(os.path.basename(p))[0] not in dark for p in df.path]]
     mks = {int(re.search(r"cas_(\d{4})", m).group(1)): m for m in glob.glob(f"{kdir}/mk/*.tm")}
     ifov = {"ISSNA": 5.9907e-6, "ISSWA": 5.9907e-5}
     summary = {}

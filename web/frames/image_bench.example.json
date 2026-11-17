@@ -1,0 +1,30 @@
+{
+ "hosts": {
+  "local": {
+   "python": "~/Development/Cassini-Project/.venv/bin/python",
+   "root": "~/cassini-build/image-bench",
+   "env": {
+    "CASSINI_DATA": "~/cassini-build/inputs/cassini_lut8.zip",
+    "CASSINI_KERNELS": "~/cassini-build/inputs/cassiniprojectJAN05.zip",
+    "CASSINI_GEOMETRY_CACHE": "~/cassini-build/inputs/geometry-usgs.sqlite",
+    "CASSINI_SPICE_CACHE": "~/cassini-build/inputs/spice_cache",
+    "CASSINI_CISSCAL": "~/cassini-build/inputs/cisscal",
+    "CASSINI_INDEX_CACHE": "~/cassini-build/inputs/zip_index"
+   }
+  },
+  "mini": {
+   "ssh": "mini",
+   "repo": "/Users/lazarus/dev/Cassini-Project",
+   "root": "/Volumes/SAM_IAC_PHOTO/cassini-work/image-bench",
+   "python": "/Users/lazarus/dev/Cassini-Project/.venv/bin/python",
+   "env": {
+    "CASSINI_DATA": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/cassini_lut8.zip",
+    "CASSINI_KERNELS": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/cassiniprojectJAN05.zip",
+    "CASSINI_GEOMETRY_CACHE": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/geometry-usgs.sqlite",
+    "CASSINI_SPICE_CACHE": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/spice_cache",
+    "CASSINI_CISSCAL": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/cisscal",
+    "CASSINI_INDEX_CACHE": "/Volumes/SAM_IAC_PHOTO/cassini-work/archives/zip_index"
+   }
+  }
+ }
+}

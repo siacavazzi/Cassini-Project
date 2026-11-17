@@ -67,7 +67,21 @@ import label_handler  # noqa: E402
 # display model (calibration.style), classic being the mosaics made before the balanced display model, raw the
 # balanced ones before natural color
 # obs-v119/v102/v88: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; obs-v118/v101/v87: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); obs-v117/v100/v86: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); obs-v116/v99 (classic stays v85): an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; obs-v115/v98/v85: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; obs-v113/v96/v83: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; obs-v112/v95/v82: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; obs-v111/v94/v81: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-VERSIONS = {"balanced": "obs-v119", "raw": "obs-v102", "eye": "obs-v119-eye", "false": "obs-v119-false", "classic": "obs-v88-classic"}
+# obs-v120/v103/v89: a tinted movie frame is matched to its set over every pixel it did not clip (tinted_frame: from TINT_CLIP up was left out, and a bright body's frame did not follow its exposure gain); 
+# obs-v121/v104/v90: every picture calibrated from full-depth data (#491, calibration.depth_image: stored values, true 12-bit originals when present; renumbered past #507 on the integration branch)
+# obs-v122/v105/v91: CISSCAL's bit weight step (#532, calibration.bitweighted)
+# obs-v123/v106/v92: flat fields for NAC UV2/CL2 from the PDS slope file and fallback flats for pairs with no slope file (#493; renumbered on the integration branch)
+# obs-v124/v107/v93: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges (#497; renumbered on the integration branch)
+# obs-v125/v108/v94: a repeat find_shift can't line up is matched near SPICE's place first (guided_shift phase or centroid), else merged as taken where SPICE puts it here; frames wholly on the disk sized by the ground's range (repeats and colour sets); v89/v103/v120: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges (#529; renumbered on the integration branch)
+# obs-v126/v109/v95: a filter's match onto its pointing's other filter is checked on the body's lit limb (_limb_register: the 2004 approach movies' doubled limbs and ring edges, audit finding 14); obs-v119/v102/v88: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; obs-v118/v101/v87: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); obs-v117/v100/v86: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); obs-v116/v99 (classic stays v85): an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; obs-v115/v98/v85: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; obs-v113/v96/v83: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; obs-v112/v95/v82: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; obs-v111/v94/v81: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out (#506; renumbered on the integration branch)
+# obs-v127/v110/v96: a colour set's channels lined up on a one-way ridge of shared edges (image_correction.ridge_shift: a ring edge across cloud tops) and a blank pair wholly on its target's disk as its even colour (_flat filled): gray sets in colour; obs-v119/v102/v88: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; obs-v118/v101/v87: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); obs-v117/v100/v86: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); obs-v116/v99 (classic stays v85): an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; obs-v115/v98/v85: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; obs-v113/v96/v83: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; obs-v112/v95/v82: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; obs-v111/v94/v81: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out (#508; renumbered on the integration branch)
+# obs-v128/v111/v97: sky smoothing measures a glow from each line's dark sky, not the line's median (calibration.SKY_LINE): no second darker limb inside Saturn's; obs-v119/v102/v88: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; obs-v118/v101/v87: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); obs-v117/v100/v86: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); obs-v116/v99 (classic stays v85): an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; obs-v115/v98/v85: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; obs-v113/v96/v83: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; obs-v112/v95/v82: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; obs-v111/v94/v81: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out (#517; renumbered on the integration branch)
+# obs-v129/v112/v98: a lossy frame's compression blocks smoothed in full from 10 to 1, not 20 (calibration.LOSSY_RATIO): no ragged dark block patches on 103RI's dim rings; obs-v119/v102/v88: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; obs-v118/v101/v87: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); obs-v117/v100/v86: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); obs-v116/v99 (classic stays v85): an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; obs-v115/v98/v85: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; obs-v113/v96/v83: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; obs-v112/v95/v82: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; obs-v111/v94/v81: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); obs-v110/v93/v80: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; obs-v109/v92/v79: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; obs-v108/v91/v78: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; obs-v107/v90/v77: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; obs-v105/v88/v75: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; obs-v104/v87/v74: a ring pass's white has 1.4x headroom (RING_HEADROOM): rings back to their brightness before #153's defect repair raised them ~15%; numbered past #401; obs-v103/v86/v73: a ring pass's movie frames as bright as a sunlit surface keep the pass's black, never a glow's (124RI's rings half black); numbered past #400 and the #396-#398 stack; obs-v102/v85/v72 (numbered past #400): movies steadied over links four frames back, solved together (_chain_links, steady5); obs-v101/v84/v71: global solve on rings and limbs (#395 ring_plane / ring_moves as anchors, ring_pair_shift, limb_place with each filter's haze solved); obs-v96/v79/v66: #396 (a mosaic's pointings registered all together, global_places, and tiles drawn at their sub-pixel places, _subpixel_at); obs-v99/v82/v69: a moon of Saturn under a pixel keeps its rings (only SPECKS take the speck veil's black: Daphnis 115RI went black); numbered past the open #396-#398 stack; obs-v95/v78/v65: #393 (a color set mixing long and short exposures drawn on one white; a long exposure among short ones gives way to its filter's short frame: 263RI pink rings); obs-v94/v77/v64: #392 (a colour set's long repeat goes under alone, clipped_still: Day the Earth Smiled's lime and purple ring copy); obs-v93/v76/v63: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); obs-v92/v75/v62: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); obs-v91/v74/v61: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); obs-v90/v73/v60: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); obs-v89/v72/v59: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); obs-v88/v71/v58: #372/#374 (movies: a limb coming into a dark frame plays; an edge strip lost in downlink plays; short exposures not blank against clipped long ones); obs-v87/v70/v57: #369 (tinted movie frames: off-hue colors fade to the set's mean, dark sky takes no color, gray frame up to 10 min away; 259EP lime limb and sky specks); obs-v86/v69/v56: #367 (one look per color movie: set frames drawn from the pass's gray filter too; 259EP Epimetheus, 117TI/147TI/00ATI haze-surface strobe; held frame's own tile); obs-v85/v68/v55: #365 (transit movies: target found at its limb, limb zone on the body's local brightness, exposure gain after the color mix; 154RH halo and lime Rhea, 153DI Dione); obs-v84/v67/v54: #359 (transit movies: target lined up per filter, limb zone mixed from both bodies' colors, ring lines not matched as a body); obs-v83/v66/v53: #357 (movie per-body: another body in a color frame moved, in each filter's plane, to where the shown frame has it; no colored copies); obs-v82/v65/v52: #355 (color-hold cap: tinted frames keep the set's mean hue where the body moved, no seams; a set still coming in shows itself); obs-v81/v64/v51: #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); obs-v80/v63/v50: #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); obs-v79/v62/v49: #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); obs-v78/v61/v48: #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); obs-v77/v60/v47: the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); obs-v76/v59/v46: #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); obs-v75/v58/v45: #334 (movie skies: long exposures on their own white, skies stored in whole codes at their median: 155EN jets, 089MI veil, Pan Encke gap, Atlas halo); obs-v74/v57/v44: #328 (a movie taken up again on its view after a pause is one movie) and #329 (frames the body fills keep the pass's black: the guard the #279 merge lost); obs-v73/v56/v43: the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); obs-v72/v55/v42: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); obs-v71/v54/v41: #271 (movie stabilization held on the pass's target by SPICE); obs-v70/v53/v40: #304 (no detail sharpening on small centred moons), #306 (registration past SPICE's jumps), #307 (movie colour filters from its sets) and #308 (dark sky under an even offset); obs-v69/v52/v39: #291 (registered tiles redrawn from their own frame: Rhea and Dione colour panels); obs-v68/v51/v38: #288 (each colour filter registered among its pointing's colour frames, then nearest in wavelength); obs-v67/v50/v37: #294 (grey single-filter colour sets); obs-v66/v49/v36: #281 (planet colour mosaics from whole visits, colour frames of one pointing registered to each other, mixes by set_mask on the tiles' boxes); obs-v65/v48/v35: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); obs-v64/v47/v34: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); obs-v63/v46/v33: the Day the Earth Smiled mosaic (#267); obs-v62/v45/v32: centred movies drawn as big as what the frames show (#269); obs-v61/v44/v31: movies use complete colour sets (#266); obs-v60/v43/v30: mosaic tile placement: slots inside disks, Titan hole, Iapetus white limb (#251); obs-v59/v42/v29: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); obs-v58/v41/v28: even brightness across a pass and dim tiles decided by each pointing's first tile (#253); obs-v57/v40/v27: natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); obs-v56/v39/v26: the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); obs-v55/v38/v25: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); obs-v54/v37/v24: the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); obs-v53/v36/v23: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); obs-v52/v35/v22: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); obs-v51/v34/v21: the batch-4 fixes (thin ringlets kept, gentler compressed frames, movie long exposures held and first whole frame, Titan wind stares in color, natural color); obs-v50/v33/v20: the batch-3 fixes (Titan color, saturated white, movie strobe, small bright bodies keep their surface, line holes, pass kinds and scan rule, ride-along pans and ring strips, scan creep); obs-v49/v32/v19: movie cosmic rays and the small artifact fixes (group I), two-filter passes in color (group F), edge registration of clouded passes (group H2); obs-v48/v31/v18: repeats merged only at the same pointing, Auto center, movie tiles, mosaic movies and the calibration fixes; obs-v47/v30/v17: calibration takes the flat field (dust rings, mottle) and the nonlinearity out (#526; renumbered on the integration branch)
+# obs-v130/v113/v99: summed frames' white guard and spike cleaning at the camera's pixel size, not the summed frame's (finding 21) (#537; renumbered on the integration branch)
+# obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
+# black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
+# NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
+VERSIONS = {"balanced": "obs-v131", "raw": "obs-v114", "eye": "obs-v131-eye", "false": "obs-v131-false", "classic": "obs-v100-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -115,6 +129,10 @@ SCAN_EVEN = 0.01     # ... and by one step (to this, in a frame) each way they h
 SCAN_TURN = 30       # degrees
 SET_COLOUR = "_c1"   # the folder suffix, after the others, of a movie that plays in its colour sets' filters where its
                      # tile counts alone made it grey (_set_colour), so its plan and frames are made again
+ONE_PAIR = "_o1"     # the folder suffix, after SET_COLOUR's place, of a mosaic coloured by its one pair set (_pair_colour),
+                     # so its plan is made again (a movie so coloured takes SET_COLOUR's)
+POLARIZED = "_p1"    # the folder suffix, after all the others, of a pass holding a polarized colour frame
+                     # (sets_passes.polarized_index): its colour sets and plan are made anew (_polarized_pass)
 PLAYED_PAIR = "_c2"  # the folder suffix, in SET_COLOUR's place, of a movie whose colours would not play and that plays in
                      # its pair's color instead (_filters, _pair_colour), so its plan and frames are made again
 RESCANNED = "_g5"    # the folder suffix, after RETRACKED's, of every pass of an observation where _revisits' scan rule
@@ -141,11 +159,21 @@ STRIP_LONG = 6       # frames: a ring mosaic of Saturn whose frames cover a stri
 STRIP_WIDE = 1.5     # this wide (_strip) plays as a movie, its mosaic the window's other choice (Sam, 2026-10-29: the
                      # long thin ring scans were awkward mosaics; 033RI_AZDKMRHPH001 18.0 x 1.2). No least width: a
                      # strip of gappy frames (077RF 0.89, 208RI_SHADSCANU 0.52) falls apart into fragments as a mosaic
+STRIP_SIZED_WIDE = 2.0   # frames: ... and its frames, each sized by its distance, stand no wider than this. Drawn one
+                     # frame across at every distance, the tiles of a mosaic Cassini drew away from spread apart with
+                     # hairline gaps, each counted as edge: the 2009 Equinox mosaic (116RI_EQXMOSAIC001, three rows of
+                     # six or seven WAC frames, 694,000 to 889,000 km) measured 19.3 x 0.9 and played as a movie (Sam
+                     # 11-16); sized, 8.1 x 2.6. Every other strip of the mission stands at most 1.7 wide sized
 STRIP_GRID = 8       # cells a frame, the grid _strip measures a pass's frames on
 STRIPPED = "_g8"     # the folder suffix, after PANNED's, of every pass of an observation where a ring strip is a movie
 JOIN_ZOOM = ZOOM * ZOOM   # a map units split at ZOOM is joined again while its frames stay within this of its first distance
 TWIST = 0.04         # of a frame: a pass the camera turns under (reel.turns) by more than this at its frames' places is drawn
                      # on a footprint turned frame by frame, and judged on its frames' places turned so (_flat)
+STARE_GAP = 300      # s: a single-filter pass whose frames come this far apart (median) or further, and whose frames all
+STARE_UNION = 2.0    # lie on less ground than this many frames, is a time-lapse of one view that creeps, not a mosaic
+                     # (_stare): the CIRS ride-along ring stares (106RI_TDIFS45HP001's second pass, eight CL1/CL2
+                     # frames 10 to 28 minutes apart within 0.8 x 0.85 of a frame, drawn as a mosaic of one view
+                     # stacked eight times, audit 11-16)
 DRIFT_LAPS = 0.5     # the least share of a frame the places of a time series' laps in a row overlap by (median) as they drift
 TOUCH_GAP = 0.2      # frames of a mosaic this share of a frame apart or less touch (_touching): a grid of tiles taken as Cassini
                      # closes in, each tile smaller on the canvas than the step between them (016DI_TARGFLYBY001's ring of
@@ -960,6 +988,29 @@ def _named_map(u):
     return bool(u["key"][0] == "SATURN" and name and any(m in name[3:] for m in MAP_NAMES))
 
 
+def _stare(u):
+    """Pass u is a time-lapse of one view of the rings (_ring), not a mosaic: one filter, its frames STARE_GAP or more apart (median), and
+    all of them, each a frame square at its place, on less ground than STARE_UNION frames. Its creep of a quarter of a
+    frame between frames counts as a jump of the camera (mosaic.min_step), but a mosaic steps on to new ground; this
+    films the same patch for hours (a CIRS ride-along stare at the rings), so it plays as a movie."""
+    fr = [f for f in u["frames"] if f[7]]
+    if not _ring(u) or len(fr) < MIN_PLACES or len({f[2] for f in fr}) != 1:
+        return False   # (the rings' ride-along stares: a moon's or Titan's, or Saturn's own, are taste call 21's wider option)
+    if float(np.median(np.diff([f[3] for f in fr]))) < STARE_GAP:
+        return False
+    xy = np.array([(-f[5] * f[7] / u["z"], -f[6] * f[7] / u["z"]) for f in fr]) / FRAME
+    k = STRIP_GRID
+    lo = xy.min(0) - 0.5
+    w, h = np.ceil((xy.max(0) + 0.5 - lo) * k).astype(int) + 2
+    if w * h > 4e6:
+        return False
+    grid = np.zeros((h, w), bool)
+    for p in xy:
+        x, y = np.round((p - 0.5 - lo) * k).astype(int) + 1
+        grid[y:y + k, x:x + k] = True
+    return bool(grid.sum() / k ** 2 < STARE_UNION)
+
+
 def _drifting(u):
     """Pass u is a time series of one view drifting over the canvas: its frames are laps (a lap ends where a filter
     comes again), at least MIN_PLACES of them, the places of laps in a row overlapping by at least DRIFT_LAPS of a
@@ -1018,23 +1069,38 @@ def _ring(u):
 def _strip(u):
     """(units) Pass u's frames, each a frame square at its place, cover a long thin strip: the rectangle with their
     union's area A and perimeter P (L + W = P / 2, L W = A, on a grid of STRIP_GRID cells a frame), which follows an
-    arc of ring as it does a straight strip, is at least STRIP_LONG frames long and at most STRIP_WIDE wide."""
-    pts = np.array([(-x * z / u["z"], -y * z / u["z"]) for *_, x, y, z in u["frames"] if z]) / FRAME
+    arc of ring as it does a straight strip, is at least STRIP_LONG frames long and at most STRIP_WIDE wide; and its
+    frames sized by their distance (_strip_shape's sized) are no more than STRIP_SIZED_WIDE wide."""
+    shape = _strip_shape(u)
+    if shape is None or not (shape[0] >= STRIP_LONG and shape[1] <= STRIP_WIDE):
+        return False
+    sized = _strip_shape(u, sized=True)
+    return sized is None or sized[1] <= STRIP_SIZED_WIDE
+
+
+def _strip_shape(u, sized=False):
+    """(length, width) in frames of the rectangle _strip measures pass u's frames on, or None. Each frame a square one
+    frame across at its place; sized, a square of the ground it covers at the pass's distance, z / u["z"] frames
+    across (as _ground sizes it)."""
+    fr = [(x, y, z) for *_, x, y, z in u["frames"] if z]
+    pts = np.array([(-x * z / u["z"], -y * z / u["z"]) for x, y, z in fr]) / FRAME
     if len(pts) < 2:
-        return False
+        return None
     k = STRIP_GRID
-    lo = pts.min(0) - 0.5
-    w, h = np.ceil((pts.max(0) + 0.5 - lo) * k).astype(int) + 2
+    side = np.array([z / u["z"] if sized else 1.0 for *_, z in fr])
+    lo = (pts - side[:, None] / 2).min(0)
+    w, h = np.ceil(((pts + side[:, None] / 2).max(0) - lo) * k).astype(int) + 2 + sized
     if w * h > 4e6:
-        return False
+        return None
     grid = np.zeros((h, w), bool)
-    for p in pts:
-        x, y = np.round((p - 0.5 - lo) * k).astype(int) + 1
-        grid[y:y + k, x:x + k] = True
+    for p, s in zip(pts, side):
+        x, y = np.round((p - s / 2 - lo) * k).astype(int) + 1
+        n = int(round(s * k))
+        grid[y:y + n, x:x + n] = True
     area = grid.sum() / k ** 2
     half = (np.sum(grid[:, 1:] != grid[:, :-1]) + np.sum(grid[1:] != grid[:-1])) / k / 2
     root = math.sqrt(max(half * half - 4 * area, 0))
-    return bool((half + root) / 2 >= STRIP_LONG and (half - root) / 2 <= STRIP_WIDE)
+    return (half + root) / 2, (half - root) / 2
 
 
 def _scan(xy, runs):
@@ -1282,6 +1348,13 @@ def _judge(u):
             return
         u["drift"], u["pair"] = True, False
         return
+    if kind == "mosaic" and not u["pair"] and _stare(u):
+        # a time-lapse of one view: a movie held on its own view, as a feature track is (track_places: each frame
+        # where the one before it is, as the pictures line up), so every frame is drawn whole in the window; held on
+        # the body's center instead, a ring stare slid round a canvas as big as its drift, small and off center
+        u["movie"], u["kind"], u["revisit"], u["pair"], u["panned"], u["track"] = True, "movie", True, False, False, True
+        u["stare"] = True
+        return
     if kind == "mosaic" and (_revisits(u) or _drifting(u)):
         # a time series: a movie
         u["movie"], u["kind"], u["revisit"], u["pair"], u["panned"] = True, "movie", True, False, False
@@ -1382,7 +1455,8 @@ def kind_of(frame_id, cache=None):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
     never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
-    mosaic_movie or None), "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
+    mosaic_movie or None), "tossup": the pointing alone cannot tell it a movie from a mosaic, so the build stores
+    both its views (prebuild.make_pass) and the window may offer either, "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
     movies, when it has any, "mosaic_steps": the ids of the frames of its mosaic passes movie mode stops on
     (mosaic_steps; by the pass's plan when cache holds it), when it has any}."""
     found = unit_of(frame_id)
@@ -1395,7 +1469,7 @@ def kind_of(frame_id, cache=None):
     steps = [v["frames"][j][1] for v in us if v["mosaic"] and not v["movie"] and v.get("kind") != "mosaic_movie"
              for j in mosaic_steps(v, _plan_if_made(v, cache))]
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"], **({"lap_ends": ends} if ends else {}),
+            "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
             **({"mosaic_steps": steps} if steps else {})}
 
 
@@ -1429,8 +1503,27 @@ def _repointed(u):
         if _repointed_frames is None:
             import bootleg_autonav as ba
             _repointed_frames = ba.iss_neighbours_frames() | ba.usgs_neighbours_frames()
-        u["_repointed"] = any(fr[1] in _repointed_frames for fr in u["frames"])
+        # (folder() also names passes given by key alone, without their frames, as its other suffixes allow)
+        u["_repointed"] = any(fr and fr[1] in _repointed_frames for fr in u.get("frames") or ())
     return u["_repointed"]
+
+
+def polarized_frame(frame_id):
+    """Whether the index reads frame frame_id as a polarized colour frame (sets_passes.polarized_index): its own
+    pictures (processed, centred, kept HDR) are named apart (frame_server.frame_name), as they are made anew."""
+    idx, row = _row_of()
+    q = row.get(frame_id)
+    return q is not None and "polarized" in idx and bool(idx["polarized"].iat[q])
+
+
+def _polarized_pass(u):
+    """Whether pass u holds a frame the index reads as a polarized colour frame (sets_passes.polarized_index)."""
+    if "_polarized" not in u:
+        idx, row = _row_of()
+        pol = idx["polarized"].to_numpy() if "polarized" in idx else None
+        u["_polarized"] = pol is not None and any(row.get(fr[1]) is not None and bool(pol[row[fr[1]]])
+                                                  for fr in (u["all"] if "all" in u else u.get("frames", ())))
+    return u["_polarized"]
 
 
 def folder(u, cache):
@@ -1440,8 +1533,11 @@ def folder(u, cache):
               + (LAID if u.get("laid") else STRIPPED if u.get("stripped") else PANNED if u.get("panned") else ISLANDS if u.get("islands")
                  else RESCANNED if u.get("rescanned") else RETRACKED if u.get("retracked") else RELAID if u.get("relaid")
                  else GROUPING if u.get("regrouped") else "")
-              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else "")
-              + (REPOINTED if _repointed(u) else ""))
+              + ((PLAYED_PAIR if u.get("played_pair") else SET_COLOUR) if _set_coloured(u) else
+                 ONE_PAIR if u.get("one_pair") else "")
+              + (POLARIZED if _polarized_pass(u) else "")
+              + (REPOINTED if _repointed(u) else "")
+              + (SATURN_TAG if saturn_look(u) and calibration.look() == "balanced" else ""))
     return os.path.join(cache, f"{VERSIONS[calibration.style()]}{calibration.variant()}-q{QUALITY}", "_".join(map(str, u["key"])) + suffix)
 
 
@@ -1623,7 +1719,7 @@ def _filters(u):
     aside = _aside(frames, u)
     count = {f: c for f, c in count.items() if f not in aside} or count
     colour = colour_of(count, nms)
-    u["set_colour"] = u["played_pair"] = False
+    u["set_colour"] = u["played_pair"] = u["one_pair"] = False
     # a movie plays only a colour set holding every colour filter (set_of): colours that no set of its holds together
     # never play, and it stayed grey. Janus ISS_059JA_GEOLOG001_PRIME takes RED and BL1 once each, side by side, and
     # GRN only in its two UV3, GRN, IR1, IR3 sets: its counts made it true colour, and none of its 49 frames was in
@@ -1664,15 +1760,26 @@ PAIR_SETS = 2   # sets of a pair (_pair_colour) a pass takes at least, as a movi
 def _pair_colour(u, count, nms):
     """The two colour filters, [longer, shorter], of a pass whose sets (colour_sets) take a pair drawn in approximate
     color (calibration.approximate_pair: a body's surface window pair, Titan's CB3 with MT1, IR1, RED...), at least
-    PAIR_SETS times: the pair taken most; None without one."""
-    seen = {}
-    for run in colour_sets(u["frames"]):
+    PAIR_SETS times, or once in a pass taking fewer than STEP_FRAMES frames of its grey filter, as plays_colour lets one
+    set play, its frames shown (none lost past MOVIE_HOLD_LOST, unfit): the pair taken most; None without one. 579
+    Titan passes, most a cloud watch's one CB3, CB3, CB3, MT1 visit, took their pair once and stayed grey (Sam
+    2026-11-16)."""
+    seen, whole = {}, {}
+    frames = u["frames"]
+    for run in colour_sets(frames):
         fs = tuple(sorted({f for f, _ in run}, key=lambda f: -nms[f]))
         if len(fs) == 2 and all(f in count for f in fs) and \
                 calibration.approximate_pair(u["key"][2], list(fs), u["key"][0]):
             seen[fs] = seen.get(fs, 0) + 1
+            if all(lost_share(frames[j][1]) <= MOVIE_HOLD_LOST for _, j in run):
+                whole[fs] = whole.get(fs, 0) + 1
     best = max(seen, key=seen.get) if seen else None
-    return list(best) if best and seen[best] >= PAIR_SETS else None
+    if best and seen[best] >= PAIR_SETS:
+        return list(best)
+    if best and whole.get(best) and count.get(max(count, key=count.get), 0) < STEP_FRAMES:
+        u["one_pair"] = True
+        return list(best)
+    return None
 
 
 def _set_coloured(u):
@@ -2416,7 +2523,7 @@ def _sky_fine(iofs, masks):
 
 
 def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True,
-               speck=False):
+               speck=False, clean_lost=False):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2430,7 +2537,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     disk (on_disk), so a frame with no dark sky is the body, never a glow. exposure, t: the frame's exposure (s) and
     time, which put a movie frame off the disk in one of the pass's runs of long exposures (pass_scale's "long") on
     their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
-    the shadow (032RI's silhouette) are in the sky the rule would take under black. speck: the body is one of SPECKS
+    the shadow (032RI's silhouette) are in the sky the rule would take under black. clean_lost: the frame's own black is measured without the pixels it lost in downlink (black_of: a narrow-angle
+    frame's, for now). speck: the body is one of SPECKS
     (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     long = scale.get("long")
@@ -2447,9 +2555,33 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
 
-    def black_of(iof):
+    def black_of(iof, valid=None):
         # the frame's sky as pass_scale finds it, at the size it measures on
         q = iof[::4, ::4].astype(np.float32)
+        if clean_lost and valid is not None and valid.shape == iof.shape and not valid.all():
+            # the frame's lost pixels (valid False: lost in downlink and filled by nothing, load_aligned's masks) are
+            # whole lines and columns of its outer border, inside the edge that is trimmed as not picture
+            # (color_image.edge_px), so they are never drawn; but they hold junk, large values of either sign (to 5
+            # times the pass's white in 133TI CLOUD002, 13 times in 207SA NHEMMOV001). This picture takes every 4th
+            # pixel, so it meets some of those columns and not others. Where the column it meets is negative, the
+            # rule below takes it out (low: far under the sky); where it is positive nothing did: 256 pixels, 0.39%
+            # of this picture, over the 0.1% that sets its brightest (the 99.9th percentile its sky is under 5% of).
+            # Most of the body then counted as sky, the whole-codes rule took that sky's spread for the band's height,
+            # and the black went far over the frame's: 207SA's brightest 951 thousandths of white and its black
+            # raised 29 in one frame, 10,247 and 466 in the next (drawn near black); 133TI's 1,019 and 33, then
+            # 2,889 and 117, one channel of every second or third picture, the movie flickering between two colours.
+            # Which sign it meets changes from frame to frame; nearly every frame has such pixels (207SA: 111 of
+            # 111). They take the median of the frame's own pixels, so they are neither its brightest nor its sky.
+            # clean_lost is a narrow-angle frame's only, and that is a stand-in, not a rule of the data: a wide-angle
+            # frame's border is lost the same way, but this picture always meets positive junk in it (6 frames of 6
+            # looked at), so a wide-angle movie's black has always been set by it, near the frame's 98th percentile,
+            # and that is its look. Measured without it the faint E and G ring movies come up as gray squares (228RI
+            # EG130PHAS001, 214RI EG120PHAS001) and Saturn's disk flattens and clips (003SA 3X3MOVIEA002), while 033RI
+            # WNHIEL1001 gains the middle of its rings: 9 movies looked at, worse on 4, the same on 4, better on 1.
+            # Wide-angle frames keep their black until that look has a rule of its own (taste call 25, 2026-11-16)
+            ok = valid[::4, ::4]
+            if ok.any():
+                q = np.where(ok, q, np.float32(np.median(q[ok])))
         top_of_sky = 0.05 * np.percentile(q, 99.9)
         if glow_only and not codes and float(np.median(q)) > calibration.GLOW_IOF[1]:
             # (a ring pass's frame as bright as a sunlit surface, GLOW_IOF, is the rings filling it, real light, never a
@@ -2687,6 +2819,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
 
     gap = u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP)
     stacking.handing(tuple(u["key"]))
+    sat_share = {}
 
     def read(fr):
         with calibration.in_mode(mode):
@@ -2706,6 +2839,10 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                 lbl, iof, _ = stacking.load_hdr(fr[0], gap)
             # (only the quarter size picture kept, the frame's size and its exposure: pass_scale's long exposures)
             got = None if iof is None else (iof[::4, ::4].astype(np.float32), iof.shape, _exposure(lbl))
+            if got is not None:
+                # (the share of the frame the camera saturated, for the Saturn look's headroom: saturn_clipped)
+                clip = whole[4] if whole is not None and not note.get("differ") and len(whole) > 4 else None
+                sat_share[fr[1]] = float(np.mean(clip)) if clip is not None else 0.0
             if whole is not None:
                 stacking.hand_on(fr[0], gap, whole)   # (after this look at it: the tile's own from here on)
         return got
@@ -2815,18 +2952,53 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # mosaic (195RI, 260RI and 269RI HIPHASE) was not brighter, and 1.4x only dimmed its faint rings (lit median 34 to 31)
     if _ring(u) and u.get("movie") and not u.get("mosaic"):
         white *= RING_HEADROOM
+    sat_white = None
+    if saturn_look(u).get("headroom") and calibration.look() == "balanced" and not saturn_clipped(sat_share):
+        # (what the camera saturated stays drawn on the white before the headroom, as bright as it was: a patch one
+        # filter saturated came out a stronger tint once it was no longer at white, 150SA NHEMMOVIE001's lime top)
+        sat_white = white
+        white *= saturn_look(u)["headroom"]
     if calibration.look() == "balanced" and white > 0:
         # a bright subject (a moon's limb, lit rings) sits in the top tenth of the range on the benchmark's gamma 3.0
         # and reads as blown out: the gamma eases toward the single pictures' (calibration.EASE_PASS) by the pass's lit
         # median (its brightest filter's, white = 1), as a single picture's highlights do (calibration.tone)
         lit = max(calibration.lit_median((np.concatenate([i.ravel() for i in iofs]) - blacks[f]) / white)
                   for f, iofs in by.items())
+        pre = gamma
         gamma = calibration.eased_gamma(gamma, lit, calibration.EASE_PASS)
+        if sat_white and saturn_look(u).get("match") and 0 < lit < 1 and not isinstance(gamma, str):
+            # the Saturn look's brightness kept: the gamma that draws the disk's lit median (lit, on the white with
+            # headroom) at the level the pass's own white and gamma drew it, so the headroom spreads the disk's bright
+            # half without darkening it, the rings or the shadows (Sam, 11-16: "the atmosphere looks darker")
+            H = saturn_look(u)["headroom"]
+            old = min(lit * H, 4.0)
+            g0 = calibration.eased_gamma(pre, old, calibration.EASE_PASS)
+            knee = calibration.SHOULDER
+            rolled = old if old <= knee else knee + (1 - knee) * math.tanh((old - knee) / (1 - knee))
+            level = rolled ** (1 / float(g0))
+            if 0 < level < 1:
+                gamma = round(min(max(math.log(lit) / math.log(level), float(gamma)), 4.0), 4)
     # the local contrast (detail) only where the body fills the frames: on a small disk against the sky (Dione 180 px
     # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
+    sat = saturn_look(u) if calibration.look() == "balanced" else {}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
            "detail": bool(filled and not small)}
+    if sat_white:
+        out["sat_white"] = sat_white
+        out["headroom"] = saturn_look(u)["headroom"]
+    if sat.get("chroma"):
+        out["chroma"] = sat["chroma"]
+    if sat.get("detail") and saturn_clipped(sat_share):
+        # (a pass the camera saturated over much of: its local contrast drew a dark ring round the clipped disk, so it
+        # keeps today's look; 2004 approach N1455663489)
+        sat = {}
+    if sat.get("detail"):
+        # (a pass that had detail() already keeps it off the disk: its rings as they are drawn today, detail_base)
+        out["detail_base"] = out["detail"]
+        out["detail"], out["detail_how"] = True, {"strength": sat.get("on_base", sat["detail"]) if out["detail_base"] and sat.get("nodisk") else sat["detail"], "lit": True,
+                                                  "sigma": sat.get("sigma", 1.0), "grain": sat.get("grain", 0),
+                                                  **({"nodisk": True} if sat.get("nodisk") else {})}
     long = _long_white(each, blacks, white) if u.get("movie") and not filled else None
     if long:
         out["long"] = long
@@ -2858,7 +3030,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             # and the body's typical color after it, so the broad-color flattening holds one color as tiles arrive
             shown = [out["balance"][f] * v for f, v in zip(mine, levels)]
             out["typical"] = {f: float(np.log(v * len(shown) / sum(shown))) for f, v in zip(mine, shown)}
-    elif calibration.false_balanced() and len(mine) == 2:
+    elif calibration.false_balanced() and len(mine) == 2 == len(drawn):
+        # (a pair drawn: three filters drawn, one of them with no frame read, are not a pair. Titan 020TI
+        # 1X1PT40001's CB3, CB2, UV1 got a pair's balance of CB2 and UV1 alone, and its movie stopped on CB3, 11-14)
         # two filters: each band's gain to the pair's mean, which calibration.color_mix balances as three channels
         # (two_bands), and the typical color of those three, a list (the green channel is no one filter's)
         levels = []
@@ -2989,6 +3163,12 @@ def _tile(u, n, cache, scale, there, rec=None):
         return out
 
 
+def _brightest(image):
+    """image[..., :3].max(axis=2): the brightest of an RGBA picture's three colour channels at each pixel, a plane at a
+    time (numpy's max along an axis of three goes pixel by pixel: 72 ms on a tile's 3072 px canvas, 8 this way)."""
+    return np.maximum(np.maximum(image[..., 0], image[..., 1]), image[..., 2])
+
+
 def _tile_made(u, n, cache, scale, base):
     """(_tile, holding the tile's lock) the report in base.json, or the tile made and its report."""
     if os.path.exists(base + ".json"):
@@ -3011,7 +3191,7 @@ def _tile_made(u, n, cache, scale, base):
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
                                                                                            on_disk(u, u["frames"][n]), exposure, t,
-                                                                                           not _ring(u), u["key"][0] in SPECKS),
+                                                                                           not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N"),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
                                                         turn=view_turn(u))
@@ -3043,7 +3223,7 @@ def _tile_made(u, n, cache, scale, base):
         out["saturated"] = share
         if image is not None:
             inside = image[..., 3] > 0
-            lit = inside & (image[..., :3].max(axis=2) >= LIT_LEVEL)
+            lit = inside & (_brightest(image) >= LIT_LEVEL)
             out["lit"] = round(float(lit.sum()) / max(1, int(inside.sum())), 4)
     if image is not None and disk is None:
         # what the tile shows, levels on the display scale: its floor (1st percentile) and top (99.99th: a hundred
@@ -3051,7 +3231,7 @@ def _tile_made(u, n, cache, scale, base):
         # body is under a hundred pixels, is never empty: none written)
         inside = image[..., 3] > 0
         if inside.any():
-            v = image[..., :3].max(axis=2)[inside]
+            v = _brightest(image)[inside]
             out["floor"], out["top"] = (int(x) for x in np.percentile(v, [1, EMPTY_TOP_PCT], method="lower"))
     os.makedirs(os.path.dirname(base), exist_ok=True)
     if image is not None and "frame_offset" in rep:
@@ -3142,14 +3322,30 @@ def _register_to(u, n):
     wavelength, not simply the first: a Titan cycle through many filters (215TI M90R1CLD125: CB3, MT1, MT3, RED, GRN,
     BL1, ...) put RED and GRN each on MT3, where Titan's haze looks nothing like it does in the visible, and the two
     matches (edges, centroid) landed 4 px apart, a magenta and green rim round Titan in the movie; GRN now lands on
-    RED and BL1 on GRN."""
+    RED and BL1 on GRN.
+    Where some of the pass's frames have JPL's own corrected pointing and others not (carried over second-hand, or
+    raw: _carried), the frames with JPL's own pointing lead: they land only on one another, and another frame lands
+    on one of them, before or after it. In the 2004 approach movie 00ASA 2X2MOVIEA001 each pointing's first frame (MT2) was a carried one 4 to
+    9 px off its pointing's JPL frames, and every filter followed it: a step in the limb where pointings met."""
     frames = u["frames"]
     _, _, f, t, nm, x, y, z = frames[n]
     if not z:
         return None
     k = z / u["z"] if u["z"] else 1.0
-    there = [j for j in range(n) if frames[j][2] != f and frames[j][7] and 0 <= t - frames[j][3] <= REGISTER_GAP
-             and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME]
+    here = lambda j: frames[j][2] != f and frames[j][7] and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME
+    carried = _carried(u)
+    if frames[n][1] in carried:
+        # a frame without JPL's own corrected pointing (carried over, or raw) lands on one with it at its pointing,
+        # taken before or after it (REGISTER_GAP either way), when there is one: JPL's frames lead the pointing
+        sure = [j for j in range(len(frames)) if j != n and frames[j][1] not in carried and here(j)
+                and abs(t - frames[j][3]) <= REGISTER_GAP]
+        if sure:
+            colour = _colour_filters(u)
+            if f in colour:
+                sure = [j for j in sure if frames[j][2] in colour] or sure
+            return min(sure, key=lambda j: (abs((frames[j][4] or 0) - (nm or 0)), abs(t - frames[j][3])))
+    there = [j for j in range(n) if here(j) and 0 <= t - frames[j][3] <= REGISTER_GAP
+             and (frames[n][1] in carried or frames[j][1] not in carried)]
     if not there:
         return None
     # a colour filter's frame lands on a frame in a colour filter, when there is one: the others
@@ -3163,6 +3359,29 @@ def _register_to(u, n):
     return min(there, key=lambda j: abs((frames[j][4] or 0) - (nm or 0)))
 
 
+def _carried(u):
+    """The frame ids of pass u whose pointing is not JPL's (or USGS's) own correction, when some of its frames have it
+    (bootleg_autonav.own_pointing_frames; or, without that list, the frames the carried-over corrections give,
+    iss_neighbours_frames and usgs_neighbours_frames): the frames that follow JPL's in _register_to. Empty when no frame
+    of the pass has its own correction, or this checkout has neither list. Worked out once, kept in u."""
+    if "_carried" not in u:
+        import bootleg_autonav as ba
+        ids = [fr[1] for fr in u["frames"]]
+        own = getattr(ba, "own_pointing_frames", None)
+        if own is not None:
+            mine = own()
+            out = {i for i in ids if i not in mine} if any(i in mine for i in ids) else set()
+        else:
+            got = set()
+            for name in ("iss_neighbours_frames", "usgs_neighbours_frames"):
+                fn = getattr(ba, name, None)
+                if fn is not None:
+                    got |= fn()
+            out = {i for i in ids if i in got}
+        u["_carried"] = frozenset(out)
+    return u["_carried"]
+
+
 def _colour_filters(u):
     """The pass's colour filters (_filters), worked out once; none when a frame has no wavelength (a test's)."""
     if "_colour_filters" not in u:
@@ -3171,7 +3390,82 @@ def _colour_filters(u):
     return u["_colour_filters"]
 
 
+# a filter's match onto its pointing's other filter (C8, _register_match) checked on the body's lit limb, where the
+# picture shows one: a match that puts the two tiles' limbs further apart than this, across the limb, is a false one,
+# and the tile goes back to SPICE's place moved across the limb onto its reference's (limb_place), or stays at SPICE's
+# place when that does not line the limbs up either. The 2004 approach movie 00ASA 2X2MOVIEA001 (Saturn, 10 filters a
+# pointing, methane bands among them): with JPL's corrected pointing every filter's limb lay within 0.3 px of the
+# others' as taken, but one false match per pointing (CB2 onto the methane MT2, phase correlation on cloud bands that
+# look different in each band) moved it 10 to 25 px, every filter registered after it followed it down the chain, and
+# the movie drew each limb and ring edge two or three times, 13 to 16 px apart, with a step at every seam. A limb's
+# height differs a little with the filter (its haze: Saturn's within about 1 px, the solve's LIMB_HAZE_PRIOR), less
+# than this. Only on a clouded body (SURFACE_CLOUDED: Saturn, Jupiter, Titan), whose bands and haze look different in
+# each filter: an airless moon's craters are the same in every filter, its C8 match is sure, and checked on the limb
+# (which SPICE's shape model puts a pixel or two off on a cratered moon) Dione's 2010 mapping mosaic and Iapetus'
+# drew doubled crater rims (the image benchmark, #506)
+LIMB_REGISTER = 2.0      # px
+LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
+
+
 def _register(u, n, out, crop, cache, scale):
+    """C8 (_register_match), then checked on the limb (_limb_register)."""
+    got = _register_match(u, n, out, crop, cache, scale)
+    if got is not None:
+        _limb_register(u, got[0], got[1], out, crop)
+
+
+def _limb_register(u, q, ref, out, crop):
+    """Tile out (its picture crop) checked against its reference tile q (picture ref) on the body's lit limb
+    (LIMB_REGISTER): out's offset and "registered" changed when the two limbs disagree. Nothing where either shows no
+    lit limb SPICE can place (limb_place), or the body is none of LIMB_BODIES or not clouded."""
+    if u["key"][0] not in LIMB_BODIES or not clouded(u) or not calibration.step("align"):
+        return
+    disk = _disk_geometry(u)
+    if disk is None:
+        return
+    lq = limb_place(disk, q, ref)
+    if lq is None:
+        return
+    reg = out.get("registered") or {}
+    now = limb_place(disk, out, crop)
+    if now is None or float(np.dot(lq[1], now[1])) < LIMB_REGISTER_TURN:
+        return
+    off = now[0] - lq[0]
+    if abs(off) <= LIMB_REGISTER:
+        return
+    spice = out.get("spice_offset", out["offset"])
+    at_spice = dict(out, offset=spice)
+    was = {k: reg[k] for k in ("how", "shift") if k in reg}
+    l0 = now if "spice_offset" not in out else limb_place(disk, at_spice, crop)
+    place, how = spice, "SPICE's place"
+    if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
+        e = l0[0] - lq[0]
+        v = (-e * l0[1][0], -e * l0[1][1])
+        if abs(e) <= LIMB_REGISTER:
+            # (SPICE's place where the limbs agree there: JPL's corrected pointing, within a filter's haze of the
+            # reference's; moved onto the reference's limb, the filter would take on the reference's haze height)
+            how = "SPICE's place (limbs agree there)"
+        elif math.hypot(*v) <= REGISTER_MAX * FRAME:
+            moved = [spice[0] + v[0], spice[1] + v[1]]
+            check = limb_place(disk, dict(out, offset=moved), crop)
+            if check is not None and abs(check[0] - lq[0]) <= LIMB_REGISTER:
+                place, how = moved, f"limb {-e:+.1f} across"
+    out.pop("spice_offset", None)
+    if place is not spice:
+        out["spice_offset"] = spice
+    out["offset"] = list(place)
+    shift = [round(spice[0] - place[0], 2), round(spice[1] - place[1], 2)]
+    out["registered"] = {"to": q["id"], "how": how, "limb_off": round(off, 2), "match": was}
+    if place is not spice:
+        out["registered"]["shift"] = shift
+    else:
+        # (a tile its match left unaligned stays so named: astray leaves such colour tiles out where they land apart)
+        if was.get("how") == "not aligned":
+            out["registered"]["how"] = "not aligned"
+        out["registered"]["kept"] = "SPICE's place"
+
+
+def _register_match(u, n, out, crop, cache, scale):
     """C8, the filters registered to each other: SPICE places each frame on its own, and the few pixels its pointing
     is off differ from frame to frame, so the filters of one pointing landed a little apart and every limb had a red
     and a cyan rim (Dione). Tile n (its report out, crop its picture as made) is moved onto the tile it is registered
@@ -3181,11 +3475,11 @@ def _register(u, n, out, crop, cache, scale):
     shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
     j = _register_to(u, n)
     if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
-        return
+        return None
     q = tile(u, j, cache, scale)
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
     if "offset" not in q or not os.path.exists(path):
-        return
+        return None
     with _lock:
         ref = _made_pictures.get(path)
     if ref is None:
@@ -3202,7 +3496,7 @@ def _register(u, n, out, crop, cache, scale):
             shift, how = wide, said
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
-        return
+        return q, ref
     if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
         # SPICE's pointing of a moon can jump tens of px between frames seconds apart: Dione's 038DI ZEROPHASE001 20 to
         # 45 px (N1549196942_1 sits 42 px from the frames either side), Hyperion's 153HY 70 to 110 px, Helene's 149HE
@@ -3222,17 +3516,18 @@ def _register(u, n, out, crop, cache, scale):
             c = None if how.startswith("centroid") else _centroid_onto(q, ref, q["offset"], out, crop, out["offset"])
             if not same(c):
                 out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-                return
+                return q, ref
             how = f"{how}, centroid agrees ({c[0]:+.1f},{c[1]:+.1f})"
     elif shift is None or math.hypot(*shift) > REGISTER_MAX * FRAME:
         if how is not None:
             out["registered"] = {"to": q["id"], "how": how, "kept": "SPICE's place"}
-        return
+        return q, ref
     # align_with_masks moves the picture by -shift to land on the reference: its place moves the same way
     dx, dy = shift
     out["spice_offset"] = out["offset"]
     out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
+    return q, ref
 
 
 def _tile_overlap(q, ref, at_q, t, crop, at_t, around=None, where=None):
@@ -3412,7 +3707,8 @@ EDGE_AGREE = 3.0     # px: matches further than this (across their own edges) fr
 EDGE_FILE = "edges4-"  # before PANEL_FILE: a clouded body's registration, kept apart from #169's; renamed when the rule changes
 EDGE_TAG = "-pe4"    # in the name of a layout whose tiles edge registration moved, instead of PANEL_TAG
 RING_EDGE_TAG = "-pr1"   # instead of EDGE_TAG for a ringed body's pass whose tiles ring registration moved (ring_places)
-RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE)
+RING_FILE = "rings1-"    # ring_places' moves, kept with the pass (RING_FILE + PLAN_FILE), and its "too little ring"
+                         # outcome ("short", ring_moves): renamed when ring_places' or _tile_ring_samples' rule changes
 
 # Global panel registration (on unless CASSINI_GLOBAL_PANELS=0): every pair of overlapping pointings is measured once
 # (panel_shift / edge_shift at SPICE's places, as panel_places measures them), and all pointings' moves are solved
@@ -3679,6 +3975,9 @@ RING_FIT_NCC = 0.6      # the least a tile's profile, moved, must agree with the
 RING_FIT_GAIN = 0.02    # ... and how much better than where it was placed, for a move of over half a pixel
 RING_FIT_LEAST = 3000   # samples on the rings a tile needs
 RING_FIT_ROUNDS = 2     # the reference profile is made again from the tiles as moved this many times
+# (ring_places) each tile's profiles kept from one round for the next, up to this much of them (a profile over the
+# tile's own bins is 12 bytes a bin; a tile's ~1,100 places 0.5 to 9 MB)
+RING_PROFILES_MB = int(os.environ.get("CASSINI_RING_PROFILES_MB", "192"))
 
 
 def _tile_ring_samples(u, t, im, rings, reach):
@@ -3698,13 +3997,24 @@ def _tile_ring_samples(u, t, im, rings, reach):
     return px[use, :3].astype(np.float32).mean(axis=1), radius, on, sy[use], sx[use]
 
 
-def _ring_profile(values, radius):
-    """(ring_places) values binned by radius (RING_BIN km, from RING_INNER): (sums, counts) over the rings' bins."""
+def _ring_profile(values, radius, bin_km=RING_BIN):
+    """(ring_places) values binned by radius (bin_km, RING_BIN by default, from RING_INNER): (sums, counts) over the rings' bins."""
+    import reproject as rp
+    nb = int((rp.RING_OUTER - rp.RING_INNER) / bin_km) + 1
+    b = ((radius - rp.RING_INNER) / bin_km).astype(int)
+    ok = (b >= 0) & (b < nb)
+    return (np.bincount(b[ok], weights=values[ok], minlength=nb), np.bincount(b[ok], minlength=nb))
+
+
+def _ring_bins(radius):
+    """(ring_places) Each point of a radius grid's bin as _ring_profile bins it (RING_BIN km, from RING_INNER), flat,
+    and the number of bins: a point off the rings' bins takes that number, one past the last (a bin of its own, left
+    out of every profile)."""
     import reproject as rp
     nb = int((rp.RING_OUTER - rp.RING_INNER) / RING_BIN) + 1
     b = ((radius - rp.RING_INNER) / RING_BIN).astype(int)
-    ok = (b >= 0) & (b < nb)
-    return (np.bincount(b[ok], weights=values[ok], minlength=nb), np.bincount(b[ok], minlength=nb))
+    b = np.where((b >= 0) & (b < nb), b, nb)
+    return b.astype(np.int16 if nb < 32767 else np.int64).ravel(), nb
 
 
 def _profile_ncc(tot, n, ref):
@@ -3744,18 +4054,55 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
         im = picture(t["n"])
         got = _tile_ring_samples(u, t, im, rings, reach) if im is not None else None
         if got is not None:
-            data[t["n"]] = got
+            # (its radius grid, 9.5 MB, let go here for its bins' 2.4, tile by tile: kept until every tile was
+            # sampled, the grids of a whole pass were held at once, 1.3 GB for 132 tiles and 3 GB for 316; the
+            # values as the doubles bincount sums)
+            v, radius, on, sy, sx = got
+            data[t["n"]] = (v.astype(np.float64),) + _ring_bins(radius) + (sy.astype(np.int64) * radius.shape[1] + sx,
+                                                                           radius.shape[1])
+            del got, radius, on
     if ref is None and len(data) < RING_FIT_MIN:
         return {}, None
     moves = {n: tuple(fixed[n][:2]) if n in fixed else (0, 0) for n in data}
+    # each tile's samples binned by radius at every place tried, ~2,200 a tile (the coarse grid of RING_FIT_STEP, the
+    # fine one, the parabola, RING_FIT_ROUNDS times): the bin of every point of its radius grid is worked out once
+    # (_ring_bins, above as each tile is sampled) and a place tried only reads its samples' bins there, where it
+    # worked the bins out again from the radii each time (half of a ring pass's time, 2026-11-16). The same bins,
+    # sums and counts: _ring_profile's.
+    given = ref is not None
+    # A tile's profile at a place does not depend on the reference, only what it is matched to does: the rounds after
+    # the first try the same ~1,100 places of every tile against a new reference, so each profile made is kept (over
+    # the bins the tile's radius grid holds at all, zeros elsewhere as bincount leaves them) and a later round reads
+    # it back instead of binning the tile's samples again: the same sums and counts, a round of two for a whole
+    # pass's fit (2026-11-16: 519 s of a 132 tile toss-up ring pass, 116RI EQXSHADOW018). Up to RING_PROFILES_MB of
+    # them; past that a profile is made again as before
+    keep = not given and RING_FIT_ROUNDS > 1
+    span = {}
+    for n, (_, bins, nb, _, _) in data.items():
+        there = bins[bins < nb]
+        span[n] = (int(there.min()), int(there.max()) + 1) if there.size else (0, 0)
+    kept, room = {}, [RING_PROFILES_MB << 20]
 
     def prof(n, d):
-        v, radius, on, sy, sx = data[n]
+        v, bins, nb, at, width = data[n]
         dx, dy = int(round(d[0])), int(round(d[1]))
-        return _ring_profile(v, radius[sy + dy, sx + dx])
+        # (never past the margin the samples were taken with, reach: there the flat index would read another row's
+        # bins without a word, where the 2-D index it replaces raised or wrapped)
+        assert abs(dx) <= reach and abs(dy) <= reach, (n, dx, dy, reach)
+        lo, hi = span[n]
+        got = kept.get((n, dx, dy))
+        if got is not None:
+            tot, cnt = np.zeros(nb), np.zeros(nb, np.intp)
+            tot[lo:hi], cnt[lo:hi] = got
+            return tot, cnt
+        b = bins.take(at + (dy * width + dx))
+        tot, cnt = np.bincount(b, weights=v, minlength=nb + 1)[:nb], np.bincount(b, minlength=nb + 1)[:nb]
+        if keep and room[0] >= (hi - lo) * 12:
+            kept[(n, dx, dy)] = (tot[lo:hi].copy(), cnt[lo:hi].astype(np.int32))
+            room[0] -= (hi - lo) * 12
+        return tot, cnt
 
     out = {}
-    given = ref is not None
     for _ in range(1 if given else RING_FIT_ROUNDS):
         if not given:
             details = []
@@ -3766,10 +4113,17 @@ def ring_places(u, tiles, picture, fixed=None, ref=None):
                 details.append(dd)
             ref = np.nanmedian(np.vstack(details), axis=0)
         new = dict(moves)
+        # a reference of under 30 bins matches nothing (_profile_ncc: -1 at every place, whatever the tile), so the
+        # search's answer is known without making a profile: no match, found at the first place tried, as the search
+        # leaves it (a scan along one ring radius: 033RI AZSCNLOPH001's 316 tiles were each searched to learn it)
+        thin = np.count_nonzero(~np.isnan(ref)) < 30
         for n in data:
             if n in fixed:
                 continue
-            v, radius, on, sy, sx = data[n]
+            if thin:
+                out[n] = {"move": [0, 0], "ncc": [-1.0, -1.0], "found": [-reach, -reach], "ok": False}
+                new[n] = (0, 0)
+                continue
             score = lambda d: _profile_ncc(*prof(n, d), ref)
             before = score((0, 0))
             best, at = -2.0, (0, 0)
@@ -3811,7 +4165,7 @@ def ring_moves(u, cache, p, tiles):
         return {}
     path = os.path.join(folder(u, cache), (RING_REDRAW_DIR + "-" if any("ring_at" in t for t in tiles) else "") + RING_FILE + PLAN_FILE)
     with _ulock(u):
-        kept, ref = {}, None
+        kept, ref, short = {}, None, set()
         if os.path.exists(path):
             with open(path) as fh:
                 rec = json.load(fh)
@@ -3821,9 +4175,16 @@ def ring_moves(u, cache, p, tiles):
             # once it is redrawn: what each was fitted on is kept with it, ring_redraw)
             drawn = {t["n"]: "ring_at" in t for t in tiles if "offset" in t}
             kept = {n: v for n, v in kept.items() if n not in drawn or (len(v) > 4 and v[4]) == drawn[n]}
+            short = {json.dumps(k) for k in rec.get("short", [])}
         todo = [t for t in tiles if "offset" in t and t["n"] not in kept]
+        # (too few ring tiles for a reference, found before on these tiles or more: ring_places reads every tile to say
+        # so again, 3 to 6.5 s a layout on 271SA NHEMMAP001's 36 tiles, on every request for one of its mosaics)
+        tried = [_ring_tried(t) for t in tiles if "offset" in t]
+        if todo and ref is None and not kept and short and all(json.dumps(k) in short for k in tried):
+            todo = []
         if todo:
             there = _tiles(u, cache, p["display_scale"])
+            unread = []
 
             pics = {t["n"]: t["pic"] for t in tiles if "pic" in t}
             by_n_ = {t["n"]: t for t in tiles}
@@ -3835,12 +4196,20 @@ def ring_moves(u, cache, p, tiles):
                     got = _made_pictures.get(fp)
                 if got is None and os.path.exists(fp):
                     got = np.asarray(Image.open(fp).convert("RGBA"))
+                if got is None:
+                    unread.append(j)
                 return got
             # (the reference profile is made once, from the first RING_FIT_MIN ring tiles or more; later tiles are fitted
             # to it alone, so a mosaic grown a tile at a time reads each tile once)
             found, made = ring_places(u, [t for t in tiles if "offset" in t], picture, fixed=kept, ref=ref)
             if made is not None:
                 ref = made
+            elif ref is None and not found and not kept and not unread and _ring_geometry(u) is not None \
+                    and all(_ring_geometry(u).knows(_ring_id(t)) for t in tiles if "offset" in t):
+                # too few ring tiles to make a reference from (ring_places' ({}, None)), every tile read and its time
+                # known: kept, with the tiles it was found on, so the same tiles or fewer of them are not read again
+                # (fewer tiles hold no more ring); a pass grown past them is read again, as before
+                _keep_ring_short(path, tried)
             if found:
                 # a pointing's filters move together: each pointing's fitted tiles (with those kept before) give its
                 # move, their median, and a tile of it not fitted, or fitted further than RING_AGREE from it, takes it
@@ -3897,6 +4266,29 @@ def ring_moves(u, cache, p, tiles):
     return {n: v[:2] for n, v in kept.items() if v[:2] != [0, 0] or (len(v) > 3 and v[3])}
 
 
+def _ring_tried(t):
+    """(ring_moves) What a tile's ring samples depend on beside its picture: the tile, whether its rings were redrawn,
+    and where it sits (_tile_ring_samples), as kept in the pass's ring file's "short"."""
+    return [int(t["n"]), "ring_at" in t, [round(float(v), 3) for v in t["offset"][:2]], [round(float(v), 3) for v in t["box"]]]
+
+
+def _keep_ring_short(path, tried):
+    """(ring_moves) Keeps that the tiles tried hold too little ring between them for a reference: the pass's ring file
+    with no reference, no moves and "short", the tiles (_ring_tried). A file with a reference is never written over."""
+    part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+    try:
+        if os.path.exists(path):
+            with open(path) as fh:
+                if json.load(fh).get("ref"):
+                    return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(part, "w") as fh:
+            json.dump({"ref": None, "tiles": {}, "short": tried}, fh)
+        os.replace(part, path)
+    except (OSError, ValueError) as e:
+        print(f"cannot keep {path} in the cache ({e})", flush=True)
+
+
 _ring_geometries = {}   # pass key -> _ring_geometry's answer
 
 
@@ -3912,7 +4304,7 @@ RING_FILTER_REDRAWN = 16.0
 RING_PAIR_BINS = 40     # bins of ring both tiles' overlap must cover
 
 
-def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
+def ring_pair_shift(u, rings, s, ref, t, mine, check=True, bin_km=RING_BIN):
     """Ring registration of two overlapping tiles of one filter, each where SPICE puts it: the radial profiles (SPICE's
     ring plane at each tile's own time, _ring_profile, detail only) of the part of the view both cover, and the radial
     lag that lines them up. Unlike a match of the pictures, a profile slides only across the rings, never along them
@@ -3943,7 +4335,7 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     ins = [(S[0] >= bx0) & (S[0] <= bx1) & (S[1] >= by0) & (S[1] <= by1) for S in (A, B)]
     if min(int(m.sum()) for m in ins) < 300:
         return None, "little ring overlap"
-    pa, pb = (_ring_profile(S[3][m], S[2][m]) for S, m in zip((A, B), ins))
+    pa, pb = (_ring_profile(S[3][m], S[2][m], bin_km) for S, m in zip((A, B), ins))
     both = (pa[1] >= 3) & (pb[1] >= 3)
     if both.sum() < RING_PAIR_BINS:
         return None, "narrow ring overlap"
@@ -3984,18 +4376,18 @@ def ring_pair_shift(u, rings, s, ref, t, mine, check=True):
     if len(step) >= 100:
         g = float(np.median(step))
     # (t's ringlets sit lag bins in from s's: t moves out by that much, across the rings)
-    move = lag * RING_BIN / g
+    move = lag * bin_km / g
     if check and abs(lag) > 1:
         # believed only when it holds: t moved by it, its profile must then line up with s's at no lag (within a bin
         # and a quarter of the lag). Tiles of one place seen at very different times or lighting can match the wrong
         # ringlets as well as their own (118RI's first and last laps, 1700 km apart that moved to 1000 km the other way)
         moved = dict(t, offset=[t["offset"][0] + float(n[0] * move), t["offset"][1] + float(n[1] * move)])
-        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False)
-        if again is None or abs(how["lag_km"]) > RING_BIN + 0.25 * abs(lag) * RING_BIN:
-            return None, f"ring match does not hold ({lag * RING_BIN:+.0f} km, then {how['lag_km'] if again is not None else how})"
+        again, how = ring_pair_shift(u, rings, s, ref, moved, mine, check=False, bin_km=bin_km)
+        if again is None or abs(how["lag_km"]) > bin_km + 0.25 * abs(lag) * bin_km:
+            return None, f"ring match does not hold ({lag * bin_km:+.0f} km, then {how['lag_km'] if again is not None else how})"
     return (float(n[0] * move), float(n[1] * move)), {"ring": True, "ncc": round(float(sc[j]), 3),
                                                       "normal": [round(float(n[0]), 4), round(float(n[1]), 4)],
-                                                      "lag_km": round(lag * RING_BIN, 1)}
+                                                      "lag_km": round(lag * bin_km, 1)}
 
 
 RING_PAIR_PARTS = 4     # (ring_pair_parts) pieces the overlap of two tiles is cut in along its length
@@ -4349,8 +4741,20 @@ def clouded(u):
 def _pointing_root(u, n, roots):
     """The tile whose correction tile n takes: the tile C8 registers it to (_register_to, a frame of its pointing in
     another filter), followed back to the pointing's first; n itself for a pointing's first tile."""
-    j = _register_to(u, n)
-    return roots.get(j, j) if j is not None else n
+    j, seen = _register_to(u, n), {n}
+    if j is None:
+        return n
+    if not _carried(u):
+        return roots.get(j, j)
+    # (where some frames follow JPL's, _carried, followed to the end: such a frame lands on a later frame, which may
+    # itself land on an earlier one; otherwise as before, the frame registered to, or its root when it has one)
+    while j not in roots and j not in seen:
+        seen.add(j)
+        nxt = _register_to(u, j)
+        if nxt is None:
+            return j
+        j = nxt
+    return roots.get(j, j)
 
 
 SURFACE_STEP = 16    # reference px: the grid a tile's surface motion (reproject.sky_field) is worked out on
@@ -4611,7 +5015,9 @@ def _ring_motion(rp, u, t, by_id, ets, view, image, km_px, there):
     rings = _ring_geometry(u)
     r = by_id[base]
     fp = os.path.join(there, f"{r['n']}.png")
-    if rings is None or not os.path.exists(fp):
+    # (a pointing's first tile left out of the mosaic, unfit, has no place to measure against: 209SA_STORMW004's
+    # saturated clear frame, which its MT2 was registered to, stopped the movie, KeyError 'box', 11-14)
+    if rings is None or "box" not in r or not os.path.exists(fp):
         return tries[0]
     with _lock:
         ref = _made_pictures.get(fp)
@@ -5228,8 +5634,10 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                 def limb(n):
                     im = picture(n)
                     return n, (limb_place(disk, by_n[n], im) if im is not None else None)
+                # (only tiles of the pointings solved, as every other match: a tile whose pointing's root is not among
+                # the tiles drawn has no place in the solve; 041RI_PHOTDRK004 W stopped on one, KeyError 13, 11-14)
                 with concurrent.futures.ThreadPoolExecutor(max(1, min(16, os.cpu_count() or 1))) as ex:
-                    for n, got_l in ex.map(limb, sorted(by_n)):
+                    for n, got_l in ex.map(limb, sorted(n for n in by_n if rootmap.get(n) in by_n)):
                         if got_l is not None:
                             o, nv, count = got_l
                             meas.append(("limb", rootmap[n], by_n[n]["filter"], nv, o, LIMB_WEIGHT))
@@ -5278,6 +5686,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             turn = haze.get(("turn", r), 0.0) if r in linked else 0.0
             if abs(turn) >= 0.01:
                 out[n].append(round(turn, 4))
+        misfit = _solve_misfit(meas, keep, {r: out[r] for r in roots if r in out})
         if rings is not None and RING_FILTERS:
             # a pointing's filters on the rings, each lined up across the rings on its pointing's first tile by their
             # radial profiles (the filters' detail: the ringlets and gaps are where they are in every filter), where C8's
@@ -5304,7 +5713,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
                         out[n] = [round(out[n][0] + got_r[0][0], 2), round(out[n][1] + got_r[0][1], 2)] + out[n][2:]
                         seen[f"filter-{n}"] = {"shift": [round(v, 2) for v in got_r[0]], "ncc": got_r[1]["ncc"]}
         if report is not None:
-            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots)})
+            report.update({"pairs": seen, "kept": len(keep), "measured": len(meas), "roots": len(roots), "misfit": misfit})
         # (a solve of tiles another solve does not hold is used, not kept over the one kept: the one in memory, or the one
         # on disk, read again here in case another process, the pre-build, wrote a larger one meanwhile)
         latest = _read_solve(path) if os.path.exists(path) else {}
@@ -5314,7 +5723,7 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
             return {n: v for n, v in out.items() if v != [0, 0]}
         part = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
         new = {"tiles": sorted(by_n), "moves": {str(n): v for n, v in sorted(out.items())}, "pairs": seen,
-               "kept": len(keep), "measured": len(meas)}
+               "kept": len(keep), "measured": len(meas), "misfit": misfit}
         if rec is not None:
             rec[name] = new
         try:
@@ -5325,6 +5734,35 @@ def global_places(u, cache, p, tiles, pic=None, report=None, anchors=None):
         except OSError as e:
             print(f"cannot keep {path} in the cache ({e})", flush=True)
         return {n: v for n, v in out.items() if v != [0, 0]}
+
+
+# a pass's solve (global_places) checked against the matches it kept, as the pointings are drawn: each match's
+# residual across what it measures (both ways for a panel match, across the edge or the rings for an edge or ring
+# match), and the pass flagged when more than SOLVE_MISFIT_SHARE of them (and at least SOLVE_MISFIT_LEAST) are off by
+# over SOLVE_MISFIT px: tiles drawn where their own matches say they are not, a seam the eye sees. Kept in the solve's
+# file ("misfit") and listed by solve_check.py, which the cache rebuild's checks run (finding 14 of the 2026-11-16
+# pipeline audit: the 2004 approach movies' seams)
+SOLVE_MISFIT = 2.0        # px
+SOLVE_MISFIT_SHARE = 0.1
+SOLVE_MISFIT_LEAST = 5
+
+
+def _solve_misfit(meas, keep, moves):
+    """{"kept", "over", "share", "worst", "flag"}: the kept matches (meas[k] for k in keep, as _solve_moves takes them;
+    limb and turn rows left out) against the pointings' moves as drawn ({root: [dx, dy, ...]})."""
+    res = []
+    for k in keep:
+        m = meas[k]
+        if m[0] in ("limb", "turn") or m[1] not in moves or (m[0] is not None and m[0] not in moves):
+            continue
+        a_, b_, d, P = m[:4]
+        mb = np.array(moves[b_][:2], float)
+        ma = np.array(moves[a_][:2], float) if a_ is not None else np.zeros(2)
+        res.append(float(np.linalg.norm(P @ (mb - ma) - P @ np.asarray(d, float))))
+    over = sum(r > SOLVE_MISFIT for r in res)
+    share = over / len(res) if res else 0.0
+    return {"kept": len(res), "over": over, "share": round(share, 3), "worst": round(max(res), 2) if res else 0.0,
+            "flag": bool(over >= SOLVE_MISFIT_LEAST and share > SOLVE_MISFIT_SHARE)}
 
 
 def _read_solve(path):
@@ -5555,6 +5993,26 @@ def _filter_path(u, f, count, rect, cache, solved_on=""):
     return os.path.join(drawn(u, cache), "filters-level", name)
 
 
+def _places_tag(mine):
+    """(filter_mosaic, _grown) What a solve moved of these tiles, for the name of the filter's mosaic drawn of them:
+    "-m<hash>" of the moves (and turns) of those moved off SPICE's places (panel registration, the global solve, ring
+    registration: layout's "spice_place"), "" when none is. A filter's mosaic was kept under its count of tiles
+    alone, so one drawn where an earlier solve had the tiles was taken for the same tiles moved since. A mosaic grown
+    a frame at a time before its pass was solved whole (a toss-up's mosaic view in the pre-build, a cold pass on a
+    server, a stretch ending in the middle of a pass) so kept every tile where the solve on the tiles so far had put
+    it, under the picture name of the last solve (layout's _m, which says the moves are the last one's): on Enceladus
+    088EN SECLNX001, 14 of 22 tiles up to 5 px of the 1,024 px view from where its kept solve has them (2026-11-16)."""
+    moved = []
+    for t in mine:
+        if "spice_place" in t and "offset" in t:
+            m = [round(t["offset"][0] - t["spice_place"][0], 2), round(t["offset"][1] - t["spice_place"][1], 2)]
+            if t.get("turn"):
+                m.append(round(float(t["turn"]), 5))
+            if any(m):
+                moved.append((t["n"], m))
+    return "-m" + hashlib.sha1(json.dumps(sorted(moved)).encode()).hexdigest()[:8] if moved else ""
+
+
 def _png(rgba):
     out = io.BytesIO()
     Image.fromarray(rgba).save(out, "PNG", compress_level=1)
@@ -5663,8 +6121,10 @@ def _grown(u, p, f, mine, rect, cache, tag=""):
     each new tile costs one tile's compose, not all of them again, and what is drawn stays as it was drawn.
     Only the newest tile's part of the canvas (and a margin for its soft edge) is composed, since nothing
     outside it changes. Starts from the largest of those mosaics already made (the first GROW_FROM tiles
-    solved together otherwise) and keeps each one it makes on the way."""
-    named = lambda m: _filter_path(u, f, m, rect, cache)[:-len(".png")] + tag + ".png"
+    solved together otherwise) and keeps each one it makes on the way. "Already made" of the same tiles at the
+    same places (_places_tag in each one's name): when a solve has moved a tile since a smaller mosaic was drawn,
+    that one is not grown from, and the tile is drawn where it is now."""
+    named = lambda m: _filter_path(u, f, m, rect, cache)[:-len(".png")] + tag + _places_tag(mine[:m]) + ".png"
     m = len(mine) - 1
     while m > GROW_FROM and named(m) not in _grown_last and not os.path.exists(named(m)):
         m -= 1
@@ -5762,7 +6222,9 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     ref = the filter the seams are solved on (balanced look, seams). Past GROW_FROM tiles it grows from the
     one before (_grown) instead of composing every tile again. tag names a set of tiles that is not every tile
     up to the newest (a mosaic movie's lap, rolling_layout): it has a name of its own and is not grown, since
-    growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine)."""
+    growing takes the tiles as the pass's first ones in time order. f = LUM: the pass's luminance base (_mine).
+    Kept under a name that says where a solve moved its tiles too (_places_tag), so it is only found again for the
+    same tiles at the same places."""
     mine = _mine(u, p, tiles, f)
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
@@ -5780,7 +6242,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     path = _filter_path(u, f, len(mine), rect, cache, solved_on)
     # (the base's saturated fills in its name: one can come and go as tiles arrive, at the same count, blown_fills)
     filled = "".join(f"-B{t['n']}" for t in mine if t.get("blown_fill"))
-    path = path[:-len(".png")] + tag + filled + ".png"
+    path = path[:-len(".png")] + tag + filled + _places_tag(mine) + ".png"
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
@@ -5886,13 +6348,190 @@ def _part(path, w, h):
     return part
 
 
+RING_SOFT = 0.06   # ring_white: the disk's edge eased over this share of its radius each way
+RING_DISK = 1.0    # ... round a circle this share of the disk's (equatorial) radius (0.9, the polar radius, left a bright
+                   # rim inside the equatorial limb: 235SA SATSTARE001)
+
+
+def ring_white(rgba, scale):
+    """A picture on a Saturn look scale (its "headroom": white that many times the pass's own) with everything off the
+    body's disk ("disk": x, y, radius px; movie_disk) back on the pass's own white, as it was drawn before the look:
+    the rings, the sky and moons keep today's brightness, the headroom is the disk's only (eased over RING_SOFT of its
+    radius at the limb). Each channel decoded at the scale's gamma, the shoulder's roll-off undone, brightened, rolled
+    off again; nothing without a disk (a frame drawn as Cassini took it)"""
+    H, disk = scale.get("headroom"), scale.get("disk")
+    if not H or not disk or isinstance(scale.get("gamma", 2.2), str):
+        return rgba
+    g = np.float32(scale.get("gamma", 2.2))
+    knee = np.float32(scale.get("shoulder") or calibration.SHOULDER)
+    room = np.float32(1) - knee
+    cx, cy, r = disk
+    r = r * RING_DISK
+    ys = np.arange(rgba.shape[0], dtype=np.float32)[:, None] - np.float32(cy)
+    xs = np.arange(rgba.shape[1], dtype=np.float32)[None, :] - np.float32(cx)
+    t = np.clip((np.sqrt(ys * ys + xs * xs) - np.float32(r * (1 - RING_SOFT))) / np.float32(2 * RING_SOFT * r), 0, 1)
+    off = (t * t * (3 - 2 * t)).astype(np.float32)
+    if not off.any():
+        return rgba
+    x = np.power(rgba[..., :3].astype(np.float32) / np.float32(255), g)
+    past = x > knee
+    x[past] = knee + room * np.arctanh(np.minimum((x[past] - knee) / room, np.float32(0.999999)))
+    x *= np.float32(H)
+    past = x > knee
+    x[past] = knee + room * np.tanh((x[past] - knee) / room)
+    y = np.power(np.clip(x, 0, 1), np.float32(1) / g) * np.float32(255)
+    rgb = rgba[..., :3].astype(np.float32)
+    rgb = rgb + (y - rgb) * off[..., None]
+    return np.dstack([np.clip(rgb + 0.5, 0, 255).astype(np.uint8), rgba[..., 3]])
+
+
+def movie_disk(scale, rect, k, radius, unturn=None):
+    """The display scale with the body's disk on a movie frame drawn at k px a reference pixel over rect (whose origin is
+    the body's centre): {"disk": (x, y, radius) px} for a scale whose detail is Saturn's lit one (detail_how), as is
+    otherwise; not on a frame drawn as Cassini took it (unturn: follow_view's own axes)"""
+    how = scale.get("detail_how") or {}
+    if not how.get("lit") or unturn or not radius or how.get("nodisk"):
+        return scale
+    return dict(scale, disk=(-rect[0] * k, -rect[1] * k, radius * k))
+
+
 def sharpens(scale):
     """True when pictures on the display scale end in detail(): a pass whose body fills its frames (pass_scale's
     "detail"; a scale made before it had one, its "filled")."""
     return bool(scale.get("detail", scale.get("filled")))
 
 
-def detail(rgba, sigma):
+SATURN_LOOK = {"detail": 2.0, "on_base": 0.6, "sigma": 0.6, "nodisk": True}
+                    # TO TURN THE LOOK OFF (Sam, 11-17: kept, "might want to revert this later, it's a trade-off"): set
+                    # SATURN_LOOK = {}. Saturn's passes and pictures then lose the SATURN_TAG suffix and the cache serves
+                    # the pictures made without the look (still kept under their old names); nothing else changes
+                    # Saturn's atmosphere (saturn_look): local contrast this strong (detail) on its lit pixels, over sigma
+                    # times DETAIL_SIGMA, so belts, storms and vortices show at today's brightness (option L, 11-16). The
+                    # first pick, option C, also gave the white 1.25x "headroom" (the disk's bright half had been rolled
+                    # off by the shoulder into a few levels); Sam found it darkened the disk, its shadows and the rings,
+                    # and its disk-only form showed a seam, so the look has no headroom (SATDEF_OPTIONS keeps C and M).
+                    # nodisk: on every lit pixel, the rings too, never limited to the disk (a disk limit left a box on the
+                    # ring crossing the disk, 2004 approach composite). on_base: on a pass that had detail() before, the
+                    # look's local contrast this strong on top of today's (detail), so its brightness stays today's
+SATURN_TAG = "_sl3"   # (_sl1: option C; _sl2: L before the terminator fix) the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
+                      # single picture with it, so only Saturn's own pictures are made again
+SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown on 11-16; "off" none
+    "off": {},
+    "A": {"headroom": 1.25},
+    "B": {"headroom": 1.25, "detail": 1.0, "sigma": 0.6},
+    "C": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6},
+    "D": {"headroom": 1.3, "detail": 3.0, "sigma": 0.6},
+    "F": {"headroom": 1.25, "detail": 2.0, "sigma": 0.6, "chroma": 1.4},
+    "L": SATURN_LOOK,
+    "L3": {"detail": 3.0, "sigma": 0.6},
+    "M": {"headroom": 1.25, "match": True, "detail": 2.0, "sigma": 0.6, "nodisk": True},
+}
+SATDEF = os.environ.get("CASSINI_SATDEF", "")
+DETAIL_LIT_MEAN = (0.02, 0.06)   # detail_how["lit"]: the pixels the neighbourhood's mean is taken over, eased in from
+                                 # this share of white to the second (all but the sky)
+DETAIL_TERMINATOR = 0.1   # ... and the change eased off where the picture's brightness, smoothed over half the patch, falls
+                          # by more than this share of its bright level (the 90th percentile of the lit pixels) across one
+                          # patch, as 1 / (1 + (g / it)^2): a terminator's and a limb's smooth fall keep their shape (the
+                          # moons' detail_on_disk eases the same way, #530)
+DETAIL_TOP = 250   # detail_how["lit"]: a pixel is raised by the local contrast at most to this level (what is brighter stays)
+DETAIL_LIT = (0.15, 0.35)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
+                            # from this share of white to the second (its luminance), so the sky round a planet neither
+                            # pulls its limb up into a bright rim nor gets texture of its own, and the glow round a bright
+                            # disk (a fifth to a quarter of white) is not pulled down into a dark ring beside it (2004
+                            # approach N1455663489: at 0.04-0.12 its halo went black)
+
+
+def saturn_look(u):
+    """The Saturn look (SATURN_LOOK: "headroom", "detail", "sigma") for a pass u (or {"key": (target, observation)})
+    of Saturn's atmosphere: Saturn its target and not a ring observation (_ring: the rings keep their own scale); {}"""
+    if u["key"][0] != "SATURN" or _ring(u):
+        return {}
+    return dict(SATDEF_OPTIONS.get(SATDEF, SATURN_LOOK) if SATDEF else SATURN_LOOK)
+
+
+SATURN_CLIPPED = (0.002, 0.2)   # saturn_clipped: a pass with more than SATURN_CLIPPED[1] of its frames saturated over
+                                # SATURN_CLIPPED[0] of them keeps today's white (no headroom): its clipped bands, under
+                                # the headroom's white no longer at white beside the bands round them, drew a lime or white
+                                # cap with a hard edge (150SA NHEMMOVIE001: RED and GRN saturated over the north)
+
+
+def saturn_clipped(shares):
+    """Whether a pass's frames, {frame id: share the camera saturated}, saturated too much for the Saturn look's
+    headroom (SATURN_CLIPPED)"""
+    v = list(shares.values())
+    return bool(v) and float(np.mean([x > SATURN_CLIPPED[0] for x in v])) > SATURN_CLIPPED[1]
+
+
+def saturn_frames(ids):
+    """saturn_look of a single picture of frames ids (a frame, a colour set), by the index's target and observation of
+    its last frame (the reference color_image.load_aligned centres on); {}"""
+    idx, row = _row_of()
+    q = row.get(ids[-1]) if ids else None
+    if q is None:
+        return {}
+    r = idx.iloc[q]
+    return saturn_look({"key": (str(r["TARGET_NAME"]), str(r["OBSERVATION_ID"]))})
+
+
+DISK_SOFT = 0.03   # disk_weight: the disk's edge eased over this share of its radius each way
+
+
+def disk_weight(shape, cx, cy, r):
+    """(float32, shape) 1 on the disk of radius r px round (cx, cy), 0 off it, eased (smoothstep) over DISK_SOFT of r"""
+    ys = np.arange(shape[0], dtype=np.float32)[:, None] - np.float32(cy)
+    xs = np.arange(shape[1], dtype=np.float32)[None, :] - np.float32(cx)
+    d = np.sqrt(ys * ys + xs * xs)
+    t = np.clip((np.float32(r * (1 + DISK_SOFT)) - d) / np.float32(2 * DISK_SOFT * r), 0, 1)
+    return (t * t * (3 - 2 * t)).astype(np.float32)
+
+
+def chroma(rgb, k):
+    """A colour picture's (uint8 RGB) colour differences raised k times about each pixel's own grey (the channels'
+    mean), its brightness kept: a channel pushed past 0 or 255 brings the pixel's change down until none is, so the
+    hue holds and nothing clips into a new tint"""
+    x = rgb.astype(np.float32)
+    lum = x.mean(axis=2, keepdims=True)
+    d = x - lum
+    # (the most of k each pixel takes before a channel reaches 0 or 255)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        up = np.where(d > 0, (255 - lum) / d, np.where(d < 0, -lum / d, np.inf)).min(axis=2, keepdims=True)
+    g = np.minimum(np.float32(k), np.maximum(up, 1))
+    return np.clip(lum + d * g, 0, 255)
+
+
+def detail(rgba, sigma, scale=None):
+    """detail_core, and for a Saturn look scale on a pass that had detail() before (detail_base) with the body's disk
+    known: today's detail off the disk (the rings as they are drawn today), the Saturn look's on it, eased over the
+    disk's edge (disk_weight)"""
+    if scale and scale.get("detail_base") and (scale.get("detail_how") or {}).get("nodisk"):
+        # (no disk limit: today's detail on the whole picture, as before, then the look's lit local contrast on top,
+        # so the picture keeps today's brightness, rings and rim and gains the cloud detail; 235SA SATSTARE001 lost 19
+        # levels on its disk and 22 on its rings when the look's detail replaced today's)
+        return detail_core(detail_core(rgba, sigma, None), sigma, scale)
+    if scale and scale.get("detail_base") and scale.get("disk") and (scale.get("detail_how") or {}).get("lit"):
+        before = detail_core(rgba, sigma, None).astype(np.float32)
+        after = detail_core(rgba, sigma, scale).astype(np.float32)
+        w = disk_weight(rgba.shape[:2], *scale["disk"])[..., None]
+        return np.clip(before + (after - before) * w + 0.5, 0, 255).astype(np.uint8)
+    return detail_core(rgba, sigma, scale)
+
+
+def terminator_ease(rgb, lit, sigma):
+    """(float32, H x W) DETAIL_TERMINATOR's easing of a lit look's change on a picture rgb (float32 H x W x 3, 8-bit
+    values) whose change weight is lit, its patch sigma px: 1 where the brightness is flat, less on a steep smooth fall.
+    The bright level is the 90th percentile (the lower value) of the channels' sum over the pixels lit over half"""
+    import cv2
+    total = rgb[..., 0] + rgb[..., 1] + rgb[..., 2]
+    on = total[lit > 0.5]
+    ref = max(float(np.percentile(on, 90, method="lower")) / 3, 1.0) if on.size else 255.0
+    s2 = max(1.5, sigma / 2)
+    big = cv2.GaussianBlur((total / 3).astype(np.float32), (0, 0), s2)
+    g = np.hypot(cv2.Sobel(big, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(big, cv2.CV_32F, 0, 1, ksize=3)) / np.float32(8) \
+        * np.float32(sigma / ref)
+    return (1 / (1 + (g / np.float32(DETAIL_TERMINATOR)) ** 2)).astype(np.float32)
+
+
+def detail_core(rgba, sigma, scale=None):
     """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
     against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
     over the mosaic's own pixels only, so the empty canvas does not darken its edges) by DETAIL times the
@@ -5900,19 +6539,48 @@ def detail(rgba, sigma):
     (the mean of the channels), the same change added to every channel, so the small misregistration between
     filters does not turn into rainbow texture."""
     import cv2
+    how = (scale or {}).get("detail_how") or {}
+    strength = np.float32(how.get("strength", DETAIL))
+    sigma = sigma * how.get("sigma", 1.0)
     a = rgba[..., 3].astype(np.float32) / 255
     rgb = rgba[..., :3].astype(np.float32)
+    lit = None
+    if how.get("lit"):
+        lum0 = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3 / 255
+        t = np.clip((lum0 - DETAIL_LIT[0]) / (DETAIL_LIT[1] - DETAIL_LIT[0]), 0, 1)
+        lit = (t * t * (3 - 2 * t)).astype(np.float32)
+        # (and only the picture's whole pixels: its feathered edge, drawn darker as it fades out, pulled the mean
+        # down and left a light line along a tile's edge, 193SA NPOLMOV001)
+        whole = (a >= np.float32(250 / 255)).astype(np.float32)
+        if scale and scale.get("disk"):
+            # and only on the body's disk where SPICE puts it (x, y, radius in this picture's pixels): the rings
+            # beside it keep their own look (235SA SATSTARE001's rings showed their tile seams sharpened)
+            whole = whole * disk_weight(a.shape, *scale["disk"])
+        lit = whole * lit
+        # the neighbourhood's mean over everything but the sky (DETAIL_LIT_MEAN): taken over the lit pixels only, it
+        # sat on a terminator's bright side, so the whole fall from light to dark was pulled darker into a gray band
+        # with a lighter edge inside it (Sam, 11-17; 048SA APOMOVIEC001's terminator 24 levels darker)
+        t = np.clip((lum0 - DETAIL_LIT_MEAN[0]) / (DETAIL_LIT_MEAN[1] - DETAIL_LIT_MEAN[0]), 0, 1)
+        a = whole * (t * t * (3 - 2 * t)).astype(np.float32)
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
     if calibration.look() == "balanced":
         # the channels' mean: 8-bit values, so the sum is exact and this is numpy's mean(axis=2) to the bit (all
         # 2^24 colours), without its slow reduce over three
         lum = (rgb[..., 0] + rgb[..., 1] + rgb[..., 2]) / 3
         mean = cv2.GaussianBlur(lum * a, (0, 0), sigma) / np.maximum(weight, 1e-3)
-        x = lum - mean
-        d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+        # (grain: the difference taken on the luminance blurred over that many px, so the pixel noise and the
+        # camera's 8-bit steps are not raised with the clouds)
+        x = (cv2.GaussianBlur(lum, (0, 0), how["grain"]) if how.get("grain") else lum) - mean
+        d = strength * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
+        if lit is not None:
+            d = d * lit
+            if DETAIL_TERMINATOR:
+                d = d * terminator_ease(rgb, lit, sigma)
         # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
         # three keeps its color)
-        room = np.where(d > 0, 255 - rgb.max(axis=2), rgb.min(axis=2))
+        # (a Saturn lit look's change toward white stops at DETAIL_TOP: it never clips the cloud bands it brings out)
+        top = np.float32(DETAIL_TOP if lit is not None else 255)
+        room = np.where(d > 0, np.maximum(top - rgb.max(axis=2), 0), rgb.min(axis=2))
         out = np.clip(rgb + _soft_detail(d, room)[..., None], 0, 255)
         return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
     mean = cv2.GaussianBlur(rgb * a[..., None], (0, 0), sigma) / np.maximum(weight, 1e-3)[..., None]
@@ -5920,6 +6588,110 @@ def detail(rgba, sigma):
     d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
     out = np.clip(rgb + _soft_detail(d, np.where(d > 0, 255 - rgb, rgb)), 0, 255)
     return np.dstack([out.round().astype(np.uint8), rgba[..., 3]])
+
+
+DISK_DETAIL_REACH = ((1.15, 1.4), (1.5, 1.85))   # stills (detail_on_disk): x the SPICE radius, the body's reach and
+                            # the edge where backdrop is told from it (round, or irregular, DISK_DETAIL_IRREGULAR:
+                            # Hyperion's long axis is 1.33 x its mean radius) ...
+DISK_DETAIL_SLACK = 12.0    # ... each at least this many px further (SPICE's place is off by up to 10 px) ...
+DISK_DETAIL_TERMINATOR = 0.2  # ... and eased off where its brightness falls by this share of its bright level per patch
+DISK_DETAIL_TOP = 251.0     # ... and raised toward white only up to this level ...
+DISK_DETAIL_LIT = 0.25      # ... over pixels lit more than this share of the way from the sky to the disk's bright end
+DISK_DETAIL_SIGMA = 0.35    # ... over a patch of at most this times the radius (a small moon's own neighbourhood)
+DISK_DETAIL_SKIP = ("SATURN",)   # bodies left as they are: Saturn's rings cross its disk and their mean darkens a band
+DISK_DETAIL_HAZE = ("TITAN",)    # ... and hazy ones unless a frame is in their surface window (calibration.SURFACE_WINDOW,
+                                 # Titan's CB3): the haze has no detail to raise (Sam, 11-16), the surface does ...
+DISK_DETAIL_HAZE_INNER = (0.7, 0.85)   # ... and there only inside the haze ring: faded out from 0.7 to 0.85 x the radius
+DISK_DETAIL_IRREGULAR = set(SMALL_RADIUS) | {"HYPERION", "PHOEBE"}   # bodies whose ends lie past their mean radius
+
+
+def detail_on_disk(rgba, cx, cy, radius, sigma=None, target=None, haze=False):
+    """detail() on a still or composite whose body SPICE places (frame_server.centred): the same raise of the local
+    contrast (DETAIL, DETAIL_EDGE, DETAIL_KNEE), its neighbourhood mean taken over the body's lit pixels only (inside
+    DISK_DETAIL_REACH and DISK_DETAIL_SLACK of (cx, cy), DISK_DETAIL_LIT over the sky, apart from any lit backdrop)
+    and its change only on those lit pixels,
+    faded in from their edge, so a moon smaller than the filter's patch is not raised to flat white against the black sky (why #304
+    kept small centred moons out of it) and no dark ring is drawn round it. rgba: H x W x 2 (LA) or 4, uint8."""
+    import cv2
+    h, w = rgba.shape[:2]
+    if not radius or radius < 4:
+        return rgba
+    sigma = sigma or min(DETAIL_SIGMA * FRAME, DISK_DETAIL_SIGMA * radius)
+    colors = rgba.shape[2] - 1
+    rgb = rgba[..., :colors].astype(np.float32)
+    lum = rgb.mean(axis=2)
+    alpha = rgba[..., colors] > 0
+    yy, xx = np.mgrid[:h, :w]
+    rr = np.hypot(xx - cx, yy - cy).astype(np.float32)
+    irregular = str(target or "").upper() in DISK_DETAIL_IRREGULAR
+    # the body: its lit pixels within reach of SPICE's centre, reach = the radius times DISK_DETAIL_REACH (an
+    # irregular moon's far ends lie past its mean radius) plus DISK_DETAIL_SLACK px for SPICE's own error
+    k_in, k_out = DISK_DETAIL_REACH[1] if irregular else DISK_DETAIL_REACH[0]
+    r_in = max(k_in * radius, radius + DISK_DETAIL_SLACK)
+    r_out = max(k_out * radius, r_in + DISK_DETAIL_SLACK)
+    circle = rr <= r_in
+    body = lum[circle & alpha]
+    if body.size < 50:
+        return rgba
+    sky = float(np.percentile(lum[alpha], 5))
+    floor = sky + max(6.0, DISK_DETAIL_LIT * (float(np.percentile(body, 90)) - sky))
+    bright = ((cv2.GaussianBlur(lum, (0, 0), 2) > floor) & alpha & (rr <= r_out)).astype(np.uint8)
+    # a lit region that runs out to r_out is backdrop, not body (Saturn's disk or limb behind a moon, a ring arc): it
+    # is left out; when the body's own largest lit region is one of them, the body joins its backdrop and is left as
+    # it is (it still takes the fine sharpening). SPICE's limb is 5 to 10 px off the body's on some frames (Dione at
+    # Saturn's limb, N1493949963_1), so the change is bounded by the lit body itself, never by SPICE's circle: a
+    # mean or change bounded by it drew a dark arc under Rhea before Saturn (N1648105861_1) and a second limb inside
+    # Dione (review of #495)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(bright, connectivity=8)
+    if n < 2:
+        return rgba
+    edge = (rr > r_out - 2.5) & (rr <= r_out) & alpha
+    touching = np.unique(labels[edge & (bright > 0)])
+    touching = set(int(t) for t in touching if t > 0)
+    inner = np.unique(labels[circle & (bright > 0)])
+    inner = [int(t) for t in inner if t > 0]
+    if not inner:
+        return rgba
+    biggest = max(inner, key=lambda t: stats[t, cv2.CC_STAT_AREA])
+    if biggest in touching:
+        return rgba
+    lit = (np.isin(labels, [t for t in inner if t not in touching]) & circle).astype(np.uint8)
+    if haze:
+        # a hazy body seen in its surface window (Titan in CB3): the surface inside is raised, the haze ring round the
+        # limb is not, so no dark band is drawn between the two (133TI CLOUD002, N1655966005_1: a dark halo inside
+        # Titan's blue haze ring). The mean and the change keep inside DISK_DETAIL_HAZE_INNER x the radius
+        lit = lit & (rr <= DISK_DETAIL_HAZE_INNER[1] * radius).astype(np.uint8)
+    lit = cv2.erode(lit, np.ones((5, 5), np.uint8)).astype(np.float32)   # (back inside the limb: bright was blurred 2 px out)
+    if lit.sum() < 50:
+        return rgba
+    # (the change follows the lit body itself, faded in from its edge; SPICE's circle, reach x the radius, only bounds
+    # it, so SPICE's few px of error draw no second limb inside the body's own; review of #495)
+    fade = np.clip((cv2.GaussianBlur(lit, (0, 0), max(1.5, sigma / 8)) - 0.5) * 2, 0, 1) * lit
+    if haze:
+        # (faded out from DISK_DETAIL_HAZE_INNER[0] to [1] x the radius: no line where the raised surface stops)
+        a0, a1 = DISK_DETAIL_HAZE_INNER
+        t = np.clip((a1 * radius - rr) / ((a1 - a0) * radius), 0, 1)
+        fade = fade * t * t * (3 - 2 * t)
+    weight = cv2.GaussianBlur(lit, (0, 0), sigma)
+    mean = cv2.GaussianBlur(lum * lit, (0, 0), sigma) / np.maximum(weight, 1e-3)
+    x = lum - mean
+    d = DETAIL * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE)) * fade
+    if DISK_DETAIL_TERMINATOR:
+        # eased off across the terminator (Sam, 11-16: the light-to-dark transition looked overprocessed while the rest
+        # of the body looked good): where the body's brightness, smoothed over half the filter's patch, falls by more
+        # than DISK_DETAIL_TERMINATOR of its bright level across one patch, the change shrinks as 1 / (1 + g^2)
+        ref = max(float(np.percentile(lum[lit > 0], 90)), 1.0)
+        # (over SPICE's disk only, night side included: the fall from the disk to the sky at the limb is no terminator)
+        disk = (rr <= radius).astype(np.float32)
+        s2 = max(1.5, sigma / 2)
+        big = cv2.GaussianBlur(lum * disk, (0, 0), s2) / np.maximum(cv2.GaussianBlur(disk, (0, 0), s2), 1e-3)
+        g = np.hypot(cv2.Sobel(big, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(big, cv2.CV_32F, 0, 1, ksize=3)) / 8 * sigma / ref
+        d = d / (1 + (g / np.float32(DISK_DETAIL_TERMINATOR)) ** 2)
+    # (up only to DISK_DETAIL_TOP: the roll-off toward white never lands a raised pixel on 254-255, which read as
+    # clipped on the brightest crater rims; the image benchmark's clip measure, review of #495)
+    room = np.where(d > 0, np.maximum(DISK_DETAIL_TOP - rgb.max(axis=2), 0), rgb.min(axis=2))
+    out = np.clip(rgb + _soft_detail(d.astype(np.float32), room)[..., None], 0, 255).round().astype(np.uint8)
+    return np.concatenate([out, rgba[..., colors:]], axis=2)
 
 
 def _soft_detail(d, room):
@@ -6209,7 +6981,13 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     g = lin(grey[..., 0])
     # (a clipped pixel of the frame says nothing of its brightness: left out of the match, and drawn from the set)
     near = np.clip((grey[..., 0].astype(np.float32) - TINT_CLIP) / max(1.0, CLIP_FROM - TINT_CLIP), 0, 1)
-    clipped = near > 0
+    # (clipped: at CLIP_FROM, where the fill is wholly the set's. From TINT_CLIP the frame only starts easing over to
+    # the set and its pixels are still its own brightness: left out of the match as well, a bright body lost the
+    # brightest of its disk from it (Jupiter's approach movie, its disk at 185 to 225: a third of it at its own
+    # exposure and more with every step of gain), and what was matched was its limb and haze against the set's. The
+    # frame's brightness then did not follow its exposure gain: 187 at gain 1.055, 208 at 1.06, 240 at 1.08, 242 at 1.4
+    # (C23RI RMOV001 frame 59, 2026-11-16))
+    clipped = near >= 1
     both = (ca > 0.99) & (ga > 0.99) & ~clipped
     top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
     top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
@@ -6686,6 +7464,8 @@ def colour_picture(u, p, colour, planes, away=None):
         rgb = np.moveaxis((calibration.encode(np.clip(x, 0, 1), g) * 255 + 0.5).astype(np.uint8), 0, -1)
     elif mix is not None:
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
+    if scale.get("chroma"):
+        rgb = chroma(rgb, scale["chroma"])
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
     rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
     return np.dstack([rgb, alpha])
@@ -6719,6 +7499,12 @@ def so_far(u, n, cache, made=None, out=OUT):
     if not made:
         return None, None
     p, tiles, rect, count, used, name = made
+    # the canvas this thread composed last, asked again at another size (the pre-build's 1024, then its full view):
+    # the same canvas, only shrunk anew
+    key = (drawn(u, cache), name, n, bool(_rolling.get()))
+    last = getattr(_last_canvas, "made", None)
+    if last is not None and last[0] == key:
+        return _sized(u, n, p, count, *last[1:], out)
     # a set of tiles other than every tile up to n has a name of its own (tag): a mosaic movie's lap, a tuned layout
     plain, _, tuned = name.partition("-tune")
     # (and a layout whose tiles panel registration moved: its tiles are not where the pre-built pictures have them)
@@ -6745,8 +7531,24 @@ def so_far(u, n, cache, made=None, out=OUT):
     else:
         rgba = filter_mosaic(u, p, used[0], tiles, rect, cache, ref, tag)
     hdr = _mosaic_map(u, p, tiles, rect, used, base, rgba.shape, cache) if HDR_ON else None
+    on_disk = movie_disk(p["display_scale"], rect, p["k"], RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]]))
+    rgba = ring_white(rgba, on_disk)
     if sharpens(p["display_scale"]):
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"])
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"], on_disk)
+    _last_canvas.made = (key, rgba, hdr, used, bool(base))
+    return _sized(u, n, p, count, rgba, hdr, used, bool(base), out)
+
+
+# the canvas so_far composed last on this thread (its key, the picture on the canvas after detail(), its recovery map,
+# the filters drawn, whether on the luminance base), for the same mosaic asked at another size: the pre-build draws a
+# mosaic pass's 1024 px picture, its 512 and its full view (up to 2048) one after another, and composing is all of the
+# cost (the full view composed again from the pass's filter mosaics took 1.4 to 3.3 core-seconds a picture,
+# 2026-11-16). One canvas a thread (up to CANVAS x CANVAS: 16 MB and its map's 4)
+_last_canvas = threading.local()
+
+
+def _sized(u, n, p, count, rgba, hdr, used, base, out):
+    """so_far's picture and report from its canvas rgba (and recovery map hdr): out px on its longest side."""
     im = Image.fromarray(rgba, "RGBA")
     s = min(out, CANVAS) / max(im.size)
     im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
@@ -6932,7 +7734,7 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 #                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
 
 
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -6970,11 +7772,28 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS):
         rel = (t["offset"][0] - by[j]["offset"][0], t["offset"][1] - by[j]["offset"][1])
         g = guide(spice, j, n, None) if guide else {}
         reach = g.get("reach", reach)
+        if ring is not None and getattr(ring, "first", False):
+            # (a pass of the rings themselves: their profiles first, the picture match sliding along the ringlets)
+            move, rhow = ring(by[j], own[j], t, own[n])
+            if move is not None and math.hypot(*move) <= believed:
+                d = (rel[0] + move[0], rel[1] + move[1])
+                if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
+                    return pr, None, "past reach"
+                return pr, d, f"rings {rhow['lag_km']:+.0f} km"
         shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                  around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
-        if shift is None or math.hypot(*shift) > believed:
+        if shift is not None and math.hypot(*shift) <= believed:
+            d = (rel[0] - shift[0], rel[1] - shift[1])
+        elif ring is not None and not getattr(ring, "first", False):
+            # (frames of the rings the pictures cannot be matched on, the ringlets repeating along the ring: their
+            # radial profiles on SPICE's ring plane, matched across the rings only (ring_pair_shift), and along the
+            # rings SPICE's step, under which the picture hardly changes)
+            move, rhow = ring(by[j], own[j], t, own[n])
+            if move is None or math.hypot(*move) > believed:
+                return pr, None, f"{how}; rings: {rhow}"
+            d, how = (rel[0] + move[0], rel[1] + move[1]), f"rings {rhow['lag_km']:+.0f} km"
+        else:
             return pr, None, how
-        d = (rel[0] - shift[0], rel[1] - shift[1])
         if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
             return pr, None, "past reach"
         return pr, d, how
@@ -7117,7 +7936,8 @@ STEADY_FILE = "steady4-" + PLAN_FILE   # steady2: held on the target (steady_gui
 if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
     # the chain alone keeps steady4's name
-    STEADY_FILE = f"steady5k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady6: a ring pass's frames the pictures cannot be matched on linked by their ring profiles (steady_rings)
+    STEADY_FILE = f"steady6k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -7128,6 +7948,32 @@ STEADY_JUMPY = 8.0    # px
 STEADY_JUMPS = 0.1    # of the neighbouring pairs
 STEADY_EDGE = 16     # px: a blob found nearer the tile's edge than its radius and this is not the moon (seen_places)
 STEADY_SEEN = 0.5     # of the placed tiles: the least share the moon must be found on for the pictures to be believed
+
+
+def steady_rings(u, made):
+    """steady_chain's ring match for a pass that shows Saturn's rings (_ring_geometry): (tile s, its picture, tile t,
+    its picture) -> ring_pair_shift's (move of t across the rings, how) or (None, why); None for any other pass. A ring
+    movie's frames slide along ringlets that repeat along the ring, so a match of the pictures fails or finds the
+    wrong ringlet (rings 2004 HIPHLFMOV001: 33 of its 43 links failed, and the movie kept SPICE's ~9 px shake); their
+    radial profiles say how far across the rings each frame sits, and SPICE's reach still bounds it."""
+    rings = _ring_geometry(u)
+    if rings is None:
+        return None
+    # (SPICE's view at each tile's time worked out here, one at a time: SPICE is not safe from several threads, and the
+    # chain's matches run side by side; once worked out, a ring plane is plain arithmetic)
+    for t in made:
+        if "offset" in t:
+            rings(np.zeros(1), np.zeros(1), _ring_id(t))
+    # (profiles binned at a pixel's width at the pass's range, not the mosaics' RING_BIN of 100 km: a close ring movie's
+    # frame spans a few thousand km of ring, and a movie is steadied to a pixel)
+    km_px = IFOV[u["key"][2]] * u["z"]
+
+    def match(s, ref, t, mine):
+        return ring_pair_shift(u, rings, s, ref, t, mine, bin_km=min(RING_BIN, km_px))
+    # (a pass of the rings themselves, _ring: matched on the rings first, the pictures where the profiles say nothing; a
+    # moon's pass with rings behind it, Daphnis in the Keeler gap: on the pictures first, as before)
+    match.first = _ring(u)
+    return match
 
 
 def steady_chain(u, cache, p=None):
@@ -7161,7 +8007,8 @@ def steady_chain(u, cache, p=None):
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
-            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS)
+            places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
+                                        steady_rings(u, made))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
@@ -7361,10 +8208,10 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure6-{}-" + PLAN_FILE   # exposure6: measured on movie-3's views (movie_footprint2, follow_view)
+EXPOSURE_FILE = "exposure7-{}-" + PLAN_FILE   # exposure7: a tinted frame measured on the windows' picture made small; exposure6: measured on movie-3's views (movie_footprint2, follow_view)
 EXPOSURE_ROLL = 0.75     # of a stretch's slow drift past EXPOSURE_FREE: how much the rolling scale takes out (evened_gains)
 EXPOSURE_FREE = 0.26     # log brightness (about 30% either way of the stretch's middle): slow drift kept as it is
-EXPOSURE_RULE = 8        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_RULE = 10       # the way the gains are worked out from the chain: in the movie frames' names (movie_webp); 10: one gain for a held picture (held_gains); 9: from exposure7's chains
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -7412,6 +8259,18 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
             im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady, per_body=False)
             if im is None:
                 continue
+            if rep.get("tint"):
+                # a frame drawn in its set's colour (tinted_frame) is measured on the picture the windows show, made
+                # small: drawn EXPOSURE_SIDE px a side it is another picture. The tint matches the frame to its set over
+                # LUM_MATCH_MIN lit pixels, a count, and a body that fills 7,600 px of the windows' picture fills 180 of
+                # this one: without the match the frame fell to its floor, 0.25 for a set's own frame and 0.67 for the
+                # frames between, and the chain took that for the movie. Every set's own frame of a Jupiter approach
+                # movie read 2.3 times brighter than the frames between, all as bright in the windows, and was drawn at
+                # 0.43; the pass's last frames at 1.41 (C23RI RMOV001, 2026-11-16)
+                im, rep = movie_frame(u, n, cache, 0, colour, out=OUT, centre=centre, steady=steady, per_body=False)
+                if im is None:
+                    continue
+                im = im.resize((max(1, round(im.width * EXPOSURE_SIDE / max(im.size))), max(1, round(im.height * EXPOSURE_SIDE / max(im.size)))), Image.BOX)
             a, kind = np.asarray(im), tuple(rep.get("color") or ())
             if last is None:
                 logs[n], hows[n] = [0.0, stretch, bool(kind)], "first"
@@ -7481,7 +8340,7 @@ def exposure_gains(u, cache, p=None, smooth=EXPOSURE_SMOOTH, colour=True, centre
             gains.update((n, 1.0) for n in ns)
             del stretches[key]
     for ns in stretches.values():
-        gains.update(zip(ns, evened_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
+        gains.update(zip(ns, held_gains([logs[n][0] for n in ns], smooth) if len(ns) >= EXPOSURE_FLASH else [1.0] * len(ns)))
     return gains
 
 
@@ -7491,15 +8350,46 @@ def evened_gains(logs, smooth):
     EXPOSURE_FLASH frames taken out by a running median, the rest smoothed with a Gaussian over smooth frames and put
     through the rolling scale (rolled), the gain the smoothed brightness over the frame's own, within EXPOSURE_GAIN either way, to 1/200 (the movie frame's lookup
     table is made once per gain)."""
+    L, target = _evened_targets(logs, smooth)
+    return [_evened_gain(own, want) for own, want in zip(L, target)]
+
+
+def _evened_targets(logs, smooth):
+    """(evened_gains, held_gains) The frames' log brightnesses as an array, and the log brightness each is brought to."""
     L = np.asarray(logs, float)
     h = EXPOSURE_FLASH // 2
     pad = np.concatenate([np.repeat(L[:1], h), L, np.repeat(L[-1:], h)])
     steady = np.array([np.median(pad[k:k + EXPOSURE_FLASH]) for k in range(len(L))])
     # (a line through the frames round each, so a pass brightening all through keeps its brightening at its ends)
     target = _gaussian_line(steady, smooth)
-    target = rolled(target)
-    return [round(float(np.clip(math.exp(want - own), 1 / EXPOSURE_GAIN, EXPOSURE_GAIN)) * 200) / 200
-            for own, want in zip(L, target)]
+    return L, rolled(target)
+
+
+def _evened_gain(own, want):
+    """(evened_gains, held_gains) The gain that takes a log brightness to the one wanted: within EXPOSURE_GAIN, to 1/200."""
+    return round(float(np.clip(math.exp(want - own), 1 / EXPOSURE_GAIN, EXPOSURE_GAIN)) * 200) / 200
+
+
+def held_gains(logs, smooth):
+    """evened_gains for a movie pass's stretch (exposure_gains), with one gain for each picture: frames in a row that
+    show the same picture (a colour set held until the next is complete: the chain gives them the same log brightness,
+    exposure_chain's "1.000 x") take the mean of what evened_gains wants for them, so a held picture does not change
+    under the eye. Frame by frame, each step between two held pictures was spread over smooth frames either side: the
+    picture brightened towards the step while it was held, then dropped after it (149HE HELENCLOS001, whose sets are
+    held five or six frames while Helene nears: gains 1.015, 1.02, 1.025, 1.03, 1.04, then 0.97, 2026-11-16). The
+    flashes and the smoothing are still counted in frames, the movie's own time: a picture shown once among held ones
+    (a set's own frame) is still brought to them. A pass that holds nothing is evened as before, to the same gains."""
+    L, target = _evened_targets(logs, smooth)
+    out, k = [], 0
+    while k < len(L):
+        j = k
+        while j + 1 < len(L) and L[j + 1] == L[k]:
+            j += 1
+        # (summed in order, as the page does)
+        want = sum(float(v) for v in target[k:j + 1]) / (j + 1 - k)
+        out += [_evened_gain(L[k], want)] * (j + 1 - k)
+        k = j + 1
+    return out
 
 
 def rolled(target):
@@ -7560,28 +8450,45 @@ def _steady_table(u, n, cache, centre=True, colour=False):
         exposure = {"local": all(tiles[m].get("gain", 1.0) == 1.0 for m in ns),
                     "logs": {str(m): v for m, v in logs.items()}, "gamma": p["display_scale"].get("gamma", 2.2),
                     "flash": EXPOSURE_FLASH, "gain": EXPOSURE_GAIN, "greyRun": EXPOSURE_GREY_RUN, "most": EXPOSURE_MOST,
-                    "roll": EXPOSURE_ROLL, "free": EXPOSURE_FREE}
+                    "roll": EXPOSURE_ROLL, "free": EXPOSURE_FREE, "held": True}   # (held: one gain for a held picture, held_gains)
     else:
         warm_movie(u, n, 6, cache, exposure=how)
     tile_of = lambda j: tiles.get(j) or {}
     not_shown = lambda j: unfit(u["frames"], j, tile_of)
     # (colour on: the frames a pass playing its grey filter shows another frame of that filter for, step_frame)
-    step, tint = {}, []
+    step, tint, server = {}, [], []
+    others = other_bodies(u, names=True) if colour and p.get("colour") else {}
     for m in ns if colour else ():
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
         if tinted:
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
+        elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
+            server.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
-    return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
+    dhow = p["display_scale"].get("detail_how") or {}
+    # (a pass stabilized by default, auto_steady: its frames are served, and pre-built, at STEADY_SMOOTH, and the page
+    # moves them from there for any other smoothing, never asking the server to draw one)
+    return {"local": True, "fixed": True, "auto": STEADY_SMOOTH if auto_steady(u, cache) else 0,
+            "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
-            "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
+            "server": server, "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
-            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL, "knee": DETAIL_KNEE, "edge": DETAIL_EDGE}
+            "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
+            "amount": dhow.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
+            **({"lit": list(DETAIL_LIT), "top": DETAIL_TOP, "litMean": list(DETAIL_LIT_MEAN), "terminator": DETAIL_TERMINATOR}
+               if dhow.get("lit") else {}),
+            **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
+               if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
+            **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
+               if dhow.get("lit") and radius and not follows(fp, rect) else {}),
+            **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2), "ringDisk": RING_DISK,
+                "shoulder": p["display_scale"].get("shoulder") or calibration.SHOULDER}
+               if p["display_scale"].get("headroom") and isinstance(p["display_scale"].get("gamma", 2.2), (int, float)) else {})}
 
 
 def page_evens(u, cache, colour=True, centre=True):
@@ -7601,7 +8508,23 @@ def page_evens(u, cache, colour=True, centre=True):
     t = _steady_table(u, 0, cache, centre, colour)
     return bool(t.get("local") and (t.get("exposure") or {}).get("local")
                 and not (colour and t.get("colour") and not t.get("sets"))
-                and not (colour and t.get("tint")))
+                and not (colour and (t.get("tint") or t.get("server"))))
+
+
+def _set_drawn_apart(u, js, others, k):
+    """Whether movie_frame draws colour set js (its tiles) with more than the page's mix (steady-local.html): another
+    body SPICE puts on every one of its tiles drawn big enough to be moved per filter (PER_BODY_LEAST canvas px of
+    radius at the table's scale k: _per_body_planes, which also keeps the clipped-band fill off it, colour_picture's
+    away), or a filter the pass takes once, cleaned of cosmic rays (_despiked). The steady table lists such frames
+    ("server"), which the page leaves to the server as it does a tinted one. (Not a set with only specks on every tile,
+    the ring moons on nearly every Saturn movie: none is moved, and the page keeps evening those passes; there
+    _per_body_planes may still line a plane's target limb up by a pixel or two, which the page does not.)"""
+    if any(_around(u, j) == [None, None] for j in js):
+        return True
+    if len(js) < 2 or not all(others.get(j) for j in js):
+        return False
+    big = [{b[0] for b in others[j] if b[3] * k >= PER_BODY_LEAST} for j in js]
+    return bool(set.intersection(*big))
 
 
 def one_white(tiles, scale):
@@ -7630,7 +8553,14 @@ def _colour_recipes(u, p, cache, ns, tiles):
     if isinstance(mix, calibration.FalseMix) or len(want) != 3:
         return None   # (two filters: the green of their mean, colour_picture's, is the server's too)
     return {"filters": list(want), "mix": None if mix is None else np.asarray(mix, float).tolist(),
-            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": _colour_by(u, want, ns, tiles, p["grey"])}
+            "gamma": scale.get("gamma", 2.2), "shoulder": calibration.SHOULDER, "clip": _clip_fill(),
+            "by": _colour_by(u, want, ns, tiles, p["grey"])}
+
+
+def _clip_fill():
+    """colour_picture's clipped-band fill, as the page does it (steady-local.html fillClipped): [CLIP_FROM, CLIP_REACH,
+    calibration.FILL_NEAR, FILL_FLOOR, FILL_MOST]"""
+    return [CLIP_FROM, CLIP_REACH, calibration.FILL_NEAR, calibration.FILL_FLOOR, calibration.FILL_MOST]
 
 
 def _colour_by(u, want, ns, tiles, grey):
@@ -7668,7 +8598,7 @@ def _eye_recipes(u, p, ns, tiles):
     if len(want) == 2:
         by = {n: [a, a, b] for n, (a, b) in by.items()}
     return {"filters": list(want), "mix": np.asarray(mix, float).tolist(),
-            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "by": by}
+            "gamma": p["display_scale"].get("gamma", 2.2), "shoulder": calibration.SHOULDER, "clip": _clip_fill(), "by": by}
 
 
 def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
@@ -8254,17 +9184,21 @@ def hdr_map(placed, W, H):
         x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
         if not (x0 < x1 and y0 < y1):
             continue
-        part = _part(path, sw, sh)
         m = _map_part(path, sw, sh)
         fx, fy = frac[0] if frac else (0.0, 0.0)
+        # (the tile's alpha as _place drew it, when it gave it: the tile moved by the part of a pixel)
+        alpha = frac[1] if len(frac) > 1 else None
         if abs(fx) > 0.01 or abs(fy) > 0.01:
             # (where _place drew the tile: moved by the part of a pixel its rounding left out, the map with it)
-            part = _subpixel(part, fx, fy)
+            if alpha is None:
+                alpha = _subpixel(_part(path, sw, sh), fx, fy)[..., 3]
             if m is not None:
                 m = cv2.warpAffine(m, np.float32([[1, 0, fx], [0, 1, fy]]), (m.shape[1], m.shape[0]), flags=cv2.INTER_LINEAR,
                                    borderMode=cv2.BORDER_REPLICATE)
+        else:
+            alpha = _part(path, sw, sh)[..., 3]
         canvas = by.setdefault(f, np.full((H, W), zero, np.uint8))
-        a = part[y0 - top:y1 - top, x0 - left:x1 - left, 3] > 0
+        a = alpha[y0 - top:y1 - top, x0 - left:x1 - left] > 0
         v = m[y0 - top:y1 - top, x0 - left:x1 - left] if m is not None else np.full(a.shape, zero, np.uint8)
         found = found or m is not None
         region = canvas[y0:y1, x0:x1]
@@ -8314,15 +9248,21 @@ def _place(u, t, rect, k, W, H, cache, scale):
     sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
     frame = np.zeros((H, W, 4), np.uint8)
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
+    moved, drew = None, _hdr_drawn.get()
     if x0 < x1 and y0 < y1:
         part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         if SUBPIXEL:
+            whole = part
             part = _subpixel_at(part, t, rect, k, left, top)
+            if drew is not None and part is not whole and not t.get("turn"):
+                moved = np.ascontiguousarray(part[..., 3])   # (the tile's alpha as moved by the part of a pixel, for hdr_map)
         frame[y0:y1, x0:x1] = part[y0 - top:y1 - top, x0 - left:x1 - left]
-    drew = _hdr_drawn.get()
     if drew is not None:
         frac = ((t["offset"][0] + bx - rect[0]) * k - left, (t["offset"][1] + by - rect[1]) * k - top) if SUBPIXEL else (0.0, 0.0)
-        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac))
+        # (with the alpha drawn here when the tile was moved by that part of a pixel and nothing else: hdr_map moved the
+        # whole tile again by it, a cubic resampling of four float planes, only to read where its alpha is over 0. A
+        # plane is resampled on its own, so the alpha is the same whatever the tile's shade)
+        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac, moved))
     return frame
 
 
@@ -9095,8 +10035,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         drawn = (W, H)
         rgba = _unturn(rgba, *unturn)
         H, W = rgba.shape[:2]
-    if sharpens(p["display_scale"]) and sharpen:
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
+    if sharpen:
+        on_disk = movie_disk(p["display_scale"], rect, k, radius, unturn)
+        rgba = ring_white(rgba, on_disk)
+        if sharpens(p["display_scale"]):
+            rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, on_disk)
     rep.update({"view": [round(v, 1) for v in rect], "width": W, "height": H})
     im = Image.fromarray(rgba, "RGBA")
     if unturn:
@@ -9163,13 +10106,68 @@ MOVIE_DIR = "movie-3"   # movie-3: views sized to the frames' own boxes (movie_f
 MOVIE_SIZES = (512, 1024)   # the sizes the windows play a movie at, smallest first (a smaller one is shrunk from them)
 
 
-def steady_of(u, steady):
+STEADY_AUTO_JUMP = 10.0   # px (on the pass's canvas): a pass whose SPICE places jump frame to frame against what its
+#                           pictures show (the median of |d - d before|, d = SPICE's place - the stabilization chain's)
+#                           by more than this is stabilized even with stabilization off (steady_of): 133TI CLOUD002's
+#                           SPICE places jumped 24 to 54 px between frames 40 s apart while Titan held still in the
+#                           pictures (median 12.9 px), and the movie jolted (Sam 11-16); 215 movie passes of the mission
+STEADY_AUTO_LINKED = 0.8  # of a pass's tiles after its first: and a pass holding a frame without the camera's own
+#                           measured pointing (bootleg_autonav.own_pointing_frames) is stabilized whenever its chain
+#                           follows the pictures on at least this share (linked, not held at SPICE's step or past the
+#                           reach): the spacecraft's reconstructed attitude shakes about 5 NAC px from one frame to the
+#                           next (audit finding 4: median 4.9, p90 9.5 against moons in the pictures; JPL's per-image
+#                           pointing 0.26), under STEADY_AUTO_JUMP, and no pointing kernel removes a per-frame shake.
+#                           The chain stays within STEADY_REACH of SPICE (the guard against a match on something else)
+_auto_steady = {}         # folder -> True/False, once the pass's chain is kept
+
+
+def _raw_pointing(u):
+    """True when pass u holds a frame whose pointing was not measured on a picture (bootleg_autonav.own_pointing_frames)."""
+    import bootleg_autonav as ba
+    own = ba.own_pointing_frames()
+    return any(fr[1] not in own for fr in u["frames"])
+
+
+def auto_steady(u, cache):
+    """True when pass u's SPICE places jump against its stabilization chain by more than STEADY_AUTO_JUMP (median, frame
+    to frame), or when it holds a frame on the reconstructed attitude (_raw_pointing) and its chain follows the
+    pictures (STEADY_AUTO_LINKED); measured on the chain kept in the cache (never worked out here: a pass whose chain is
+    not made yet is drawn at SPICE's places, as before). Feature tracks are steady anyway."""
+    if cache is None or u.get("track") or not calibration.step("align"):
+        return False
+    key = folder(u, cache)
+    if key in _auto_steady:
+        return _auto_steady[key]
+    path = os.path.join(key, STEADY_FILE)
+    p = _plan_if_made(u, cache)
+    if p is None or not os.path.exists(path):
+        return False
+    with open(path) as fh:
+        kept = json.load(fh)
+    chain = {int(n): xy for n, xy in (kept.get("places") or {}).items()}
+    d = {}
+    for n in sorted(chain):
+        place = tile(u, n, cache, p["display_scale"]).get("offset")
+        if place:
+            d[n] = (place[0] - chain[n][0], place[1] - chain[n][1])
+    jumps = [max(abs(d[n][0] - d[n - 1][0]), abs(d[n][1] - d[n - 1][1])) for n in d if n - 1 in d]
+    hows = [str(h) for h in (kept.get("how") or {}).values() if h != "first"]
+    linked = sum(h.startswith("linked") for h in hows) / len(hows) if hows else 0.0
+    got = len(jumps) >= 5 and (float(np.median(jumps)) > STEADY_AUTO_JUMP or
+                               (linked >= STEADY_AUTO_LINKED and _raw_pointing(u)))
+    _auto_steady[key] = got
+    return got
+
+
+def steady_of(u, steady, cache=None):
     """The stabilization smoothing a movie of pass u is drawn with: steady (Settings > Movie, frames) within
     0..STEADY_MOST, 0 for a feature track (always steady, track_places) and with Settings > Processing's alignment
-    off (SPICE's places)."""
+    off (SPICE's places); with steady 0, STEADY_SMOOTH for a pass whose SPICE places jump against its pictures
+    (auto_steady)."""
     if u.get("track") or not calibration.step("align"):
         return 0
-    return max(0, min(STEADY_MOST, int(steady or 0)))
+    steady = max(0, min(STEADY_MOST, int(steady or 0)))
+    return STEADY_SMOOTH if steady == 0 and auto_steady(u, cache) else steady
 
 
 def exposure_of(exposure):
@@ -9211,6 +10209,53 @@ def _making_movie(path):
                 del _movie_making_now[path]
 
 
+TWIN_NO = ("color", "ids", "tint", "per_body")   # in a colour frame's report: it was drawn of a colour set (_movie_twin)
+
+
+def _movie_twin(u, n, cache, colour, centre, steady, exposure, named):
+    """A movie picture the cache holds that frame n drawn this way is, to the bit: (its path, this picture's report),
+    or None. named(colour, exposure): movie_webp's name of the frame drawn alike but for those two.
+    - Evened (exposure on) at an exposure gain of exactly 1 (exposure_gains: a flat stretch, one too short to even, a
+      speck's pass): movie_frame draws what it draws with no exposure asked, since the gain is all the exposure changes
+      in it; its report is that picture's with the gain noted, where movie_frame notes it (before "centred").
+    - A plane (colour off) whose colour frame was drawn grey (its report names no colour set: TWIN_NO) of the frame
+      this one shows (held_of, as movie_frame holds it): both are that frame's tile placed alone, and the reports are
+      the same.
+    Of nine movie passes' pictures, 100 of 276 evened ones and 192 of 365 planes were such copies, each drawn and
+    saved again, a tenth of a movie pass's time (2026-11-16: bytes, reports and recovery maps compared)."""
+    if not exposure and colour:
+        return None
+    twin = named(True, 0) if not exposure else named(colour, 0)
+    if not os.path.exists(twin):
+        return None
+    rep = reel.report_of(twin[:-4] + "json", None)
+    if rep is None or "centred" not in rep:
+        return None
+    p = plan(u, cache)
+    if exposure:
+        if exposure_gains(u, cache, p, exposure, colour, centre, steady).get(n, 1.0) != 1.0:
+            return None
+        out = {}
+        for k, v in rep.items():
+            if k == "centred":
+                out["exposure"] = {"smooth": exposure, "gain": 1.0}
+            out[k] = v
+        return twin, out
+    if any(k in rep for k in TWIN_NO):
+        return None
+    frames, held = u["frames"], {}
+    tile_of = lambda j: tile(u, j, cache, p["display_scale"])
+
+    def not_shown(j):
+        if j not in held:
+            held[j] = unfit(frames, j, tile_of)
+        return held[j]
+    if "offset" not in tile_of(n):
+        return None
+    s = held_of([fr[2] for fr in frames], n, not_shown, holds(tile_of, not_shown))
+    return (twin, rep) if rep.get("held") == (frames[s][1] if s != n else None) else None
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -9225,7 +10270,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not found or found[1] < 0:
         return None
     u, n = found
-    steady, exposure = steady_of(u, steady), exposure_of(exposure)
+    steady, exposure = steady_of(u, steady, cache), exposure_of(exposure)
     rec = _record(u, cache)
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
@@ -9239,12 +10284,36 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
     filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
-    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+
+    def named(colour, exposure):
+        return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                            f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
+                            f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+    path = named(colour, exposure)
     report, meta = {}, path[:-4] + "json"
 
     def make():
+        # a picture the cache already holds under another name (_movie_twin: an evened frame whose gain is 1, a plane
+        # of a frame drawn grey) is read from it, not drawn again
+        twin = _movie_twin(u, n, cache, colour, centre, steady, exposure, named) if size >= MOVIE_SIZES[0] else None
+        if twin is not None:
+            try:
+                with open(twin[0], "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                twin = None   # (gone meanwhile: drawn, as before)
+        if twin is not None:
+            rep = twin[1]
+            report.update(rep)
+            reel._cached(meta, lambda: json.dumps(rep).encode())
+            reel.keep_report(meta, rep)
+            its_map = twin[0][:-len(".webp")] + ".hdr.webp"
+            if os.path.exists(its_map):
+                def read_map():
+                    with open(its_map, "rb") as fh:
+                        return fh.read()
+                reel._cached(path[:-len(".webp")] + ".hdr.webp", read_map)
+            return data
         # a strip (smaller than the sizes a window plays) of a frame already kept at one of them is that picture
         # shrunk (both are movie_frame at OUT, shrunk): the pass's tiles are not read again
         for big in MOVIE_SIZES:
@@ -9998,6 +11067,60 @@ def fade_table(frame_id, cache, laps=1, W=0, H=0):
             "ids": [fr[1] for fr in u["frames"]], "fade_max": FADE_MAX}
 
 
+def _rolling_path(u, made, size, cache, fmt="webp", out=OUT):
+    """Where a mosaic movie's picture of this layout (rolling_layout's) is kept."""
+    full = size == "full"
+    return os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+
+
+def rolling_restart(u, size, cache, laps=1, fade=(0, 0), last=None, fmt="webp", out=OUT):
+    """Before a build makes a mosaic movie's pictures in frame order: when some of them are kept and others are not
+    (a build stopped part way through the pass) and this process holds none of the pass's pictures in memory, the
+    kept ones are removed so that all are made again from the first frame; the number removed.
+    A mosaic movie's picture is grown from the one before it in memory (_roll), and drawn whole when there is none
+    to grow from; grown and whole differ by a few levels in places (_over composes the new tile over the 8-bit picture,
+    _compose all tiles at once). A process that found the first pictures kept had no picture in memory to grow the
+    next from, drew it whole, and grew the rest from that: the pass's pictures then depended on where the build had
+    been stopped (jupiter-atmos-mosaic's last picture came out three different ways after three stopped benchmark
+    builds, 2026-11-16, and the same at every uninterrupted one). Made again in order, they are the pictures an
+    uninterrupted build makes. Tiles, plan and solve are kept: only the pictures are made again. last: the frames
+    up to it only (prebuild's stretch; its tiles are made)."""
+    fade = fade_style(*fade)
+    with _lock:
+        if any(k[0] == u["key"] for k in _rolled):
+            return 0   # (this process is growing the pass already: a later stretch of it continues the chain)
+    count = len(u["frames"]) if last is None else last + 1
+
+    def path(n):
+        made = rolling_layout(u, n, cache, laps, fade=fade)   # (as _rolling_picture lays it out for prebuild: wait)
+        return _rolling_path(u, made, size, cache, fmt, out) if made else None
+    # (pictures are made in frame order: the last one kept means all are, the first one missing means none are; only a
+    # part-made pass has every frame laid out)
+    if count == 0:
+        return 0
+    end = path(count - 1)
+    if end is not None and os.path.exists(end):
+        return 0
+    start = next((x for x in map(path, range(count)) if x is not None), None)
+    if start is None or not os.path.exists(start):
+        return 0
+    paths = [x for x in map(path, range(count)) if x is not None]
+    have = [os.path.exists(x) for x in paths]
+    if not any(have) or all(have):
+        return 0
+    gone = 0
+    for x, kept in zip(paths, have):
+        if kept:
+            stem = x[:-len("." + fmt)]
+            for f in (x, stem + ".hdr.webp", stem + ".json"):
+                try:
+                    os.remove(f)
+                    gone += f == x
+                except FileNotFoundError:
+                    pass
+    return gone
+
+
 def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=True, skipped=None, fade=(0, 0)):
     """(WebP, report) of the pass's mosaic movie at frame n, made once and kept; None before any tile is placed.
     One frame's picture is made once at a time (a window's request and the one made ahead wait for each other).
@@ -10007,8 +11130,7 @@ def _rolling_picture(u, n, size, cache, laps, slots, fmt, out, made_only, read=T
     if not made:
         return None
     post = _faded(u, made, cache) if fade[0] else None
-    full = size == "full"
-    path = os.path.join(drawn(u, cache), "rolling-level", f"full{out}" if full else str(size), f"{made[5]}.{fmt}")
+    path = _rolling_path(u, made, size, cache, fmt, out)
     if os.path.exists(path):
         return _make_mosaic(u, n, size, path, cache, slots, made, fmt, out, post) if read else True
     with _lock:
@@ -10407,7 +11529,7 @@ def _pointing(u, p, tiles, rect, count, used, layers, cache, channel=None, tint=
     else:
         rgba = planes[0]
     if sharpens(p["display_scale"]):
-        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k)
+        rgba = detail(rgba, DETAIL_SIGMA * FRAME * k, p["display_scale"])
     # (not cut to its picture: the tiles are cut to theirs, and the canvas is where pointing_box says it is)
     return np.ascontiguousarray(rgba), (x0, y0, k)
 
