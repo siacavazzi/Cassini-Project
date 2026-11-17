@@ -76,6 +76,12 @@ def is_polarizer(f1, f2):
     return f1.startswith("P") and f1[1:2].isdigit() or f1.startswith("IRP") or f2.startswith("IRP")
 
 
+def as_text(column):
+    """A column's values as text, as pandas 1 and 2's astype(str) gives them ("nan" for a missing one): pandas 3's
+    astype(str) keeps a missing value as NaN, a float, which colour_filter cannot read."""
+    return [v if isinstance(v, str) else str(v) for v in column.tolist()]
+
+
 def colour_filter(f1, f2):
     """The frame's colour filter ("RED", "CB2", "BL1/GRN"...), or None for clear and polarizer frames."""
     if is_polarizer(f1, f2):
@@ -297,7 +303,7 @@ def groups():
 
 def _old_reel_sets(idx):
     """The filter sets reel.load_index made before this module (RED only as a true red), for --moved."""
-    cams, f1s, f2s = idx["INSTRUMENT_ID"].tolist(), idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist()
+    cams, f1s, f2s = idx["INSTRUMENT_ID"].tolist(), as_text(idx["filter1"]), as_text(idx["filter2"])
     import reel
     out = []
     fs = [colour_filter(a, b) for a, b in zip(f1s, f2s)]
@@ -335,7 +341,7 @@ def main():
     globals()["REPEAT_MAX"] = 0
     try:
         _, before = filter_sets(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
-                                idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(),
+                                as_text(idx["filter1"]), as_text(idx["filter2"]),
                                 idx["seconds_1970"].tolist(), lambda q: reel.wavelength(idx["INSTRUMENT_ID"].iat[q],
                                                                                       idx["filter1"].iat[q] + idx["filter2"].iat[q]))
     finally:
