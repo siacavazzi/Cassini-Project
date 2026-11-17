@@ -136,14 +136,18 @@ def polarized_share(cam, f1, f2):
     return None if band is None else (POLARIZED_SHARE if cam in ("ISSNA", "N") else IR_POLARIZED_SHARE)[band]
 
 
-def polarized_as_colour(cams, targets, obs, f1s, f2s):
+def polarized_as_colour(cams, targets, obs, f1s, f2s, ts=None):
     """For each frame (columns, as filter_sets takes them), whether it is a polarizer frame that counts as its colour
     filter: a visible polarizer frame of a POLARIZED_SHARE filter in an observation (camera, target, observation)
     that takes every filter of POLARIZED_SHARE through the visible polarizers (true colour) and no visible colour
     (VISIBLE_COLOURS) without one. Its plain frames of other bands (a methane, ultraviolet or near-infrared band:
     018SA 1X2PLRNCJ's CL1 MT2) are its own, as before.
     WAC frames: an IR_POLARIZED_SHARE band through IRP0 or IRP90 in an observation whose every non-clear frame is
-    such a frame and that takes at least two of those bands (a false colour or two-band set)."""
+    such a frame and that takes at least two of those bands (a false colour or two-band set).
+    ts (the frames' times, seconds), when given: only an observation where its polarized frames, read as their bands,
+    make a colour set (runs: two bands or more within SET_GAP) counts, so a sequence that gains no colour is not
+    changed at all (C24JU 2X2ATM043, its WAC bands minutes apart, stayed grey and its sky came out lifted, its two
+    angles stacked)."""
     keys = list(zip(cams, targets, obs))
     pol = [polarized_filter(c, str(a), str(b)) for c, a, b in zip(cams, f1s, f2s)]
     took, plain = {}, set()
@@ -157,6 +161,11 @@ def polarized_as_colour(cams, targets, obs, f1s, f2s):
             plain.add(k)
     ok = {k for k, fs in took.items() if k not in plain
           and (fs >= set(POLARIZED_SHARE) if k[0] in ("ISSNA", "N") else len(fs) >= 2)}
+    if ts is not None and ok:
+        rows = [(k[0], k[1], k[2], p, float(t)) for k, p, t in zip(keys, pol, ts) if p and k in ok]
+        rows.sort(key=lambda r: r[4])
+        formed = {(rows[run[0]][0], rows[run[0]][1], rows[run[0]][2]) for run in runs(rows)}
+        ok &= formed
     return [p is not None and k in ok for k, p in zip(keys, pol)]
 
 
@@ -173,7 +182,7 @@ def polarized_index(idx, filter_cols=True):
     f1s = text("filter1") if filter_cols else [p[0] for p in parts]
     f2s = text("filter2") if filter_cols else [p[1] for p in parts]
     use = polarized_as_colour(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
-                              f1s, f2s)
+                              f1s, f2s, idx["seconds_1970"].tolist() if "seconds_1970" in idx else None)
     idx["polarized"] = use
     if any(use):
         wac = [c in ("ISSWA", "W") for c in idx["INSTRUMENT_ID"].tolist()]
