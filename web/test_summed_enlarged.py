@@ -46,6 +46,39 @@ for lines in (512, 256):
     native = small.astype(np.float32)
     assert cal.enlarged(native, info) is native
     assert cal.enlarged(blocks.astype(np.float32), info).dtype == np.float32
+# pixels lost in downlink (a line's end that never came: zeros in the camera frame) are bridged before the frame is
+# enlarged, so they do not bleed into the rows beside them
+for lines in (512, 256):
+    s = 1024 // lines
+    info = {"LINES": str(lines), "LINE_SAMPLES": str(lines)}
+    y, x = np.mgrid[0:lines, 0:lines].astype(np.float64)
+    whole = 0.1 + 0.05 * np.sin(x / 9.0) * np.cos(y / 13.0)
+    lost = np.zeros((lines, lines), bool)
+    lost[100:102, 40:] = True            # two lines' ends
+    lost[:, [0, -1]] = True              # a summed frame's first and last column (label.valid_mask)
+    lost[lines - 1, 10:20] = True        # at the frame's bottom: only pixels above to take
+    hit = np.where(lost, 0.0, whole)
+    clean = cal.enlarged(np.repeat(np.repeat(whole, s, 0), s, 1), info)
+    blocks = np.repeat(np.repeat(hit, s, 0), s, 1)
+    bled = cal.enlarged(blocks, info)
+    got = cal.enlarged(blocks, info, lost)
+    beside = np.zeros((1024, 1024), bool)          # the three camera rows on each side of the lost lines, kept columns
+    beside[97 * s:100 * s, 45 * s:-3 * s] = beside[102 * s:105 * s, 45 * s:-3 * s] = True
+    assert np.abs(bled - clean)[beside].max() > 0.005          # as it was without the mask: the zeros bleed
+    assert np.abs(got - clean)[beside].max() < 2e-4, np.abs(got - clean)[beside].max()
+    # and what was lost reads as its neighbours do, not as zeros (the picture's own fill takes it from there)
+    inside = np.zeros((1024, 1024), bool)
+    inside[100 * s:102 * s, 45 * s:-3 * s] = True
+    assert np.abs(got - clean)[inside].max() < 0.01 and got[inside].min() > 0.04
+    assert got[-1, 12 * s:18 * s].min() > 0.04
+    # a mask of another size, or none lost: as without one
+    assert np.array_equal(cal.enlarged(blocks, info, np.zeros((7, 7), bool)), bled)
+    assert np.array_equal(cal.enlarged(blocks, info, np.zeros((lines, lines), bool)), bled)
+v = np.arange(20.0).reshape(5, 4)
+gone = np.zeros((5, 4), bool); gone[1:3, 0] = True; gone[0, 1] = True; gone[:, 3] = True
+out = cal.bridged(v, gone)
+assert out[1, 0] == v[0, 0] + (v[3, 0] - v[0, 0]) / 3 and out[2, 0] == v[0, 0] + 2 * (v[3, 0] - v[0, 0]) / 3   # in proportion
+assert out[0, 1] == v[1, 1] and np.all(out[:, 3] == np.median(v[~gone])) and np.array_equal(out[~gone], v[~gone])
 # a full size frame is never touched
 full = rng.random((1024, 1024))
 assert cal.enlarged(full, {"LINES": "1024", "LINE_SAMPLES": "1024"}) is full

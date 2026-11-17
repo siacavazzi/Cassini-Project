@@ -586,7 +586,9 @@ Calibrates one frame to I/F. Returns None if the frame can't be calibrated.
 png = the frame's PNG as stored in the dataset
 image = optional image on the same scale as png to calibrate instead (see unstretch)
 """
-def calibrate(png, info, image=None, smooth=True):
+def calibrate(png, info, image=None, smooth=True, lost=None):
+    # lost: for a summed frame whose picture still has the pixels it lost in downlink as stored (not filled yet), those
+    # pixels at the camera's own size (label.valid_mask(camera=True), inverted): bridged before the frame is enlarged
     camera = _value(info, "INSTRUMENT_ID", "")
     names = _filters_of(info)
     if any(name.startswith(("P", "IRP")) for name in names):
@@ -725,7 +727,7 @@ def calibrate(png, info, image=None, smooth=True):
         per_second /= share
     # a summed frame drawn at the picture's size comes this far as blocks, each of the camera's pixels repeated (every
     # step above works camera pixel by camera pixel on them): now enlarged smoothly from the camera's own pixels
-    per_second = enlarged(per_second, info)
+    per_second = enlarged(per_second, info, lost)
     # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
     # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
     if step("geom"):
@@ -750,13 +752,41 @@ the flat field and the smoothing above vary inside one) and enlarged with SUMMED
 science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped.
 iof = the calibrated frame (2-D), info = its label
 """
-def enlarged(iof, info):
+def enlarged(iof, info, lost=None):
     s = summing_of(info)
     h, w = iof.shape[:2]
     if s <= 1 or iof.ndim != 2 or h % s or w % s or h != s * int(_value(info, "LINES", "0") or 0):
         return iof
     small = np.ascontiguousarray(iof).reshape(h // s, s, w // s, s).mean(axis=(1, 3))
+    if lost is not None and np.shape(lost) == small.shape and np.any(lost):
+        # the pixels lost in downlink (zeros, or garbage after a lost packet) bridged first: enlarged with them, a lost
+        # line bled two camera pixels into the rows on each side of it, which the line fill that comes later (on
+        # the picture, with its block shaped mask) does not reach (the Iapetus 049IA mosaic: a band of streaks)
+        small = bridged(small, np.asarray(lost, bool))
     return cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE).astype(iof.dtype, copy=False)
+
+
+"""
+values (2-D) with its lost pixels (lost: True where lost) bridged down their columns: each from the nearest kept
+pixels above and below it, in proportion to how near each is (the one there is, at a frame's top or bottom); a column
+with nothing kept takes the kept pixels' median. Only so they do not bleed when the frame is enlarged (enlarged): the
+picture's own fills (image_correction.fill_lines, fill_invalid) still take them as lost and fill them their way.
+"""
+def bridged(values, lost):
+    h, w = values.shape
+    kept = ~lost
+    if not kept.any():
+        return values
+    rows = np.arange(h)[:, None]
+    cols = np.broadcast_to(np.arange(w), (h, w))
+    up = np.maximum.accumulate(np.where(kept, rows, -1), axis=0)                    # the nearest kept row above
+    down = np.minimum.accumulate(np.where(kept, rows, h)[::-1], axis=0)[::-1]       # ... and below
+    above, below = up >= 0, down < h
+    a, b = values[np.clip(up, 0, h - 1), cols], values[np.clip(down, 0, h - 1), cols]
+    t = (rows - up) / np.maximum(down - up, 1)
+    fill = np.where(above & below, a + (b - a) * t, np.where(above, a, b))
+    fill = np.where(above | below, fill, np.median(values[kept]))
+    return np.where(lost, fill, values)
 
 
 """
@@ -1902,7 +1932,13 @@ def calibrated_each(labels, images, iofs=None, deep=None):
     for lbl, image, iof, picture in zip(labels, images, given, deep):
         if iof is None:
             png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-            iof = calibrate(png, lbl.get_info(), depth_image(png, lbl.get_info()) if picture is None else picture)
+            info = lbl.get_info()
+            if picture is None and summing_of(info) > 1:
+                # (a summed frame's own stored values still have what it lost in downlink, bridged before it is
+                # enlarged; a picture given is filled already)
+                iof = calibrate(png, info, depth_image(png, info), lost=~lbl.valid_mask(camera=True))
+            else:
+                iof = calibrate(png, info, depth_image(png, info) if picture is None else picture)
         iofs.append(iof)
     return iofs
 
