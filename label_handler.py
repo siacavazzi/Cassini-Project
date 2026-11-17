@@ -364,8 +364,11 @@ class label:
         if ds.lut8():
             # the lean archive stores camera codes; stretch them like the old PNGs
             img = cal.display_stretch(img, self.info)
-        if int(self.info["LINES"]) < 1024:
-            
+        # (and a picture stored smaller than its label says: the one such frame in the archive, N1855753770_1, a
+        # 1024 line label over a 256 px PNG, stopped its processed picture and composite at 256 px against the
+        # label's 1024 line valid mask, 11-15)
+        if int(self.info["LINES"]) < 1024 or img.shape[0] < 1024:
+
             #scale_percent = 200
             #width = int(img.shape[1] * scale_percent / 100)
             #height = int(img.shape[0] * scale_percent / 100)
