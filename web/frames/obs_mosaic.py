@@ -9587,6 +9587,53 @@ def _making_movie(path):
                 del _movie_making_now[path]
 
 
+TWIN_NO = ("color", "ids", "tint", "per_body")   # in a colour frame's report: it was drawn of a colour set (_movie_twin)
+
+
+def _movie_twin(u, n, cache, colour, centre, steady, exposure, named):
+    """A movie picture the cache holds that frame n drawn this way is, to the bit: (its path, this picture's report),
+    or None. named(colour, exposure): movie_webp's name of the frame drawn alike but for those two.
+    - Evened (exposure on) at an exposure gain of exactly 1 (exposure_gains: a flat stretch, one too short to even, a
+      speck's pass): movie_frame draws what it draws with no exposure asked, since the gain is all the exposure changes
+      in it; its report is that picture's with the gain noted, where movie_frame notes it (before "centred").
+    - A plane (colour off) whose colour frame was drawn grey (its report names no colour set: TWIN_NO) of the frame
+      this one shows (held_of, as movie_frame holds it): both are that frame's tile placed alone, and the reports are
+      the same.
+    Of nine movie passes' pictures, 100 of 276 evened ones and 192 of 365 planes were such copies, each drawn and
+    saved again, a tenth of a movie pass's time (2026-11-16: bytes, reports and recovery maps compared)."""
+    if not exposure and colour:
+        return None
+    twin = named(True, 0) if not exposure else named(colour, 0)
+    if not os.path.exists(twin):
+        return None
+    rep = reel.report_of(twin[:-4] + "json", None)
+    if rep is None or "centred" not in rep:
+        return None
+    p = plan(u, cache)
+    if exposure:
+        if exposure_gains(u, cache, p, exposure, colour, centre, steady).get(n, 1.0) != 1.0:
+            return None
+        out = {}
+        for k, v in rep.items():
+            if k == "centred":
+                out["exposure"] = {"smooth": exposure, "gain": 1.0}
+            out[k] = v
+        return twin, out
+    if any(k in rep for k in TWIN_NO):
+        return None
+    frames, held = u["frames"], {}
+    tile_of = lambda j: tile(u, j, cache, p["display_scale"])
+
+    def not_shown(j):
+        if j not in held:
+            held[j] = unfit(frames, j, tile_of)
+        return held[j]
+    if "offset" not in tile_of(n):
+        return None
+    s = held_of([fr[2] for fr in frames], n, not_shown, holds(tile_of, not_shown))
+    return (twin, rep) if rep.get("held") == (frames[s][1] if s != n else None) else None
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -9615,12 +9662,36 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
     # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
     filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
-    path = os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+
+    def named(colour, exposure):
+        return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                            f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
+                            f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+    path = named(colour, exposure)
     report, meta = {}, path[:-4] + "json"
 
     def make():
+        # a picture the cache already holds under another name (_movie_twin: an evened frame whose gain is 1, a plane
+        # of a frame drawn grey) is read from it, not drawn again
+        twin = _movie_twin(u, n, cache, colour, centre, steady, exposure, named) if size >= MOVIE_SIZES[0] else None
+        if twin is not None:
+            try:
+                with open(twin[0], "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                twin = None   # (gone meanwhile: drawn, as before)
+        if twin is not None:
+            rep = twin[1]
+            report.update(rep)
+            reel._cached(meta, lambda: json.dumps(rep).encode())
+            reel.keep_report(meta, rep)
+            its_map = twin[0][:-len(".webp")] + ".hdr.webp"
+            if os.path.exists(its_map):
+                def read_map():
+                    with open(its_map, "rb") as fh:
+                        return fh.read()
+                reel._cached(path[:-len(".webp")] + ".hdr.webp", read_map)
+            return data
         # a strip (smaller than the sizes a window plays) of a frame already kept at one of them is that picture
         # shrunk (both are movie_frame at OUT, shrunk): the pass's tiles are not read again
         for big in MOVIE_SIZES:
