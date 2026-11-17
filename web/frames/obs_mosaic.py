@@ -7442,10 +7442,10 @@ EXPOSURE_LIT = 0.04      # of the brightest: the pixels a brightness is measured
 EXPOSURE_SIDE = 160      # px: the movie pictures a pass's brightness is measured on (exposure_chain) are this big
 # a movie's brightness chain (exposure_chain), kept with the pass for each way of drawing it; renamed (with the movie
 # frames drawn with it, movie_webp) whenever the rule changes
-EXPOSURE_FILE = "exposure6-{}-" + PLAN_FILE   # exposure6: measured on movie-3's views (movie_footprint2, follow_view)
+EXPOSURE_FILE = "exposure7-{}-" + PLAN_FILE   # exposure7: a tinted frame measured on the windows' picture made small; exposure6: measured on movie-3's views (movie_footprint2, follow_view)
 EXPOSURE_ROLL = 0.75     # of a stretch's slow drift past EXPOSURE_FREE: how much the rolling scale takes out (evened_gains)
 EXPOSURE_FREE = 0.26     # log brightness (about 30% either way of the stretch's middle): slow drift kept as it is
-EXPOSURE_RULE = 8        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp)
+EXPOSURE_RULE = 9        # the way the gains are worked out from the chain: in the movie frames' names (movie_webp); 9: from exposure7's chains
 EXPOSURE_GREY_RUN = 6    # frames: a colour pass's grey frames (its filters coming in) evened only in a run this long
 EXPOSURE_SAME = 0.5      # of the larger lit area: two pictures sharing less lit view than this show different scenes
 
@@ -7493,6 +7493,18 @@ def exposure_chain(u, cache, p=None, colour=True, centre=True, steady=0):
             im, rep = movie_frame(u, n, cache, 0, colour, out=EXPOSURE_SIDE, centre=centre, steady=steady, per_body=False)
             if im is None:
                 continue
+            if rep.get("tint"):
+                # a frame drawn in its set's colour (tinted_frame) is measured on the picture the windows show, made
+                # small: drawn EXPOSURE_SIDE px a side it is another picture. The tint matches the frame to its set over
+                # LUM_MATCH_MIN lit pixels, a count, and a body that fills 7,600 px of the windows' picture fills 180 of
+                # this one: without the match the frame fell to its floor, 0.25 for a set's own frame and 0.67 for the
+                # frames between, and the chain took that for the movie. Every set's own frame of a Jupiter approach
+                # movie read 2.3 times brighter than the frames between, all as bright in the windows, and was drawn at
+                # 0.43; the pass's last frames at 1.41 (C23RI RMOV001, 2026-11-16)
+                im, rep = movie_frame(u, n, cache, 0, colour, out=OUT, centre=centre, steady=steady, per_body=False)
+                if im is None:
+                    continue
+                im = im.resize((max(1, round(im.width * EXPOSURE_SIDE / max(im.size))), max(1, round(im.height * EXPOSURE_SIDE / max(im.size)))), Image.BOX)
             a, kind = np.asarray(im), tuple(rep.get("color") or ())
             if last is None:
                 logs[n], hows[n] = [0.0, stretch, bool(kind)], "first"
