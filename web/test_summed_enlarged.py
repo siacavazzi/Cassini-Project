@@ -74,6 +74,27 @@ for lines in (512, 256):
     # a mask of another size, or none lost: as without one
     assert np.array_equal(cal.enlarged(blocks, info, np.zeros((7, 7), bool)), bled)
     assert np.array_equal(cal.enlarged(blocks, info, np.zeros((lines, lines), bool)), bled)
+# what the camera saturated, and the camera pixels the enlargement would mix it into, stay as they were (blocks)
+for lines in (512, 256):
+    s = 1024 // lines
+    info = {"LINES": str(lines), "LINE_SAMPLES": str(lines)}
+    y, x = np.mgrid[0:lines, 0:lines].astype(np.float64)
+    scene = 0.1 + 0.05 * np.sin(x / 9.0) * np.cos(y / 13.0)
+    blown = np.hypot(x - 120, y - 90) < 14
+    scene[blown] = 1.0                       # a blown-out patch at the top of the range
+    blocks = np.repeat(np.repeat(scene, s, 0), s, 1)
+    plain = cal.enlarged(blocks, info)
+    got = cal.enlarged(blocks, info, None, blown)
+    reach = cv2.dilate(blown.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0     # the patch and 2 camera pixels round it
+    big = np.repeat(np.repeat(reach, s, 0), s, 1)
+    assert np.array_equal(got[big], blocks[big])                       # as it was: no part of the clipped value moved
+    assert np.abs(plain - blocks)[big & ~np.repeat(np.repeat(blown, s, 0), s, 1)].max() > 0.05   # without: it does
+    far = ~np.repeat(np.repeat(cv2.dilate(blown.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0, s, 0), s, 1)
+    assert np.array_equal(got[far], plain[far])                        # beyond 4 camera pixels: the enlarged picture
+    assert np.abs(got - plain)[~big].max() < 0.02                      # and a smooth join between
+    assert cal.enlarged(blocks, info, None, np.zeros((lines, lines), bool)) is not None
+    assert np.array_equal(cal.enlarged(blocks, info, None, np.zeros((lines, lines), bool)), plain)
+assert cal.clipped_codes(np.zeros((4, 4, 3), np.uint8), {}) is None
 v = np.arange(20.0).reshape(5, 4)
 gone = np.zeros((5, 4), bool); gone[1:3, 0] = True; gone[0, 1] = True; gone[:, 3] = True
 out = cal.bridged(v, gone)

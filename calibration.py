@@ -727,7 +727,7 @@ def calibrate(png, info, image=None, smooth=True, lost=None):
         per_second /= share
     # a summed frame drawn at the picture's size comes this far as blocks, each of the camera's pixels repeated (every
     # step above works camera pixel by camera pixel on them): now enlarged smoothly from the camera's own pixels
-    per_second = enlarged(per_second, info, lost)
+    per_second = enlarged(per_second, info, lost, clipped_codes(png, info))
     # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
     # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
     if step("geom"):
@@ -752,7 +752,7 @@ the flat field and the smoothing above vary inside one) and enlarged with SUMMED
 science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped.
 iof = the calibrated frame (2-D), info = its label
 """
-def enlarged(iof, info, lost=None):
+def enlarged(iof, info, lost=None, clipped=None):
     s = summing_of(info)
     h, w = iof.shape[:2]
     if s <= 1 or iof.ndim != 2 or h % s or w % s or h != s * int(_value(info, "LINES", "0") or 0):
@@ -763,7 +763,41 @@ def enlarged(iof, info, lost=None):
         # line bled two camera pixels into the rows on each side of it, which the line fill that comes later (on
         # the picture, with its block shaped mask) does not reach (the Iapetus 049IA mosaic: a band of streaks)
         small = bridged(small, np.asarray(lost, bool))
-    return cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE).astype(iof.dtype, copy=False)
+    out = cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE)
+    if clipped is not None and np.shape(clipped) == small.shape and np.any(clipped):
+        # what the camera saturated is not a measurement, and enlarged with its neighbors it would put part of its
+        # clipped value into them (the masks kept beside the frame are block shaped: a pixel beside a blown-out one
+        # then reads half blown and counts as measured; the Grand Finale ring mosaics' clipped patches changed).
+        # So the saturated camera pixels and the SUMMED_CLIPPED_NEAR round them (as far as the enlargement reaches)
+        # stay as they were, blocks, fading into the enlarged picture over one camera pixel more
+        side = 2 * (SUMMED_CLIPPED_NEAR + 1) + 1
+        near = cv2.dilate(np.asarray(clipped, np.uint8), np.ones((side, side), np.uint8)).astype(np.float32)
+        keep = np.clip(cv2.resize(near, (w, h), interpolation=cv2.INTER_LINEAR), 0, 1)
+        out = keep * iof + (1 - keep) * out
+    return out.astype(iof.dtype, copy=False)
+
+
+SUMMED_CLIPPED_NEAR = 2   # camera pixels round a saturated one left as blocks (enlarged): the bicubic's reach
+
+
+"""
+The pixels of a frame's stored codes the camera saturated, at the codes' own size and as the frame was taken (saturated's
+test on the codes, not moved by the geometric correction, which comes after enlarged), or None when codes is not the
+frame's stored picture (a 2-D array)
+"""
+def clipped_codes(codes, info):
+    codes = np.asarray(codes)
+    if codes.ndim != 2 or not codes.size:
+        return None
+    if ds.lut8() and _value(info, "DATA_CONVERSION_TYPE", "") in ("TABLE", "12BIT"):
+        top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
+        low, high = stored_range(codes, info)
+        if high < top:
+            return np.zeros(codes.shape, bool)
+        if low >= top:
+            return np.ones(codes.shape, bool)
+        return codes >= 250
+    return codes >= 254
 
 
 """
