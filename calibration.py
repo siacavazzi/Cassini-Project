@@ -568,11 +568,40 @@ def calibrate(png, info, image=None, smooth=True):
     per_second *= SUM_FACTORS[mode]
     per_second *= sensitivity
     per_second *= distance ** 2
+    # a summed frame drawn at the picture's size comes this far as blocks, each of the camera's pixels repeated (every
+    # step above works camera pixel by camera pixel on them): now enlarged smoothly from the camera's own pixels
+    per_second = enlarged(per_second, info)
     # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
     # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
     if step("geom"):
         per_second = gc.correct(per_second, info)
     return per_second
+
+
+SUMMED_ENLARGE = cv2.INTER_CUBIC   # how a summed frame's calibrated picture is enlarged from the camera's own pixels
+                                   # (enlarged): bicubic. Sam's taste call 23 (2026-11-17), of three shown on nine frames:
+                                   # each camera pixel a 2x2 or 4x4 block (as it was: stair steps along every limb and
+                                   # ring edge, plain at 4x4), bilinear (soft), bicubic (C: keeps a little more edge
+                                   # contrast, and goes slightly past its neighbors' brightness on 0.5 to 2% of pixels)
+
+
+"""
+A summed frame's calibrated picture enlarged smoothly. The camera summed its pixels 2x2 or 4x4 (512 or 256 lines:
+181,430 frames, 41% of the archive), and the picture is drawn at 1024 px with each camera pixel repeated as a block
+(label.resize_image), which is what the calibration above works on: the bias and dark per camera line, hot pixels and
+lost lines per camera pixel (enlarged smoothly before them, the repairs left short streaks). Here, after all of them and
+before the geometric correction, the blocks are taken back to the camera's own pixels (each block's mean: the flat field
+and the smoothing above vary inside one) and enlarged with SUMMED_ENLARGE. A frame at its own size (the science TIFF's,
+a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped.
+iof = the calibrated frame (2-D), info = its label
+"""
+def enlarged(iof, info):
+    s = summing_of(info)
+    h, w = iof.shape[:2]
+    if s <= 1 or iof.ndim != 2 or h % s or w % s or h != s * int(_value(info, "LINES", "0") or 0):
+        return iof
+    small = np.ascontiguousarray(iof).reshape(h // s, s, w // s, s).mean(axis=(1, 3))
+    return cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE).astype(iof.dtype, copy=False)
 
 
 LOSSY_RATIO = (6.0, 20.0)  # a lossy frame compressed more than LOSSY_RATIO[0] times has its compression blocks smoothed, all of
