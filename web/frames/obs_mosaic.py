@@ -84,7 +84,8 @@ import label_handler  # noqa: E402
 # obs-v132/v115/v101: a band of a colour movie frame the camera saturated is floored at the light it saturated
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
-VERSIONS = {"balanced": "obs-v132", "raw": "obs-v115", "eye": "obs-v132-eye", "false": "obs-v132-false", "classic": "obs-v101-classic"}
+# obs-v133/v116/v102: a transit's saturation excess moves with its plane (_per_body_planes) (#553)
+VERSIONS = {"balanced": "obs-v133", "raw": "obs-v116", "eye": "obs-v133-eye", "false": "obs-v133-false", "classic": "obs-v102-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -7420,7 +7421,7 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
     body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame).
-    sat: one saturation excess map per plane (_place_sat: linear, float32) or None (a mosaic: not yet carried): how much of the band's
+    sat: one saturation excess map per plane (_place_sat: linear, float32) or None (a mosaic: none): how much of the band's
     value there is the white its saturated pixels were drawn over the light they saturated on; the band is filled there
     and floored at what it read less that, not at its white."""
     scale = p["display_scale"]
@@ -10077,6 +10078,20 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if moved:
             away = moved.pop("_away", None)
             rep["per_body"] = moved
+            if sats is not None:
+                # (each saturation excess moved as its plane was: a plane lined up on the shown one's target limb by
+                # the same shift; where another body's copy was moved (away), none: what is drawn there is the body's
+                # own, from the shown plane)
+                for i, m in enumerate(sats):
+                    if m is None:
+                        continue
+                    off = (moved.get("_target") or [None] * len(sats))[i]
+                    if off and any(off):
+                        m = cv2.warpAffine(m, np.float32([[1, 0, off[0]], [0, 1, off[1]]]), (m.shape[1], m.shape[0]),
+                                           flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                    if away is not None and away.shape == m.shape:
+                        m = np.where(away, 0, m).astype(np.float32)
+                    sats[i] = m
         # a colour filter the pass takes once (a cycle's lone MT1 and UV1, _set_colour's Titan stares) has no frame of
         # its own filter either side to take its cosmic rays out against (_around): the set's planes are cleaned as a
         # still composite's channels are (calibration._clean_spikes), or each hit is a bright dot through the mix
