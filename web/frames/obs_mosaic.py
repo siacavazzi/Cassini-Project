@@ -81,9 +81,10 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
+# obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
 # obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
-VERSIONS = {"balanced": "obs-v134", "raw": "obs-v117", "eye": "obs-v134-eye", "false": "obs-v134-false", "classic": "obs-v103-classic"}
+VERSIONS = {"balanced": "obs-v136", "raw": "obs-v119", "eye": "obs-v136-eye", "false": "obs-v136-false", "classic": "obs-v105-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2360,6 +2361,49 @@ def long_repeats(tiles, colour):
         if any(o["n"] != t["n"] and o["filter"] == t["filter"] and abs(o["t"] - t["t"]) <= MIX_SPAN
                and math.hypot(o["offset"][0] - t["offset"][0], o["offset"][1] - t["offset"][1]) <= reach
                and s >= OVER_STEP * o.get("saturated", 0.0) for o in placed):
+            out.add(t["n"])
+    return out
+
+
+BRACKET_STEP = 4.0   # (bracket_shorts) a frame exposed this many times as long as another at its place is its long one
+
+
+def _tile_exposure(t, paths=None):
+    """A tile's exposure in s, from its frame's own label (paths: frame id -> path, the pass's frames), or None"""
+    fid = t.get("id")
+    path = (paths or {}).get(fid) or (fid and ("nac_data/" if fid[0] == "N" else "wac_data/") + fid + ".png")
+    if not path:
+        return None
+    try:
+        return _exposure(label_handler.label(path, as_png=True))
+    except Exception as e:   # noqa: BLE001
+        print(f"bracket_shorts: no exposure for {fid}: {e}")
+        return None
+
+
+def bracket_shorts(tiles, u=None):
+    """The tiles (n) of a grey filter's exposure brackets that go under: a short exposure at a place where the same
+    filter took one BRACKET_STEP times as long within SAME_PLACE of it and MIX_SPAN of its time, that long one saturated
+    over less than OVER_EXPOSED of the whole frame. (Not over_exposed's test of its lit part: 036RI's 120 s frames
+    saturated 33-35 % of the frame on a 57-63 % lit part, past it, yet the accepted picture before #491 draws them on
+    top, their saturated B ring white.) The long one shows the faint rings and ground the short one barely measured; where it saturated, the camera's own saturated pixels are drawn as ever. Which went on top
+    was left to dim_under's overlap ratio, a median over sparse lit pixels that is no rule for one place taken twice:
+    036RI DRING001 alternates 120 s and 10 s frames, and calibrated at full depth (#491) one 10 s frame's ratio went
+    from 0.60 to 0.74, past DIM_UNDER, and its faint C ring came out on top of the 120 s frame's, a soft band with a
+    hard seam."""
+    placed = [t for t in tiles if "offset" in t and "t" in t]
+    paths = {fr[1]: fr[0] for fr in (u or {}).get("frames", [])}
+    exposure = {t["n"]: _tile_exposure(t, paths) for t in placed}
+    out = set()
+    for t in placed:
+        mine = exposure[t["n"]]
+        if not mine:
+            continue
+        reach = SAME_PLACE * max(t["box"][2], t["box"][3])
+        if any(o["n"] != t["n"] and o["filter"] == t["filter"] and abs(o["t"] - t["t"]) <= MIX_SPAN
+               and math.hypot(o["offset"][0] - t["offset"][0], o["offset"][1] - t["offset"][1]) <= reach
+               and (exposure[o["n"]] or 0) >= BRACKET_STEP * mine and o.get("saturated", 0.0) < OVER_EXPOSED
+               for o in placed):
             out.add(t["n"])
     return out
 
@@ -6228,6 +6272,11 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     Kept under a name that says where a solve moved its tiles too (_places_tag), so it is only found again for the
     same tiles at the same places."""
     mine = _mine(u, p, tiles, f)
+    if f != LUM and f not in (p.get("colour") or []) and not _rolling.get():
+        # a grey filter's exposure bracket: its short frames go under its long ones (bracket_shorts)
+        shorts = bracket_shorts(mine, u)
+        if shorts:
+            mine = [dict(t, long=True) if t["n"] in shorts else t for t in mine]
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)
     plain = tag[:-len(VISIT_TAG)] if tag.endswith(VISIT_TAG) else tag
     whole = plain in ("", PANEL_TAG, EDGE_TAG, RING_EDGE_TAG, SURFACE_TAG, SURFACE_TAG + PANEL_TAG, RING_REDRAW_TAG,
