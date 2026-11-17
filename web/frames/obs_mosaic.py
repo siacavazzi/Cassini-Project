@@ -1414,7 +1414,8 @@ def kind_of(frame_id, cache=None):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
     never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
-    mosaic_movie or None), "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
+    mosaic_movie or None), "tossup": the pointing alone cannot tell it a movie from a mosaic, so the build stores
+    both its views (prebuild.make_pass) and the window may offer either, "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
     movies, when it has any, "mosaic_steps": the ids of the frames of its mosaic passes movie mode stops on
     (mosaic_steps; by the pass's plan when cache holds it), when it has any}."""
     found = unit_of(frame_id)
@@ -1427,7 +1428,7 @@ def kind_of(frame_id, cache=None):
     steps = [v["frames"][j][1] for v in us if v["mosaic"] and not v["movie"] and v.get("kind") != "mosaic_movie"
              for j in mosaic_steps(v, _plan_if_made(v, cache))]
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"], **({"lap_ends": ends} if ends else {}),
+            "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
             **({"mosaic_steps": steps} if steps else {})}
 
 

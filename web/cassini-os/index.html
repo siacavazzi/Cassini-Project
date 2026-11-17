@@ -711,6 +711,7 @@ body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
 .wmopt span { color: var(--q-dim); font-size: 10px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wmopt i { font-style: normal; color: var(--q-accent); } .wmopt[aria-checked="true"] i::before { content: "✓"; }
 .wmopt[aria-checked="true"] { color: #fff; }
+.wmopt:disabled { opacity: .38; } .wmopt:disabled:hover { background: none; color: inherit; }
 .wmopt:hover, .wmset:hover, .wmopt:focus-visible, .wmset:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
 .wmfoot { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
 .wmset { display: block; color: var(--q-dim); }
@@ -5798,9 +5799,11 @@ function targetLabel(k) {
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
         const m = b.dataset.mode, on = m === st.mode;
+        // (a view the pass has no stored picture for is not offered: it would be drawn on request)
+        b.disabled = m !== "auto" && !!st.allowed && !st.allowed.includes(m);
         b.setAttribute("aria-checked", String(on));
         b.querySelector("span").textContent = m === "auto" && st.playing ? `now ${st.playing}${st.building ? ", building" : ""}`
-          : PASS_MODES.find(x => x[0] === m)[2];
+          : b.disabled ? "not stored for this pass" : PASS_MODES.find(x => x[0] === m)[2];
       }
       // the button says when this window differs from the Settings defaults
       btn.classList.toggle("chosen", st.centre !== def || (st.inPass && st.mode !== "auto"));
@@ -6412,6 +6415,7 @@ function targetLabel(k) {
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
+    const tossPasses = new Set();     // passes the server said are a toss-up (kind_of tossup): the build stores both views
     // what the data says (passInfo, the server's own rule worked out ahead) counts as the server's answer
     const dataKind = k => { const p = passInfo(k); return p ? p[0] : null; };
     const mosaicPass = k => mosaicPasses.has(passOf(k)) || dataKind(k) === "mosaic" || dataKind(k) === "mosaic_movie";
@@ -6423,7 +6427,18 @@ function targetLabel(k) {
     // window), else the cameras.passes default; "auto" follows the server (a mosaic pass builds, a movie or a stare
     // plays its frames, a mosaic movie rolls: each place shows its newest tile)
     const passChoice = new Map();
-    const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
+    // the views the build stores for the pass (prebuild.make_pass): a mosaic movie rolls, a mosaic builds, a movie plays its
+    // frames, and a toss-up has both a mosaic and a movie. A Mosaic, Movie or Mosaic movie asked for that the pass has
+    // no stored picture for plays Auto instead: it would be drawn on request (a movie pass laid out as a mosaic took the
+    // server 4-5 minutes a picture and up to ~15 GB, cache completeness check 2026-11-16)
+    const storedModes = k => {
+      const toss = tossPasses.has(passOf(k));
+      if (lapPass(k)) return ["mosaic_movie"];
+      if (mosaicPass(k)) return toss ? ["mosaic", "movie"] : ["mosaic"];
+      if (moviePass(k)) return toss ? ["movie", "mosaic"] : ["movie"];
+      return [];
+    };
+    const modeOf = k => { const m = passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto"; return m === "auto" || storedModes(k).includes(m) ? m : "auto"; };
     const playsAs = k => { const m = modeOf(k); return m !== "auto" ? m : lapPass(k) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePass(k) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
     // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
@@ -6437,7 +6452,7 @@ function targetLabel(k) {
       // a pass asked for as a mosaic whose mosaic is not up yet is being built (a long movie's first mosaic deep in
       // the pass makes every tile before it: minutes when nothing of it is in the cache)
       const building = on && p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
-      menu.sync({ inPass: !!on, mode: m, playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
+      menu.sync({ inPass: !!on, mode: m, allowed: on ? storedModes(k) : [], playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
                   centred: k >= 0 && centreOn() && /[?&]center=1/.test(shownKey || "") });
     }
     menu.onMode = mode => {
@@ -7370,6 +7385,7 @@ function targetLabel(k) {
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
+            if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
@@ -12052,10 +12068,12 @@ void main() {
   const name = t => (t || "Unknown").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   const hms = e => new Date(e.t * 1000).toISOString().slice(11, 19);
   const KIND = { mosaic: "MOS", rolling: "MOS", movie: "MOV", color: "COL", processed: "", frame: "" };
-  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
+  // (128: the size the build stores every frame at for strips; 256 is stored for no frame, so each was drawn on request;
+  // the stand-in below asks 512, stored for every kind of picture)
+  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=128`;
   // a frame's pictures for the strip, best first: as the stage shows it (As in the movie: the film's picture, the
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
-  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
+  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=512`] : [])] : tries(e, 1024);
   function thumb(img, e) {
     const urls = thumbTries(e); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
@@ -13079,7 +13097,7 @@ void main() {
     // its surface map, or else (as in the dock's All bodies folder) its sharpest real picture
     const map = typeof TEX_FILES !== "undefined" && TEX_ON && TEX_FILES[n], b = M.index && M.index.bodies[n];
     if (map) return `--c:${c};background-image:url(data/textures/1k/${map}.webp);`;
-    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256');background-size:cover;background-position:50% 50%;`;
+    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=512');background-size:cover;background-position:50% 50%;`;
     return `--c:${c};`;
   }
   function fillPick() {
@@ -13817,7 +13835,7 @@ void main() {
   // a body's icon in the folder: its surface map, or else its sharpest real picture from the frame server
   function folderIcon(n, b) {
     if (MAP[n] || n === "SUN" || !b.best || !window.cassiniFeeds) return `<span class="fic">${bodyIcon(n)}</span>`;
-    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256')"></span></span>`;
+    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=512')"></span></span>`;
   }
   const folder = document.createElement("div");
   folder.id = "dkfolder"; folder.hidden = true; folder.setAttribute("role", "dialog"); folder.setAttribute("aria-label", "All bodies");
@@ -14025,7 +14043,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"f145a792fc13";
+  const BUILD = /*BUILD*/"1c961da33230";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
