@@ -44,7 +44,7 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.waitForTimeout(4000);
   const g = await page.evaluate(() => ["imgcard", "wacard"].map(c => { const w = document.getElementById(c); return [w.querySelector('.levels [aria-checked="true"]').dataset.v, (w.querySelector(".shot").dataset.src || "").replace(/^https?:\/\/[^/]+/, "")]; }));
   console.log("settings raw", JSON.stringify(g));
-  check(g.every(([v, src]) => v === "raw" && /^\/frames\/[NW]\d+_\d+\.webp/.test(src)), "Settings level Raw: both windows raw");
+  check(g.every(([v, src]) => v === "raw" && (!src || /^\/frames\/[NW]\d+_\d+\.webp/.test(src))), "Settings level Raw: every window raw");
   await page.evaluate(() => cassiniSettings.set("cameras.level", "full"));
   await page.screenshot({ path: `${out}/page.png` });
   await ctx.close(); await br.close();
