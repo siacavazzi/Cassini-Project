@@ -5992,7 +5992,7 @@ SATURN_LOOK = {"detail": 2.0, "on_base": 0.6, "sigma": 0.6, "nodisk": True}
                     # nodisk: on every lit pixel, the rings too, never limited to the disk (a disk limit left a box on the
                     # ring crossing the disk, 2004 approach composite). on_base: on a pass that had detail() before, the
                     # look's local contrast this strong on top of today's (detail), so its brightness stays today's
-SATURN_TAG = "_sl2"   # (_sl1: option C, never in a kept cache) the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
+SATURN_TAG = "_sl3"   # (_sl1: option C; _sl2: L before the terminator fix) the folder suffix (after the others) of a pass with the Saturn look, and the name suffix of a
                       # single picture with it, so only Saturn's own pictures are made again
 SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown on 11-16; "off" none
     "off": {},
