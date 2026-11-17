@@ -954,23 +954,21 @@ def _count(v):
 
 
 def _thumb_mosaic(frame_id, size, cache):
-    """(WebP, report) of the mosaic the camera windows' route answers for frame_id, from the tiles the cache already
-    holds, or None. A thumbnail draws no pass and starts nothing (mosaic_webp make=False): the Highlights
-    thumbnails are made as the server starts (warm_thumbs), and with the mosaic route as a window asks it each of
-    the 15 highlight passes the cache did not hold under this code's versions was planned, had its first tile
-    drawn and its other tiles started in a thread, in a server nobody had asked for anything (2026-11-17, the Mini's
-    24 GB: 22 GB in 70 s, 42 to 61 GB in half an hour). A pass that is not built gives None here, so its
-    thumbnail is its colour set or its frame (pick_thumb)."""
+    """(WebP, report) of the picture the camera windows show of frame_id's pass at that frame (a mosaic's mosaic
+    so far, a mosaic movie's picture), shrunk from one the cache already holds (obs_mosaic.kept_webp), or None.
+    A thumbnail draws nothing: the Highlights thumbnails are made as the server starts (warm_thumbs), in a server
+    nobody has asked for anything, and the mosaic route as a window asks it composes a pass's mosaic from its
+    tiles when the cache does not hold it at the thumbnail's size, and plans and draws a pass the cache does not
+    hold at all. A pass that is not built gives None, and its thumbnail is its colour set or its frame
+    (pick_thumb)."""
     reel.target_of()   # the mosaic route's index, so the answer never depends on how long the server has been up
-    made = obs_mosaic.mosaic_webp(frame_id, size, cache, _mosaic_slots, ahead=0, make=False)
+    made = obs_mosaic.kept_webp(frame_id, size, cache)
     if made:
         return made
-    # a movie plays as frames: no rolling mosaic either, as on the mosaic route
+    # a movie plays as frames; and for a mosaic pass or mosaic movie whose picture the cache does not hold, no
+    # reel mosaic of its frames is drawn in its place either
     found = obs_mosaic.unit_of(frame_id)
-    if found and found[0]["movie"]:
-        return None
-    # a mosaic pass this cache has no plan of: no reel mosaic of its frames is drawn in its place either
-    if found and found[0]["mosaic"] and not obs_mosaic.planned(found[0], cache):
+    if found and (found[0]["movie"] or found[0]["mosaic"]):
         return None
     found = reel.mosaic_of(frame_id)
     return reel.shot_webp(*found, size, cache, True, _mosaic_slots) if found else None
@@ -994,9 +992,10 @@ def pick_thumb(hint, size, cache):
             return color_webp(hint["color"], size, cache)[0], {"picked": "color", "ids": hint["color"]}
         except FileNotFoundError:
             pass
-    if hint.get("frame"):
+    # (a highlight with no frame hint: the frame its mosaic hint names, so it always has a thumbnail)
+    for frame_id in dict.fromkeys(f for f in (hint.get("frame"), hint.get("mosaic")) if f):
         try:
-            return webp(hint["frame"], size, cache), {"picked": "frame", "id": hint["frame"]}
+            return webp(frame_id, size, cache), {"picked": "frame", "id": frame_id}
         except FileNotFoundError:
             pass
     return None

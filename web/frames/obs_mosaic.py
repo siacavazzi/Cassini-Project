@@ -11560,7 +11560,7 @@ def _seam_of(u, p, tiles, rect, ref, t, cache, f=None):
 REPEAT_POINTING = 600   # s: a filter's tiles at one place are one pointing when taken within this of each other
 
 
-def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False, tune=None, make=True):
+def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT, force=False, tune=None):
     """(WebP, report) of the mosaic so far at frame_id when its pass is a mosaic (or force: the person asked for
     the pass as a mosaic, whatever _judge says); otherwise None. Then makes the next few tiles and the mosaics
     with them in the background, so the next frames' mosaics are ready when the window asks for them. Never
@@ -11568,11 +11568,7 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
     how many frames short of frame_id it is). size
     "full" = out px on the longest side (the full view's picture, never warmed ahead); fmt "png" for a PNG
     instead. tune: the person's changes to its tiles (parse_tune), the tuned mosaic (tuned_layout) instead of
-    the pass's own; never made ahead.
-    make=False, for a caller no window is waiting on (a Highlights thumbnail, made as the server starts): the
-    mosaic of the tiles the cache already holds, None when it holds none (_made_so_far). No frame is processed,
-    no plan worked out and nothing started in the background (no tiles ahead, no tile map, no mosaics ahead): a
-    thumbnail of a pass that was never built must not set a whole pass drawing in the server."""
+    the pass's own; never made ahead."""
     found = unit_of(frame_id)
     if not found or not (found[0]["mosaic"] or force) or found[1] < 0:
         return None
@@ -11585,11 +11581,8 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
     # the mosaic of the tiles made so far, when the clock has run past them (playing faster than a frame is
     # processed): the window gets a picture at once, a little behind, and catches up as the tiles behind it
     # (tiles_ahead) are made, instead of waiting for every tile up to n
-    if make:
-        m = _made_through(u, n, cache)
-        tiles_ahead(u, m + 1, cache)
-    else:
-        m, ahead = _made_so_far(u, n, cache), 0
+    m = _made_through(u, n, cache)
+    tiles_ahead(u, m + 1, cache)
     if m < n:
         if m < 0:
             return None
@@ -11606,7 +11599,7 @@ def mosaic_webp(frame_id, size, cache, slots=None, ahead=3, fmt="webp", out=OUT,
         # outlines were kept in their reports are measured once here); a map worked out already needs no work
         with _lock:
             mapped = (folder(u, cache), laid[5]) in _maps
-        if not mapped and make:
+        if not mapped:
             _map_later(u, n, cache)
     if made and ahead and size != "full":
         warm(u, n + ahead, cache, size, slots, start=n + 1, force=force)
@@ -11684,17 +11677,50 @@ def planned(u, cache):
     return _record(u, cache) is not None or os.path.exists(_plan_path(u, cache))
 
 
-def _made_so_far(u, n, cache):
-    """_made_through for a caller that must draw nothing (mosaic_webp make=False): the last tile j <= n of the pass
-    with tiles 0..j in the cache already, -1 for none or for a pass with no plan here (planned). Tile 0 is not
-    made and the plan is only read."""
+KEPT_SIZES = (512, 1024)   # the sizes the pre-build keeps a pass's pictures at, the smaller first
+
+
+def kept_webp(frame_id, size, cache):
+    """(WebP, report) of the picture a camera window shows of frame_id's pass at that frame, taken from a picture
+    the cache ALREADY holds and shrunk to size: a mosaic pass's mosaic so far, a mosaic movie's picture
+    (rolling_layout, the time-lapse a window opens on). None when the pass is neither, has no plan in the cache
+    (planned), has a tile up to that frame that is not made, or holds the picture at none of size and KEPT_SIZES.
+
+    Nothing is drawn here: no frame is processed, no tile made, no mosaic composed, nothing started in the
+    background. For a caller no window waits on, the Highlights thumbnails the server makes as it starts
+    (frame_server.warm_thumbs). mosaic_webp at a thumbnail's size composed the pass's whole mosaic from its tiles
+    (so_far), a picture no build keeps at that size, and for a mosaic movie none at any: the 728-frame north
+    polar movie (193SA NPOLMOV001) took 10 GB in 50 s that way and never finished, in a server nobody had asked
+    for anything, again at every start (2026-11-17, the full build's preview: 42 to 61 GB on a 24 GB Mac)."""
+    found = unit_of(frame_id)
+    if not found or not found[0]["mosaic"] or found[1] < 0:
+        return None
+    u, n = found
     if not planned(u, cache):
-        return -1
+        return None
     p = plan(u, cache)
-    j = -1
-    while j < n and _has_tile(u, j + 1, cache, p):
-        j += 1
-    return j
+    if not all(_has_tile(u, j, cache, p) for j in range(n + 1)):
+        return None   # (a layout would make the tiles it lacks)
+    movie = u.get("kind") == "mosaic_movie"
+    with _asking():
+        made = rolling_layout(u, n, cache, 1, made_only=True) if movie else layout(u, n, cache)
+    if not made:
+        return None
+    where = _rolling_path if movie else _mosaic_path
+    for kept in dict.fromkeys((size, *(z for z in KEPT_SIZES if z > size))):
+        path = where(u, made, kept, cache)
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as fh:
+            data = fh.read()
+        if kept != size:
+            im = Image.open(io.BytesIO(data))
+            im.thumbnail((size, size), Image.LANCZOS)
+            buf = io.BytesIO()
+            reel.save_webp(im, buf, quality=QUALITY, method=4)
+            data = buf.getvalue()
+        return data, reel.report_of(path[:-len("webp")] + "json", {})
+    return None
 
 
 _asked = [0]   # mosaics a window is waiting for right now: work made ahead waits while there are any
