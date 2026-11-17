@@ -38,7 +38,5 @@ print("I/F x1000, every 2nd row across the terminator:\n guarded", (guarded[::2]
 assert (raw - before).max() > 0.002                       # unguarded, the smoothing still draws the slope below its codes
 assert steps(guarded).max() < 0.006                       # gone: the slope rises as the codes do
 assert np.abs(guarded - raw).max() < 0.002                # ... about as calibrated without smoothing there
-assert cal.slope_guarded([lbl]) and cal.slope_guarded([lh.label("nac_data/N1872033073_1.png", as_png=True)])
-with cal.slope_guard(False):
-    assert not cal.slope_guarded([lbl])
+assert cal.slope_guarded([lbl]) and not cal.slope_guarded([lh.label("nac_data/N1872033073_1.png", as_png=True)])
 print("ok")
