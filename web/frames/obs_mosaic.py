@@ -81,11 +81,13 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
+# obs-v132/v115/v101: a raw frame whose lead match onto a frame with JPL's own pointing is not believed lands where it did
+# without the lead (_register_match): Telesto's clear frames, 77 px off by SPICE, no longer stay there as a gray ghost
 # obs-v135/v118/v104: an empty sky's whole noise taken for sky where the sky test's cut ran through it (calibration._sky): black, not a gray floor with line stripes (numbered past #552, the lit-sky pass and #558)
 # obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
 # obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
-VERSIONS = {"balanced": "obs-v137", "raw": "obs-v120", "eye": "obs-v137-eye", "false": "obs-v137-false", "classic": "obs-v106-classic"}
+VERSIONS = {"balanced": "obs-v138", "raw": "obs-v121", "eye": "obs-v138-eye", "false": "obs-v138-false", "classic": "obs-v107-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3361,7 +3363,7 @@ REGISTER_FAR = {"W": 32 / 1024}
 REGISTER_SURE = (0.2, 0.1, 0.5)   # least peaks: phase, edges with it, phase alone
 
 
-def _register_to(u, n):
+def _register_to(u, n, lead=True):
     """The tile tile n is registered to (_register): of the frames of the pass in another filter at its pointing
     (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it (only the colour filters' when n is in a
     colour filter and there are some, below), the one nearest it in wavelength (the first of those as near), so each
@@ -3381,7 +3383,7 @@ def _register_to(u, n):
     k = z / u["z"] if u["z"] else 1.0
     here = lambda j: frames[j][2] != f and frames[j][7] and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME
     carried = _carried(u)
-    if frames[n][1] in carried:
+    if lead and frames[n][1] in carried:
         # a frame without JPL's own corrected pointing (carried over, or raw) lands on one with it at its pointing,
         # taken before or after it (REGISTER_GAP either way), when there is one: JPL's frames lead the pointing
         sure = [j for j in range(len(frames)) if j != n and frames[j][1] not in carried and here(j)
@@ -3519,10 +3521,31 @@ def _register_match(u, n, out, crop, cache, scale):
     to (_register_to) by the pipeline's own alignment of a set's channels (image_correction.align_with_masks: phase
     correlation, then on edges, then by the lit area's centroid) over the part of the view both cover; out["offset"]
     is changed by the shift found (out["spice_offset"] keeps SPICE's), out["registered"] says to what and how. A
-    shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
+    shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place.
+    A frame without JPL's own pointing first tries the frame with it its pointing leads with (_register_to); when that
+    match is not believed it tries the frame it lands on without that lead (lead=False, the chain's own order), and
+    keeps whichever is believed: Telesto's raw clear frames (164TE, N1831466361_1) sit 77 px off by SPICE, and led
+    onto the IR1 frame 114 s later their match was not believed and they stayed there, a gray ghost beside the moon in
+    the colour movie, where on the UV3 frame 34 s before it the wide search agrees."""
     j = _register_to(u, n)
     if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
         return None
+    got = _register_match_to(u, n, j, out, crop, cache, scale)
+    if "shift" in (out.get("registered") or {}) or u["frames"][n][1] not in _carried(u):
+        return got
+    j2 = _register_to(u, n, lead=False)
+    if j2 is None or j2 == j:
+        return got
+    first = out.get("registered")
+    again = _register_match_to(u, n, j2, out, crop, cache, scale)
+    if "shift" in (out.get("registered") or {}):
+        return again
+    out["registered"] = first
+    return got
+
+
+def _register_match_to(u, n, j, out, crop, cache, scale):
+    """_register_match onto tile j."""
     q = tile(u, j, cache, scale)
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
     if "offset" not in q or not os.path.exists(path):
