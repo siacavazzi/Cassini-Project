@@ -3314,7 +3314,7 @@ REGISTER_FAR = {"W": 32 / 1024}
 REGISTER_SURE = (0.2, 0.1, 0.5)   # least peaks: phase, edges with it, phase alone
 
 
-def _register_to(u, n):
+def _register_to(u, n, lead=True):
     """The tile tile n is registered to (_register): of the frames of the pass in another filter at its pointing
     (SAME_PLACE, by the geometry cache) taken at most REGISTER_GAP before it (only the colour filters' when n is in a
     colour filter and there are some, below), the one nearest it in wavelength (the first of those as near), so each
@@ -3334,7 +3334,7 @@ def _register_to(u, n):
     k = z / u["z"] if u["z"] else 1.0
     here = lambda j: frames[j][2] != f and frames[j][7] and math.hypot(x - frames[j][5], y - frames[j][6]) * k <= SAME_PLACE * FRAME
     carried = _carried(u)
-    if frames[n][1] in carried:
+    if lead and frames[n][1] in carried:
         # a frame without JPL's own corrected pointing (carried over, or raw) lands on one with it at its pointing,
         # taken before or after it (REGISTER_GAP either way), when there is one: JPL's frames lead the pointing
         sure = [j for j in range(len(frames)) if j != n and frames[j][1] not in carried and here(j)
@@ -3472,10 +3472,31 @@ def _register_match(u, n, out, crop, cache, scale):
     to (_register_to) by the pipeline's own alignment of a set's channels (image_correction.align_with_masks: phase
     correlation, then on edges, then by the lit area's centroid) over the part of the view both cover; out["offset"]
     is changed by the shift found (out["spice_offset"] keeps SPICE's), out["registered"] says to what and how. A
-    shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place."""
+    shift past REGISTER_MAX of a frame, or none found, leaves SPICE's place.
+    A frame without JPL's own pointing first tries the frame with it its pointing leads with (_register_to); when that
+    match is not believed it tries the frame it lands on without that lead (lead=False, the chain's own order), and
+    keeps whichever is believed: Telesto's raw clear frames (164TE, N1831466361_1) sit 77 px off by SPICE, and led
+    onto the IR1 frame 114 s later their match was not believed and they stayed there, a gray ghost beside the moon in
+    the colour movie, where on the UV3 frame 34 s before it the wide search agrees."""
     j = _register_to(u, n)
     if j is None or not calibration.step("align"):   # Settings > Processing: SPICE's places as they are
         return None
+    got = _register_match_to(u, n, j, out, crop, cache, scale)
+    if "shift" in (out.get("registered") or {}) or u["frames"][n][1] not in _carried(u):
+        return got
+    j2 = _register_to(u, n, lead=False)
+    if j2 is None or j2 == j:
+        return got
+    first = out.get("registered")
+    again = _register_match_to(u, n, j2, out, crop, cache, scale)
+    if "shift" in (out.get("registered") or {}):
+        return again
+    out["registered"] = first
+    return got
+
+
+def _register_match_to(u, n, j, out, crop, cache, scale):
+    """_register_match onto tile j."""
     q = tile(u, j, cache, scale)
     path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
     if "offset" not in q or not os.path.exists(path):
