@@ -958,8 +958,8 @@ def _thumb_mosaic(frame_id, size, cache):
     holds, or None. A thumbnail draws no pass and starts nothing (mosaic_webp make=False): the Highlights
     thumbnails are made as the server starts (warm_thumbs), and with the mosaic route as a window asks it each of
     the 15 highlight passes the cache did not hold under this code's versions was planned, had its first tile
-    drawn and its other tiles started in a thread, in a server nobody had asked for anything (2026-11-17: 20 GB in
-    70 s and 42 to 61 GB in half an hour on the Mini's 24 GB). A pass that is not built gives None here, so its
+    drawn and its other tiles started in a thread, in a server nobody had asked for anything (2026-11-17, the Mini's
+    24 GB: 22 GB in 70 s, 42 to 61 GB in half an hour). A pass that is not built gives None here, so its
     thumbnail is its colour set or its frame (pick_thumb)."""
     reel.target_of()   # the mosaic route's index, so the answer never depends on how long the server has been up
     made = obs_mosaic.mosaic_webp(frame_id, size, cache, _mosaic_slots, ahead=0, make=False)
