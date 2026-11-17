@@ -141,6 +141,10 @@ def set_key(items, env):
 
 
 def job_env(cfg, workers=2):
+    # (under the slot limiter (~/agents/bin/heavy, HEAVY_SLOTS) a build's slots are its processes: each runs its
+    # frames' pool at 1, not 2, so n slots stay n processes (11-16: benchmarks at ~9 processes a slot crashed the MacBook))
+    if os.environ.get("HEAVY_SLOTS", "0") != "0":
+        workers = 1
     env = dict(os.environ)
     env.update(cfg["env"])
     env.update({"CASSINI_KEEP_SPICE_CACHE": "1", "PYTHONUNBUFFERED": "1", "MPLBACKEND": "Agg", "PYTHONDONTWRITEBYTECODE": "1",
@@ -339,6 +343,9 @@ class Builder:
         self.key = set_key(self.items, cfg["env"])
         self.names = names
         self.slots = slots or free_slots()
+        held = int(os.environ.get("HEAVY_SLOTS", "0") or 0)
+        if held:
+            self.slots = min(self.slots, held)   # (never more processes than the limiter's slots, whatever --slots says)
         self.result = os.path.join(self.root, "results", f"{self.sha[:12]}-{self.key}")
         self.wt = os.path.join(self.root, "wt", self.sha[:12])
         self.cache = os.path.join(self.root, "cache", self.sha[:12])
@@ -368,11 +375,19 @@ class Builder:
         self.cfg = {**self.cfg, "env": {**self.cfg["env"], "CASSINI_GEOMETRY_CACHE": dst}}
 
     def done_items(self):
+        """Items build.json lists AND whose folder still holds meta.json.
+        A listed item whose folder was moved or deleted is rebuilt rather
+        than crashing the compare later."""
         try:
             with open(os.path.join(self.result, "build.json")) as fh:
-                return set(json.load(fh).get("built", []))
+                listed = set(json.load(fh).get("built", []))
         except OSError:
             return set()
+        have = {n for n in listed
+                if os.path.exists(os.path.join(self.result, n, "meta.json"))}
+        for n in sorted(listed - have):
+            self.log(f"  {n}: listed as built but its folder is missing; rebuilding it")
+        return have
 
     def worktree(self):
         if not os.path.exists(os.path.join(self.wt, "web", "frames", "prebuild.py")):
@@ -412,6 +427,22 @@ class Builder:
         have = self.done_items()   # (again: a build that finished while this one waited)
         todo = [it for it in want if it["name"] not in have]
         self.snapshot()
+        # (holding the lock: a cache or item folder already here is what an interrupted build left: its plan,
+        # tiles and private geometry copy were made by a run that never finished, so a resume must not reuse them)
+        # (the cache is per commit, the result per commit and item set: hold the cache's own lock too, so another
+        # set's build of this commit is never wiped from under it)
+        os.makedirs(os.path.dirname(self.cache), exist_ok=True)
+        self._cache_lock = open(self.cache + ".lock", "w")
+        try:
+            fcntl.flock(self._cache_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.log(f"{self.sha[:12]}: waiting for another build of this commit to finish with its cache")
+            fcntl.flock(self._cache_lock, fcntl.LOCK_EX)
+        if os.path.exists(self.cache) and not self.keep_cache:
+            self.log(f"{self.sha[:12]}: removing a cache an interrupted build left ({self.cache})")
+            shutil.rmtree(self.cache, ignore_errors=True)
+        for it in todo:
+            shutil.rmtree(os.path.join(self.result, it["name"]), ignore_errors=True)
         os.makedirs(self.cache, exist_ok=True)
         self.private_geometry()
         t0 = time.time()
@@ -436,6 +467,7 @@ class Builder:
                  + (f"; failed: {', '.join(failures)}" if failures else ""))
         if not self.keep_cache and not failures:
             shutil.rmtree(self.cache, ignore_errors=True)
+        self._cache_lock.close()
         self._lock.close()
         return self.result
 
@@ -519,8 +551,17 @@ def remote_build(host, sha, names, log=print):
     subprocess.run(["ssh", ssh, f"git -C {shlex.quote(repo)} cat-file -e {sha}^{{commit}} 2>/dev/null || "
                                 f"git -C {shlex.quote(repo)} fetch -q origin {sha}"], check=True)
     env = " ".join(f"{k}={shlex.quote(v)}" for k, v in cfg.get("env", {}).items())
-    cmd = (f"cd {shlex.quote(repo)} && {env} CASSINI_BENCH_CONFIG=/nonexistent CASSINI_BENCH_REPO={shlex.quote(repo)} "
-           f"{shlex.quote(py)} {tool}/image_bench.py build --rev {sha} --root {shlex.quote(root)} --items {','.join(names)} --python {shlex.quote(py)}")
+    # (on the host's own slot limiter when it has one (~/agents/bin/heavy), under this job's thread, at this job's slots
+    # (at most 3): a build started over ssh outside it ran free_slots() processes at 2 workers each, 20+ on the 24 GB
+    # Mini, the fan-out that crashed the MacBook on 11-16)
+    slots = min(3, max(1, int(os.environ.get("HEAVY_SLOTS", "0") or 0) or 2))
+    owner = (os.environ.get("HEAVY_NAME") or "bench").split(":")[0]
+    build = (f"{shlex.quote(py)} {tool}/image_bench.py build --rev {sha} --root {shlex.quote(root)} --items {','.join(names)} "
+             f"--python {shlex.quote(py)} --slots {slots}")
+    limited = (f"if [ -x ~/agents/bin/heavy ]; then ~/agents/bin/heavy -n {slots} --name {shlex.quote(owner + ': image bench ' + sha[:8])} "
+               f"-- env {env} CASSINI_BENCH_CONFIG=/nonexistent CASSINI_BENCH_REPO={shlex.quote(repo)} {build}; "
+               f"else {env} CASSINI_BENCH_CONFIG=/nonexistent CASSINI_BENCH_REPO={shlex.quote(repo)} {build}; fi")
+    cmd = f"cd {shlex.quote(repo)} && {limited}"
     log(f"{host}: building {len(names)} items of {sha[:12]}")
     p = subprocess.run(["ssh", ssh, cmd], capture_output=True, text=True)
     for line in (p.stdout + p.stderr).strip().splitlines()[-40:]:
