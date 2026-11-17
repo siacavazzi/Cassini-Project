@@ -2366,28 +2366,32 @@ def long_repeats(tiles, colour):
 BRACKET_STEP = 4.0   # (bracket_shorts) a frame exposed this many times as long as another at its place is its long one
 
 
-def _tile_exposure(t):
-    """A tile's exposure in s (its frame's label), or None"""
+def _tile_exposure(t, paths=None):
+    """A tile's exposure in s, from its frame's own label (paths: frame id -> path, the pass's frames), or None"""
     fid = t.get("id")
-    if not fid:
+    path = (paths or {}).get(fid) or (fid and ("nac_data/" if fid[0] == "N" else "wac_data/") + fid + ".png")
+    if not path:
         return None
     try:
-        return _exposure(label_handler.label(("nac_data/" if fid[0] == "N" else "wac_data/") + fid + ".png", as_png=True))
-    except Exception:   # noqa: BLE001
+        return _exposure(label_handler.label(path, as_png=True))
+    except Exception as e:   # noqa: BLE001
+        print(f"bracket_shorts: no exposure for {fid}: {e}")
         return None
 
 
-def bracket_shorts(tiles):
+def bracket_shorts(tiles, u=None):
     """The tiles (n) of a grey filter's exposure brackets that go under: a short exposure at a place where the same
     filter took one BRACKET_STEP times as long within SAME_PLACE of it and MIX_SPAN of its time, that long one not
-    over-exposed (saturated under OVER_EXPOSED of the frame). The long one shows the faint rings and ground the short
+    over-exposed (over_exposed: saturated over OVER_EXPOSED of the frame, or of its lit part when that is OVER_LEAST of
+    the frame: a ring arc over sky whose rings it drew flat white keeps the short frame on top). The long one shows the faint rings and ground the short
     one barely measured; where it saturated, the camera's own saturated pixels are drawn as ever. Which went on top
     was left to dim_under's overlap ratio, a median over sparse lit pixels that is no rule for one place taken twice:
     036RI DRING001 alternates 120 s and 10 s frames, and calibrated at full depth (#491) one 10 s frame's ratio went
     from 0.60 to 0.74, past DIM_UNDER, and its faint C ring came out on top of the 120 s frame's, a soft band with a
     hard seam."""
     placed = [t for t in tiles if "offset" in t and "t" in t]
-    exposure = {t["n"]: _tile_exposure(t) for t in placed}
+    paths = {fr[1]: fr[0] for fr in (u or {}).get("frames", [])}
+    exposure = {t["n"]: _tile_exposure(t, paths) for t in placed}
     out = set()
     for t in placed:
         mine = exposure[t["n"]]
@@ -6268,7 +6272,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     mine = _mine(u, p, tiles, f)
     if f != LUM and f not in (p.get("colour") or []) and not _rolling.get():
         # a grey filter's exposure bracket: its short frames go under its long ones (bracket_shorts)
-        shorts = bracket_shorts(mine)
+        shorts = bracket_shorts(mine, u)
         if shorts:
             mine = [dict(t, long=True) if t["n"] in shorts else t for t in mine]
     # every tile up to the newest (less a colour filter's partial visits, VISIT_TAG: those are left out from the start)

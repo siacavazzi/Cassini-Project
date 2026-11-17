@@ -11,7 +11,7 @@ import obs_mosaic as om
 
 BOX = [-511.0, -511.0, 1022, 1022]
 EXPOSURE = {}
-om._tile_exposure = lambda t: EXPOSURE.get(t["n"])
+om._tile_exposure = lambda t, paths=None: EXPOSURE.get(t["n"])
 
 
 def tile(n, t, x, y, sat, s, f="CL1/CL2"):
@@ -39,6 +39,6 @@ assert 1 not in om.bracket_shorts(d)
 checks += 6
 # filter_mosaic marks them for a grey filter only (not a colour picture's filters, not the luminance base)
 src = open(om.__file__).read().split("def filter_mosaic", 1)[1].split("\ndef ", 1)[0]
-assert "bracket_shorts(mine)" in src and 'f != LUM and f not in (p.get("colour") or [])' in src
+assert "bracket_shorts(mine, u)" in src and 'f != LUM and f not in (p.get("colour") or [])' in src
 checks += 1
 print(f"{checks} checks ok")
