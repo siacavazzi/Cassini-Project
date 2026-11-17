@@ -397,7 +397,7 @@ def _match(im1, im2, g, mask1, mask2, within=None, filled=False, placed_flat=Fal
         shift, how = checked_shift(im1, im2, mask1, mask2, g)
     if shift is None:
         # a limb or terminator through filters that look nothing alike inside it: matched on the lit area's outline
-        shift, how = limb_shift(im1, im2, mask1, mask2)
+        shift, how = limb_shift(im1, im2, mask1, mask2, g)
     if shift is None:
         # one straight feature (a ring's edge across cloud tops): pinned across it, SPICE's place along it (ridge_shift)
         shift, how = ridge_shift(im1, im2, mask1, mask2, g, placed_flat)
@@ -504,15 +504,67 @@ def _lit(im, mask):
     return lit if LIMB_SHARE <= lit[mask].mean() <= 1 - LIMB_SHARE else None
 
 
-def limb_shift(im1, im2, mask1, mask2):
+"""
+A near-straight limb (Titan's haze along the bottom of a frame it fills to the horizon: 200TI's N1767327092_1 and
+N1767326987_1) correlates as a ridge too, its peak round LIMB_RESPONSE whatever the frames' noise (0.21 on the display
+copies, 0.17 calibrated at full depth, the same place found): it is pinned across the outline instead, as ridge_shift
+pins a ring edge, and placed along it at SPICE's offset (as taken without one, or past RIDGE_GUESS). Each outline must
+be one edge (the lit area's specks, stars and cosmic rays, dropped: its gradients' coherence at least LIMB_STRAIGHT), the
+two running within LIMB_TURN degrees of each other; the best place across (searched to CHECK_REACH, LIMB_STEP apart)
+must be inside the search and pass the outline match's own checks (LIMB_DIFF, LIMB_GAIN, the edges no worse).
+((dx, dy), how) or None
+"""
+LIMB_STRAIGHT = 0.9   # the least coherence of an outline's gradient directions (1 = one straight edge)
+LIMB_TURN = 5.0       # degrees: the most the two outlines may run apart
+LIMB_STEP = 1.0       # px between the places tried across the outline (then refined to a quarter of it)
+LIMB_SPECK = 0.01     # of the lit area: smaller lit pieces are specks, not the body
+
+
+def _outline_across(lit, mask):
+    """The direction across a lit area's outline, (x, y), when the outline is one near-straight edge, else None"""
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(lit.astype(np.uint8), connectivity=8)
+    keep = np.zeros(n, bool)
+    keep[1:] = stats[1:, cv2.CC_STAT_AREA] >= LIMB_SPECK * lit.sum()
+    f = cv2.GaussianBlur(keep[labels].astype(np.float32), (0, 0), 2)
+    # (the frame's own border is not the outline)
+    inner = cv2.erode(mask.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
+    gx, gy = cv2.Sobel(f, cv2.CV_32F, 1, 0) * inner, cv2.Sobel(f, cv2.CV_32F, 0, 1) * inner
+    tensor = np.array([[np.sum(gx * gx), np.sum(gx * gy)], [np.sum(gx * gy), np.sum(gy * gy)]], np.float64)
+    w, v = np.linalg.eigh(tensor)
+    if w[1] <= 0 or (w[1] - w[0]) / (w[1] + w[0]) < LIMB_STRAIGHT:
+        return None
+    return v[:, 1]
+
+
+def _limb_ridge(l1, l2, mask1, mask2, g, differ, checked):
+    a1, a2 = _outline_across(l1, mask1), _outline_across(l2, mask2)
+    if a1 is None or a2 is None or np.degrees(np.arccos(min(1.0, abs(float(a1 @ a2))))) > LIMB_TURN:
+        return None
+    across = a1
+    along = np.array([-across[1], across[0]])
+    c = np.zeros(2) if g is None or np.hypot(g[0], g[1]) > RIDGE_GUESS else np.asarray(g, np.float64)
+    base = float(c @ along) * along
+    ts = np.arange(-CHECK_REACH, CHECK_REACH + LIMB_STEP / 2, LIMB_STEP)
+    d = np.array([differ(tuple(base + t * across)) for t in ts])
+    m = int(np.argmin(d))
+    if m == 0 or m == len(ts) - 1:
+        return None
+    fine = np.arange(ts[m] - LIMB_STEP, ts[m] + LIMB_STEP * 1.01, LIMB_STEP / 4)
+    t = float(fine[int(np.argmin([differ(tuple(base + t * across)) for t in fine]))])
+    shift = tuple(float(x) for x in base + t * across)
+    ok, before, after = checked(shift)
+    if not ok:
+        return None
+    angle = (float(np.degrees(np.arctan2(along[1], along[0]))) + 180) % 180
+    return shift, (f"limb ridge at {angle:.0f} deg (outlines differ {100 * before:.1f} % to {100 * after:.1f} %, "
+                   f"{'SPICE' if c.any() else 'as taken'} along it)")
+
+
+def limb_shift(im1, im2, mask1, mask2, g=None):
     if min(float(np.mean(mask1)), float(np.mean(mask2))) < LIMB_VALID:
         return None, "not aligned"
     l1, l2 = _lit(im1, mask1), _lit(im2, mask2)
     if l1 is None or l2 is None:
-        return None, "not aligned"
-    f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
-    (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
-    if response < LIMB_RESPONSE or np.hypot(dx, dy) > CHECK_REACH:
         return None, "not aligned"
 
     def differ(shift):
@@ -520,10 +572,19 @@ def limb_shift(im1, im2, mask1, mask2):
         both = mask1 & (shift_image(mask2.astype(np.float32), *shift) > 0.99)
         both = cv2.erode(both.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
         return float((l1[both] != moved[both]).mean()) if both.sum() >= 1000 else 1.0
-    before, after = differ((0.0, 0.0)), differ((dx, dy))
-    if after > LIMB_DIFF or after > LIMB_GAIN * before:
-        return None, "not aligned"
-    if _agreement(im1, im2, mask1, mask2, (dx, dy)) < _agreement(im1, im2, mask1, mask2, (0.0, 0.0)):
+
+    def checked(shift):
+        before, after = differ((0.0, 0.0)), differ(shift)
+        ok = after <= LIMB_DIFF and after <= LIMB_GAIN * before and \
+            _agreement(im1, im2, mask1, mask2, shift) >= _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
+        return ok, before, after
+    f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
+    (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
+    if response < LIMB_RESPONSE or np.hypot(dx, dy) > CHECK_REACH:
+        # a peak too low to believe: a near-straight outline is matched across itself alone (_limb_ridge)
+        return _limb_ridge(l1, l2, mask1, mask2, g, differ, checked) or (None, "not aligned")
+    ok, before, after = checked((dx, dy))
+    if not ok:
         return None, "not aligned"
     return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
 

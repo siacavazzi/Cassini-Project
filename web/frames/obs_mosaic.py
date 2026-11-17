@@ -81,7 +81,9 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-VERSIONS = {"balanced": "obs-v131", "raw": "obs-v114", "eye": "obs-v131-eye", "false": "obs-v131-false", "classic": "obs-v100-classic"}
+# obs-v134/v117/v103: a near-straight limb (Titan's haze to the horizon, 200TI's CB2/RED/BL1 set) matched across its outline, SPICE's place along it (image_correction._limb_ridge)
+# (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
+VERSIONS = {"balanced": "obs-v134", "raw": "obs-v117", "eye": "obs-v134-eye", "false": "obs-v134-false", "classic": "obs-v103-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
