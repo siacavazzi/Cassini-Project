@@ -1,0 +1,5 @@
+Originals: 207532 frames indexed from 125 complete volumes in /Users/samiacavazzi/cassini-build/inputs/orig12
+originals: {'frames': 207532, 'volumes': 125}
+1328193 members, 443177 frame PNGs considered, 207532 with an original
+207487 PNGs left out, 28.02 GB; kept: {'8LSB: original does not give the PNG': 44, 'conversion': 1}
+wrote /Users/samiacavazzi/cassini-build/lean8/cassini_lut8_lean.zip: 44.96 GB (73.00 GB before)
