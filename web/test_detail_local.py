@@ -77,7 +77,8 @@ for (s, w, h, sig, lit), want in zip(CASES, wants):
 # the processor's version, in node
 js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), C = " + json.dumps(CASES) + ";\n"
       "C.forEach(([s, w, h, sig, lit], q) => { const px = new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + q + '.bin'));"
-      " const one = (p, sg, amt, lt, dk) => { const k = M.gaussKernel(sg), d = M.detailInputs(p, lt, dk, w);"
+      " const one = (p, sg, amt, lt, dk) => { const k = M.gaussKernel(sg), d = M.detailInputs(p, lt, dk, w, 0.03, lt ? " + json.dumps(list(om.DETAIL_LIT_MEAN)) + " : null);"
+      " if (lt) M.terminatorEase(p, d.w, w, h, sg, " + str(om.DETAIL_TERMINATOR) + ", (m, kk) => M.blurCPU(m, w, h, kk));"
       " return M.detailFinish(p, d.lum, M.blurCPU(d.a, w, h, k), M.blurCPU(d.la, w, h, k), amt, " + str(om.DETAIL_KNEE) + ", " + str(om.DETAIL_EDGE) + ", d.w, lt ? " + str(om.DETAIL_TOP) + " : 255); };"
       " const L = " + json.dumps(list(om.DETAIL_LIT)) + ", dk = [w * 0.52, h * 0.47, Math.min(w, h) * 0.3];"
       " const out = lit == 4 ? one(one(px, sig / 0.6, " + str(om.DETAIL) + ", null, null), sig, 1.0, L, null) : lit == 3 ? M.diskBlend(one(new Uint8ClampedArray(px), sig / 0.6, " + str(om.DETAIL) + ", null, null), one(px, sig, 2.0, L, dk), w, dk)"
@@ -102,15 +103,16 @@ const [dir, cases, amount, knee, edge] = process.argv.slice(2), C = JSON.parse(c
     const [s, w, h, sig, lit] = C[q];
     if (lit >= 3) { fs.copyFileSync(dir + '/' + q + '.cpu', dir + '/' + q + '.gpu'); continue; }
     const px = fs.readFileSync(dir + '/' + q + '.bin').toString('base64');
-    const out = await p.evaluate(([px, w, h, sig, amount, knee, edge, lit, litw, top]) => {
+    const out = await p.evaluate(([px, w, h, sig, amount, knee, edge, lit, litw, top, litm, term]) => {
       const M = window.cassiniSteadyMath(), blur = window.cassiniSteadyGPU();
       if (!blur) return null;
       const b = atob(px), a = new Uint8ClampedArray(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
-      const k = M.gaussKernel(sig), d = M.detailInputs(a, lit ? litw : null, lit == 2 ? [w * 0.52, h * 0.47, Math.min(w, h) * 0.3] : null, w), t0 = performance.now(), [ga, gla] = blur([d.a, d.la], w, h, k), ms = performance.now() - t0;
+      const k = M.gaussKernel(sig), d = M.detailInputs(a, lit ? litw : null, lit == 2 ? [w * 0.52, h * 0.47, Math.min(w, h) * 0.3] : null, w, 0.03, lit ? litm : null), t0 = performance.now(), [ga, gla] = blur([d.a, d.la], w, h, k), ms = performance.now() - t0;
+      if (lit) M.terminatorEase(a, d.w, w, h, sig, term, (m, kk) => blur([m, m], w, h, kk)[0]);
       const r = M.detailFinish(a, d.lum, ga, gla, lit ? 2.0 : amount, knee, edge, d.w, lit ? top : 255);
       let s = ''; for (let i = 0; i < r.length; i += 32768) s += String.fromCharCode.apply(null, r.subarray(i, i + 32768));
       return { px: btoa(s), ms };
-    }, [px, w, h, sig, +amount, +knee, +edge, lit, JSON.parse(process.argv[7]), +process.argv[8]]);
+    }, [px, w, h, sig, +amount, +knee, +edge, lit, JSON.parse(process.argv[7]), +process.argv[8], JSON.parse(process.argv[9]), +process.argv[10]]);
     if (!out) { console.log('nogpu'); process.exit(0); }
     fs.writeFileSync(dir + '/' + q + '.gpu', Buffer.from(out.px, 'base64'));
     console.error('gpu ms', q, out.ms.toFixed(0));
@@ -121,7 +123,7 @@ const [dir, cases, amount, knee, edge] = process.argv.slice(2), C = JSON.parse(c
 with open(f"{tmp}/run.cjs", "w") as fh:
     fh.write(runner)
 env = dict(os.environ, NODE_PATH=subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip())
-res = subprocess.run(["node", f"{tmp}/run.cjs", tmp, json.dumps(CASES), str(om.DETAIL), str(om.DETAIL_KNEE), str(om.DETAIL_EDGE), json.dumps(list(om.DETAIL_LIT)), str(om.DETAIL_TOP)], capture_output=True, text=True, env=env)
+res = subprocess.run(["node", f"{tmp}/run.cjs", tmp, json.dumps(CASES), str(om.DETAIL), str(om.DETAIL_KNEE), str(om.DETAIL_EDGE), json.dumps(list(om.DETAIL_LIT)), str(om.DETAIL_TOP), json.dumps(list(om.DETAIL_LIT_MEAN)), str(om.DETAIL_TERMINATOR)], capture_output=True, text=True, env=env)
 assert res.returncode == 0, res.stderr
 gpu = "nogpu" not in res.stdout
 

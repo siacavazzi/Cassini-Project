@@ -6003,6 +6003,12 @@ SATDEF_OPTIONS = {   # evidence only (CASSINI_SATDEF=<name>): the options shown 
     "M": {"headroom": 1.25, "match": True, "detail": 2.0, "sigma": 0.6, "nodisk": True},
 }
 SATDEF = os.environ.get("CASSINI_SATDEF", "")
+DETAIL_LIT_MEAN = (0.02, 0.06)   # detail_how["lit"]: the pixels the neighbourhood's mean is taken over, eased in from
+                                 # this share of white to the second (all but the sky)
+DETAIL_TERMINATOR = 0.1   # ... and the change eased off where the picture's brightness, smoothed over half the patch, falls
+                          # by more than this share of its bright level (the 90th percentile of the lit pixels) across one
+                          # patch, as 1 / (1 + (g / it)^2): a terminator's and a limb's smooth fall keep their shape (the
+                          # moons' detail_on_disk eases the same way, #530)
 DETAIL_TOP = 250   # detail_how["lit"]: a pixel is raised by the local contrast at most to this level (what is brighter stays)
 DETAIL_LIT = (0.15, 0.35)   # detail_how["lit"]: a pixel's weight in the neighbourhood's mean (and its change) eased in
                             # from this share of white to the second (its luminance), so the sky round a planet neither
@@ -6086,6 +6092,21 @@ def detail(rgba, sigma, scale=None):
     return detail_core(rgba, sigma, scale)
 
 
+def terminator_ease(rgb, lit, sigma):
+    """(float32, H x W) DETAIL_TERMINATOR's easing of a lit look's change on a picture rgb (float32 H x W x 3, 8-bit
+    values) whose change weight is lit, its patch sigma px: 1 where the brightness is flat, less on a steep smooth fall.
+    The bright level is the 90th percentile (the lower value) of the channels' sum over the pixels lit over half"""
+    import cv2
+    total = rgb[..., 0] + rgb[..., 1] + rgb[..., 2]
+    on = total[lit > 0.5]
+    ref = max(float(np.percentile(on, 90, method="lower")) / 3, 1.0) if on.size else 255.0
+    s2 = max(1.5, sigma / 2)
+    big = cv2.GaussianBlur((total / 3).astype(np.float32), (0, 0), s2)
+    g = np.hypot(cv2.Sobel(big, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(big, cv2.CV_32F, 0, 1, ksize=3)) / np.float32(8) \
+        * np.float32(sigma / ref)
+    return (1 / (1 + (g / np.float32(DETAIL_TERMINATOR)) ** 2)).astype(np.float32)
+
+
 def detail_core(rgba, sigma, scale=None):
     """Raises the local contrast of a mosaic of a body that fills the frames (Titan's surface is a few per cent
     against its haze): each pixel moved away from its neighbourhood's mean (a Gaussian of sigma canvas pixels,
@@ -6106,12 +6127,17 @@ def detail_core(rgba, sigma, scale=None):
         lit = (t * t * (3 - 2 * t)).astype(np.float32)
         # (and only the picture's whole pixels: its feathered edge, drawn darker as it fades out, pulled the mean
         # down and left a light line along a tile's edge, 193SA NPOLMOV001)
-        a = (a >= np.float32(250 / 255)).astype(np.float32) * lit
+        whole = (a >= np.float32(250 / 255)).astype(np.float32)
         if scale and scale.get("disk"):
             # and only on the body's disk where SPICE puts it (x, y, radius in this picture's pixels): the rings
             # beside it keep their own look (235SA SATSTARE001's rings showed their tile seams sharpened)
-            a = a * disk_weight(a.shape, *scale["disk"])
-        lit = a
+            whole = whole * disk_weight(a.shape, *scale["disk"])
+        lit = whole * lit
+        # the neighbourhood's mean over everything but the sky (DETAIL_LIT_MEAN): taken over the lit pixels only, it
+        # sat on a terminator's bright side, so the whole fall from light to dark was pulled darker into a gray band
+        # with a lighter edge inside it (Sam, 11-17; 048SA APOMOVIEC001's terminator 24 levels darker)
+        t = np.clip((lum0 - DETAIL_LIT_MEAN[0]) / (DETAIL_LIT_MEAN[1] - DETAIL_LIT_MEAN[0]), 0, 1)
+        a = whole * (t * t * (3 - 2 * t)).astype(np.float32)
     weight = cv2.GaussianBlur(a, (0, 0), sigma)
     if calibration.look() == "balanced":
         # the channels' mean: 8-bit values, so the sum is exact and this is numpy's mean(axis=2) to the bit (all
@@ -6124,6 +6150,8 @@ def detail_core(rgba, sigma, scale=None):
         d = strength * x / (1 + np.abs(x) / np.float32(DETAIL_EDGE))
         if lit is not None:
             d = d * lit
+            if DETAIL_TERMINATOR:
+                d = d * terminator_ease(rgb, lit, sigma)
         # (the room a pixel has: up to its brightest channel's 255, down to its darkest's 0, so one change for all
         # three keeps its color)
         # (a Saturn lit look's change toward white stops at DETAIL_TOP: it never clips the cloud bands it brings out)
@@ -7804,7 +7832,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
             "amount": dhow.get("strength", DETAIL), "knee": DETAIL_KNEE, "edge": DETAIL_EDGE,
-            **({"lit": list(DETAIL_LIT), "top": DETAIL_TOP} if dhow.get("lit") else {}),
+            **({"lit": list(DETAIL_LIT), "top": DETAIL_TOP, "litMean": list(DETAIL_LIT_MEAN), "terminator": DETAIL_TERMINATOR}
+               if dhow.get("lit") else {}),
             **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
                if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
