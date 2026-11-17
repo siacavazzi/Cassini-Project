@@ -66,6 +66,9 @@ cyc = {"frames": [("m", "N1809549745_1", "MT3", 0.0, 889, 10.0, 10.0, 100000.0),
                   ("r", "N1809549801_1", "RED", 83.0, 649, 10.0, 10.0, 100000.0),
                   ("g", "N1809549856_1", "GRN", 138.0, 568, 10.0, 10.0, 100000.0),
                   ("b", "N1809549926_1", "BL1", 205.0, 451, 10.0, 10.0, 100000.0)], "z": 100000.0, "key": u["key"]}
+# (the rule under test is the wavelength one: no frame of the cycle is taken as carried, though two of these real ids
+# are in JPL's list (#543's own_pointing_frames), which C8's _carried, #506, would otherwise let lead)
+cyc["_carried"] = frozenset()
 assert [obs_mosaic._register_to(cyc, n) for n in range(4)] == [None, 0, 1, 2], [obs_mosaic._register_to(cyc, n) for n in range(4)]
 print("nearest band: ok")
 
