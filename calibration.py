@@ -554,13 +554,12 @@ def overclock_bias(info):
 
 
 """
-The share of its plain frame's I/F a polarized colour frame calibrates to (sets_passes.POLARIZED_SHARE), or None for
-any other frame: a narrow-angle frame through P0, P60 or P120 and a colour filter of that table, in an observation the
-index loaders read as that colour (sets_passes.polarized_index, which stacking.load_index's FILTER_NAME carries).
+The share of its plain frame's I/F a polarized colour frame calibrates to (sets_passes.polarized_share:
+POLARIZED_SHARE, IR_POLARIZED_SHARE), or None for any other frame: a narrow-angle frame through P0, P60 or P120 and a
+colour filter, or a wide-angle frame through a near-infrared band and IRP0 or IRP90, in an observation the index loaders
+read as that band (sets_passes.polarized_index: stacking.load_index's "polarized" column).
 """
 def polarized_share(info, camera):
-    if camera != "ISSNA":
-        return None
     names = _filters_of(info)
     import stacking
     sp = stacking._sets_passes()
@@ -569,16 +568,25 @@ def polarized_share(info, camera):
     global _polarized
     if _polarized is None:
         idx = stacking.load_index()
-        got = {}
-        for path, name in zip(idx["path"].tolist(), idx["FILTER_NAME"].tolist()):
-            if isinstance(path, str) and path.startswith("nac") and str(name).startswith("(CL1,"):
-                got[stacking.frame_id(path)] = str(name)
-        _polarized = got
+        _polarized = ({stacking.frame_id(p) for p, u in zip(idx["path"].tolist(), idx["polarized"].tolist())
+                       if u and isinstance(p, str)} if "polarized" in idx else set())
     frame = os.path.basename(str(info.get("path") or "")).split(".")[0]
-    return sp.POLARIZED_SHARE[names[1]] if _polarized.get(frame) == f"(CL1,{names[1]})" else None
+    return sp.polarized_share(camera, names[0], names[1]) if frame in _polarized else None
 
 
-_polarized = None   # {frame id: FILTER_NAME as stacking.load_index reads it} of the NAC's CL1 frames (polarized_share)
+"""
+The band a polarized colour frame stands for (polarized_share's frames), or None: band_of's name for it.
+"""
+def polarized_band(info):
+    camera = _value(info, "INSTRUMENT_ID", "")
+    if not polarized_share(info, camera):
+        return None
+    import stacking
+    names = _filters_of(info)
+    return stacking._sets_passes().polarized_filter(camera, names[0], names[1])
+
+
+_polarized = None   # the frame ids stacking.load_index reads as polarized colour frames (polarized_share)
 
 
 """
@@ -1699,9 +1707,10 @@ def mix_display(rgb, mix, gamma=2.2, shoulder=SHOULDER):
 A frame's color filter ("RED", "CB2", "BL1/GRN"...), the filters other than the clear ones, as reel.colour_filter
 """
 def band_of(info):
-    if polarized_share(info, _value(info, "INSTRUMENT_ID", "")):
-        # a polarized colour frame is its colour filter's (sets_passes.polarized_index)
-        return _filters_of(info)[1]
+    band = polarized_band(info)
+    if band:
+        # a polarized colour frame is its band's (sets_passes.polarized_index)
+        return band
     return "/".join(f for f in _filters_of(info) if not f.startswith("CL")) or "CL1/CL2"
 
 
