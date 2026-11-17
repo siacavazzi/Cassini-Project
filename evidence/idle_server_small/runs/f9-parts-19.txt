@@ -1,0 +1,54 @@
+    0.0 s        11 MB  start
+    0.3 s        49 MB    in <module>:34 < <module>:59 < <module>:246
+    1.6 s       177 MB  imported
+    1.7 s       177 MB  zip index
+    1.7 s       177 MB  27 highlights
+    5.6 s       880 MB    in _row_of:215 < unit_of:1304 < mosaic_webp:10406 < _thumb_mosaic:875 < pick_thumb:891 < make:932 < _make_file:350
+   10.7 s      1269 MB    in sky_to_surface:242 < _plane_seen:276 < ring_masks:329 < ring_redrawn:4730 < surface_pictures:4538 < layout:5931 < mosaic_webp:10425
+   15.9 s      1302 MB    in sky_to_surface:242 < _plane_seen:276 < ring_masks:329 < ring_redrawn:4730 < surface_pictures:4538 < layout:5931 < mosaic_webp:10425
+   21.1 s      1346 MB    in ring_redrawn:4740 < surface_pictures:4538 < layout:5931 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+   26.2 s      1501 MB    in got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   31.4 s      1642 MB    in ring_plane:254 < got:4046 < _tile_ring_samples:3666 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+   36.5 s      1509 MB    in _tile_ring_samples:3669 < ring_places:3720 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891
+   41.7 s      1694 MB    in _ring_profile:3682 < prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+   46.8 s      1453 MB    in _ring_profile:3682 < prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+   52.0 s      1453 MB    in prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   57.2 s      1147 MB    in _ring_detail:3646 < _profile_ncc:3690 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+   62.4 s      1147 MB    in prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   67.6 s      1147 MB    in _ring_profile:3682 < prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+   72.7 s      1147 MB    in _ring_profile:3682 < prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+   77.9 s      1147 MB    in prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   83.1 s      1147 MB    in prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   88.2 s      1147 MB    in prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   93.4 s      1147 MB    in prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+   98.6 s      1147 MB    in _ring_profile:3682 < prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+  103.7 s      1147 MB    in prof:3730 < <lambda>:3748 < ring_places:3759 < ring_moves:3816 < layout:5945 < mosaic_webp:10425 < _thumb_mosaic:875
+  108.9 s      1147 MB    in _ring_profile:3682 < prof:3730 < <lambda>:3748 < ring_places:3753 < ring_moves:3816 < layout:5945 < mosaic_webp:10425
+  114.0 s      1381 MB    in ring_plane:254 < got:4046 < ring_pair_shift:3907 < ring_pair_parts:4010 < measure:5096
+  114.0 s      1381 MB    in _lit:3498 < <listcomp>:3579 < edge_shift:3579 < measure:5104
+  114.0 s      1381 MB    in global_places:5114 < panel_places:4780 < layout:5948 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+  119.2 s      1314 MB    in ring_pair_shift:3908 < ring_pair_parts:4010 < measure:5096
+  119.2 s      1314 MB    in edge_shift:3575 < measure:5104
+  119.2 s      1314 MB    in global_places:5114 < panel_places:4780 < layout:5948 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+  124.3 s      1322 MB    in ring_plane:263 < got:4046 < ring_pair_shift:3907 < measure:5100
+  124.3 s      1322 MB    in sky_to_surface:232 < ring_plane:262 < got:4046 < ring_pair_shift:3907 < ring_pair_parts:4010 < measure:5096
+  124.3 s      1322 MB    in global_places:5114 < panel_places:4780 < layout:5948 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+  129.4 s      1316 MB    in _lit:3498 < <listcomp>:3579 < edge_shift:3579 < measure:5104
+  129.4 s      1316 MB    in ring_pair_shift:3908 < ring_pair_parts:4010 < measure:5096
+  129.4 s      1316 MB    in global_places:5114 < panel_places:4780 < layout:5948 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+  134.6 s      1317 MB    in ring_pair_shift:3908 < measure:5100
+  134.6 s      1317 MB    in sky_to_surface:232 < ring_plane:262 < got:4046 < ring_pair_shift:3907 < ring_pair_shift:3968 < ring_pair_parts:4010 < measure:5096
+  134.6 s      1317 MB    in global_places:5114 < panel_places:4780 < layout:5948 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+  139.8 s      1190 MB    in picture:5023 < limb:5204
+  139.8 s      1190 MB    in sky_to_surface:232 < got:4204 < limb_place:4232 < limb:5205
+  139.8 s      1190 MB    in global_places:5207 < panel_places:4780 < layout:5948 < mosaic_webp:10425 < _thumb_mosaic:875 < pick_thumb:891 < make:932
+  144.9 s      1656 MB    in _field:1069 < <listcomp>:1147 < _blended:1147 < composite:717 < compose:85 < _compose:5559 < make:5784
+  150.1 s      1491 MB    in _levels:927 < _blended:1143 < composite:717 < compose:85 < _compose:5559 < make:5784 < _cached:342
+  155.2 s      2235 MB    in match_gains:253 < held_level:5544 < _compose:5558 < make:5784 < _cached:342 < filter_mosaic:5803 < so_far:6712
+  160.3 s      3799 MB    in _levels:927 < _blended:1143 < composite:717 < compose:85 < _compose:5559 < make:5784 < _cached:342
+  165.5 s      3836 MB    in _levels:995 < _blended:1143 < composite:717 < compose:85 < _compose:5559 < make:5784 < _cached:342
+  170.7 s      4607 MB    in _levels:995 < _blended:1143 < composite:717 < compose:85 < _compose:5559 < make:5784 < _cached:342
+  175.9 s      5124 MB    in _levels:995 < _blended:1143 < composite:717 < compose:85 < _compose:5559 < make:5784 < _cached:342
+  181.0 s      3509 MB    in <listcomp>:607 < _normed:607 < _bands_blended:617 < _blended:1181 < composite:717 < compose:85 < _compose:5559
+  182.8 s      2003 MB  thumb 19 mosaic W1859483408_1: 181 s, +1826 MB, peak so far 5560 MB; {"picked": "mosaic", "id": "W1859483408_1", "tiles": 93}
+  182.8 s      2003 MB  DONE thumbs: peak 5560 MB

@@ -1,0 +1,27 @@
+heavy: queued behind earlier waiters (deepopt: idle server footprint)
+heavy: got 2 slots after 8253 s
+04:21:22 before
+Traceback (most recent call last):
+  File "/Users/samiacavazzi/cassini-build/deepopt/prof/idle_watch.py", line 112, in <module>
+    os.killpg(p.pid, signal.SIGTERM); time.sleep(3); os.killpg(p.pid, signal.SIGKILL)
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted
+04:36:26 parts
+parts exit 0
+04:56:28 after
+Traceback (most recent call last):
+  File "/Users/samiacavazzi/cassini-build/deepopt/prof/idle_watch.py", line 112, in <module>
+    os.killpg(p.pid, signal.SIGTERM); time.sleep(3); os.killpg(p.pid, signal.SIGKILL)
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted
+04:59:53 parts after
+parts after exit 0
+05:00:39 built pass
+prebuild exit 1
+cp: /Users/samiacavazzi/cassini-build/deepopt/runs/idle/cache-built: No such file or directory
+cp: /Users/samiacavazzi/cassini-build/deepopt/runs/idle/cache-built: No such file or directory
+16f1e7c519877252e19c47078769b740b5362aa3  /Users/samiacavazzi/cassini-build/deepopt/runs/idle/thumb-built-before.webp
+shasum: /Users/samiacavazzi/cassini-build/deepopt/runs/idle/thumb-built-after.webp: No such file or directory
+built-pass thumbnail: DIFFERENT
+05:01:26 done
+IDLE HEAVY DONE

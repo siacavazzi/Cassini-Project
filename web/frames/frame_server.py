@@ -968,14 +968,21 @@ def _count(v):
 
 
 def _thumb_mosaic(frame_id, size, cache):
-    """(WebP, report) of the mosaic the camera windows' route answers for frame_id, or None; nothing made ahead"""
+    """(WebP, report) of the picture the camera windows show of frame_id's pass at that frame (a mosaic's mosaic
+    so far, a mosaic movie's picture), shrunk from one the cache already holds (obs_mosaic.kept_webp), or None.
+    A thumbnail draws nothing: the Highlights thumbnails are made as the server starts (warm_thumbs), in a server
+    nobody has asked for anything, and the mosaic route as a window asks it composes a pass's mosaic from its
+    tiles when the cache does not hold it at the thumbnail's size, and plans and draws a pass the cache does not
+    hold at all. A pass that is not built gives None, and its thumbnail is its colour set or its frame
+    (pick_thumb)."""
     reel.target_of()   # the mosaic route's index, so the answer never depends on how long the server has been up
-    made = obs_mosaic.mosaic_webp(frame_id, size, cache, _mosaic_slots, ahead=0)
+    made = obs_mosaic.kept_webp(frame_id, size, cache)
     if made:
         return made
-    # a movie plays as frames: no rolling mosaic either, as on the mosaic route
+    # a movie plays as frames; and for a mosaic pass or mosaic movie whose picture the cache does not hold, no
+    # reel mosaic of its frames is drawn in its place either
     found = obs_mosaic.unit_of(frame_id)
-    if found and found[0]["movie"]:
+    if found and (found[0]["movie"] or found[0]["mosaic"]):
         return None
     found = reel.mosaic_of(frame_id)
     return reel.shot_webp(*found, size, cache, True, _mosaic_slots) if found else None
@@ -999,9 +1006,10 @@ def pick_thumb(hint, size, cache):
             return color_webp(hint["color"], size, cache)[0], {"picked": "color", "ids": hint["color"]}
         except FileNotFoundError:
             pass
-    if hint.get("frame"):
+    # (a highlight with no frame hint: the frame its mosaic hint names, so it always has a thumbnail)
+    for frame_id in dict.fromkeys(f for f in (hint.get("frame"), hint.get("mosaic")) if f):
         try:
-            return webp(hint["frame"], size, cache), {"picked": "frame", "id": hint["frame"]}
+            return webp(frame_id, size, cache), {"picked": "frame", "id": frame_id}
         except FileNotFoundError:
             pass
     return None
@@ -1090,8 +1098,14 @@ def warm_icons(site, cache):
 
 
 def warm_site(site, cache):
-    warm_thumbs(site, cache)
-    warm_icons(site, cache)
+    """The Highlights thumbnails and the bodies' folder pictures the cache lacks, made as the server starts. What
+    their frames' calibration kept for a next frame (calibration.let_go: up to 0.5 GB of tables) is let go at the
+    end, so a server nobody asks anything of does not hold it; a frame asked for later makes its tables again."""
+    try:
+        warm_thumbs(site, cache)
+        warm_icons(site, cache)
+    finally:
+        calibration.let_go()
 
 
 def warm_prebuild():

@@ -11746,6 +11746,58 @@ def _made_through(u, n, cache):
     return min(j, n)
 
 
+def planned(u, cache):
+    """Whether the pass has its plan in this cache (in memory, or its plan file): it was built, or a window asked
+    for it, under this code's versions. Without one, plan() reads the pass's frames and draws a tile."""
+    return _record(u, cache) is not None or os.path.exists(_plan_path(u, cache))
+
+
+KEPT_SIZES = (512, 1024)   # the sizes the pre-build keeps a pass's pictures at, the smaller first
+
+
+def kept_webp(frame_id, size, cache):
+    """(WebP, report) of the picture a camera window shows of frame_id's pass at that frame, taken from a picture
+    the cache ALREADY holds and shrunk to size: a mosaic pass's mosaic so far, a mosaic movie's picture
+    (rolling_layout, the time-lapse a window opens on). None when the pass is neither, has no plan in the cache
+    (planned), has a tile up to that frame that is not made, or holds the picture at none of size and KEPT_SIZES.
+
+    Nothing is drawn here: no frame is processed, no tile made, no mosaic composed, nothing started in the
+    background. For a caller no window waits on, the Highlights thumbnails the server makes as it starts
+    (frame_server.warm_thumbs). mosaic_webp at a thumbnail's size composed the pass's whole mosaic from its tiles
+    (so_far), a picture no build keeps at that size, and for a mosaic movie none at any: the 728-frame north
+    polar movie (193SA NPOLMOV001) took 10 GB in 50 s that way and never finished, in a server nobody had asked
+    for anything, again at every start (2026-11-17, the full build's preview: 42 to 61 GB on a 24 GB Mac)."""
+    found = unit_of(frame_id)
+    if not found or not found[0]["mosaic"] or found[1] < 0:
+        return None
+    u, n = found
+    if not planned(u, cache):
+        return None
+    p = plan(u, cache)
+    if not all(_has_tile(u, j, cache, p) for j in range(n + 1)):
+        return None   # (a layout would make the tiles it lacks)
+    movie = u.get("kind") == "mosaic_movie"
+    with _asking():
+        made = rolling_layout(u, n, cache, 1, made_only=True) if movie else layout(u, n, cache)
+    if not made:
+        return None
+    where = _rolling_path if movie else _mosaic_path
+    for kept in dict.fromkeys((size, *(z for z in KEPT_SIZES if z > size))):
+        path = where(u, made, kept, cache)
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as fh:
+            data = fh.read()
+        if kept != size:
+            im = Image.open(io.BytesIO(data))
+            im.thumbnail((size, size), Image.LANCZOS)
+            buf = io.BytesIO()
+            reel.save_webp(im, buf, quality=QUALITY, method=4)
+            data = buf.getvalue()
+        return data, reel.report_of(path[:-len("webp")] + "json", {})
+    return None
+
+
 _asked = [0]   # mosaics a window is waiting for right now: work made ahead waits while there are any
 
 

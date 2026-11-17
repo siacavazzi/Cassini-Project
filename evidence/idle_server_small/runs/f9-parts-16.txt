@@ -1,0 +1,21 @@
+    0.0 s        11 MB  start
+    0.3 s        54 MB    in <module>:35 < <module>:59 < <module>:246
+    1.2 s       178 MB  imported
+    1.2 s       178 MB  zip index
+    1.2 s       178 MB  27 highlights
+    5.4 s      1142 MB    in <lambda>:1960 < fill_saturated:1965 < colour_picture:6638 < so_far:6710 < kept:6682 < make:10598 < _cached:342
+   10.6 s      2780 MB    in _part:5853 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   15.7 s      3925 MB    in _part:5854 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   20.9 s      4637 MB    in _subpixel:8259 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+   26.1 s      5021 MB    in _part:5853 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   31.3 s      5652 MB    in _shade:1985 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   36.4 s      6710 MB    in _part:5853 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   41.6 s      7921 MB    in _subpixel:8265 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712
+   46.8 s      9303 MB    in _part:5854 < _window:5471 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682
+   50.1 s     10076 MB  STOPPED: footprint over the cap of 10 GB; what holds it:
+  thread in _subpixel:8266 < _subpixel_at:8280 < _window:5473 < make:5769 < _cached:342 < filter_mosaic:5803 < so_far:6712 < kept:6682 < make:10598 < _cached:342 < _make_mosaic:10630 < _mosaic_at:10557
+  live numpy arrays: 8, 0 MB owned (footprint 10079 MB)
+        266 MB  obs_mosaic._parts  (OrderedDict, 37 entries, 37 arrays)
+        122 MB  data_source._indexes  (dict, 1 entries, 6 arrays)
+         39 MB  reel._index  (tuple, 2 entries, 9 arrays)
+  largest arrays: 
