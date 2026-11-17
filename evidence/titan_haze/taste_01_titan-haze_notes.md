@@ -1,0 +1,8 @@
+# Taste call 1 follow-up: Titan's haze looked harsh (Sam, 11-17)
+
+Cause in stills and color sets: the noise-aware fine sharpening raised a faint 2-pixel grid along Titan's soft haze edge. The fix leaves Titan out of the fine sharpening; the surface markings in its CB3 frames stay raised inside the haze ring. The 133TI movie's harder orange haze edge is a separate change in the movie path (not sharpening), being traced by the build thread.
+
+- taste_01_titan-haze_ti133s_1.jpg: Titan 133TI CLOUD002, single CB3 frame (2010). Left: today; middle: the integration build now (#495 + #530 sharpening); right: the fix, Titan skips the fine sharpening (surface detail inside the haze ring kept). Top whole picture, bottom 1:1 crop at the limb.
+- taste_01_titan-haze_ti133c_2.jpg: Titan 133TI CLOUD002, CB3 color set (2010). Left: today; middle: the integration build now (#495 + #530 sharpening); right: the fix, Titan skips the fine sharpening (surface detail inside the haze ring kept). Top whole picture, bottom 1:1 crop at the limb.
+- taste_01_titan-haze_ti04c_3.jpg: Titan's haze crescent, WAC color set (2004). Left: today; middle: the integration build now (#495 + #530 sharpening); right: the fix, Titan skips the fine sharpening (surface detail inside the haze ring kept). Top whole picture, bottom 1:1 crop at the limb.
+- taste_01_titan-haze_ti17c_4.jpg: Titan close-up, CB3 + MT1 pair (2017). Left: today; middle: the integration build now (#495 + #530 sharpening); right: the fix, Titan skips the fine sharpening (surface detail inside the haze ring kept). Top whole picture, bottom 1:1 crop at the limb.
