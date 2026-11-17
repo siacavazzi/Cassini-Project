@@ -241,6 +241,8 @@ def check_flat_fix():
     return FIX
 
 
+# (kept from frame to frame: calibration.let_go lets it go once a pass's tiles are made; a maker kept like this
+# belongs in its list)
 @functools.lru_cache(maxsize=24)
 def _map(name, mode):
     fixed = os.path.join(FIX, "flat", f"{name}.{mode}.npy")
@@ -277,6 +279,8 @@ def correction(info):
     return _correction(flat, dust, aboff, strength, mode)
 
 
+# (kept from frame to frame: calibration.let_go lets it go once a pass's tiles are made; a maker kept like this
+# belongs in its list)
 @functools.lru_cache(maxsize=32)
 def _correction(flat, dust, aboff, strength, mode):
     out = None
