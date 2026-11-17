@@ -5981,6 +5981,9 @@ def sharpens(scale):
 
 
 SATURN_LOOK = {"detail": 2.0, "on_base": 0.6, "sigma": 0.6, "nodisk": True}
+                    # TO TURN THE LOOK OFF (Sam, 11-17: kept, "might want to revert this later, it's a trade-off"): set
+                    # SATURN_LOOK = {}. Saturn's passes and pictures then lose the SATURN_TAG suffix and the cache serves
+                    # the pictures made without the look (still kept under their old names); nothing else changes
                     # Saturn's atmosphere (saturn_look): local contrast this strong (detail) on its lit pixels, over sigma
                     # times DETAIL_SIGMA, so belts, storms and vortices show at today's brightness (option L, 11-16). The
                     # first pick, option C, also gave the white 1.25x "headroom" (the disk's bright half had been rolled
