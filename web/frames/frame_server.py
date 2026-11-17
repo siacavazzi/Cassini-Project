@@ -2300,6 +2300,9 @@ def main():
         data_source.check_originals()
     except Exception as e:   # (OriginalsMissing, or a manifest it can't read: a preview starts all the same)
         print(f"WARNING: {e}. Pictures drawn here are not the rebuild's: keep this cache apart from it", flush=True)
+    # frames stored with other pointing than this code's worked out again before the index is read (refresh_stale)
+    import bootleg_autonav
+    bootleg_autonav.refresh_stale()
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of), and Pre-process its filter sets (warm_prebuild); made now rather than on
     # the first request
