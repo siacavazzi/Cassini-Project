@@ -636,7 +636,12 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             codes = ds.imread(l.export(), cv2.IMREAD_GRAYSCALE)
             # calibrated from its stored values at full depth (cal.depth_image), not from the display copy (image,
             # gray: 255 levels over the frame's range, for lining the repeats up and marking what the camera saturated)
-            iof = cal.calibrate(codes, info, cal.depth_image(codes, info))
+            if cal.summing_of(info) > 1:
+                # (a summed frame's lost pixels bridged before it is enlarged, cal.enlarged: its lost lines are filled
+                # only after the merge)
+                iof = cal.calibrate(codes, info, cal.depth_image(codes, info), lost=~l.valid_mask(camera=True))
+            else:
+                iof = cal.calibrate(codes, info, cal.depth_image(codes, info))
         except Exception as e:
             print(f"Skipping repeat {p}: {e}")
             continue

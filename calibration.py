@@ -594,7 +594,9 @@ Calibrates one frame to I/F. Returns None if the frame can't be calibrated.
 png = the frame's PNG as stored in the dataset
 image = optional image on the same scale as png to calibrate instead (see unstretch)
 """
-def calibrate(png, info, image=None, smooth=True):
+def calibrate(png, info, image=None, smooth=True, lost=None):
+    # lost: for a summed frame whose picture still has the pixels it lost in downlink as stored (not filled yet), those
+    # pixels at the camera's own size (label.valid_mask(camera=True), inverted): bridged before the frame is enlarged
     camera = _value(info, "INSTRUMENT_ID", "")
     names = _filters_of(info)
     if any(name.startswith(("P", "IRP")) for name in names):
@@ -731,11 +733,127 @@ def calibrate(png, info, image=None, smooth=True):
     share = polarized_share(info, camera)
     if share:
         per_second /= share
+    # a summed frame drawn at the picture's size comes this far as blocks, each of the camera's pixels repeated (every
+    # step above works camera pixel by camera pixel on them): now enlarged smoothly from the camera's own pixels
+    per_second = enlarged(per_second, info, lost, clipped_codes(png, info))
     # CISSCAL's step 11, the WAC's geometric distortion and per-filter focal length (geometric_correction.py; the
     # "geom" step), last as in CISSCAL: the frame resampled onto one straight grid for every filter
     if step("geom"):
         per_second = gc.correct(per_second, info)
     return per_second
+
+
+SUMMED_ENLARGE = cv2.INTER_CUBIC   # how a summed frame's calibrated picture is enlarged from the camera's own pixels
+                                   # (enlarged): bicubic. Sam's taste call 23 (2026-11-17), of three shown on nine frames:
+                                   # each camera pixel a 2x2 or 4x4 block (as it was: stair steps along every limb and
+                                   # ring edge, plain at 4x4), bilinear (soft), bicubic (C: keeps a little more edge
+                                   # contrast, and goes slightly past its neighbors' brightness on 0.5 to 2% of pixels)
+
+
+"""
+A summed frame's calibrated picture enlarged smoothly. The camera summed its pixels 2x2 or 4x4 (512 or 256 lines:
+181,430 frames, 41% of the archive), and the picture is drawn at 1024 px with each camera pixel repeated as a block
+(depth_image, label.resize_image), which is what the calibration above works on: the bias and dark per camera line, hot
+pixels and lost lines per camera pixel (enlarged smoothly before them, the repairs left short streaks). Here, after all
+of them and before the geometric correction, the blocks are taken back to the camera's own pixels (each block's mean:
+the flat field and the smoothing above vary inside one) and enlarged with SUMMED_ENLARGE. A frame at its own size (the
+science TIFF's, a full size frame) is left as it is. Masks kept beside a frame (lost, saturated pixels) stay block shaped,
+and the lost and the saturated pixels themselves keep the values they had: only what the camera measured is enlarged.
+iof = the calibrated frame (2-D), info = its label; lost, clipped = its lost and its saturated pixels at the camera's
+own size (label.valid_mask(camera=True) inverted, clipped_codes), or None
+"""
+def enlarged(iof, info, lost=None, clipped=None):
+    s = summing_of(info)
+    h, w = iof.shape[:2]
+    if s <= 1 or iof.ndim != 2 or h % s or w % s or h != s * int(_value(info, "LINES", "0") or 0):
+        return iof
+    small = np.ascontiguousarray(iof).reshape(h // s, s, w // s, s).mean(axis=(1, 3))
+    gone = None
+    if lost is not None and np.shape(lost) == small.shape and np.any(lost):
+        # the pixels lost in downlink (zeros, or garbage after a lost packet) bridged first: enlarged with them, a lost
+        # line bled two camera pixels into the rows on each side of it, which the line fill that comes later (on
+        # the picture, with its block shaped mask) does not reach (the Iapetus 049IA mosaic: a band of streaks)
+        gone = np.asarray(lost, bool)
+        small = bridged(small, gone)
+    out = cv2.resize(small, (w, h), interpolation=SUMMED_ENLARGE)
+    if clipped is not None and np.shape(clipped) == small.shape and np.any(clipped):
+        # what the camera saturated is not a measurement, and enlarged with its neighbors it would put part of its
+        # clipped value into them (the masks kept beside the frame are block shaped: a pixel beside a blown-out one
+        # then reads half blown and counts as measured; the Grand Finale ring mosaics' clipped patches changed).
+        # So the saturated camera pixels and the SUMMED_CLIPPED_NEAR round them (as far as the enlargement reaches)
+        # stay as they were, blocks, fading into the enlarged picture over one camera pixel more
+        side = 2 * (SUMMED_CLIPPED_NEAR + 1) + 1
+        near = cv2.dilate(np.asarray(clipped, np.uint8), np.ones((side, side), np.uint8)).astype(np.float32)
+        keep = np.clip(cv2.resize(near, (w, h), interpolation=cv2.INTER_LINEAR), 0, 1)
+        out = keep * iof + (1 - keep) * out
+    if gone is not None:
+        # and the lost pixels themselves keep what they held (their blocks, as in a frame not enlarged): the bridge is
+        # only there so that they do not bleed. Left bridged they changed what is measured on the frame before its
+        # fills: a pass's black sits over its sky's fine structure (obs_mosaic.pass_scale's sky_tops), which counts
+        # the lost pixels too, and without them it fell by a quarter to a half on the 4x4 filters of the Grand Finale
+        # ring mosaics (269RI HIPHASEFB001: VIO 3.4e-4 to 1.5e-4, IR3 2.8e-4 to 2.1e-4), so the mosaic drew 14% brighter
+        # with its faint rings and their seams lifted. With their own values back it is within 1% of what it was
+        out = np.where(np.repeat(np.repeat(gone, s, 0), s, 1), iof, out)
+    return out.astype(iof.dtype, copy=False)
+
+
+SUMMED_CLIPPED_NEAR = 2   # camera pixels round a saturated one left as blocks (enlarged): the bicubic's reach
+
+
+"""
+The pixels of a frame's stored codes the camera saturated, at the codes' own size and as the frame was taken (saturated's
+test on the codes, not moved by the geometric correction, which comes after enlarged), or None when codes is not the
+frame's stored picture (a 2-D array)
+"""
+def clipped_codes(codes, info):
+    codes = np.asarray(codes)
+    if codes.ndim != 2 or not codes.size:
+        return None
+    if ds.lut8() and _value(info, "DATA_CONVERSION_TYPE", "") in ("TABLE", "12BIT"):
+        top = 4095 if _value(info, "DATA_CONVERSION_TYPE", "") == "12BIT" else 255
+        low, high = stored_range(codes, info)
+        if high < top:
+            return np.zeros(codes.shape, bool)
+        if low >= top:
+            return np.ones(codes.shape, bool)
+        return codes >= 250
+    return codes >= 254
+
+
+"""
+values (2-D) with its lost pixels (lost: True where lost) bridged down their columns: each from the nearest kept
+pixels above and below it, in proportion to how near each is (the one there is, at a frame's top or bottom). A column
+with nothing kept (a summed frame's first and last: label.valid_mask always counts them lost) is bridged along its
+rows the same way, from the nearest pixels left and right that are kept or were bridged down their columns. (It took
+the kept pixels' median: where a ring or a limb crosses the frame's edge that is the sky's value, and enlarged it put
+a band 1 to 2 camera pixels wide, a fifth to a third too dark and then a tenth too bright, down the valid pixels beside
+each edge: PR 566's review.) Only so they do not bleed when the frame is enlarged (enlarged): the picture's own fills
+(image_correction.fill_lines, fill_invalid) still take them as lost and fill them their way.
+"""
+def bridged(values, lost):
+    kept = ~np.asarray(lost, bool)
+    if not kept.any():
+        return values
+    fill, found = _bridged_down(values, kept)
+    if not found.all():
+        # (every row has a pixel found: a kept pixel's whole column is)
+        across, _ = _bridged_down(fill.T, found.T)
+        fill = np.where(found, fill, across.T)
+    return np.where(kept, values, fill)
+
+
+def _bridged_down(values, kept):
+    # (values with each pixel not kept taken down its column from the nearest kept ones, whether its column has one)
+    h, w = values.shape
+    rows = np.arange(h)[:, None]
+    cols = np.broadcast_to(np.arange(w), (h, w))
+    up = np.maximum.accumulate(np.where(kept, rows, -1), axis=0)                    # the nearest kept row above
+    down = np.minimum.accumulate(np.where(kept, rows, h)[::-1], axis=0)[::-1]       # ... and below
+    above, below = up >= 0, down < h
+    a, b = values[np.clip(up, 0, h - 1), cols], values[np.clip(down, 0, h - 1), cols]
+    t = (rows - up) / np.maximum(down - up, 1)
+    fill = np.where(above & below, a + (b - a) * t, np.where(above, a, b))
+    return np.where(kept, values, fill), above | below
 
 
 """
@@ -1882,7 +2000,13 @@ def calibrated_each(labels, images, iofs=None, deep=None):
     for lbl, image, iof, picture in zip(labels, images, given, deep):
         if iof is None:
             png = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE)
-            iof = calibrate(png, lbl.get_info(), depth_image(png, lbl.get_info()) if picture is None else picture)
+            info = lbl.get_info()
+            if picture is None and summing_of(info) > 1:
+                # (a summed frame's own stored values still have what it lost in downlink, bridged before it is
+                # enlarged; a picture given is filled already)
+                iof = calibrate(png, info, depth_image(png, info), lost=~lbl.valid_mask(camera=True))
+            else:
+                iof = calibrate(png, info, depth_image(png, info) if picture is None else picture)
         iofs.append(iof)
     return iofs
 
