@@ -8,6 +8,11 @@ Optional: COLOUR_SMOOTH_REAL=<folder of color pictures in play order> runs the c
 Run: python web/test_colour_smooth.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames")]
 import glob, json, subprocess, tempfile  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 import colour_smooth as C  # noqa: E402
@@ -33,7 +38,7 @@ def body(tint, seed, size=300):
 
 def in_node(pictures, strength):
     """The page's palettes, wants (SPAN either side) and smoothed bytes of the pictures in play order."""
-    tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+    tmp = tempfile.mkdtemp()
     for i, a in enumerate(pictures):
         open(f"{tmp}/{i}.raw", "wb").write(a.tobytes())
     js = ("const fs = require('fs');\nconst window = {};\n" + script + "\nconst M = window.cassiniColourSmooth.math, SPAN = window.cassiniColourSmooth.SPAN;\n"

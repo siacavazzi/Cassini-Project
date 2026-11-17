@@ -711,6 +711,7 @@ body.idle.pinned #app .camwin { opacity: 1; pointer-events: auto; }
 .wmopt span { color: var(--q-dim); font-size: 10px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wmopt i { font-style: normal; color: var(--q-accent); } .wmopt[aria-checked="true"] i::before { content: "✓"; }
 .wmopt[aria-checked="true"] { color: #fff; }
+.wmopt:disabled { opacity: .38; } .wmopt:disabled:hover { background: none; color: inherit; }
 .wmopt:hover, .wmset:hover, .wmopt:focus-visible, .wmset:focus-visible { background: rgba(138,182,255,.16); color: #fff; outline: none; }
 .wmfoot { border-top: 1px solid var(--q-line); margin-top: 4px; padding-top: 4px; }
 .wmset { display: block; color: var(--q-dim); }
@@ -2248,7 +2249,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     <div id="exsum"></div>
     <div class="exrow"><span>Cameras</span><div class="exseg" id="excams"><button data-v="NW">Both</button><button data-v="N">NAC</button><button data-v="W">WAC</button></div></div>
     <div class="exrow"><span>Frame rate</span><label class="chk"><input type="checkbox" id="exauto"> Adaptive</label><input type="range" id="exfps" min="2" max="30" step="1" aria-label="Pictures per second"><span class="val" id="exfpsv"></span></div>
-    <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="5" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
+    <div class="exrow"><span>Picture size</span><input type="range" id="exsize" min="0" max="3" step="1" aria-label="Picture size per camera"><span class="val" id="exsizev"></span></div>
     <div class="exrow"><span></span><label class="chk"><input type="checkbox" id="exsound"> Sound</label><label class="chk"><input type="checkbox" id="excap"> Captions</label><label class="chk" id="exboomw" title="Play the movie forward, then back to its first picture"><input type="checkbox" id="exboom"> Boomerang</label><label class="chk" title="HDR video (HDR10): highlights brighter than white on an HDR screen"><input type="checkbox" id="exhdr"> HDR</label></div>
     <div class="exrow"><button class="exbtn go" id="exgo" disabled>Export</button><button class="exbtn" id="exclear">Clear marks</button><button class="exbtn" id="exedit" title="Pick the frames and the look of this movie (Movie Editor)">Edit frames…</button><span id="exstate"></span></div>
     <div id="exbar"><i></i></div>
@@ -3395,16 +3396,18 @@ body.ambient.phone .amb-where { font-size: 18px; }
     }
     // obs_mosaic._place's corner of tile a in the canvas (k at OUT), at place o
     const corner = (t, a, o) => [pyRound((o[0] + t.box[a][0] - t.view[0]) * t.k), pyRound((o[1] + t.box[a][1] - t.view[1]) * t.k)];
-    // how far frame a's tile moves from SPICE's place to its stabilized one, canvas pixels
-    function shift(t, pl, a) {
+    // how far frame a's tile moves from where the served frame has it to its stabilized place, canvas pixels: from
+    // SPICE's place, or, for a pass the server stabilizes by default (the table's "auto", obs_mosaic.auto_steady: its
+    // pre-built frames are drawn at that smoothing), from its places at that smoothing (base)
+    function shift(t, pl, a, base) {
       if (!pl) return [0, 0];
-      const s = corner(t, a, t.spice[a]), p = corner(t, a, pl[a]);
+      const s = corner(t, a, base ? base[a] : t.spice[a]), p = corner(t, a, pl[a]);
       return [p[0] - s[0], p[1] - s[1]];
     }
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
     // Gaussian-weighted line over smooth frames (_gaussian_line), the rolling scale (rolled), the gain to that line within
     // GAIN either way, to 1/200
-    function evenedGains(L, smooth, c) {
+    function evenedTargets(L, smooth, c) {
       const N = L.length, h = Math.floor(c.flash / 2), pad = [];
       for (let k = 0; k < h; k++) pad.push(L[0]);
       pad.push(...L);
@@ -3430,11 +3433,34 @@ body.ambient.phone .amb-where { font-size: 18px; }
       let mid = 0;
       for (const v of want) mid += v;
       mid /= N;
-      const out = [];
+      const target = [];
       for (let a = 0; a < N; a++) {
         const dev = want[a] - mid, roll = c.roll || 0, free = c.free || 0;
-        const w = want[a] - roll * Math.sign(dev) * Math.max(Math.abs(dev) - free, 0);
-        out.push(pyRound(Math.min(Math.max(Math.exp(w - L[a]), 1 / c.gain), c.gain) * 200) / 200);
+        target.push(want[a] - roll * Math.sign(dev) * Math.max(Math.abs(dev) - free, 0));
+      }
+      return target;
+    }
+    // obs_mosaic._evened_gain: the gain that takes a log brightness to the one wanted
+    const evenedGain = (own, want, c) => pyRound(Math.min(Math.max(Math.exp(want - own), 1 / c.gain), c.gain) * 200) / 200;
+    function evenedGains(L, smooth, c) {
+      const target = evenedTargets(L, smooth, c);
+      return L.map((own, a) => evenedGain(own, target[a], c));
+    }
+    // obs_mosaic.held_gains: one gain for each picture, frames in a row that show the same picture (a held color set:
+    // the same log brightness) taking the mean of what evenedGains wants for them. A server whose frames are named
+    // by a rule before 10 evens frame by frame (c.held false or missing): the page then does as its frames were made
+    function heldGains(L, smooth, c) {
+      if (!c.held) return evenedGains(L, smooth, c);
+      const target = evenedTargets(L, smooth, c), out = [];
+      for (let k = 0; k < L.length;) {
+        let j = k;
+        while (j + 1 < L.length && L[j + 1] === L[k]) j++;
+        let want = 0;
+        for (let a = k; a <= j; a++) want += target[a];
+        want /= j + 1 - k;
+        const g = evenedGain(L[k], want, c);
+        for (let a = k; a <= j; a++) out.push(g);
+        k = j + 1;
       }
       return out;
     }
@@ -3446,7 +3472,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       for (const n of ns) { const k = e.logs[n][1]; if (!by.has(k)) by.set(k, []); by.get(k).push(n); }
       for (const [k, run] of by) if (inColour && !e.logs[run[0]][2] && run.length < e.greyRun) { for (const n of run) out[n] = 1.0; by.delete(k); }
       for (const run of by.values()) {
-        const g = run.length >= e.flash ? evenedGains(run.map(n => e.logs[n][0]), smooth, e) : run.map(() => 1.0);
+        const g = run.length >= e.flash ? heldGains(run.map(n => e.logs[n][0]), smooth, e) : run.map(() => 1.0);
         run.forEach((n, i) => { out[n] = g[i]; });
       }
       return out;
@@ -3456,13 +3482,26 @@ body.ambient.phone .amb-where { font-size: 18px; }
       const t = new Uint8Array(256);
       const dec = v => gamma === "srgb" ? (v <= 0.04045 ? v / 12.92 : Math.pow((Math.max(v, 0.04045) + 0.055) / 1.055, 2.4)) : Math.pow(v, gamma);
       const enc = x => gamma === "srgb" ? (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0.0031308), 1 / 2.4) - 0.055) : Math.pow(x, 1 / gamma);
-      for (let i = 0; i < 256; i++) t[i] = Math.trunc(enc(Math.min(Math.max(dec(i / 255) * g, 0), 1)) * 255 + 0.5);
+      for (let i = 0; i < 256; i++) {
+        const v = i / 255;
+        let lin = enc(Math.min(Math.max(dec(v) * g, 0), 1));
+        if (g < 1.0) {
+          // a gain under 1 leaves white white: a clipped level (CLIP_FROM, 240, and up, eased in to 255) keeps its
+          // brightness, as _shade does (the sun's glare in 028RG HIPHASE002 dimmed to a flat grey blob)
+          const w = Math.min(Math.max((v * 255 - 240) / (255 - 240), 0), 1);
+          lin = lin + w * w * (3 - 2 * w) * (v - lin);
+        }
+        t[i] = Math.trunc(lin * 255 + 0.5);
+      }
       return t;
     }
     // obs_mosaic.colour_picture on its planes (RGBA, each a filter's tile placed in the view, red channel = the
     // filter): calibration.mix_display (decode, the 3x3 natural mix, _shoulder's roll-off, encode) in float32 as numpy
-    // does it, then the picture only where every filter has it. c: {mix (3x3, or null: straight), gamma, shoulder}
-    function mix(planes, c) {
+    // does it, then the picture only where every filter has it. c: {mix (3x3, or null: straight), gamma, shoulder,
+    // filters, clip}; W: the planes' width. A two-filter set (its recipe lists the first filter's tile twice): green
+    // the two's mean in linear light (calibration.two_bands). A band clipped where another is not: filled from the
+    // others first (fillClipped), as colour_picture does
+    function mix(planes, c, W) {
       const f = Math.fround, N = planes[0].length, out = new Uint8ClampedArray(N), g = c.gamma, srgb = g === "srgb";
       const gf = srgb ? 0 : f(g), ig = srgb ? 0 : f(1 / g);
       const dec = new Float32Array(256);
@@ -3488,9 +3527,41 @@ body.ambient.phone .amb-where { font-size: 18px; }
         }
         lv = y => { let lo = 0, hi = 255; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (T[mid] <= y) lo = mid; else hi = mid - 1; } return lo; };
       }
-      const x = [0, 0, 0], y = [0, 0, 0];
-      for (let i = 0; i < N; i += 4) {
-        let r0 = planes[0][i], r1 = planes[1][i], r2 = planes[2][i];
+      // the three bands (red channel of each plane) and where every filter has the picture
+      const P = N / 4, rgb = [new Uint8Array(P), new Uint8Array(P), new Uint8Array(P)], alpha = new Uint8Array(P), y = [0, 0, 0];
+      for (let p = 0, i = 0; p < P; p++, i += 4) {
+        rgb[0][p] = planes[0][i]; rgb[1][p] = planes[1][i]; rgb[2][p] = planes[2][i];
+        alpha[p] = Math.min(planes[0][i + 3], planes[1][i + 3], planes[2][i + 3]);
+      }
+      if (c.filters && c.filters.length === 2) {
+        // (colour_picture's two planes: the first, their mean, the second)
+        for (let p = 0; p < P; p++) rgb[1][p] = lv(Math.min(Math.max(f(f(dec[rgb[0][p]] + dec[rgb[2][p]]) / 2), 0), 1));
+      }
+      const [CLIP_FROM] = c.clip || CLIP_DEFAULT;
+      const clipped = rgb.map(b => { const m = new Uint8Array(P); let any = false; for (let p = 0; p < P; p++) if (b[p] >= CLIP_FROM && alpha[p] > 0) { m[p] = 1; any = true; } return any ? m : null; });
+      const same = (a, b) => { if (!a || !b) return a === b; for (let p = 0; p < P; p++) if (a[p] !== b[p]) return false; return true; };
+      if (clipped.some(m => m) && !(same(clipped[0], clipped[1]) && same(clipped[0], clipped[2]))) {
+        const lin = fillClipped(rgb, clipped.map(m => m || new Uint8Array(P)), dec, W, P / W, c.clip || CLIP_DEFAULT);
+        for (let p = 0, i = 0; p < P; p++, i += 4) {
+          const v = [lin.x[0][p], lin.x[1][p], lin.x[2][p]];
+          if (M) for (let k = 0; k < 3; k++) y[k] = f(f(f(M[k][0] * v[0]) + f(M[k][1] * v[1])) + f(M[k][2] * v[2]));
+          else for (let k = 0; k < 3; k++) y[k] = v[k];
+          const top = Math.max(y[0], y[1], y[2]);
+          if (top > knee) {
+            const roll = f(knee + f(room * f(Math.tanh(f(f(top - knee) / room)))));
+            const k = f(roll / Math.max(top, tiny));
+            for (let j = 0; j < 3; j++) y[j] = f(y[j] * k);
+          }
+          if (lin.every && lin.every[p] && rgb[0][p] >= 255 && rgb[1][p] >= 255 && rgb[2][p] >= 255) y[0] = y[1] = y[2] = 1;
+          const a = alpha[p], s = f(a / 255);
+          for (let k = 0; k < 3; k++) out[i + k] = Math.trunc(f(f(lv(Math.min(Math.max(y[k], 0), 1)) * s) + 0.5));
+          out[i + 3] = a;
+        }
+        return out;
+      }
+      const x = [0, 0, 0];
+      for (let i = 0, p = 0; i < N; i += 4, p++) {
+        let r0 = rgb[0][p], r1 = rgb[1][p], r2 = rgb[2][p];
         if (M) {
           x[0] = dec[r0]; x[1] = dec[r1]; x[2] = dec[r2];
           for (let k = 0; k < 3; k++) y[k] = f(f(f(M[k][0] * x[0]) + f(M[k][1] * x[1])) + f(M[k][2] * x[2]));
@@ -3502,11 +3573,165 @@ body.ambient.phone .amb-where { font-size: 18px; }
           }
           r0 = lv(Math.min(Math.max(y[0], 0), 1)); r1 = lv(Math.min(Math.max(y[1], 0), 1)); r2 = lv(Math.min(Math.max(y[2], 0), 1));
         }
-        const a = Math.min(planes[0][i + 3], planes[1][i + 3], planes[2][i + 3]), s = f(a / 255);
+        const a = alpha[p], s = f(a / 255);
         out[i] = Math.trunc(f(f(r0 * s) + 0.5)); out[i + 1] = Math.trunc(f(f(r1 * s) + 0.5)); out[i + 2] = Math.trunc(f(f(r2 * s) + 0.5));
         out[i + 3] = a;
       }
       return out;
+    }
+    // (the table's c.clip: obs_mosaic CLIP_FROM and CLIP_REACH, calibration FILL_NEAR, FILL_FLOOR and FILL_MOST; these
+    // for a table made before it had them)
+    const CLIP_DEFAULT = [240, 1 / 16, 0.05, 99.9, 0.5];
+    // np.percentile (linear) of a float32 array, sorted here in place
+    function percentile(a, q) {
+      a.sort();
+      const n = a.length, v = (n - 1) * (q / 100);
+      let lo = Math.floor(v), hi = lo + 1;
+      const gamma = v - lo;
+      if (v >= n - 1) lo = hi = n - 1;
+      else if (v < 0) lo = hi = 0;
+      const A = a[lo], B = a[hi], d = Math.fround(B - A);
+      return gamma >= 0.5 ? B - d * (1 - gamma) : A + d * gamma;
+    }
+    // np.median of a float32 array (sorted here in place), float32 as numpy has it
+    function median(a) {
+      a.sort();
+      const n = a.length, m = n >> 1;
+      return n % 2 ? a[m] : Math.fround(Math.fround(a[m - 1] + a[m]) / 2);
+    }
+    // cv2.resize(src, (W, H), interpolation=INTER_AREA) of a float32 w x h picture to a smaller one: whole blocks
+    // averaged when the scale is a whole number both ways (resizeAreaFast), else each source pixel's share of the cell
+    // (resizeArea), float32 summed in cv2's order
+    function resizeArea(src, w, h, W, H) {
+      const f = Math.fround, out = new Float32Array(W * H), sx = w / W, sy = h / H;
+      if (sx === Math.round(sx) && sy === Math.round(sy)) {
+        const area = sx * sy, scale = f(1 / area), ofs = [];
+        for (let y = 0; y < sy; y++) for (let x = 0; x < sx; x++) ofs.push(y * w + x);
+        for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
+          const o = Y * sy * w + X * sx;
+          let s = 0, k = 0;
+          for (; k <= area - 4; k += 4) s = f(s + f(f(f(src[o + ofs[k]] + src[o + ofs[k + 1]]) + src[o + ofs[k + 2]]) + src[o + ofs[k + 3]]));
+          for (; k < area; k++) s = f(s + src[o + ofs[k]]);
+          out[Y * W + X] = f(s * scale);
+        }
+        return out;
+      }
+      const tab = (ss, ds, scale) => {
+        const t = [];
+        for (let d = 0; d < ds; d++) {
+          const fs1 = d * scale, fs2 = fs1 + scale, cell = Math.min(scale, ss - fs1);
+          let s2 = Math.min(Math.floor(fs2), ss - 1);
+          const s1 = Math.min(Math.ceil(fs1), s2);
+          if (s1 - fs1 > 1e-3) t.push([d, s1 - 1, f((s1 - fs1) / cell)]);
+          for (let s = s1; s < s2; s++) t.push([d, s, f(1 / cell)]);
+          if (fs2 - s2 > 1e-3) t.push([d, s2, f(Math.min(Math.min(fs2 - s2, 1), cell) / cell)]);
+        }
+        return t;
+      };
+      const xt = tab(w, W, sx), yt = tab(h, H, sy), buf = new Float32Array(W), sum = new Float32Array(W);
+      let prev = yt[0][0];
+      for (const [dy, syi, beta] of yt) {
+        buf.fill(0);
+        for (const [dx, sxi, a] of xt) buf[dx] = f(src[syi * w + sxi] * a + buf[dx]);   // (one rounding: cv2's fused multiply-add)
+        if (dy !== prev) {
+          for (let x = 0; x < W; x++) { out[prev * W + x] = sum[x]; sum[x] = f(beta * buf[x]); }
+          prev = dy;
+        } else for (let x = 0; x < W; x++) sum[x] = f(sum[x] + f(beta * buf[x]));
+      }
+      for (let x = 0; x < W; x++) out[prev * W + x] = sum[x];
+      return out;
+    }
+    // colour_picture's clipped bands, before its mix: each band in linear light (dec), a band clipped (masks, CLIP_FROM
+    // and up) where another is not filled from the others (calibration.fill_saturated, reach CLIP_REACH of the
+    // picture's side), never under what it read unless it clipped over most of the lit picture (mostly_saturated),
+    // eased in from CLIP_FROM to white. {x: the three bands, every: where all three clipped, or null}
+    function fillClipped(rgb, masks, dec, W, H, clip) {
+      const f = Math.fround, P = W * H, [CLIP_FROM, CLIP_REACH, FILL_NEAR, FILL_FLOOR, FILL_MOST] = clip;
+      const x = rgb.map(b => { const o = new Float32Array(P); for (let p = 0; p < P; p++) o[p] = dec[b[p]]; return o; });
+      const top = new Float32Array(P);
+      for (let p = 0; p < P; p++) top[p] = Math.max(x[0][p], x[1][p], x[2][p]);
+      const thr = f(0.2 * percentile(top.slice(), 99)), lit = new Uint8Array(P);
+      let litN = 0;
+      for (let p = 0; p < P; p++) if (top[p] > thr) { lit[p] = 1; litN++; }
+      const mostly = m => { if (!litN) return false; let k = 0; for (let p = 0; p < P; p++) if (m[p] && lit[p]) k++; return k > FILL_MOST * litN; };
+      const reach = CLIP_REACH * Math.max(H, W), q = Math.max(1, Math.trunc(Math.floor(reach / 8))), ws = Math.max(1, Math.floor(W / q)), hs = Math.max(1, Math.floor(H / q));
+      const kern = gaussKernel(reach / q), soft = v => blurCPU(resizeArea(v, W, H, ws, hs), ws, hs, kern);
+      const filled = [];
+      let floorOn = true;
+      x.forEach((c, i) => {
+        const m = masks[i];
+        if (!m.some(v => v)) { filled.push(c); return; }
+        const total = new Float32Array(P), count = new Float32Array(P);
+        x.forEach((o, j) => {
+          if (j === i) return;
+          const n = masks[j], both = new Uint8Array(P);
+          let nb = 0;
+          for (let p = 0; p < P; p++) if (lit[p] && !m[p] && !n[p] && o[p] > 0) { both[p] = 1; nb++; }
+          if (nb < 100) return;
+          const ratios = new Float32Array(nb);
+          for (let p = 0, k = 0; p < P; p++) if (both[p]) ratios[k++] = f(c[p] / o[p]);
+          const ratio = median(ratios), cw = new Float32Array(P), ow = new Float32Array(P), wv = new Float32Array(P);
+          for (let p = 0; p < P; p++) { wv[p] = both[p]; cw[p] = f(c[p] * wv[p]); ow[p] = f(o[p] * wv[p]); }
+          const num = soft(cw), den = soft(ow), near = soft(wv), small = new Float32Array(ws * hs), one = f(1e-6), fn = f(FILL_NEAR);
+          for (let p = 0; p < small.length; p++) {
+            const k = Math.min(Math.max(f(near[p] / fn), 0), 1);
+            small[p] = f(f(f(k * num[p]) / Math.max(den[p], one)) + f(f(1 - k) * ratio));
+          }
+          const field = resizeLinear(small, ws, hs, W, H);
+          for (let p = 0; p < P; p++) if (m[p] && !n[p]) { total[p] = f(total[p] + f(field[p] * o[p])); count[p] += 1; }
+        });
+        const out = c.slice();
+        let some = false, under = 0;
+        for (let p = 0; p < P; p++) { if (count[p] > 0) { out[p] = f(total[p] / count[p]); some = true; } if (lit[p] && !m[p]) under++; }
+        if (floorOn && some && under >= 100 && !mostly(m)) {
+          const u = new Float32Array(under);
+          for (let p = 0, k = 0; p < P; p++) if (lit[p] && !m[p]) u[k++] = c[p];
+          floorOn = f(percentile(u, FILL_FLOOR));
+          for (let p = 0; p < P; p++) if (count[p] > 0) out[p] = Math.max(out[p], floorOn);
+        }
+        filled.push(out);
+      });
+      let every = new Uint8Array(P), any = false;
+      for (let p = 0; p < P; p++) if (masks[0][p] && masks[1][p] && masks[2][p]) { every[p] = 1; any = true; }
+      // colour_picture: never under what the band read (but a band clipped over most of it), eased in from CLIP_FROM
+      const span = f(255 - CLIP_FROM);
+      x.forEach((c, i) => {
+        const fl = filled[i], keep = mostly(masks[i]), b = rgb[i];
+        for (let p = 0; p < P; p++) {
+          const v = keep ? fl[p] : Math.max(fl[p], c[p]);
+          let w = Math.min(Math.max(f(f(b[p] - CLIP_FROM) / span), 0), 1);
+          w = f(f(w * w) * f(3 - f(2 * w)));
+          c[p] = f(c[p] + f(w * f(v - c[p])));
+        }
+      });
+      return { x, every: any ? every : null };
+    }
+    // obs_mosaic._shade_rgb: a colour picture (RGBA) times exposure gain g on linear brightness, white kept white by
+    // its brightest band under a gain of 1 (movie_frame puts a gain under 1 on the mixed set, not on its planes)
+    function shadeRgb(px, g, gamma, clipFrom = CLIP_DEFAULT[0]) {
+      const f = Math.fround, srgb = gamma === "srgb", lut = new Float32Array(256);
+      const dec = v => srgb ? (v <= 0.04045 ? v / 12.92 : Math.pow((Math.max(v, 0.04045) + 0.055) / 1.055, 2.4)) : Math.pow(v, gamma);
+      const enc = x => srgb ? (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0.0031308), 1 / 2.4) - 0.055) : Math.pow(x, 1 / gamma);
+      for (let i = 0; i < 256; i++) lut[i] = enc(Math.min(Math.max(dec(i / 255) * g, 0), 1)) * 255;
+      const span = f(255 - clipFrom);
+      for (let i = 0; i < px.length; i += 4) {
+        let w = 0;
+        if (g < 1.0) {
+          w = Math.min(Math.max(f(f(Math.max(px[i], px[i + 1], px[i + 2]) - clipFrom) / span), 0), 1);
+          w = f(f(w * w) * f(3 - f(2 * w)));
+        }
+        for (let c = 0; c < 3; c++) {
+          const v = px[i + c], dim = g < 1.0 ? f(lut[v] + f(w * f(v - lut[v]))) : lut[v];
+          px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(dim + 0.5))));
+        }
+      }
+      return px;
+    }
+    // movie_frame's colour set at exposure gain: planes gained (lut) for a gain over 1, then mixed; a gain under 1 on
+    // the mixed picture (its planes come ungained)
+    function setPicture(planes, c, W, gain = 1, gamma = c.gamma) {
+      const px = mix(planes, c, W);
+      return gain < 1 ? shadeRgb(px, gain, gamma, (c.clip || CLIP_DEFAULT)[0]) : px;
     }
     // obs_mosaic.held_of: the frame shown in frame n's place, n or, when n is partial (most of it lost in downlink,
     // over-exposed: t.partial), the last earlier placed frame of its filter that is not, nor over-exposed (t.over:
@@ -3614,23 +3839,48 @@ body.ambient.phone .amb-where { font-size: 18px; }
       return k;
     }
     // what is blurred: the alpha a and the luminance times it, float32 as numpy has them
-    function detailInputs(px) {
+    // lit (obs_mosaic.DETAIL_LIT, a Saturn pass's detail_how): each pixel weighted by how lit it is, and only the
+    // picture's whole pixels, so the sky and a tile's feathered edge neither count in the mean nor change
+    // disk (obs_mosaic.disk_weight): [x, y, radius] px of the body's disk, eased over soft of its radius, outside which
+    // nothing changes (the rings beside Saturn); W the picture's width
+    // litMean (obs_mosaic.DETAIL_LIT_MEAN): the pixels the mean is taken over, eased in (all but the sky); lit alone, the
+    // change's weight is also the mean's (before the terminator fix)
+    function detailInputs(px, lit, disk = null, W = 0, soft = 0.03, litMean = null) {
       const f = Math.fround, N = px.length / 4, a = new Float32Array(N), la = new Float32Array(N), lum = new Float32Array(N);
+      const w = lit ? new Float32Array(N) : null, lo = lit ? f(lit[0]) : 0, span = lit ? f(f(lit[1]) - lo) : 1, whole = f(250 / 255);
+      const mlo = litMean ? f(litMean[0]) : 0, mspan = litMean ? f(f(litMean[1]) - mlo) : 1;
+      const dr = disk ? f(disk[2] * (1 + soft)) : 0, dw = disk ? f(2 * soft * disk[2]) : 1;
       for (let p = 0, i = 0; p < N; p++, i += 4) {
         a[p] = f(px[i + 3] / 255);
         lum[p] = f((px[i] + px[i + 1] + px[i + 2]) / 3);
+        if (w) {
+          let wh = a[p] >= whole ? 1 : 0;
+          if (disk) {
+            const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+            const u = Math.min(1, Math.max(0, f(f(dr - d) / dw)));
+            wh = f(wh * f(f(u * u) * f(3 - f(2 * u))));
+          }
+          const l0 = f(f(f(px[i] + px[i + 1]) + px[i + 2]) / 3 / 255);
+          const t = Math.min(1, Math.max(0, f(f(l0 - lo) / span)));
+          w[p] = f(wh * f(f(t * t) * f(3 - f(2 * t))));
+          if (litMean) {
+            const tm = Math.min(1, Math.max(0, f(f(l0 - mlo) / mspan)));
+            a[p] = f(wh * f(f(tm * tm) * f(3 - f(2 * tm))));
+          } else a[p] = w[p];
+        }
         la[p] = f(lum[p] * a[p]);
       }
-      return { a, la, lum };
+      return { a, la, lum, w };
     }
     // the rest of detail() once the two blurs (ga of a, gla of lum * a) are in: mean, the change (less on big differences,
     // DETAIL_EDGE) rolled off past knee of the room the pixel has left (obs_mosaic._soft_detail), clip, round half to even
-    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32) {
+    function detailFinish(px, lum, ga, gla, amount, knee = 0.5, edge = 32, w = null, top = 255) {
       const f = Math.fround, floor = f(1e-3), D = f(amount), K = f(knee), E = f(edge), tiny = f(1e-6);
       for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
         const mean = f(gla[p] / Math.max(ga[p], floor)), x = f(lum[p] - mean);
         let d = f(f(D * x) / f(1 + f(Math.abs(x) / E)));
-        const room = d > 0 ? f(255 - Math.max(px[i], px[i + 1], px[i + 2])) : f(Math.min(px[i], px[i + 1], px[i + 2]));
+        if (w) d = f(d * w[p]);
+        const room = d > 0 ? f(Math.max(top - Math.max(px[i], px[i + 1], px[i + 2]), 0)) : f(Math.min(px[i], px[i + 1], px[i + 2]));
         const k = f(K * room), mag = Math.abs(d);
         if (mag > k) {
           const rest = f(room - k), over = f(mag - k), soft = f(k + f(f(rest * over) / Math.max(f(over + rest), tiny)));
@@ -3639,6 +3889,67 @@ body.ambient.phone .amb-where { font-size: 18px; }
         for (let c = 0; c < 3; c++) px[i + c] = pyRound(Math.min(255, Math.max(0, f(px[i + c] + d))));
       }
       return px;
+    }
+    // obs_mosaic.ring_white: off the body's disk (disk: x, y, radius px, eased over soft of its radius) the picture
+    // back on the pass's own white (H: the Saturn look's headroom, g: its gamma, knee: the shoulder), so the rings and
+    // sky keep today's brightness; in place
+    function ringWhite(px, W, H, g, knee, disk, soft = 0.06) {
+      const f = Math.fround, room = f(1 - knee), K = f(knee), G = f(g), iG = f(1 / g), r0 = f(disk[2] * (1 - soft)), w2 = f(2 * soft * disk[2]);
+      const lut = new Float32Array(256);   // each code's linear value with the shoulder undone, times H, rolled off again
+      for (let v = 0; v < 256; v++) {
+        let x = f(Math.pow(f(v / 255), G));
+        if (x > K) x = f(K + f(room * f(Math.atanh(Math.min(f(f(x - K) / room), f(0.999999))))));
+        x = f(x * f(H));
+        if (x > K) x = f(K + f(room * f(Math.tanh(f(f(x - K) / room)))));
+        lut[v] = f(f(Math.pow(Math.min(Math.max(x, 0), 1), iG)) * 255);
+      }
+      for (let p = 0, i = 0; i < px.length; p++, i += 4) {
+        const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+        let t = Math.min(1, Math.max(0, f(f(d - r0) / w2)));
+        t = f(f(t * t) * f(3 - f(2 * t)));
+        if (t <= 0) continue;
+        for (let c = 0; c < 3; c++) px[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(px[i + c] + f(f(lut[px[i + c]] - px[i + c]) * t)) + 0.5))));
+      }
+      return px;
+    }
+    // obs_mosaic.detail's blend: before off the disk, after on it, eased over soft of its radius (disk_weight); rounded
+    function diskBlend(before, after, W, disk, soft = 0.03) {
+      const f = Math.fround, out = new Uint8ClampedArray(after.length), dr = f(disk[2] * (1 + soft)), dw = f(2 * soft * disk[2]);
+      for (let p = 0, i = 0; i < after.length; p++, i += 4) {
+        const ys = f(Math.floor(p / W) - f(disk[1])), xs = f(p % W - f(disk[0])), d = f(Math.sqrt(f(f(ys * ys) + f(xs * xs))));
+        let u = Math.min(1, Math.max(0, f(f(dr - d) / dw)));
+        u = f(f(u * u) * f(3 - f(2 * u)));
+        for (let c = 0; c < 3; c++) out[i + c] = Math.min(255, Math.max(0, Math.trunc(f(f(before[i + c] + f(f(after[i + c] - before[i + c]) * u)) + 0.5))));
+        out[i + 3] = after[i + 3];
+      }
+      return out;
+    }
+    // obs_mosaic.terminator_ease: w (the change's weight) times 1 / (1 + (g / T)^2), g the fall of the brightness (blurred
+    // over s2 = max(1.5, sigma / 2) by blurFn) across one patch over its bright level (the lower 90th percentile of the
+    // channels' sum where w > 0.5); cv2's 3x3 Sobel with BORDER_REFLECT_101; in place
+    function terminatorEase(px, w, W, H, sigma, T, blurFn) {
+      const f = Math.fround, N = W * H, lum = new Float32Array(N), sums = [];
+      for (let p = 0, i = 0; p < N; p++, i += 4) {
+        const t = px[i] + px[i + 1] + px[i + 2];
+        lum[p] = f(t / 3);
+        if (w[p] > 0.5) sums.push(t);
+      }
+      let ref = 255;
+      if (sums.length) { sums.sort((x, y) => x - y); ref = Math.max(sums[Math.floor(0.9 * (sums.length - 1))] / 3, 1); }
+      const big = blurFn(lum, gaussKernel(Math.max(1.5, sigma / 2)));
+      const refl = (i, n) => { while (i < 0 || i >= n) i = i < 0 ? -i : 2 * n - 2 - i; return i; };
+      const k = f(f(sigma / ref)), iT = f(1 / T);
+      for (let y = 0; y < H; y++) {
+        const y0 = refl(y - 1, H) * W, y1 = y * W, y2 = refl(y + 1, H) * W;
+        for (let x = 0; x < W; x++) {
+          const x0 = refl(x - 1, W), x2 = refl(x + 1, W);
+          const gx = f(f(f(big[y0 + x2] - big[y0 + x0]) + f(2 * f(big[y1 + x2] - big[y1 + x0]))) + f(big[y2 + x2] - big[y2 + x0]));
+          const gy = f(f(f(big[y2 + x0] - big[y0 + x0]) + f(2 * f(big[y2 + x] - big[y0 + x]))) + f(big[y2 + x2] - big[y0 + x2]));
+          const g = f(f(f(Math.hypot(gx, gy)) / 8) * k), q = f(g * iT);
+          w[y1 + x] = f(w[y1 + x] * f(1 / f(1 + f(q * q))));
+        }
+      }
+      return w;
     }
     // cv2's separable float32 blur (BORDER_REFLECT_101), on the processor: rows summed tap by tap, then columns
     // centre first and each pair of taps together, as cv2's RowFilter and SymmColumnFilter (the reference the GPU's
@@ -3658,8 +3969,8 @@ body.ambient.phone .amb-where { font-size: 18px; }
       }
       return out;
     }
-    return { pyRound, pyRound2, places, shift, evenedGains, gains, lut, mix, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
-      gaussKernel, detailInputs, detailFinish, blurCPU };
+    return { pyRound, pyRound2, places, shift, evenedGains, heldGains, gains, lut, mix, setPicture, shadeRgb, fillClipped, resizeArea, percentile, median, heldOf, shownOf, trailOf, blendTrail, fadeWeight, fadeLight, resizeLinear, applyLight,
+      gaussKernel, detailInputs, detailFinish, blurCPU, ringWhite, diskBlend, terminatorEase };
   };
   window.cassiniSteadyMath = STEADY_MATH;
   // the same blur on the GPU (WebGL 2 with float colour buffers): blur([a, b], w, h, kernel) -> [blurred a, blurred b],
@@ -3739,9 +4050,19 @@ void main() {
 let blur;   // the GPU blur, made when a filled pass first needs it
 const sharpen = (px, W, H, t) => {
   if (blur === undefined) blur = (${STEADY_GPU.toString()})();
-  const k = M.gaussKernel(t.sigma), d = M.detailInputs(px);
-  const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
-  return M.detailFinish(px, d.lum, ga, gla, t.amount, t.knee, t.edge);
+  const disk = t.disk ? [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W] : null;
+  const one = (p, sigma, amount, lit, dk) => {
+    const k = M.gaussKernel(sigma), d = M.detailInputs(p, lit, dk, W, 0.03, lit ? t.litMean : null);
+    const [ga, gla] = blur ? blur([d.a, d.la], W, H, k) : [M.blurCPU(d.a, W, H, k), M.blurCPU(d.la, W, H, k)];
+    if (lit && t.terminator) M.terminatorEase(p, d.w, W, H, sigma, t.terminator, (m, kk) => blur ? blur([m, m], W, H, kk)[0] : M.blurCPU(m, W, H, kk));
+    return M.detailFinish(p, d.lum, ga, gla, amount, t.knee, t.edge, d.w, lit ? (t.top ?? 255) : 255);
+  };
+  // obs_mosaic.detail, no disk limit: today's detail first, then the look's lit local contrast on top of it
+  if (t.base && t.lit && !disk) return one(one(px, t.base.sigma, t.base.amount, null, null), t.sigma, t.amount, t.lit, null);
+  if (!(t.base && disk && t.lit)) return one(px, t.sigma, t.amount, t.lit, disk);
+  // obs_mosaic.detail: today's detail off the disk (the rings as drawn before the Saturn look), the look's on it
+  const before = one(new Uint8ClampedArray(px), t.base.sigma, t.base.amount, null, null), after = one(px, t.sigma, t.amount, t.lit, disk);
+  return M.diskBlend(before, after, W, disk);
 };
 const tables = new Map(), placed = new Map(), gained = new Map(), luts = new Map();
 onmessage = async e => {
@@ -3749,6 +4070,9 @@ onmessage = async e => {
   if (m.table) { tables.set(m.key, m.table); return; }
   const t = tables.get(m.key), pk = m.key + ":" + m.steady, gk = m.key + ":" + m.exposure, t0 = performance.now();
   if (!placed.has(pk)) placed.set(pk, M.places(t, m.steady));
+  const bk = m.key + ":" + (t.auto || 0);
+  if (t.auto && !placed.has(bk)) placed.set(bk, M.places(t, t.auto));
+  const base = t.auto ? placed.get(bk) : null;
   if (m.exposure && !gained.has(gk)) gained.set(gk, M.gains(t.exposure, m.exposure));
   // one gain for every tile of the picture (movie_frame), through _shade's lookup table
   const gain = m.exposure ? (gained.get(gk)[m.n] ?? 1.0) : 1.0, t1 = performance.now();
@@ -3759,15 +4083,17 @@ onmessage = async e => {
     L = luts.get(lk);
   }
   const W = m.planes[0].bitmap.width, H = m.planes[0].bitmap.height, mixing = m.planes.length > 1 || m.trail, moves = [];
+  // (a colour set at a gain under 1: the gain on the mixed picture, setPicture, as movie_frame does it)
+  const late = mixing && !m.trail && gain < 1.0;
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
   const planes = m.planes.map(p => {
-    const [dx, dy] = M.shift(t, placed.get(pk), p.i), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i, base), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);
     if (!L && !mixing) return c;
     const im = g.getImageData(0, 0, W, H), d = im.data;
-    if (L) for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
+    if (L && !late) for (let i = 0; i < d.length; i += 4) { d[i] = L[d[i]]; d[i + 1] = L[d[i + 1]]; d[i + 2] = L[d[i + 2]]; }
     if (!mixing) { g.putImageData(im, 0, 0); return c; }
     return d;
   });
@@ -3776,7 +4102,8 @@ onmessage = async e => {
     // a colour set: colour_picture's mix of the filters' planes; a trail: the earlier frames under the newest;
     // a filled pass: then its detail filter (the planes came without it)
     let px = !mixing ? planes[0].getContext("2d").getImageData(0, 0, W, H).data
-      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.mix(planes, m.eye ? t.eye : t.sets);
+      : m.trail ? M.blendTrail(planes.slice(0, -1), planes[planes.length - 1]) : M.setPicture(planes, m.eye ? t.eye : t.sets, W, gain, t.exposure ? t.exposure.gamma : undefined);
+    if (m.detail && t.headroom && t.disk) px = M.ringWhite(px, W, H, t.headroom, t.hgamma, t.shoulder, [t.disk[0] * W, t.disk[1] * H, t.disk[2] * W * t.ringDisk]);
     if (m.detail) px = sharpen(px, W, H, t);
     out = new OffscreenCanvas(W, H);
     out.getContext("2d").putImageData(new ImageData(px, W, H), 0, 0);
@@ -3858,6 +4185,9 @@ onmessage = async e => {
       if (o.color && e.table.colour && !recipes) return null;
       // a frame drawn in its colour set's colour (obs_mosaic.set_shown, the table's "tint"): the server draws it
       if (o.color && (e.table.tint || []).includes(e.n)) return null;
+      // and one whose set the server draws with more than this mix (another body moved per filter, a lone filter's
+      // cosmic rays cleaned: obs_mosaic._set_drawn_apart, the table's "server")
+      if (o.color && (e.table.server || []).includes(e.n)) return null;
       if (exposure && !(e.table.exposure && e.table.exposure.local)) return null;
       const tr = set ? 0 : Math.min(trail, e.table.trail_most);
       if (!steady && !exposure && !tr && !set) return null;
@@ -5571,9 +5901,11 @@ function targetLabel(k) {
       pass.hidden = !st.inPass;
       for (const b of pass.querySelectorAll(".wmopt")) {
         const m = b.dataset.mode, on = m === st.mode;
+        // (a view the pass has no stored picture for is not offered: it would be drawn on request)
+        b.disabled = m !== "auto" && !!st.allowed && !st.allowed.includes(m);
         b.setAttribute("aria-checked", String(on));
         b.querySelector("span").textContent = m === "auto" && st.playing ? `now ${st.playing}${st.building ? ", building" : ""}`
-          : PASS_MODES.find(x => x[0] === m)[2];
+          : b.disabled ? "not stored for this pass" : PASS_MODES.find(x => x[0] === m)[2];
       }
       // the button says when this window differs from the Settings defaults
       btn.classList.toggle("chosen", st.centre !== def || (st.inPass && st.mode !== "auto"));
@@ -6185,6 +6517,7 @@ function targetLabel(k) {
     const mosaicPasses = new Set();   // passes (passOf) the server said is a mosaic pass
     const moviePasses = new Set();    // passes the server said is a movie or a stare: never a mosaic, never asked
     const lapPasses = new Set();
+    const tossPasses = new Set();     // passes the server said are a toss-up (kind_of tossup): the build stores both views
     // what the data says (passInfo, the server's own rule worked out ahead) counts as the server's answer
     const dataKind = k => { const p = passInfo(k); return p ? p[0] : null; };
     const mosaicPass = k => mosaicPasses.has(passOf(k)) || dataKind(k) === "mosaic" || dataKind(k) === "mosaic_movie";
@@ -6196,7 +6529,19 @@ function targetLabel(k) {
     // window), else the cameras.passes default; "auto" follows the server (a mosaic pass builds, a movie or a stare
     // plays its frames, a mosaic movie rolls: each place shows its newest tile)
     const passChoice = new Map();
-    const modeOf = k => passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto";
+    // the views the build stores for the pass (prebuild.make_pass): a mosaic movie rolls, a mosaic builds, a movie plays its
+    // frames, and a toss-up has both a mosaic and a movie. A Mosaic, Movie or Mosaic movie asked for that the pass has
+    // no stored picture for plays Auto instead: it would be drawn on request (a movie pass laid out as a mosaic took the
+    // server 4-5 minutes a picture and up to ~15 GB, cache completeness check 2026-11-16)
+    const storedModes = k => {
+      // (a toss-up: the replay data says so from the start (passInfo's 6th field), else the server's warm answer)
+      const info = passInfo(k), toss = tossPasses.has(passOf(k)) || !!(info && info[5]);
+      if (lapPass(k)) return ["mosaic_movie"];
+      if (mosaicPass(k)) return toss ? ["mosaic", "movie"] : ["mosaic"];
+      if (moviePass(k)) return toss ? ["movie", "mosaic"] : ["movie"];
+      return [];
+    };
+    const modeOf = k => { const m = passChoice.get(passOf(k)) || S.get("cameras.passes") || "auto"; return m === "auto" || storedModes(k).includes(m) ? m : "auto"; };
     const playsAs = k => { const m = modeOf(k); return m !== "auto" ? m : lapPass(k) ? "mosaic_movie" : mosaicPass(k) ? "mosaic" : moviePass(k) ? "movie" : ""; };
     const NAMES = { auto: "AUTO", mosaic: "MOSAIC", movie: "MOVIE", mosaic_movie: "MOSAIC MOVIE" };
     // the window's settings menu (winMenu: the slider button in its title bar) holds Auto center and, while the
@@ -6210,7 +6555,7 @@ function targetLabel(k) {
       // a pass asked for as a mosaic whose mosaic is not up yet is being built (a long movie's first mosaic deep in
       // the pass makes every tile before it: minutes when nothing of it is in the cache)
       const building = on && p === "mosaic" && obsShown !== catalog.obs[k] && mLane.pass.busy;
-      menu.sync({ inPass: !!on, mode: m, playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
+      menu.sync({ inPass: !!on, mode: m, allowed: on ? storedModes(k) : [], playing: p ? NAMES[p].toLowerCase() : "", building, centre: centreOn(),
                   centred: k >= 0 && centreOn() && /[?&]center=1/.test(shownKey || "") });
     }
     menu.onMode = mode => {
@@ -7143,6 +7488,7 @@ function targetLabel(k) {
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
+            if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
             // the window is in that pass already: its frame is steadied (or rolls) from now on
@@ -8789,9 +9135,14 @@ function targetLabel(k) {
     return "http://localhost:8765";
   })();
   const S = window.cassiniSettings, card = $("excard");
-  // 1536 and 2048: "up to", each mosaic at the biggest size its pass has detail for; "full": mosaics at their native
+  // 2048: "up to", each mosaic at the biggest size its pass has detail for; "full": mosaics at their native
   // resolution (export.py)
-  const SIZES = [512, 768, 1024, 1536, 2048, "full"];
+  // (no 768 and no "up to 1536": no picture is kept at either, so a film at them had pictures drawn on the request; a
+  // size kept before reads as the nearest here and on the server)
+  const SIZES = [512, 1024, 2048, "full"];
+  // the size kept on this device as one the picker offers: the nearest, the larger of two as near (a 768 kept before it
+  // went is 1024), for the label, the slider and the film's request alike (export.py takes the nearest the same way)
+  const sizeOf = () => { const sz = +opt("export.size", 1024) || 1024; return SIZES.slice(0, -1).reduce((m, v) => (Math.abs(v - sz) <= Math.abs(m - sz) ? v : m)); };
   const CANVAS_S = 0.7;   // seconds a mosaic picture takes up to 2048 (the windows' canvas: about as 1024)
   // measured on the Mac Mini (bench_fullres_movie.py): seconds to draw a mosaic picture at Full, per million pixels
   // (hexagon mosaic movies 2012-11-27 and 2013-06-26: 5.5-7.4 s a picture of 2400-3100 px, two made at once)
@@ -8803,8 +9154,9 @@ function targetLabel(k) {
         hint: "Pictures stay on screen for their real gap to the next one, sped up: bursts flip fast, quiet spells linger (1/30 to 1/2 s each)." });
     D({ key: "export.fps", label: "Fixed frame rate", type: "range", value: 12, min: 2, max: 30, step: 1, unit: "fps",
         hint: "Pictures per second when the frame rate is not adaptive." });
-    D({ key: "export.size", label: "Picture size", type: "range", value: 1024, min: 512, max: 2048, step: 256, unit: "px",
-        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Above 1024, mosaics are drawn up to that size, each only as big as its pass has detail for." });
+    // (the sizes the picker offers, SIZES: a size kept here before it went, 768 or 1536, is not one of them and reads as 1024)
+    D({ key: "export.size", label: "Picture size", type: "choice", value: 1024, options: [[512, "512 px"], [1024, "1024 px"], [2048, "Up to 2048 px"]],
+        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Up to 2048, mosaics are drawn up to that size, each only as big as its pass has detail for." });
     D({ key: "export.full", label: "Mosaics at full resolution", type: "toggle", value: false,
         hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
     D({ key: "export.sound", label: "Sound", type: "toggle", value: false, was: [true], hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
@@ -8924,7 +9276,7 @@ function targetLabel(k) {
   const bgQ = () => (bg().toLowerCase() === "#000000" ? "" : `&bg=${bg().slice(1)}`);
   const params = () => {
     const q = new URLSearchParams({ from: iso(X.a), until: iso(X.b), cams: X.cams || "NW", fps: opt("export.adaptive", true) ? "auto" : String(opt("export.fps", 12)),
-      size: opt("export.full", false) ? "full" : String(opt("export.size", 1024)), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
+      size: opt("export.full", false) ? "full" : String(sizeOf()), sound: opt("export.sound", false) ? "1" : "0", caption: opt("export.caption", true) ? "1" : "0" });
     // Boomerang (export.py boom=): only when on, so a film made without it keeps its name
     if (opt("export.boomerang", false)) q.set("boom", "1");
     // HDR film (export.py hdr=): only when on, made by the server (filmHere)
@@ -9505,8 +9857,7 @@ function targetLabel(k) {
     $("exauto").checked = opt("export.adaptive", true);
     $("exfps").value = opt("export.fps", 12); $("exfps").disabled = $("exauto").checked;
     $("exfpsv").textContent = $("exauto").checked ? "adaptive" : `${opt("export.fps", 12)} fps`;
-    const full = opt("export.full", false), sz = opt("export.size", 1024);
-    const near = SIZES.slice(0, -1).reduce((m, v, i) => (Math.abs(v - sz) < Math.abs(SIZES[m] - sz) ? i : m), 0);
+    const full = opt("export.full", false), near = SIZES.indexOf(sizeOf()), sz = SIZES[near];
     $("exsize").value = full ? SIZES.length - 1 : near; $("exsizev").textContent = full ? "Full" : sz > 1024 ? `≤ ${sz} px` : `${sz} px`;
     $("exsound").checked = opt("export.sound", false); $("excap").checked = opt("export.caption", true); $("exboom").checked = opt("export.boomerang", false); $("exhdr").checked = opt("export.hdr", false);
     segs();
@@ -11820,10 +12171,12 @@ void main() {
   const name = t => (t || "Unknown").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   const hms = e => new Date(e.t * 1000).toISOString().slice(11, 19);
   const KIND = { mosaic: "MOS", rolling: "MOS", movie: "MOV", color: "COL", processed: "", frame: "" };
-  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=256`;
+  // (128: the size the build stores every frame at for strips; 256 is stored for no frame, so each was drawn on request;
+  // the stand-in below asks 512, stored for every kind of picture)
+  const thumbUrl = e => `${FRAMES}/frames/${e.id}.webp?size=128`;
   // a frame's pictures for the strip, best first: as the stage shows it (As in the movie: the film's picture, the
   // size the stage asks for, so a click shows it at once; Raw frame: the frame as Cassini took it), then stand-ins
-  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=256`] : [])] : tries(e, 1024);
+  const thumbTries = e => ME.src === "raw" || !e.src ? [thumbUrl(e), ...(e.src ? [`${FRAMES}${e.src}${e.src.includes("?") ? "&" : "?"}size=512`] : [])] : tries(e, 1024);
   function thumb(img, e) {
     const urls = thumbTries(e); let at = 0;
     img.onerror = () => { if (++at < urls.length) img.src = urls[at]; else img.onerror = null; };
@@ -12847,7 +13200,7 @@ void main() {
     // its surface map, or else (as in the dock's All bodies folder) its sharpest real picture
     const map = typeof TEX_FILES !== "undefined" && TEX_ON && TEX_FILES[n], b = M.index && M.index.bodies[n];
     if (map) return `--c:${c};background-image:url(data/textures/1k/${map}.webp);`;
-    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256');background-size:cover;background-position:50% 50%;`;
+    if (b && b.best && window.cassiniFeeds && n !== "SUN") return `--c:${c};background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=512');background-size:cover;background-position:50% 50%;`;
     return `--c:${c};`;
   }
   function fillPick() {
@@ -13087,6 +13440,7 @@ void main() {
     { key: "closest", label: "Closest views", c: "#ef8f6b" },
     { key: "find", label: "Finds", c: "#9fd38a" },
     { key: "transit", label: "Transits", c: "#c49cf0" },
+    { key: "plume", label: "Plumes", c: "#f3f0e2" },
     { key: "flyby", label: "Flybys", c: "#8ab6ff" },
     { key: "movie", label: "Movies", c: "#6fd6d0" },
   ];
@@ -13584,7 +13938,7 @@ void main() {
   // a body's icon in the folder: its surface map, or else its sharpest real picture from the frame server
   function folderIcon(n, b) {
     if (MAP[n] || n === "SUN" || !b.best || !window.cassiniFeeds) return `<span class="fic">${bodyIcon(n)}</span>`;
-    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256')"></span></span>`;
+    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=512')"></span></span>`;
   }
   const folder = document.createElement("div");
   folder.id = "dkfolder"; folder.hidden = true; folder.setAttribute("role", "dialog"); folder.setAttribute("aria-label", "All bodies");
@@ -13792,7 +14146,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"968db3bcdb98";
+  const BUILD = /*BUILD*/"b2a29f162433";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

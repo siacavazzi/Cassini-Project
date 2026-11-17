@@ -1,0 +1,96 @@
+heavy: waiting for 1 of 14 slots (deepopt: plan memory)
+heavy: got 1 slots after 5 s
+SATURN_ISS_030RI_HIPHAMOVE001_PRIME_N_0: footprint before the plan 893 MB, when pass_scale returned 2453 MB, highest 2453 MB; 400 samples
+growth by the innermost repo function running (MB):
+       536  pass_scale:2693
+       384  _parameters:334
+       107  _parameters:319
+        98  load_index:97
+        80  load_index:99
+        64  read_cube:90
+        62  _dark:367
+        43  _box_truncate:341
+        43  <listcomp>:324
+        34  sky_mask:651
+        18  dark_sky:423
+        15  image_mask:359
+        15  _dark:370
+        15  sky_mask:646
+        10  garbled_lines:188
+        10  dark_sky:424
+        10  flat_lines:96
+        10  load_index:107
+         9  sky_levels:2256
+         7  <listcomp>:2394
+         6  frame_id:43
+         5  <dictcomp>:452
+         4  garbled_lines:194
+         4  sky_mask:655
+         3  repair_hot:575
+growth by the innermost three (MB):
+       536  pass_scale:2693<plan:1710<make_pass:363
+       384  _parameters:334<_dark:350<dark_dn:344
+       107  _parameters:319<_dark:350<dark_dn:344
+        98  load_index:97<find_repeats:121<load_hdr:285
+        80  load_index:99<find_repeats:121<load_hdr:285
+        64  read_cube:90<_parameters:319<_dark:350
+        62  _dark:367<dark_dn:344<calibrate:500
+        43  <listcomp>:324<_parameters:324<_dark:350
+        34  sky_mask:651<sky_residual:665<calibrate:516
+        26  _box_truncate:341<image_mask:367<image_hum:382
+        18  dark_sky:423<image_hum:388<calibrate:500
+        18  _box_truncate:341<image_mask:368<image_hum:382
+        15  image_mask:359<image_hum:382<calibrate:500
+        15  _dark:370<dark_dn:344<calibrate:500
+        15  sky_mask:646<sky_residual:665<calibrate:516
+        10  garbled_lines:188<valid_mask:410<load_hdr:313
+        10  dark_sky:424<image_hum:388<calibrate:500
+        10  flat_lines:96<valid_mask:405<load_hdr:313
+        10  load_index:107<find_repeats:121<load_hdr:285
+         9  sky_levels:2256<pass_scale:2768<plan:1710
+         7  <listcomp>:2394<_sky_fine:2394<<dictcomp>:2773
+         6  frame_id:43<<listcomp>:104<load_index:104
+         5  <dictcomp>:452<_hot_maps:452<hot_map:474
+         4  garbled_lines:194<valid_mask:410<load_hdr:313
+         4  sky_mask:655<sky_residual:665<calibrate:516
+over the plan:
+      0.00 s     893 MB  traced      0  _row_of:215
+      0.61 s    1097 MB  traced      0  frame_id:43 | load_index:97 | pass_scale:2693
+      0.95 s    1762 MB  traced      0  _parameters:334 | _parameters:334 | pass_scale:2693
+      1.19 s    2158 MB  traced      0  sky_mask:651 | sky_mask:651 | pass_scale:2693
+      1.46 s    2172 MB  traced      0  <dictcomp>:452 | <dictcomp>:452 | pass_scale:2693
+      1.72 s    2211 MB  traced      0  sky_mask:651 | sky_mask:651 | pass_scale:2693
+      1.99 s    2241 MB  traced      0  sky_mask:651 | sky_mask:655 | pass_scale:2693
+      2.25 s    2325 MB  traced      0  sky_mask:646 | repair_hot:575 | pass_scale:2693
+      2.52 s    2330 MB  traced      0  sky_mask:651 | missing_pixels:312 | pass_scale:2693
+      2.77 s    2338 MB  traced      0  sky_mask:651 | _basis:235 | pass_scale:2693
+      3.03 s    2346 MB  traced      0  sky_mask:651 | _dark:367 | pass_scale:2693
+      3.29 s    2377 MB  traced      0  sky_mask:651 | image_mask:359 | pass_scale:2693
+      3.57 s    2392 MB  traced      0  sky_residual:666 | dark_sky:423 | pass_scale:2693
+      3.82 s    2402 MB  traced      0  repair_hot:546 | dark_sky:423 | pass_scale:2693
+      4.09 s    2414 MB  traced      0  _dark:367 | sky_mask:646 | pass_scale:2693
+      4.35 s    2416 MB  traced      0  _box_truncate:341 | sky_mask:651 | pass_scale:2693
+      4.62 s    2417 MB  traced      0  dark_sky:424 | sky_mask:651 | pass_scale:2693
+      4.89 s    2423 MB  traced      0  sky_mask:648 | sky_mask:651 | pass_scale:2693
+      5.17 s    2425 MB  traced      0  sky_mask:651 | stored_range:306 | pass_scale:2693
+      5.44 s    2431 MB  traced      0  sky_mask:651 | _dark:370 | pass_scale:2693
+      5.72 s    2431 MB  traced      0  sky_mask:651 | image_mask:360 | pass_scale:2693
+      5.97 s    2431 MB  traced      0  sky_mask:651 | _dark:367 | pass_scale:2693
+      6.22 s    2431 MB  traced      0  sky_mask:651 | _dark:370 | pass_scale:2693
+      6.49 s    2433 MB  traced      0  bright_dark:449 | _box_truncate:341 | pass_scale:2693
+      6.75 s    2433 MB  traced      0  load_hdr:327 | dark_sky:423 | pass_scale:2693
+      7.00 s    2433 MB  traced      0  _dark:367 | dark_sky:423 | pass_scale:2693
+      7.26 s    2433 MB  traced      0  _median5:403 | sky_mask:646 | pass_scale:2693
+      7.50 s    2433 MB  traced      0  _dark:367 | dark_sky:424 | pass_scale:2693
+      7.78 s    2433 MB  traced      0  _box_truncate:341 | sky_mask:648 | pass_scale:2693
+      8.03 s    2433 MB  traced      0  _auto_star_level:332 | sky_mask:651 | pass_scale:2693
+      8.28 s    2433 MB  traced      0  _box_truncate:341 | sky_mask:651 | pass_scale:2693
+      8.55 s    2433 MB  traced      0  _box_truncate:341 | sky_mask:651 | pass_scale:2693
+      8.79 s    2435 MB  traced      0  _auto_star_level:335 | sky_mask:648 | pass_scale:2693
+      9.04 s    2435 MB  traced      0  _dark:370 | sky_mask:648 | pass_scale:2693
+      9.29 s    2435 MB  traced      0  _box_truncate:341 | sky_mask:648 | pass_scale:2693
+      9.55 s    2435 MB  traced      0  _box_truncate:341 | sky_mask:648 | pass_scale:2693
+      9.81 s    2435 MB  traced      0  _box_truncate:341 | sky_mask:651 | pass_scale:2693
+     10.07 s    2436 MB  traced      0  _dark_sky:2627
+     10.31 s    2451 MB  traced      0  <listcomp>:2394
+     10.58 s    2453 MB  traced      0  <listcomp>:2394

@@ -1,0 +1,2 @@
+1660 files in A (260 MB), 1660 in B; 1660 identical, 0 differ, 0 only in A, 0 only in B
+exit 0

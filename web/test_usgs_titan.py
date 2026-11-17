@@ -6,6 +6,11 @@ import os
 import sys
 import sqlite3
 import tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import types
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.environ["CASSINI_GEOMETRY_CACHE"] = os.path.join(tempfile.mkdtemp(), "geometry.sqlite")
@@ -14,7 +19,7 @@ sys.path.insert(0, ROOT)
 import spiceypy as sp  # noqa: E402
 import bootleg_autonav as ba  # noqa: E402
 
-neighbours_ck, ck, spk = ba.extra_kernels()  # in load order: USGS's own last, so they win
+iss_ck, neighbours_ck, ck, spk = ba.extra_kernels()  # in load order: the ISS neighbours first, USGS's own last, so they win
 frames = ba.usgs_titan_frames()
 nac = {line.strip() for line in open(os.path.join(ba.USGS_TITAN_DIR, "images.lis")) if line.strip()}
 assert len(nac) == 6896 and all(f.startswith("N") for f in nac), len(nac)
@@ -50,5 +55,5 @@ assert db.execute("SELECT frame FROM pointing").fetchall() == [(usgs,)]
 # switched off: no extra kernels, no frames, and the cache answers as before
 os.environ["CASSINI_USGS_TITAN"] = "0"
 ba._usgs_frames = None
-assert ba.extra_kernels() == [] and ba.usgs_titan_frames() == set()
+assert ba.extra_kernels() == [iss_ck] and ba.usgs_titan_frames() == set()
 print("ok")

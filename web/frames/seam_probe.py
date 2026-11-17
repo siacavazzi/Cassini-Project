@@ -163,8 +163,9 @@ def main():
                     print("  (not grown at this tile: no redraw)")
                 for label, off in (seam_bench.SETTINGS if grown else []):
                     with calibration.stepping(off):
-                        before = om._filter_path(u, f, j, rect, args.cache)
-                        after = om._filter_path(u, f, j + 1, rect, args.cache)
+                        # (as _grown names them: by count and by where a solve moved their tiles)
+                        named = lambda m: om._filter_path(u, f, m, rect, args.cache)[:-len(".png")] + om._places_tag(mine[:m]) + ".png"
+                        before, after = named(j), named(j + 1)
                         if not os.path.exists(before):
                             print(f"  [{label}] no picture so far before tile #{j} in the cache ({before})")
                             continue

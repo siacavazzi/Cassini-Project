@@ -23,6 +23,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 os.environ["CASSINI_USGS_TITAN"] = "0"  # the mission kernels only; the USGS CK is loaded by hand below
+os.environ["CASSINI_ISS_NEIGHBOURS"] = "0"   # (nor the ISS neighbours CK: the raw attitude)
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import spiceypy as sp  # noqa: E402
@@ -34,7 +35,7 @@ OUT_CK = os.path.join(OUT, "Titan_neighbours_ck.bc")
 OUT_LIST = os.path.join(OUT, "neighbours.lis")
 YEARS = {int(y) for y in os.environ.get("NEIGHBOURS_YEARS", "").split(",") if y}  # a trial run's years
 USGS_CK = os.path.join(HERE, "Titan_CISS_2024_ck.bc")
-MAX_GAP = 600.0  # seconds from the nearest USGS frame of the same observation
+MAX_GAP = float(os.environ.get("NEIGHBOURS_MAX_GAP", "inf"))  # seconds from the nearest USGS frame of the same observation: any (Sam 11-16: a sequence never mixes corrected and raw pointing; was 600)
 PAD = 0.5  # seconds either side of the mid-exposure time
 BODY = "CASSINI_SC_COORD"
 
@@ -42,9 +43,12 @@ usgs = {line.strip() for line in open(os.path.join(HERE, "images.lis")) if line.
 concurrent = {line.strip() for line in open(os.path.join(HERE, "concurrent.lis")) if line.strip()}
 index = pd.read_csv(os.path.join(ROOT, "Image_index.csv"), usecols=["path", "IMAGE_MID_TIME", "OBSERVATION_ID", "TARGET_NAME"],
                     low_memory=False)
-index = index[(index["TARGET_NAME"] == "TITAN") & index["path"].notna() & index["IMAGE_MID_TIME"].notna()]
+index = index[index["path"].notna() & index["IMAGE_MID_TIME"].notna()]
 index = index.assign(frame=index["path"].str.rsplit("/", n=1).str[-1].str.split(".").str[0],
                      year=index["IMAGE_MID_TIME"].str[:4].astype(int))
+# every frame of an observation USGS adjusted any frame of, whatever its target (ISS_213TI_MEDRES001_VIMS's UNK frames
+# stayed on the raw attitude beside their corrected Titan frames)
+index = index[index["OBSERVATION_ID"].isin(set(index.loc[index["frame"].isin(usgs), "OBSERVATION_ID"]))]
 
 if os.path.exists(OUT_CK):
     os.remove(OUT_CK)

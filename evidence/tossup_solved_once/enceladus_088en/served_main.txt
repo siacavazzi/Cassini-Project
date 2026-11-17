@@ -1,0 +1,7 @@
+ENCELADUS_ISS_088EN_SECLNX001_CIRS_N_1 kind movie tossup True mosaic False frames 22
+22 mosaic pictures at 1024 in the cache
+  frame 7 asks for CL1-CL28_ma33d188a_-1350_-997_2773_2279-s7-g2.webp - not in the cache
+  frame 8 asks for CL1-CL29_ma33d188a_-1350_-997_2773_2279-s7-g2.webp - not in the cache
+  frame 9 asks for CL1-CL210_mfe369314_-1350_-997_2773_2279-s7-g2.webp - not in the cache
+  frame 10 asks for CL1-CL211_m444dad41_-1350_-997_2773_2279-s7-g2.webp - not in the cache
+asked by a fresh process: 8 found, 14 not made, 0 with no mosaic yet

@@ -75,9 +75,12 @@ MOMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moments.csv"
 NOT_BODIES = {"SKY", "DARKSKY", "UNK", "NONE", "SPICA", "FOMALHAUT"}
 HIGHLIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlights.csv")
 CANDIDATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "candidates.csv")
+# the passes where Enceladus' plumes show clearly, by one rule (plume_moments.py), added to the Moments list
+PLUMES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plume_moments.csv")
 # what a moments.csv row is (its "type" column), so the Moments window can group, sort and filter by it: a hand-picked
-# special moment, a find from the poster and geometry sweeps, a transit, eclipse or mutual event, or a body's closest view
-MOMENT_TYPES = ("special", "find", "transit", "closest")
+# special moment, a find from the poster and geometry sweeps, a transit, eclipse or mutual event, a body's closest view,
+# or a pass where Enceladus' plumes show (plume_moments.csv)
+MOMENT_TYPES = ("special", "find", "transit", "closest", "plume")
 CANDIDATE_TYPES = ("movie", "transit", "find", "closest")
 TRUE_BLUES = ("BL1", "BL2", "VIO")   # the blue of a true colour set (reel.TRUE_BLUES)
 SET_GAP = 300        # seconds between the frames of one filter set (reel.SET_GAP)
@@ -92,6 +95,8 @@ def main():
     ap.add_argument("--attitude", help="folder with attitude/<year>.bin from export_attitude.py (same catalog export)")
     ap.add_argument("--huygens", help="Huygens replay folder (tracks/huygens, manifest_huygens.json, huygens_descent.json)")
     ap.add_argument("--moments", default=MOMENTS, help="curated imaging sessions for the Moments list (default: %(default)s)")
+    ap.add_argument("--plumes", default=PLUMES, help="Enceladus plume passes for the Moments list, rows like the "
+                    "moments file's (plume_moments.py; default: %(default)s)")
     ap.add_argument("--candidates", default=CANDIDATES, help="potential moments nobody picked yet, hidden in the Moments "
                     "window until asked for (make_candidates.py; default: %(default)s)")
     ap.add_argument("--scores", help="observations_scored.csv from the highlight scoring, for each moment's photo score")
@@ -152,7 +157,7 @@ def slim_catalog(data, year, groups=None):
 
 def load_groups():
     """Each frame's filter set and pass by the frame server's one rule (web/frames/sets_passes.py): ({id: (set,
-    pass)}, sets {set: [kind, [channel ids]]}, passes {pass: [kind, observation, pass number, last frame id, frames]})."""
+    pass)}, sets {set: [kind, [channel ids]]}, passes {pass: [kind, observation, pass number, last frame id, frames, tossup]})."""
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frames"))
     import sets_passes
@@ -229,16 +234,16 @@ def read_scores(args):
 
 def moments(args, years):
     """
-    The rows of the moments file that fall in these years, as encounters.json entries:
+    The rows of the moments file and the plumes file (plume_moments.csv) that fall in these years, as encounters.json
+    entries:
       {"kind": "observation", "type", "label", "body", "obs": [OBSERVATION_ID, ...], "et", "utc", "start", "end",
        "end_et", "frames", "rgb_sets", "why", "source", "photo_score" (with --scores)}
     type is the row's type column (MOMENT_TYPES), special when it is empty.
     et/utc is the first picture of the listed observations and end the last, both from the catalog.
     A row in these years with no pictures in the catalog is an error.
     """
-    if not args.moments or not os.path.exists(args.moments):
-        return []
-    rows = [r for r in csv.DictReader(open(args.moments, newline="")) if int(r["date"][:4]) in years]
+    files = [f for f in (args.moments, getattr(args, "plumes", None)) if f and os.path.exists(f)]
+    rows = [r for f in files for r in csv.DictReader(open(f, newline="")) if int(r["date"][:4]) in years]
     if not rows:
         return []
     scores = read_scores(args)

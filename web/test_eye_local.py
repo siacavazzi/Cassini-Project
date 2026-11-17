@@ -5,9 +5,33 @@ frame drawn in the eye style (colour_picture with calibration.eye_mix), for a fa
 stare, WAC MT3 + CB2 + MT2) and a two-filter pass (CB2 + MT2: its longer filter's tile listed twice), so no picture
 of its own is ever made or cached for it. Synthetic passes as web/test_steady_local.py.
 Run: python web/test_eye_local.py"""
+# the page moves the frame drawn at SPICE's places by whole canvas pixels; the server draws tiles at their sub-pixel
+# places (obs_mosaic.SUBPIXEL, #396), so the two are equal pixel for pixel only with that off (with it on the page's
+# picture is at most half a pixel from the server's)
+import os as _os; _os.environ["CASSINI_SUBPIXEL"] = "0"
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, subprocess, tempfile  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import numpy as np  # noqa: E402
+import atexit, glob, shutil  # noqa: E402
+# every scratch folder this test makes (the pass caches, node's planes and pictures: gigabytes a run) under one root,
+# removed when it ends, failed or not; a root an earlier run left (killed, timed out: atexit never ran) whose process
+# is gone is removed first. Child processes (node) get it as TMPDIR
+_name = os.path.splitext(os.path.basename(__file__))[0]
+for _old in glob.glob(os.path.join(tempfile.gettempdir(), f"{_name}_*_*")):
+    try:
+        os.kill(int(os.path.basename(_old)[len(_name) + 1:].split("_")[0]), 0)
+    except ProcessLookupError:
+        shutil.rmtree(_old, True)
+    except (ValueError, IndexError, PermissionError):
+        pass
+tempfile.tempdir = tempfile.mkdtemp(prefix=f"{_name}_{os.getpid()}_")
+os.environ["TMPDIR"] = tempfile.tempdir
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
 import calibration  # noqa: E402
@@ -44,8 +68,11 @@ def make_pass(name, filters, base):
                 Image.fromarray(im).save(f"{TD}/{n}.png")
                 json.dump({"n": n, "id": fr[n][1], "filter": f, "t": fr[n][3], "offset": spice[n], "box": [-S / 2, -S / 2, S, S]},
                           open(f"{TD}/{n}.json", "w"))
+            # (the grey filter its methane band: a set's frames are drawn as the set, which the page mixes; a grey filter
+            # with a picture of its own (CB2) has every frame drawn tinted, which the table lists and the page leaves)
+            grey = next(f for f in filters if om.held_band(f))
             json.dump({"key": list(u["key"]), "display_scale": scale, "angle": 0, "footprint": [0, 0, 1800, 1100], "fixed": True,
-                       "view": [1800, 1100], "k": 1, "colour": filters, "grey": filters[0], "whole": False},
+                       "view": [1800, 1100], "k": 1, "colour": filters, "grey": grey, "whole": False},
                       open(os.path.join(d, om.PLAN_FILE), "w"))
     return u
 
@@ -62,7 +89,7 @@ def node_mix(cases, sets):
             pl.tofile(f"{tmp}/{c}_{q}.bin")
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), c = " + json.dumps(sets) + ";\n"
           f"for (let i = 0; i < {len(cases)}; i++) {{ const P = [0, 1, 2].map(q => new Uint8ClampedArray(fs.readFileSync('{tmp}/' + i + '_' + q + '.bin')));"
-          f" fs.writeFileSync('{tmp}/' + i + '.out', M.mix(P, c)); }}")
+          f" fs.writeFileSync('{tmp}/' + i + '.out', M.mix(P, c, {cases[0][0].shape[1]})); }}")
     with open(f"{tmp}/mix.js", "w") as fh:
         fh.write(js)
     subprocess.run(["node", f"{tmp}/mix.js"], check=True)
@@ -77,6 +104,8 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
     table = om._steady_table(u, 0, cache, True, True)
     eye = table["eye"]
     assert eye and eye["by"], table.get("eye")
+    assert not table["tint"], table["tint"]
+    assert not table["server"], table["server"]
     want_mix = calibration.eye_mix("W", filters, "SATURN")
     assert np.allclose(eye["mix"], want_mix)
     # Natural color, the default, draws a set with a methane band as Natural color (emulated) does (fix plan group
@@ -122,4 +151,20 @@ for name, filters, base in (("EYE3", ["MT3", "CB2", "MT2"], 1600200000), ("EYE2"
     lit = lit[lit.max(axis=1) > 40]
     print(f"{'+'.join(filters)}: {len(cases)} colour pictures, the page's eye mix equals the server's colors=eye picture "
           f"but for {off} of {total} values a level apart; median lit color {np.median(lit, axis=0).astype(int).tolist()}")
+# a set the server draws with more than the page's mix is listed as server-drawn (the table's "server",
+# obs_mosaic._set_drawn_apart): a filter the pass takes once (its cosmic rays cleaned, _despiked), another body on
+# every one of its tiles (moved per filter, _per_body_planes)
+cyc = {"frames": [(f"p{n}", f"N{n}", "RGB"[n % 3], 30.0 * n) for n in range(9)]}
+once = {"frames": cyc["frames"][:8] + [("p8", "N8", "MT1", 240.0)]}
+titan = lambda n: [("TITAN", 1.0, 2.0, 30.0, True)]
+speck = lambda n: [("PAN", 1.0, 2.0, 3.0, True)]
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {}, 1.0)
+assert om._set_drawn_apart(once, [6, 7, 8], {}, 1.0)
+assert om._set_drawn_apart(cyc, [3, 4, 5], {n: titan(n) for n in (3, 4, 5)}, 1.0)
+# (a speck on every tile is not moved: the page mixes the set; nor a body drawn under PER_BODY_LEAST at a small scale)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {n: speck(n) for n in (3, 4, 5)}, 1.0)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {n: titan(n) for n in (3, 4, 5)}, 0.2)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {3: titan(3), 4: titan(4)}, 1.0)
+assert not om._set_drawn_apart(cyc, [3, 4, 5], {3: titan(3), 4: titan(4), 5: [("RHEA", 1.0, 2.0, 30.0, True)]}, 1.0)
+print("server-drawn sets: lone filter and per-body sets listed, others mixed here")
 print("ok")

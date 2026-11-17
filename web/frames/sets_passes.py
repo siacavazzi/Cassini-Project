@@ -76,6 +76,12 @@ def is_polarizer(f1, f2):
     return f1.startswith("P") and f1[1:2].isdigit() or f1.startswith("IRP") or f2.startswith("IRP")
 
 
+def as_text(column):
+    """A column's values as text, as pandas 1 and 2's astype(str) gives them ("nan" for a missing one): pandas 3's
+    astype(str) keeps a missing value as NaN, a float, which colour_filter cannot read."""
+    return [v if isinstance(v, str) else str(v) for v in column.tolist()]
+
+
 def colour_filter(f1, f2):
     """The frame's colour filter ("RED", "CB2", "BL1/GRN"...), or None for clear and polarizer frames."""
     if is_polarizer(f1, f2):
@@ -319,27 +325,29 @@ def pass_table():
             if u.get("off"):   # (frames obs_mosaic._drop_strays took out of the pass are in none)
                 mine = mine[~np.isin(ids[mine], list(u["off"]))]
             pass_of[mine] = len(passes)
-            passes.append({"key": u["key"], "kind": u.get("kind"), "rows": [int(mine[0]), int(mine[-1])], "frames": len(mine)})
+            passes.append({"key": u["key"], "kind": u.get("kind"), "rows": [int(mine[0]), int(mine[-1])], "frames": len(mine),
+                           "tossup": bool(u.get("tossup"))})
     return pass_of, passes
 
 
 def groups():
     """{frame id: (set id, pass id)} for every frame of the index, and the tables the page reads with them:
     sets {set id: [kind, [channel frame ids]]} and passes {pass id: [kind or "", observation, pass number in it,
-    last frame id, frames]}. Set ids are reel.load_index's set numbers, pass ids pass_table's."""
+    last frame id, frames, tossup (1: the build stores both its mosaic and its movie, kind_of's tossup)]}. Set ids are reel.load_index's set numbers, pass ids pass_table's."""
     import reel
     idx, sets = reel.load_index()
     ids = idx["id"].tolist()
     pass_of, passes = pass_table()
     by_id = dict(zip(ids, zip(idx["set"].tolist(), pass_of.tolist())))
     set_table = {n: [s["kind"], [ids[q] for q in s["use"]]] for n, s in enumerate(sets)}
-    pass_table_ = {n: [p["kind"] or "", p["key"][1], p["key"][3], ids[p["rows"][1]], p["frames"]] for n, p in enumerate(passes)}
+    pass_table_ = {n: [p["kind"] or "", p["key"][1], p["key"][3], ids[p["rows"][1]], p["frames"], int(p["tossup"])]
+                   for n, p in enumerate(passes)}
     return by_id, set_table, pass_table_
 
 
 def _old_reel_sets(idx):
     """The filter sets reel.load_index made before this module (RED only as a true red), for --moved."""
-    cams, f1s, f2s = idx["INSTRUMENT_ID"].tolist(), idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist()
+    cams, f1s, f2s = idx["INSTRUMENT_ID"].tolist(), as_text(idx["filter1"]), as_text(idx["filter2"])
     import reel
     out = []
     fs = [colour_filter(a, b) for a, b in zip(f1s, f2s)]
@@ -377,7 +385,7 @@ def main():
     globals()["REPEAT_MAX"] = 0
     try:
         _, before = filter_sets(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
-                                idx["filter1"].astype(str).tolist(), idx["filter2"].astype(str).tolist(),
+                                as_text(idx["filter1"]), as_text(idx["filter2"]),
                                 idx["seconds_1970"].tolist(), lambda q: reel.wavelength(idx["INSTRUMENT_ID"].iat[q],
                                                                                       idx["filter1"].iat[q] + idx["filter2"].iat[q]))
     finally:

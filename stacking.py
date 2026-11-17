@@ -7,11 +7,16 @@ taken within a short window of the original, that SPICE (the geometry cache) put
 same pointing: within REPEAT_PLACE of a frame of it. A frame taken seconds later at another
 pointing (the next panel of a mosaic; Phoebe 2004-06-11 goes back and forth between two
 pointings a minute apart) is not a repeat, however close in time. Where SPICE can't place a
-frame, the repeat must line up with it (image_correction.find_shift) to be merged.
+frame, the repeat must line up with it (image_correction.find_shift) to be merged. A repeat taken
+from nearer or further (a close flyby: Phoebe's closest approach, 2004-06-11, frames 18 s apart from
+100 km nearer, the body 4% bigger) is brought to the frame's range before it is merged (to_range).
 """
 
+import atexit
 import math
 import os
+import shutil
+import socket
 import threading
 import cv2
 import numpy as np
@@ -37,6 +42,15 @@ same_settings = ["EXPOSURE_DURATION", "GAIN_MODE_ID", "INSTRUMENT_MODE_ID"]
 # find_shift lines a repeat up by at most 20 px, the same.
 REPEAT_PLACE = 0.02
 FRAME = 1024
+# full resolution pixels: a repeat SPICE puts at a range that makes the body bigger or smaller than this (grown) is
+# brought to the frame's range before it is lined up and merged (to_range). Lining up only shifts a frame, so one taken
+# nearer or further was merged as two pictures of different sizes laid over each other (Phoebe N1465674377_2: crater
+# shadows with three edges). The size that counts is how far the body reaches from its centre within the frame (its
+# limb, or the frame's farthest corner on a body that fills it): that far out the range change moves the ground most.
+# Over the mission (the geometry cache, 2026-11-16) 6,790 of 91,117 frames that merged a repeat differed by over a
+# pixel, 3,701 of those Titan's. Under it a repeat is merged as before, to the bit.
+REPEAT_GROW = 1.0
+HALF_DIAGONAL = math.hypot(FRAME / 2, FRAME / 2)   # px: the frame's corner from its middle
 
 
 def frame_id(path):
@@ -47,22 +61,86 @@ def frame_id(path):
 Where SPICE puts the body in each of the frames ids (its target, or the body it shows instead, ba.shown_targets),
 from the geometry cache (bootleg_autonav, CASSINI_GEOMETRY_CACHE): {id: (x, y, z)}, find_target's centring shift in full resolution pixels and
 the distance in km. Frames that are not cached, or that SPICE could not place, are left out.
+reach = also give, fourth, how far the body reaches from its centre within the frame (full resolution pixels, as
+drawn: _reach), None for a body of no known size; load_hdr's range test (grown) asks for it
 """
-def places(ids):
+def places(ids, reach=False):
     if not ba.GEOMETRY_CACHE or not os.path.exists(ba.GEOMETRY_CACHE):
         return {}
     db, out = ba._geometry_db(), {}
+    shown = ba.shown_targets()
     for k in range(0, len(ids), 900):
         part = ids[k:k + 900]
-        for frame, x, y, z, camera, scale in db.execute(
-                f"SELECT frame, x, y, z, camera, scale FROM target WHERE version = ? AND error IS NULL "
+        for frame, target, x, y, z, camera, scale in db.execute(
+                f"SELECT frame, target, x, y, z, camera, scale FROM target WHERE version = ? AND error IS NULL "
                 f"AND frame IN ({','.join('?' * len(part))})", (ba.GEOMETRY_VERSION, *part)):
             # on the frame as it is drawn: a WAC frame's shift grown by its geometric correction (ba.linear_ratio)
             r = ba.linear_ratio(camera, scale)
             # a frame that shows another body than its target: that body's place (ba.shown_targets)
-            x, y, z = ba.shown_targets().get(frame, (None, x, y, z))[1:]
-            out[frame] = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
+            target, x, y, z = shown.get(frame, (target, x, y, z))
+            at = (x * r, y * r, z) if r != 1.0 and x is not None else (x, y, z)
+            if reach:
+                at += (_reach(target, at, scale and scale * r), ground_range(at, _radius(target), scale and scale * r))
+            out[frame] = at
     return out
+
+
+_radii = {}
+
+
+def _radius(target):
+    if target not in _radii:
+        _radii[target] = ba._radius_km(target)
+    return _radii[target]
+
+
+def ground_range(place, km, scale):
+    """The distance (km) from the camera to the ground in the frame's middle: along the camera's axis, hypot(x, y) / scale
+    radians off the body's centre (place = (x, y, z), find_target's shift in px and the centre's range; scale px a
+    radian), to where it meets a sphere of km radius; the centre's range when the axis misses the body or its size is
+    not known. (The formula of export_tracks.ground_range, PR #500, here for the repeat merge and colour sets.)"""
+    x, y, z = place[:3]
+    if not km or not z or not scale or x is None or z <= km:
+        return z
+    off = math.hypot(x, y) / scale
+    side = z * math.sin(off)
+    if side < km and math.cos(off) > 0:
+        return z * math.cos(off) - math.sqrt(km * km - side * side)
+    return z
+
+
+def _range(place, other):
+    """The range that sizes the ground in the frame at place against the frame at other ((x, y, z, reach, ground) as
+    places(reach=True) gives): for two frames wholly on the disk the ground's (the ground under the frame grows by
+    the ratio of its ranges, which on a close Titan is twice the centre's: 2,425 km to the ground at 5,000 from the
+    centre), else the centre's (the limb grows by that)."""
+    if _on_disk(place) and _on_disk(other) and len(place) > 4 and len(other) > 4 and place[4] and other[4]:
+        return place[4]
+    return place[2]
+
+
+def _reach(target, at, scale):
+    """How far the body at place at (x, y, z) reaches from its centre within the frame, full resolution pixels: its
+    radius (the target's mean radius over the distance, at scale pixels a radian), but no further than the frame's
+    farthest corner from it, and 0 when it is wholly off the frame; None when its size is not known."""
+    x, y, z = at[:3]
+    km = _radius(target)
+    if not km or not z or not scale or x is None:
+        return None
+    radius = km / z * scale
+    # (the body's centre sits at -x, -y from the frame's: find_target's shift centres it)
+    near = math.hypot(max(abs(x) - FRAME / 2, 0), max(abs(y) - FRAME / 2, 0))
+    if near >= radius:
+        return 0.0
+    return min(radius, math.hypot(FRAME / 2 + abs(x), FRAME / 2 + abs(y)))
+
+
+def _on_disk(place):
+    """True when the frame at place ((x, y, z, reach) as places(reach=True) gives) lies wholly on its body's disk: the
+    body reaches its farthest corner (_reach's cap)."""
+    if place is None or len(place) < 4 or place[3] is None or place[0] is None:
+        return False
+    return place[3] >= math.hypot(FRAME / 2 + abs(place[0]), FRAME / 2 + abs(place[1])) - 1e-6
 
 
 """
@@ -73,6 +151,21 @@ def same_place(a, b):
     if a is None or b is None or a[0] is None or b[0] is None:
         return None
     return math.hypot(a[0] - b[0], a[1] - b[1]) <= REPEAT_PLACE * FRAME
+
+
+def grown(a, b):
+    """How far, full resolution pixels, the change of range between places a and b ((x, y, z, reach)) moves the ground
+    where the body reaches furthest in the frame (a limb, or the farthest corner of a body filling it): its size seen
+    from the nearer over its size from the further, less one, times the nearer's reach. 0 without both ranges and a
+    reach (and 0 for either None)."""
+    if a is None or b is None:
+        return 0.0
+    za, zb = (_range(a, b) if len(a) > 2 else None), (_range(b, a) if len(b) > 2 else None)
+    # (a frame wholly on the disk is brought to range about its middle, to_range: the most it then moves is at its corner)
+    reach = max((HALF_DIAGONAL if _on_disk(p) else p[3] for p in (a, b) if len(p) > 3 and p[3] is not None), default=None)
+    if not za or not zb or reach is None:
+        return 0.0
+    return reach * abs(za - zb) / max(za, zb)
 
 
 """
@@ -100,13 +193,45 @@ def _sets_passes():
     return sets_passes
 
 
+def to_range(image, place, ref_place, inter=None, border=0):
+    """image (a frame's picture, I/F or mask, 1024 px as label.resize_image), taken at place (x, y, z as places gives),
+    as seen from ref_place's range: grown or shrunk by its range over ref_place's about the body's centre (find_target's
+    shift: ba.CCD_CENTER less x, y), where it stays; lining up then takes up the rest. A frame wholly on its body's disk
+    (_on_disk) about its middle instead, as color_image.spice_warps scales a colour set's channels: the centre can be
+    thousands of px off (a close Titan), and the ground under the frame does not grow about it as the limb does, so a
+    scale about it would move the frame by more than lining up looks (20 px) for. What falls outside the frame is
+    border (0: to_range of a frame of ones is the part it covers)."""
+    k = _range(place, ref_place) / _range(ref_place, place)
+    centre = (ba.CCD_CENTER, ba.CCD_CENTER) if _on_disk(place) else \
+        (ba.CCD_CENTER - float(place[0]), ba.CCD_CENTER - float(place[1]))
+    m = cv2.getRotationMatrix2D(centre, 0, k)
+    h, w = image.shape[:2]
+    return cv2.warpAffine(image, m, (w, h), flags=cv2.INTER_CUBIC if inter is None else inter,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=border)
+
+
+def _not_pictures():
+    """{frame id: why} of the frames that hold no picture (web/frames/not_pictures.py)."""
+    import sys
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "frames")
+    if here not in sys.path:
+        sys.path.append(here)
+    import not_pictures
+    return not_pictures.ids()
+
+
 def load_index():
     global index, groups, columns
     if index is None:
         # read once, even when several threads (the frame server's) ask at the same time
         with _index_lock:
             if index is None:
-                idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False).set_index("path", drop=False)
+                idx = pd.read_csv("Image_index.csv", usecols=keys + ["path", "seconds_1970"], low_memory=False)
+                # a dark or lamp frame is no repeat of a picture (web/frames/not_pictures.py: nothing of the scene in it)
+                dark = _not_pictures()
+                if dark:
+                    idx = idx[[frame_id(p) not in dark if isinstance(p, str) else True for p in idx["path"].tolist()]]
+                idx = idx.set_index("path", drop=False)
                 # a frame that shows another body than the archive's target is grouped with that body's frames, as its
                 # label and places have it (ba.shown_targets)
                 shown = ba.shown_targets()
@@ -167,7 +292,7 @@ def find_repeats(path, window=120, max_frames=5):
     near = pd.notna(paths) & (gap <= window) & (paths != key)
     nearest = paths[near][np.argsort(gap[near], kind="quicksort")].tolist()
     if nearest:
-        where = places([frame_id(p) for p in [key] + nearest])
+        where = places([frame_id(p) for p in [key] + nearest], reach=True)
         nearest = [p for p in nearest if same_place(where.get(frame_id(key)), where.get(frame_id(p))) is not False]
     return [path] + [prefix + p for p in nearest[:max_frames - 1]]
 
@@ -175,17 +300,24 @@ def find_repeats(path, window=120, max_frames=5):
 """
 Loads the frame at path and stacks it with its repeat exposures.
 returns (label of the frame at path, stacked image resized like label.resize_image),
-plus how many frames went in when count is True, and with valid True last the mask of pixels
-valid in any frame stacked (label.valid_mask): a repeat fills what the frame lost in downlink
+plus how many frames went in when count is True, and with valid True the mask of pixels
+valid in any frame stacked (label.valid_mask): a repeat fills what the frame lost in downlink.
+deep = also return, last, the same stack at full depth (calibration.depth_image, every repeat on the scale of the
+frame at path: identical exposures, so the same DN are the same level), float32: what the stack is calibrated from
+(the display copies' stack is rounded to 255 levels over the frame's range, and is for aligning and matching only)
 """
-def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
+def load_stacked(path, window=120, max_frames=5, count=False, valid=False, deep=False):
     lbl = lh.label(path, as_png=True)
     frames = [lbl.resize_image()]
     masks = [lbl.valid_mask()] if valid else None
+    codes = ds.imread(lbl.export(), cv2.IMREAD_GRAYSCALE) if deep else None
+    scale = cal.value_range(codes, lbl.info) if deep and ds.lut8() else None
+    deeps = [cal.depth_image(codes, lbl.info)] if deep else None
     if not cal.step("stack"):   # Settings > Processing: the frame alone
         max_frames = 1
+    tail = lambda n, mask, d: ((n,) if count else ()) + ((mask,) if valid else ()) + ((d,) if deep else ())
     if max_frames <= 1:
-        return (lbl, frames[0]) + ((1,) if count else ()) + ((masks[0],) if valid else ())
+        return (lbl, frames[0]) + tail(1, masks[0] if valid else None, deeps[0] if deep else None)
     for repeat in find_repeats(path, window, 4 * max_frames)[1:]:
         if len(frames) >= max_frames:
             break
@@ -196,6 +328,11 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
                 continue
             frame = repeat_lbl.resize_image()
             mask = repeat_lbl.valid_mask() if valid and frame is not None else None
+            if deep and frame is not None:
+                repeat_codes = ds.imread(repeat_lbl.export(), cv2.IMREAD_GRAYSCALE)
+                if scale is not None and repeat_lbl.info.get("DATA_CONVERSION_TYPE") != lbl.info.get("DATA_CONVERSION_TYPE"):
+                    continue
+                deep_frame = cal.depth_image(repeat_codes, repeat_lbl.info, scale)
         except Exception as e:
             print(f"Skipping repeat {repeat}: {e}")
             continue
@@ -203,15 +340,19 @@ def load_stacked(path, window=120, max_frames=5, count=False, valid=False):
             frames.append(frame)
             if valid:
                 masks.append(mask)
+            if deep:
+                deeps.append(deep_frame)
     if len(frames) > 1:
         print(f"Stacking {len(frames)} frames for {path}")
     # a polarized colour frame's repeats are its filter's other polarizer angles: their plain mean (stack_frames)
     plain = len(frames) > 1 and polarized(path)
     if valid:
-        stacked, mask = ic.stack_frames(frames, masks=masks, plain=plain)
-        return (lbl, stacked) + ((len(frames),) if count else ()) + (mask,)
-    stacked = ic.stack_frames(frames, plain=plain)
-    return (lbl, stacked, len(frames)) if count else (lbl, stacked)
+        got = ic.stack_frames(frames, masks=masks, plain=plain, deep=deeps)
+        return (lbl, got[0]) + tail(len(frames), got[1], got[2] if deep else None)
+    got = ic.stack_frames(frames, plain=plain, deep=deeps)
+    if deep:
+        return (lbl, got[0]) + tail(len(frames), None, got[1])
+    return (lbl, got, len(frames)) if count else (lbl, got)
 
 
 """
@@ -220,13 +361,32 @@ merged in I/F (obs_mosaic.pass_scale: every frame of a pass of up to 96 a filter
 again (color_image.load_aligned): the same frames read, calibrated and merged twice, minutes apart in one process.
 pass_scale now asks for the merge as the tile will (valid, clipped) and hands it on (hand_on); the tile's load_hdr call,
 the same path, window and display model, takes it (once: it is the tile's own from then on) instead of working it
-out. Up to HANDED_MB of them wait at a time (CASSINI_HDR_HANDED_MB; a 1024 px frame is 6 MB: the first 21 frames of
-a pass at 128), and a new pass's plan lets go of what the last one's tiles did not take (handing). The merge is the
-one load_hdr returns, so every tile is the same to the bit.
+out. Up to HANDED_MB of them wait at a time in memory (CASSINI_HDR_HANDED_MB; a 1024 px frame is 6 MB: the first 21
+frames of a pass at 128), and a new pass's plan lets go of what the last one's tiles did not take (handing). The merge
+is the one load_hdr returns, so every tile is the same to the bit.
+
+Past that room a merge waits in a file instead (hand_to: a folder for them, which the pre-build gives; without one, as
+before, the frames past the room are merged again by their tiles). Of the mission's 362,515 pass frames the plans
+read 289,365 (a long pass's scale is measured on SCALE_FRAMES a filter), 140,352 of them past the first 21 of their
+pass: those were read, calibrated and merged twice (2026-11-16). A file holds the merge's
+arrays as they are (the I/F as float32, the masks a bit a pixel: 4.3 MB a 1024 px frame), the label and the count stay
+in memory, and the tile gets back arrays equal to the bit; a file that cannot be written or read back costs only the
+hand-over (the tile merges the frame itself). Up to HANDED_DISK_MB of them wait at a time (CASSINI_HDR_HANDED_DISK_MB),
+each removed as its tile takes it, the rest when the next pass's plan begins and when the process ends.
 """
 HANDED_MB = int(os.environ.get("CASSINI_HDR_HANDED_MB", "128"))
+HANDED_DISK_MB = int(os.environ.get("CASSINI_HDR_HANDED_DISK_MB", "4096"))
 _handed, _handed_lock = {}, threading.Lock()
-_handed_state = {"bytes": 0, "pass": None}
+_handed_state = {"bytes": 0, "pass": None, "disk": 0, "root": None, "folder": None, "serial": 0}
+
+
+class _Filed:
+    """A merge waiting in a file (hand_on past the memory's room): the file, its arrays' sizes in memory, and the
+    answer with each array's place (how it reads back) instead of the array."""
+    __slots__ = ("path", "size", "parts")
+
+    def __init__(self, path, size, parts):
+        self.path, self.size, self.parts = path, size, parts
 
 
 def _handed_key(path, window, max_frames):
@@ -240,31 +400,162 @@ def _handed_size(result):
     return sum(a.nbytes for a in result if isinstance(a, np.ndarray))
 
 
+def hand_to(root):
+    """Merges past the memory's room wait in files under root from here on (None or "": none do, as before). Each
+    process keeps its own folder there (<host>-<pid>, made with its first file, removed when it ends); folders left by
+    processes of this machine that are gone (killed before they could tidy up) are removed here."""
+    with _handed_lock:
+        _handed_state.update(root=os.path.abspath(os.path.expanduser(root)) if root else None, folder=None)
+    if not root:
+        return
+    host = _host()
+    try:
+        names = os.listdir(_handed_state["root"])
+    except OSError:
+        return
+    for name in names:
+        owner, _, pid = name.rpartition("-")
+        if owner != host or not pid.isdigit() or int(pid) == os.getpid() or _alive(int(pid)):
+            continue
+        shutil.rmtree(os.path.join(_handed_state["root"], name), ignore_errors=True)
+
+
+def _host():
+    return "".join(c if c.isalnum() else "_" for c in socket.gethostname().split(".")[0]) or "host"
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True   # (there, and not ours to signal)
+    return True
+
+
+def _handed_folder():
+    """(holding _handed_lock) This process's folder for filed merges, made on first use; None when there is none."""
+    if _handed_state["folder"] is None and _handed_state["root"]:
+        folder = os.path.join(_handed_state["root"], f"{_host()}-{os.getpid()}")
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError:
+            _handed_state["root"] = None   # (cannot be made: no files, as without a folder)
+            return None
+        _handed_state["folder"] = folder
+        atexit.register(_tidy, folder, _handed_state["root"])
+    return _handed_state["folder"]
+
+
+def _tidy(folder, root):
+    """(as the process ends) Its folder of filed merges removed, and the folder they are all in once it is empty."""
+    shutil.rmtree(folder, True)
+    try:
+        os.rmdir(root)
+    except OSError:
+        pass
+
+
+def _file_room():
+    """(holding _handed_lock) True while another merge can wait in a file."""
+    return bool(_handed_state["root"]) and _handed_state["disk"] < HANDED_DISK_MB * 2 ** 20
+
+
 def handing(key):
     """A pass's plan begins (key: the pass's): what an earlier pass handed on and no tile took is let go."""
     with _handed_lock:
-        if _handed_state["pass"] != key:
-            _handed.clear()
-            _handed_state.update(bytes=0)
-            _handed_state["pass"] = key
+        if _handed_state["pass"] == key:
+            return
+        left = [v.path for v in _handed.values() if isinstance(v, _Filed)]
+        _handed.clear()
+        _handed_state.update(bytes=0, disk=0)
+        _handed_state["pass"] = key
+    for path in left:
+        _remove(path)
+
+
+def _remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def hand_room():
-    """True while another frame's merge can wait for its tile."""
+    """True while another frame's merge can wait for its tile (in memory, or in a file: hand_to)."""
     with _handed_lock:
-        return _handed_state["bytes"] < HANDED_MB * 2 ** 20
+        return _handed_state["bytes"] < HANDED_MB * 2 ** 20 or _file_room()
 
 
 def hand_on(path, window, result, max_frames=8):
     """Keeps result, load_hdr(path, window, max_frames, valid=True, clipped=True)'s answer in this display model, for
-    the next such call (the tile's), while there is room; False when there is none."""
+    the next such call (the tile's), while there is room: in memory, and past that in a file (hand_to); False when
+    there is none."""
     key, size = _handed_key(path, window, max_frames), _handed_size(result)
     with _handed_lock:
-        if key in _handed or _handed_state["bytes"] + size > HANDED_MB * 2 ** 20:
+        if key in _handed:
             return False
-        _handed[key] = result
-        _handed_state["bytes"] += size
-        return True
+        if _handed_state["bytes"] + size <= HANDED_MB * 2 ** 20:
+            _handed[key] = result
+            _handed_state["bytes"] += size
+            return True
+        folder = _handed_folder() if _file_room() and _handed_state["disk"] + size <= HANDED_DISK_MB * 2 ** 20 else None
+        if folder is None:
+            return False
+        _handed_state["serial"] += 1
+        _handed_state["disk"] += size   # (its room held while it is written, outside the lock)
+        name, of = os.path.join(folder, f"{_handed_state['serial']}.merge"), _handed_state["pass"]
+    filed = _file(name, size, result)
+    with _handed_lock:
+        # (kept unless it could not be written, or another pass's plan began meanwhile, or another thread handed it on)
+        if filed is not None and key not in _handed and _handed_state["pass"] == of:
+            _handed[key] = filed
+            return True
+        if _handed_state["pass"] == of:
+            _handed_state["disk"] = max(0, _handed_state["disk"] - size)
+    _remove(name)
+    return False
+
+
+def _file(name, size, result):
+    """result's arrays written to the file name, each as it is (a mask a bit a pixel): the _Filed that reads them
+    back, or None when the file cannot be written (a full disk: no hand-over, the tile merges the frame itself)."""
+    parts = []
+    try:
+        with open(name, "wb") as fh:
+            for x in result:
+                if not isinstance(x, np.ndarray):
+                    parts.append(("as is", x))
+                elif x.dtype == np.bool_:
+                    np.save(fh, np.packbits(x, axis=None), allow_pickle=False)
+                    parts.append(("bits", x.shape))
+                else:
+                    np.save(fh, x, allow_pickle=False)
+                    parts.append(("array", None))
+    except (OSError, ValueError):
+        _remove(name)
+        return None
+    return _Filed(name, size, parts)
+
+
+def _unfile(filed):
+    """A filed merge read back as it was handed on (and its file removed); None when it cannot be read."""
+    out = []
+    try:
+        with open(filed.path, "rb") as fh:
+            for kind, x in filed.parts:
+                if kind == "as is":
+                    out.append(x)
+                elif kind == "bits":
+                    count = int(np.prod(x))
+                    out.append(np.unpackbits(np.load(fh, allow_pickle=False), count=count).view(np.bool_).reshape(x))
+                else:
+                    out.append(np.load(fh, allow_pickle=False))
+    except (OSError, ValueError, EOFError):
+        out = None
+    _remove(filed.path)
+    return None if out is None else tuple(out)
 
 
 def _handed_take(path, window, max_frames):
@@ -273,9 +564,15 @@ def _handed_take(path, window, max_frames):
     key = _handed_key(path, window, max_frames)
     with _handed_lock:
         result = _handed.pop(key, None)
-        if result is not None:
+        if isinstance(result, _Filed):
+            _handed_state["disk"] = max(0, _handed_state["disk"] - result.size)
+        elif result is not None:
             _handed_state["bytes"] -= _handed_size(result)
-    return result
+    return _unfile(result) if isinstance(result, _Filed) else result
+
+
+if os.environ.get("CASSINI_HDR_HANDED_DIR"):
+    hand_to(os.environ["CASSINI_HDR_HANDED_DIR"])   # (any process: a server's too, when its environment says so)
 
 
 """
@@ -285,10 +582,18 @@ exposure for the bright parts, a long one for the faint ones) becomes one pictur
 of both. Each frame is calibrated on its own, aligned to the frame at path, and averaged weighted by
 its exposure time (the long exposures carry the faint signal), leaving out its saturated pixels
 and the few around them (charge bleeds out of a full pixel), so where a long exposure saturated the
-short one is used. A repeat that can't be matched (a faint frame of mostly empty sky, where phase
-correlation finds nothing) is taken as it is only where SPICE puts it at the frame's pointing
-(same_place); otherwise it is left out, as a frame of another pointing would put its scene over
-this one (Phoebe's black blotches: the other pointing's shadow where this frame saturated).
+short one is used. A repeat find_shift can't match (a faint frame of mostly empty sky, where phase
+correlation round the target finds nothing; and half the repeats of a random 6,000 frames,
+2026-11-16: smooth disks and ring frames that look the same) is matched again near where SPICE puts
+it (image_correction.guided_shift, its phase and centroid matches) when SPICE puts it at the frame's
+pointing (same_place): taken as it is, one in four of those was over 3 px off. One nothing matches is
+still taken as it is there (a bracket's short frame is what fills the long one's saturated parts). A
+frame of another pointing is never merged (Phoebe's black blotches: the other pointing's shadow where
+this frame saturated).
+A repeat SPICE puts at another range, the body over REPEAT_GROW bigger or smaller (grown), is first
+brought to the frame's range (to_range): on a close flyby the frames of a bracket seconds apart are
+taken from tens or hundreds of km nearer (Phoebe's closest approach: crater shadows with three edges
+where a 2 s frame was merged with 0.82 s ones 4% bigger).
 returns (label of the frame at path, float32 I/F image sized like label.resize_image, how many
 frames went in), or the label, None and 1 when the frame at path can't be calibrated.
 valid = also return, last, the mask of pixels valid in any frame merged (label.valid_mask): what a frame lost in
@@ -310,10 +615,10 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
     lbl = lh.label(path, as_png=True)
     ref = first = None
     total, weight, n = None, None, 0
-    merging, own, differ = [], None, False
+    merging, own, differ, seen, ranged_any = [], None, False, None, False
     plain = not cal.step("hdr")
     repeats = find_repeats(path, window, max_frames if cal.step("stack") else 1)
-    where = places([frame_id(p) for p in repeats]) if len(repeats) > 1 else {}
+    where = places([frame_id(p) for p in repeats], reach=True) if len(repeats) > 1 else {}
     for p in repeats:
         try:
             l = lbl if p == path else lh.label(p, as_png=True)
@@ -323,7 +628,9 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             image = l.resize_image()
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
             codes = ds.imread(l.export(), cv2.IMREAD_GRAYSCALE)
-            iof = cal.calibrate(codes, info, gray)
+            # calibrated from its stored values at full depth (cal.depth_image), not from the display copy (image,
+            # gray: 255 levels over the frame's range, for lining the repeats up and marking what the camera saturated)
+            iof = cal.calibrate(codes, info, cal.depth_image(codes, info))
         except Exception as e:
             print(f"Skipping repeat {p}: {e}")
             continue
@@ -331,16 +638,41 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             if p == path:
                 return (lbl, None, 1) + ((None,) if valid else ()) + ((None,) if clipped else ())
             continue
-        shift = None
+        shift, ranged = None, False
         if ref is not None:
             # a frame SPICE puts at another pointing is never merged, one that doesn't line up only where SPICE puts it
             # at this one
             here = same_place(where.get(frame_id(path)), where.get(frame_id(p)))
+            # one taken nearer or further, brought to this frame's range first (to_range)
+            ranged = here is not False and grown(where.get(frame_id(path)), where.get(frame_id(p))) > REPEAT_GROW
+            if ranged:
+                at, ref_at = where[frame_id(p)], where[frame_id(path)]
+                image, iof = to_range(image, at, ref_at), to_range(iof.astype(np.float32), at, ref_at)
+                gray, codes = to_range(gray, at, ref_at), to_range(codes, at, ref_at, cv2.INTER_NEAREST)
+                inside = to_range(np.ones(iof.shape[:2], np.float32), at, ref_at, cv2.INTER_LINEAR) > 0.99
             shift = ic.find_shift(ref, image, 20) if here is not False else None
-            if not here and shift is None:
+            if shift is None and here:
+                # phase correlation round the target found nothing: the repo's fallback for that, matched near where
+                # SPICE puts the repeat (image_correction.guided_shift: phase, edges, then the centroid, within 12 px)
+                at_p, at_ref = where[frame_id(p)], where[frame_id(path)]
+                shift, how = ic.guided_shift(ref, image, (at_ref[0] - at_p[0], at_ref[1] - at_p[1]))
+                if shift is not None and how.startswith("edges"):
+                    # (not on edges alone: a ring frame's edges run along its arcs, and match anywhere along them, 28 px
+                    # off on N1581475448_1)
+                    shift = None
+            if shift is None and not here:
                 print(f"Skipping repeat {p}: it doesn't line up with {path}, and SPICE doesn't put it at the same pointing")
                 continue
+            # (one nothing lines up is still merged as taken where SPICE puts it here: left out, the high-phase ring
+            # mosaics' exposure brackets lost the short frames that measure what the long ones saturate, and their
+            # colour channels came apart in magenta and green blocks, Earth Smiled and the Grand Finale rings)
         mask = l.valid_mask() if valid else None
+        if valid and ranged:
+            # (lost pixels resized with it, and a pixel more round them: the cubic resize of its I/F spreads a lost line
+            # that far. The edge it no longer covers is not lost but unmeasured, left out as saturated below, so a whole
+            # repeat still has the frame's own mask and the merge stays on the plain path, not "differ"'s)
+            mask = to_range(mask.astype(np.float32), at, ref_at, cv2.INTER_LINEAR, border=1) > 0.99
+            mask = cv2.erode(mask.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
         if valid:
             own = mask if own is None else own
             # a frame that lost other pixels than the frame at path: then every frame's lost ones are left out, so
@@ -354,7 +686,19 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
             if valid:
                 mask = ic.shift_image(mask.astype(np.float32), *shift) > 0.99
         full = cal.saturated(codes, info, gray)
+        if ranged or shift is not None:
+            # the edge a shrunk or shifted frame no longer covers measured nothing: left out as a saturated pixel is (and
+            # never taken for one the first frame saturated)
+            cover = inside if ranged else np.ones(full.shape, bool)
+            if shift is not None:
+                cover = ic.shift_image(cover.astype(np.float32), *shift) > 0.99
+            full = full | ~cover
+            ranged_any = ranged_any or ranged
         good = ~cv2.dilate(full.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+        if ref is not image:
+            # (where a repeat measured, saturated or not: all of a plain one, what a resized or shifted one still reaches)
+            reach = cover if ranged or shift is not None else np.ones(full.shape, bool)
+            seen = reach if seen is None else seen | reach
         merging.append((iof, good, mask, np.float32(float(info.get("EXPOSURE_DURATION", 1)) or 1), full))
     if note is not None:
         note["differ"] = bool(differ)
@@ -382,9 +726,17 @@ def load_hdr(path, window=120, max_frames=8, valid=False, clipped=False, note=No
     if n > 1:
         print(f"Merged {n} exposures for {path}")
     out = (lbl, merged, n)
+    # what the frame at path saturated where a repeat brought to its range no longer reaches (the strip along the
+    # edge of a frame taken further than a nearer repeat, to_range): that repeat would have measured it at its own
+    # size, so it is not drawn white as saturated ground but left out as unmeasured, for the next tile of a mosaic
+    # (or the fill of lost pixels) to take, as a frame's lost lines are (Phoebe's closest approach: a white strip
+    # a few px wide along a tile's edge)
+    # (only where no repeat measured it: one that did and saturated there too says it is saturated ground, white)
+    blank = clip & merging[0][4] & ~seen if ranged_any and seen is not None and n > 1 else None
     if valid:
         # valid where some exposure went in, or where every one saturated but the frame at path has its (clipped) pixel
-        out += (own | (weight > 0) if differ else own,)
+        mask = own | (weight > 0) if differ else own
+        out += (mask if blank is None else mask & ~blank,)
     if clipped:
-        out += (clip & merging[0][4],)
+        out += (clip & merging[0][4] if blank is None else clip & merging[0][4] & ~blank,)
     return out

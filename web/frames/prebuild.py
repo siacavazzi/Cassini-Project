@@ -11,11 +11,19 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
   composites  /frames/color.webp?ids=R,G,B for every filter set the page makes (its findSets rule), at 1024 (which
               also writes full) and 512, in the default look (balanced, natural colors)
   mosaics     every mosaic pass's plan and tiles (obs_mosaic), then what the window shows at each of its frames,
-              1024 and 512: its mosaic so far, or a mosaic movie's rolling picture
+              1024 and 512: its mosaic so far, or a mosaic movie's rolling picture; and the frame's full view (the
+              fullview phase's picture, full_view), shrunk from the canvas the 1024 was shrunk from (and a toss-up
+              pass's frames as a movie, evened too, make_evened)
   movies      the same for every movie pass: its steadied frames (movie_webp), then the planes the page's own steps
               start from (make_planes: each frame alone, color=0, at 1024; a filled pass's also before detail, _d0),
-              and for a pass the page cannot even itself (false colour, feature tracks), its frames with Exposure
-              normalization at its default smoothing (make_evened, _e8)
+              and its frames with Exposure normalization at its default smoothing (make_evened, _e8r8), which the
+              Movie Editor, a Pre-process and a film ask the server for
+  evened      every movie pass's frames with Exposure normalization at its default smoothing (make_evened every=True,
+              files _e8r8), at 1024 and 512, and the same for a toss-up mosaic pass's movie frames: the pictures the
+              Movie Editor, a Pre-process and a film ask the server for (the camera windows even the plain frames
+              themselves). The movies phase makes them in a new build; this adds them to a cache built before it
+              did (only for the passes the page cannot even), and the toss-up passes', so no such request draws a
+              frame (the server reads a stored file). Run after movies and mosaics
   processed   /frames/processed/<ID>.webp at 1024, 512 and 256, every frame, centred as Auto center asks
   strips      a movie pass's steadied frames at 128 (the movie strip)
   chains      every movie pass's stabilization and exposure chains (small JSON files; no pictures), which the page's
@@ -26,10 +34,13 @@ Phases (each its own run; a run picks up where the last one stopped, since a mad
               movies and chains): it draws no picture, but can write into the cache the chains a steady table still
               waits for, and the tile maps and global solves tile_map and layout keep when first asked (tables.py).
               A pass is made again when its picture versions or its count of built tiles changed (tables.built)
-  fullview    the full view of every mosaic pass (decision D3): its mosaic at its last frame at size=full (CANVAS up to
-              FULL_MAX, 2048 px), as the mosaic route makes it. Run after mosaics
+  fullview    the full view at every frame of every mosaic pass (decision D3, every frame since 2026-11-16): a mosaic's
+              mosaic so far and a mosaic movie's rolling picture at size=full (up to FULL_MAX, 2048 px), as the
+              routes make them for the page's full view. Run after mosaics: on a cache whose mosaics phase made
+              them (since 2026-11-16) it finds every one made; on an older cache it draws them (1.4 to 3.3
+              core-seconds a picture)
 
-tables and fullview add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
+tables, fullview and evened add to a finished cache and are not recorded in slices.json (the page's timeline stays as the
 picture phases left it).
 
 Made to share the Mac Mini with the live and preview servers: run it under `nice -n 19 taskpolicy -b` (low CPU and
@@ -84,10 +95,11 @@ import calibration  # noqa: E402
 import obs_mosaic  # noqa: E402
 import reel  # noqa: E402
 import slices  # noqa: E402
+import stacking  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview")
-ADDED = ("tables", "fullview")   # phases run on a finished cache, not recorded in slices.json
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened")
+ADDED = ("tables", "fullview", "evened")   # phases run on a finished cache, not recorded in slices.json
 
 
 @functools.lru_cache(None)
@@ -165,6 +177,13 @@ def movie_passes():
     return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])]
 
 
+def evened_passes():
+    """Every pass a Pre-process asks movie frames of (segment_items, make_pass's movie()), in time order: the movie
+    passes, and the toss-up mosaic passes, whose frames it makes as a movie too."""
+    return [u for u in all_passes() if u.get("kind") == "movie" or (u.get("movie") and not u["mosaic"])
+            or (u.get("tossup") and u.get("kind") == "mosaic")]
+
+
 def centred(frame_id):
     """Auto center (on by default in a camera window, center=1): the view the server's centre_of gives the frame's
     pass (centred on the body, or north up where it is), which names the cache folder the window's picture is
@@ -193,23 +212,28 @@ def items(phase):
         return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512, 256)])
                 for i in frame_ids()]
     if phase == "mosaics":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c)) for u in mosaic_passes()]
+        # (a toss-up mosaic pass plays as a movie too, make_pass's movie(): its evened frames with it, as the evened
+        # phase adds them to a cache built before)
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, full=True) + (
+            make_evened(u, c, every=True) if u.get("tossup") and u.get("kind") == "mosaic" else 0)) for u in mosaic_passes()]
     if phase == "chains":
-        # a movie pass's stabilization and exposure chains (steady2-, exposure6-c11s0-plan4.json), which the page
+        # a movie pass's stabilization and exposure chains (steady2-, exposure7-c11s0-plan4.json), which the page
         # holds to SPICE and evens out itself (Settings > Processing, Stabilize / Even exposure): no frames are made
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_chains(u, c)) for u in movie_passes()]
     if phase in ("movies", "strips"):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         if phase == "strips":
             return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c))
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c, every=True))
                 for u in movie_passes()]
     if phase == "tables":
         movies = {tuple(u["key"]) for u in movie_passes()}
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_tables(u, c, tuple(u["key"]) in movies))
                 for u in all_passes()]
     if phase == "fullview":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes() if u["mosaic"]]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes()]
+    if phase == "evened":
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)) for u in evened_passes()]
     raise ValueError(phase)
 
 
@@ -236,7 +260,8 @@ WATCH_PAD = 3 * 3600   # s around a watched observation: what a window plays aro
 
 
 def watched_first(todo):
-    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv, and
+    """todo with the items of the most watched stretches first (the Moments strip, web/replay/moments.csv and
+    plume_moments.csv, and
     Highlights, web/replay/highlights.csv: each observation's frames, WATCH_PAD either side), in time order, then
     the rest in time order. A Moment plays every frame of its stretch, its neighbours' too: by observation alone,
     most of what played on 8790 was still made on demand (2026-10-26). An item's time is its frame's (a set's last
@@ -245,7 +270,7 @@ def watched_first(todo):
     import csv
     here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "replay")
     watched = set()
-    for name in ("moments.csv", "highlights.csv"):
+    for name in ("moments.csv", "plume_moments.csv", "highlights.csv"):
         try:
             with open(os.path.join(here, name)) as fh:
                 for row in csv.DictReader(fh):
@@ -343,7 +368,13 @@ def built(args, total, errors):
     slices.record(args.cache, args.phase, spans_of(args), frame_server.picture_versions(), total, errors)
 
 
-def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, stopped=None):
+# the pre-build making one pass at a time (main, --threads 1: a farm's processes) lets the calibration's kept tables go
+# once a pass's tiles are made (calibration.let_go). Not a server (a stretch pre-processed there shares its tables
+# with the windows' own requests), nor several passes at once (one pass's end would take them from another's tiles)
+_let_go = [False]
+
+
+def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, stopped=None, full=False):
     """What a window shows as it plays through the pass, at every frame at 1024 and 512, after the pass's plan and
     every tile (as web/frames/warm_pass.py does for one observation): a mosaic movie's rolling picture
     (rolling_webp, wait=True, in frame order, so each grows from the one before and is named after every tile
@@ -354,7 +385,9 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
     last). style: the page's Settings > Movie choices, as the window puts them in its request ({trail, laps,
     center, color}; the defaults when None). made(t): called as each frame of the stretch has its pictures, with
     the frame's time (a stretch's progress, Segments), so a long pass counts up frame by frame. stopped(): true once
-    the stretch is stopped, so a long pass ends at the next picture instead of making the rest of it."""
+    the stretch is stopped, so a long pass ends at the next picture instead of making the rest of it. full: a mosaic's
+    or mosaic movie's full view at each frame too (full_view: the fullview phase's picture, made here while the
+    frame's canvas is at hand; the mosaics phase asks for it)."""
     style = style or {}
     t0, t1 = within or (-float("inf"), float("inf"))
     last = max((j for j, f in enumerate(u["frames"]) if f[3] <= t1), default=-1)
@@ -365,6 +398,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         if stopped and stopped():
             return 0
         obs_mosaic.tile(u, j, cache, p["display_scale"])
+    if _let_go[0]:
+        # (every tile is made: what follows, the solve and the pictures drawn of the tiles, calibrates no frame, and
+        # the calibration's kept tables were held beside the mosaic it composes)
+        calibration.let_go()
     if u["mosaic"] and last == len(u["frames"]) - 1:
         # (every tile made: their reports in one file too, which a server's first look at the pass reads instead of
         # a file a tile, obs_mosaic.REPORTS_FILE)
@@ -373,7 +410,33 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         # whole pass puts it from its first tile on: obs_mosaic.global_places)
         if u.get("kind") == "mosaic":
             obs_mosaic.solve_places(u, cache)
+    elif u.get("tossup") and u.get("kind") == "movie" and last == len(u["frames"]) - 1:
+        # a toss-up that plays as a movie: its mosaic so far is drawn at every frame too (below), and is solved on
+        # all its tiles first as a mosaic pass's is. Left to each frame, the solve was made again at every frame on
+        # the tiles so far and each picture was named after that partial solve's moves, which a server reading the
+        # finished pass's solve never asks for: of 108RI MNRNGSHAD005's 29 mosaics so far it found 10 and drew the
+        # other 19 on request (2026-11-16; the Dione 221DI case of solve_places, still open for these)
+        obs_mosaic.solve_places(u, cache)
+    if not u["mosaic"] and last == len(u["frames"]) - 1:
+        # (a movie's stabilization chain before its first frame: a pass whose SPICE places jump against it is drawn
+        # stabilized by default (obs_mosaic.auto_steady), decided on the chain kept, so without it here its default
+        # frames were drawn at SPICE's places and named so, never asked for again, and the stabilized ones drawn at
+        # request time)
+        obs_mosaic.steady_chain(u, cache, p)
     kind, n = u.get("kind"), 0
+    if kind == "mosaic_movie":
+        # (a pass a stopped build left part made is made again from its first picture, as an uninterrupted build makes
+        # it: each grows from the one before it in memory, obs_mosaic.rolling_restart)
+        fade = (style.get("fade", 0), style.get("persist", 0))
+        # (with full on, its full views too, at the pass's one full size: they are grown in frame order the same way)
+        restart = [(s, obs_mosaic.OUT) for s in sizes]
+        if full and u["frames"]:
+            restart.append((frame_server.FULL, frame_server.full_out(u["frames"][0][1], cache)))
+        for size, out in restart:
+            gone = obs_mosaic.rolling_restart(u, size, cache, style.get("laps", 1), fade, last, out=out)
+            if gone:
+                print(f"{u['key'][1]} pass {u['key'][3]}: {gone} mosaic movie pictures at {size} a stopped build left "
+                      "made again from the first", flush=True)
 
     def movie(f, size):
         obs_mosaic.movie_webp(f[1], size, cache, style.get("trail", 0), style.get("color", True), wait=True, ahead=0,
@@ -402,6 +465,8 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
                 movie(f, size)
             elif u.get("tossup") and kind == "movie":
                 obs_mosaic._mosaic_at(u, j, size, cache)
+        if full and (kind == "mosaic_movie" or u["mosaic"]):
+            full_view(u, j, cache)
         if kind != "mosaic_movie" and u["mosaic"]:
             # its tile map too (obs_mosaic.tile_map, kept in MAPS_DIR), which the server works out behind a mosaic's
             # first view (_map_later: the layout at every tile up to it) and the window's first hover reads
@@ -434,25 +499,43 @@ def make_tables(u, cache, movie):
 
 
 def make_fullview(u, cache):
-    """The full view of mosaic pass u (decision D3): its mosaic at its last frame at size=full, as the mosaic route
-    makes it for ?size=full (obs_mosaic.mosaic_webp, out CANVAS up to FULL_MAX), after the pass's plan and tiles
-    (made by the mosaics phase; found here). 1, or 0 for a pass with nothing drawn at its last frame (the route answers
-    404 for it as for any size: obs_mosaic.blank, a ring scan whose tiles hold nothing above black)."""
-    made = obs_mosaic.mosaic_webp(u["frames"][-1][1], frame_server.FULL, cache, None, fmt="webp",
-                                  out=min(obs_mosaic.CANVAS, frame_server.FULL_MAX), force=False,
-                                  tune=obs_mosaic.parse_tune("", ""))
-    if not made:
-        print(f"fullview {u['frames'][-1][1]}: no mosaic at the pass's last frame (the route's 404)", flush=True)
-        return 0
-    if made[1].get("behind"):
-        raise ValueError(f"mosaic {made[1]['behind']} frames behind its last frame: run the mosaics phase first")
-    return 1
+    """The full view of mosaic pass u at every frame: the picture the page's full view asks for there (its window's
+    picture at size=full), stored so a full view, the studio or a download never makes the server draw one
+    (Sam, 2026-11-16: 2048 at every frame of every mosaic and mosaic movie, not only a pass's last frame). After the
+    mosaics phase, whose plan, tiles and pictures it reuses (found here, not made again):
+    - a mosaic movie (kind mosaic_movie): its rolling picture at size=full (obs_mosaic.rolling_webp, the route's
+      mode=rolling&size=full, out frame_server.full_out), in frame order so each grows from the one before,
+      as the mosaics phase makes the 1024 and 512 ones. Never the pass's mosaic so far, which a window never shows for
+      a mosaic movie: drawn at full size, it first redrew every tile's rings as at the pass's epoch (ring_redraw,
+      ~1,600 tiles and ~6 GB a process on a Saturn polarimetry pass), which made this phase take hours a pass;
+    - a mosaic: its mosaic so far at size=full at each frame (obs_mosaic._mosaic_at, the mosaic route's ?size=full,
+      out frame_server.full_out), on the layout the mosaics phase drew at 1024; frames that add nothing to it share
+      its picture, made once.
+    The number of frames with a picture; a frame with nothing drawn yet (the route's 404) has none."""
+    return sum(full_view(u, j, cache) for j in range(len(u["frames"])))
+
+
+def full_view(u, j, cache):
+    """The full view of mosaic pass u at frame j (make_fullview's picture there), made unless it is; whether the frame
+    has one. Asked right after the frame's 1024 and 512 px pictures (make_pass, the mosaics phase), it is the canvas
+    they were shrunk from shrunk once more (obs_mosaic.so_far keeps the canvas it composed last): the same picture as
+    composed afresh, for a resize and a WebP instead of 1.4 to 3.3 core-seconds."""
+    if u.get("kind") == "mosaic_movie":
+        f = u["frames"][j]
+        res = obs_mosaic.rolling_webp(f[1], frame_server.FULL, cache, 1, wait=True,
+                                      out=frame_server.full_out(f[1], cache))
+        return bool(res and res[0] is not None)
+    # (one size for the whole pass: its native size's bucket)
+    return bool(obs_mosaic._mosaic_at(u, j, frame_server.FULL, cache, fmt="webp",
+                                      out=frame_server.full_out(u["frames"][-1][1], cache)))
 
 
 def make_planes(u, cache, centre=True):
     """The frames the page's movie steps start from (steady-local.html, Settings > Processing > Steady movies on this
     computer), as it asks for them: each frame alone at SPICE's places with no gain and no trail (color=0, trail=0,
-    steady=0, exposure=0), at 1024, Auto center as the window has it; and for a filled pass (Titan, Jupiter), the
+    steady=0, exposure=0), at 1024, Auto center as the window has it (a pass stabilized by default, obs_mosaic.auto_steady,
+    is served at STEADY_SMOOTH's places for steady=0, and its steady table's "auto" says so: the page moves its frames
+    from there); and for a filled pass (Titan, Jupiter), the
     same before its detail filter (sharpen False, detail=0, files _d0), which the page sharpens itself after its
     exposure, trail or colour mix. Returns 0: make_pass has counted the pass's frames."""
     filled = obs_mosaic.sharpens(obs_mosaic.plan(u, cache)["display_scale"])
@@ -462,13 +545,17 @@ def make_planes(u, cache, centre=True):
     return 0
 
 
-def make_evened(u, cache, sizes=(1024, 512), centre=True):
+def make_evened(u, cache, sizes=(1024, 512), centre=True, every=False):
     """A movie pass's frames with Exposure normalization at its default smoothing (exposure=EXPOSURE_SMOOTH, on by
     default since 2026-10-29), as the window asks the server for them, for a pass the page cannot even itself
     (obs_mosaic.page_evens: a false colour pass, a feature track, a pass whose view follows its frames); nothing for
-    the rest, which the page evens on the frames make_pass and make_planes made. Returns 0: make_pass has counted
-    the pass's frames."""
-    if obs_mosaic.page_evens(u, cache, True, centre):
+    the rest, which the page evens on the frames make_pass and make_planes made.
+    every: for every pass (the evened phase). The camera windows even those passes themselves, but the Movie Editor's
+    pictures, a Pre-process (make_pass with the page's style) and a film ask the server for the evened frame, and
+    with none kept it drew each on the request: opening a stretch of 999 frames in the editor took 131 s on a finished
+    cache (2026-11-15). The same pictures by the same maker, kept ahead. Returns 0: make_pass has counted the pass's
+    frames."""
+    if not every and obs_mosaic.page_evens(u, cache, True, centre):
         return 0
     for f in u["frames"]:
         for size in sizes:
@@ -491,6 +578,20 @@ def make_chains(u, cache):
 
 
 # ---------- sharing the Mini ----------
+
+def default_max_load():
+    """--max-load's default: 0.8 x the machine's real cores, and no load wait at all for a job running under the slot
+    limiter (~/agents/bin/heavy, HEAVY_SLOTS set), which already decides how many processes run. The limiter makes
+    os.cpu_count() answer the slots it holds (its sitecustomize), so a default taken from it was 0.8 x 3 = 2.4 on a
+    3-slot job, under any busy Mac's load: on 11-16 the before/after builds on both Macs waited at 0% CPU for 30 min."""
+    if os.environ.get("HEAVY_SLOTS", "0") not in ("", "0"):
+        return float("inf")
+    try:
+        cores = os.sysconf("SC_NPROCESSORS_ONLN")
+    except (ValueError, OSError, AttributeError):
+        cores = None
+    return float(cores or os.cpu_count() or 8) * 0.8
+
 
 def busy(args):
     """Why the job should wait now, or None."""
@@ -649,7 +750,7 @@ def make(args, todo, status, errors, holds):
                 status.update(last=name)
 
 
-PASS_PHASES = ("mosaics", "movies", "strips", "chains", "tables", "fullview")
+PASS_PHASES = ("mosaics", "movies", "strips", "chains", "tables", "fullview", "evened")
 # stretches per process (procs --balanced): enough small ones that the processes run out together. A process out of
 # stretches waits for the one that holds the last, about half a stretch each: 1 / (2 x BALANCE) of the phase's process
 # time, 6% at 8. The overnight build's own status files show 2 to 9% of a phase idle that way, and far more in a
@@ -847,7 +948,7 @@ SEGMENT_YIELD = 1.0     # seconds at most a picture of the stretch waits for the
 SEGMENT_MAX = int(os.environ.get("CASSINI_SEGMENT_MAX", "0") or 0)
 ETA_WINDOW, ETA_LEAST = 60.0, 8.0   # seconds of pace the time left is worked out from, and the least that says anything
 SEGMENT_KEEP = 12       # finished stretches the server keeps the status of (a stretch asked again past them is made again from the cache)
-SEGMENT_SIZES = (512, 768, 1024)
+SEGMENT_SIZES = (512, 1024)   # the sizes the windows ask for and the build keeps (sizes= takes the nearest)
 SEGMENT_ANSWER = 0.3    # seconds POST /prebuild waits for its stretch to be made before it answers how far it is
 
 
@@ -867,7 +968,7 @@ def segment_options(q):
         raise ValueError("until= must come after from=")
     cams = "".join(c for c in "NW" if c in (get("cams") or "NW"))
     try:
-        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: abs(z - int(x))) for x in (get("sizes") or "1024").split(",") if x})
+        sizes = sorted({min(SEGMENT_SIZES, key=lambda z: (abs(z - int(x)), -z)) for x in (get("sizes") or "1024").split(",") if x})
         trail, laps = int(get("trail", "0") or 0), int(get("laps", "1") or 1)
         steady, exposure = int(get("steady_smooth", "0") or 0), int(get("exposure", "0") or 0)
         most = max(0, int(get("most", "0") or 0))
@@ -1167,7 +1268,8 @@ def main():
     ap.add_argument("--threads", type=int, default=3)
     ap.add_argument("--first", type=int, default=0, help="skip this many items (they are made)")
     ap.add_argument("--sample", type=int, help="only time this many items, spread over the mission")
-    ap.add_argument("--max-load", type=float, default=float(os.cpu_count() or 8) * 0.8)
+    ap.add_argument("--max-load", type=float, default=default_max_load(),
+                    help="wait while the 1-minute load is over this (default: 0.8 x the Mac's cores; none under the slot limiter)")
     ap.add_argument("--live", default="http://127.0.0.1:8765", help="the live server, waited for while slow ('' for none)")
     ap.add_argument("--watch", default="", help="more servers to wait for while slow, comma separated (previews)")
     ap.add_argument("--disk", help="BSD name of the LaCie (diskutil list), waited for while busier than --max-tps")
@@ -1187,6 +1289,8 @@ def main():
     ap.add_argument("--shard", help=argparse.SUPPRESS)   # k/n: one process's stretch (--procs)
     ap.add_argument("--queue", help=argparse.SUPPRESS)   # a --balanced process's queue folder (stretches)
     ap.add_argument("--tables-out", help="tables: the folder to write into (default <cache>/public-tables)")
+    ap.add_argument("--handed", help="folder where a pass's merged frames wait for their tiles past the memory's room "
+                                     "(stacking.hand_to; default <cache>.handed, beside the cache; 'none' for none)")
     args = ap.parse_args()
     global _tables_out
     _tables_out = args.tables_out
@@ -1206,8 +1310,14 @@ def main():
         return
     obs_mosaic.tiles_ahead = lambda *a, **k: None      # everything is made here, in order (warm_pass.py)
     obs_mosaic.rolling_ahead = lambda *a, **k: None
+    _let_go[0] = args.threads == 1
     if args.phase == "tables":
         obs_mosaic.warm_movie = lambda *a, **k: None   # (a steady table's chains are made in order, tables._steady)
+    if args.phase in PASS_PHASES and not os.environ.get("CASSINI_HDR_HANDED_DIR") and args.handed != "none":
+        # a pass's frames are read, calibrated and merged once: the plan's merge of each waits for its tile, past the
+        # memory's room in a file (stacking.hand_on). Beside the cache, on its disk, never in it (the farm ships the
+        # cache's folders); the environment's folder instead when it names one
+        stacking.hand_to(args.handed or os.path.abspath(os.path.expanduser(args.cache)).rstrip(os.sep) + ".handed")
     data_source = frame_server.data_source
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None
@@ -1218,6 +1328,12 @@ def main():
     if args.until and args.until[5:10] in ("01-01", "") and until > since:
         until -= 1
     data_source.check_kernels(range(since, until + 1))
+    # ... and the 12-bit originals (data_source.check_originals): a cache built partly on the squeezed codes would keep
+    # those pictures under the same names
+    data_source.check_originals()
+    # ... and the flat fields repaired from the PDS's slope files (flat_field.check_flat_fix)
+    import flat_field
+    flat_field.check_flat_fix()
     (sample if args.sample else procs if args.procs > 1 else run)(args)
 
 

@@ -235,7 +235,7 @@ body.phone.has-dock { --appdockh: 50px; }
   // a body's icon in the folder: its surface map, or else its sharpest real picture from the frame server
   function folderIcon(n, b) {
     if (MAP[n] || n === "SUN" || !b.best || !window.cassiniFeeds) return `<span class="fic">${bodyIcon(n)}</span>`;
-    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=256')"></span></span>`;
+    return `<span class="fic"><span class="pic" style="background-image:url('${cassiniFeeds.frames}/frames/${b.best}.webp?size=512')"></span></span>`;
   }
   const folder = document.createElement("div");
   folder.id = "dkfolder"; folder.hidden = true; folder.setAttribute("role", "dialog"); folder.setAttribute("aria-label", "All bodies");
