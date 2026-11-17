@@ -87,9 +87,9 @@ import label_handler  # noqa: E402
 # without the lead (_register_match): Telesto's clear frames, 77 px off by SPICE, no longer stay there as a gray ghost
 # obs-v135/v118/v104: an empty sky's whole noise taken for sky where the sky test's cut ran through it (calibration._sky): black, not a gray floor with line stripes (numbered past #552, the lit-sky pass and #558)
 # obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
-# obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
+# obs-v141/v124/v110: sky smoothing's slope guard on every frame (calibration.SKY_GLOW_MOVE): no black gap and grainy halo outside Saturn's limb; obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
-VERSIONS = {"balanced": "obs-v140", "raw": "obs-v123", "eye": "obs-v140-eye", "false": "obs-v140-false", "classic": "obs-v109-classic"}
+VERSIONS = {"balanced": "obs-v141", "raw": "obs-v124", "eye": "obs-v141-eye", "false": "obs-v141-false", "classic": "obs-v110-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
