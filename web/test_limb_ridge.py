@@ -1,9 +1,9 @@
-"""The limb match as a search for where the lit areas' outlines differ least (image_correction.limb_shift,
-_outline_search): a round limb is found where it is; a near-straight one (Titan's haze along the bottom of a frame,
-200TI EUVFUV002's CB2/RED/BL1 set, gray after #491 when its correlation peak fell from 0.21 to 0.17) is placed across
-itself and along it at SPICE's offset; two outlines running different ways are not one limb moved; the place found
-does not hang on a few hundred changed pixels (W1640522624_1's peak fell from 0.54 to 0.19 that way).
-Synthetic frames. Run: python web/test_limb_ridge.py"""
+"""The limb match, where the outlines' correlation peak falls short, as a search for where the lit areas' outlines
+differ least (image_correction.limb_shift, _outline_search): a round limb is found where it is; a near-straight one
+(Titan's haze along the bottom of a frame, 200TI EUVFUV002's CB2/RED/BL1 set, gray after #491 when its correlation
+peak fell from 0.21 to 0.17) is placed across itself and along it at SPICE's offset; two outlines running different
+ways are not one limb moved; the place found does not hang on a few hundred changed pixels (W1640522624_1's peak fell
+from 0.54 to 0.19 that way). Synthetic frames. Run: python web/test_limb_ridge.py"""
 import os
 import sys
 
@@ -35,6 +35,9 @@ def haze(dx, dy, band, tilt=0.0, specks=8):
 
 
 checks = 0
+# (the correlation peak, believed first where it reaches LIMB_RESPONSE, is set aside: the search decides)
+believed = ic.LIMB_RESPONSE
+ic.LIMB_RESPONSE = 2.0
 
 # 1. the haze limb moved 7 px across (down) and 20 px along it: found across, SPICE's place along it
 h1, h2 = haze(0, 0, 0), haze(20, 7, 1)
@@ -73,7 +76,8 @@ assert changed > 100 and a is not None and b is not None and np.hypot(a[0] - b[0
 print(f"{changed} lit pixels changed: {[round(v, 2) for v in a]} -> {[round(v, 2) for v in b]}")
 checks += 1
 
-# 6. a straight edge with no SPICE moves only across it
+# 6. a straight edge with no SPICE moves only across it, also where its peak is believed
+ic.LIMB_RESPONSE = believed
 edge1 = cv2.cvtColor(np.where(xx < 500, 180, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 edge2 = cv2.cvtColor(np.where(xx < 506, 120, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 shift, how = ic.limb_shift(edge1, edge2, MASK, MASK)

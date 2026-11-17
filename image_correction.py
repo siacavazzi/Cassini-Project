@@ -471,20 +471,22 @@ A body's limb matched on its outline alone: the lit area of each frame (above it
 matched as a shape, so the filters' brightness inside it, which phase correlation and the edges trip on, plays no
 part. Titan through CB3 and MT1, or Saturn's limb through BL1 and MT2, look nothing alike inside the disk, but the
 disk's outline is the same curve (N1872922446_1: phase and edges found nothing; the outlines line up to 0.4 % of the
-frame differing, from 3.7 % as taken, 20 px off). The move is where the two outlines differ least: searched over
-CHECK_REACH on the outlines LIMB_COARSE times smaller, then refined to a quarter px at full size (_outline_search).
-(Their phase correlation's peak, believed from 0.2 before, was a poor gate: a few hundred of a million lit pixels
-changed, the frames calibrated at full depth (#491), took W1640522624_1's from 0.54 to 0.19 and 200TI's N1767327092_1
-from 0.21 to 0.17, the outlines' best place the same, and those sets went gray.) Where the least difference is not
-distinct (nothing LIMB_FAR px off differs LIMB_DISTINCT times more), the outline says only how far across it the frame
-moved: a near-straight one (_outline_across) is placed across itself and along it at SPICE's offset, as ridge_shift
-does for a ring edge (as taken without one, or past RIDGE_GUESS); any other is not aligned. The move must stay within
-CHECK_REACH, leave at most LIMB_DIFF of the frame differing, LIMB_GAIN of what differed as taken, and the edges must
-agree no worse than as taken (_agreement). Each frame must have a clear lit and dark part (LIMB_CONTRAST between its
-5th and 95th percentiles, lit over LIMB_SHARE of it to 1 - LIMB_SHARE). SPICE's offset is not asked for a distinct
-place: between a set's filters it is often the one off (N1496643022_1: SPICE -18,-7, the outline +17,+9).
+frame differing, from 3.7 % as taken, 20 px off). The outlines' phase correlation is believed where its peak
+reaches LIMB_RESPONSE; that peak swings on a few hundred of a million lit pixels, though (calibrating at full depth,
+#491, took W1640522624_1's from 0.54 to 0.19 and 200TI's N1767327092_1 from 0.21 to 0.17, the outlines' best place the
+same, and those sets went gray), so where it falls short the move is searched directly: where the outlines differ
+least, over CHECK_REACH on the outlines LIMB_COARSE times smaller, refined to a quarter px at full size
+(_outline_search). Where that least difference is not distinct (nothing LIMB_FAR px off differs LIMB_DISTINCT times
+more), the outline says only how far across it the frame moved: a near-straight one (_outline_across) is placed across
+itself and along it at SPICE's offset, as ridge_shift does for a ring edge (as taken without one, or past
+CHECK_REACH); any other is not aligned. Either move must stay within CHECK_REACH, leave at most LIMB_DIFF of the frame
+differing, LIMB_GAIN of what differed as taken, and the edges must agree no worse than as taken (_agreement). Each
+frame must have a clear lit and dark part (LIMB_CONTRAST between its 5th and 95th percentiles, lit over LIMB_SHARE of
+it to 1 - LIMB_SHARE). SPICE's offset is not asked for a distinct place: between a set's filters it is often the one
+off (N1496643022_1: SPICE -18,-7, the outline +17,+9).
 ((dx, dy), how) or (None, "not aligned")
 """
+LIMB_RESPONSE = 0.2   # the outlines' correlation peak believed first
 LIMB_DIFF = 0.01      # the most of the frame (inside both) whose lit and dark may differ after the move ...
 LIMB_GAIN = 0.6       # ... and at most this share of what differed as taken
 LIMB_COARSE = 4       # the outlines searched this many times smaller first
@@ -573,6 +575,19 @@ def limb_shift(im1, im2, mask1, mask2, g=None):
         both = mask1 & (shift_image(mask2.astype(np.float32), *shift) > 0.99)
         both = cv2.erode(both.astype(np.uint8), np.ones((15, 15), np.uint8), borderValue=0) > 0
         return float((l1[both] != moved[both]).mean()) if both.sum() >= 1000 else 1.0
+    def checked(shift):
+        before, after = differ((0.0, 0.0)), differ(shift)
+        ok = np.hypot(*shift) <= CHECK_REACH and after <= LIMB_DIFF and after <= LIMB_GAIN * before and \
+            _agreement(im1, im2, mask1, mask2, shift) >= _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
+        return ok, before, after
+    # the outlines' phase correlation first, where its peak stands out (as every limb match was found before)
+    f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
+    (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
+    if response >= LIMB_RESPONSE:
+        ok, before, after = checked((dx, dy))
+        if ok:
+            return (dx, dy), f"limb (peak {response:.2f}, outlines differ {100 * before:.1f} % to {100 * after:.1f} %)"
+    # ... and where it does not, the place the outlines differ least
     got = _outline_search(l1, l2, mask1, mask2)
     if got is None:
         return None, "not aligned"
@@ -590,7 +605,7 @@ def limb_shift(im1, im2, mask1, mask2, g=None):
         if a1 is None or a2 is None or np.degrees(np.arccos(min(1.0, abs(float(a1 @ a2))))) > LIMB_TURN:
             return None, "not aligned"
         across, along = a1, np.array([-a1[1], a1[0]])
-        c = np.zeros(2) if g is None or np.hypot(g[0], g[1]) > RIDGE_GUESS else np.asarray(g, np.float64)
+        c = np.zeros(2) if g is None or np.hypot(g[0], g[1]) > CHECK_REACH else np.asarray(g, np.float64)
         base = float(c @ along) * along
         ts = np.arange(-CHECK_REACH, CHECK_REACH + 0.5)
         t = int(np.argmin([differ(tuple(base + t * across)) for t in ts]))
@@ -602,10 +617,8 @@ def limb_shift(im1, im2, mask1, mask2, g=None):
         how = f"limb ridge at {angle:.0f} deg"
         along_how = f", {'SPICE' if c.any() else 'as taken'} along it"
     shift = (float(shift[0]), float(shift[1]))
-    before, after = differ((0.0, 0.0)), differ(shift)
-    if np.hypot(*shift) > CHECK_REACH or after > LIMB_DIFF or after > LIMB_GAIN * before:
-        return None, "not aligned"
-    if _agreement(im1, im2, mask1, mask2, shift) < _agreement(im1, im2, mask1, mask2, (0.0, 0.0)):
+    ok, before, after = checked(shift)
+    if not ok:
         return None, "not aligned"
     return shift, f"{how} (outlines differ {100 * before:.1f} % to {100 * after:.1f} %{along_how if how != 'limb' else ''})"
 
