@@ -701,7 +701,7 @@ def calibrate(png, info, image=None, smooth=True):
             # levels apart there)
             # (a frame with its original, when SKY_SMOOTH_ORIGINALS turns smoothing on for it: its true DN on the codes'
             # scale, fractional, so the smoothing's code-step tests see no steps the squeeze made)
-            per_second = smooth_sky(per_second, _smooth_steps(png, info), sky, _value(info, "TARGET_NAME", "") in SKY_SLOPE_BODIES and _slopes.get())
+            per_second = smooth_sky(per_second, _smooth_steps(png, info), sky, _slopes.get())
 
     gain_ratio = GAIN_RATIOS[camera][GAIN_STATES[gain]]
     slope, start = SENSITIVITY[camera]
@@ -831,9 +831,12 @@ SKY_GLOW_TOP = 24          # ... and beyond the dark sky, where that glow is up 
 SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move further than this many codes from its own (from the
                            # first, none from the second) keeps its own: the glow's one-code steps move a code at most, a
                            # crescent's terminator, too steep for the blur, was pulled down to the edge of the smoothing and
-                           # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14). Only on the
-SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets: every other frame keeps the smoothing as it was (on all of them,
-                           # the change moved Jupiter's approach movie's evening and ring movies' registration)
+                           # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14).
+SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets have their color sets' channels aligned on the frames as smoothed
+                           # without it (color_image: Titan crescents' channels matched on the guarded slope came out apart).
+                           # The guard itself is on every frame since 11-17: on a Saturn limb, sky pixels the glow smoothing
+                           # pulled up from the limb's soft edge (0.04 -> 0.11 of white 10 px out on N1469611288_1, the
+                           # edge pixels left dark between) drew a thin black gap and a grainy halo (Sam, 11-17)
 SKY_LINE = (32, 0.75)      # the glow's rise and reach are measured from each line's dark sky (its median over that line's
                            # pixels of the measured dark sky, with at least SKY_LINE[0] of them; a line with fewer takes the
                            # nearest lines') on a line less than SKY_LINE[1] dark sky, not the whole line's median: on a line mostly across Saturn that median is the
