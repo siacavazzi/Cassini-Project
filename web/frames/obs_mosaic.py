@@ -84,7 +84,7 @@ import label_handler  # noqa: E402
 # obs-v132/v115/v101: a band of a colour movie frame the camera saturated is floored at the light it saturated
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
-# obs-v133/v116/v102: a hazy body's movie frame (PER_BODY_HAZY: Titan, Saturn) measures its own black's sky spread away from
+# obs-v133/v116/v102: a hazy body's movie frame (HAZE_BLACK_BODIES: Titan) measures its own black's sky spread away from
 # its haze (_glow_free): 133TI CLOUD002's limb a soft fade, not a hard orange edge
 VERSIONS = {"balanced": "obs-v133", "raw": "obs-v116", "eye": "obs-v133-eye", "false": "obs-v133-false", "classic": "obs-v102-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
@@ -2517,6 +2517,10 @@ SKY_OUTLIER = 6  # a movie frame's own sky (tile_scale): pixels further under it
                  # the 99.9th percentile) or this many times its noise are not sky (a lost line calibrates to ~-1 I/F)
 
 
+HAZE_BLACK_BODIES = ("TITAN",)   # tile_scale's hazy: Titan's haze reaches a third of a radius past its limb. Not Saturn: its
+                                 # movie frames' sky round the disk is ring and limb glare, and measured past it the black
+                                 # fell under that glare (saturn05's disk washed out, 15% clipped; the approach movie's frames
+                                 # placed 10 px apart), benchmark 2026-11-17
 SKY_GLOW_RISE = 0.1   # _glow_free: a sky pixel whose mean over SKY_SMOOTH pixels is over the sky's median by this share of
                       # the way up to its ceiling (5% of the frame's top) is in its body's haze
 
@@ -2557,7 +2561,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     time, which put a movie frame off the disk in one of the pass's runs of long exposures (pass_scale's "long") on
     their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
     the shadow (032RI's silhouette) are in the sky the rule would take under black. clean_lost: the frame's own black is measured without the pixels it lost in downlink (black_of: a narrow-angle
-    frame's, for now). hazy: the body's limb is a haze (PER_BODY_HAZY), kept out of the sky the whole-codes rule's spread
+    frame's, for now). hazy: the body's limb is a haze (HAZE_BLACK_BODIES), kept out of the sky the whole-codes rule's spread
     is measured on (_glow_free). speck: the body is one of SPECKS
     (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
@@ -2669,7 +2673,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             # noise measure misses), as a single picture's black sits: the sky's blocks and column stripes over its
             # median, and the faint stray light round the moon they show in, are under black, as in the frame alone
             # (089MI's 2 s UV3 drew its columns as stripes round the moon on the median alone)
-            # (a hazy body's (PER_BODY_HAZY) measured on the sky away from its haze, _glow_free: Titan's haze rises smoothly
+            # (a hazy body's (HAZE_BLACK_BODIES) measured on the sky away from its haze, _glow_free: Titan's haze rises smoothly
             # through the sky the 5% rule finds, out to a third of a radius, and its outer part set this percentile:
             # 133TI CLOUD002's black went to 5 times the pass's, over the haze, and its limb came out a hard orange edge,
             # the methane band's fainter haze cut first. The stray light round an airless moon stays under black, as
@@ -3217,7 +3221,7 @@ def _tile_made(u, n, cache, scale, base):
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
                                                                                            on_disk(u, u["frames"][n]), exposure, t,
                                                                                            not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N",
-                                                                                           hazy=u["key"][0] in PER_BODY_HAZY),
+                                                                                           hazy=u["key"][0] in HAZE_BLACK_BODIES),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
                                                         turn=view_turn(u))
