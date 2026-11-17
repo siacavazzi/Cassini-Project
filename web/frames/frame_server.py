@@ -117,6 +117,7 @@ Routes:
                                what the page needs to fade a mosaic movie's older tiles itself on the time-lapse
                                picture (W x H as made), for any fade (obs_mosaic.fade_table)
   /frames/movie/<ID>.steady.json?center=1&color=0
+  /frames/movie/<ID>.sat.webp?size=1024&center=1&detail=1   its kept saturation excess map (page colour mix), never drawn
                                what the page needs to stabilize the frame's movie pass itself, for any smoothing
                                (obs_mosaic.steady_table, Settings > Movie > Stabilize in: This computer)
   /frames/movie/<ID>.json      the pass the frame is in: its frames [id, time, filter], cadence, movie/mosaic call
@@ -2003,6 +2004,29 @@ def make_handler(site, cache, flags=None):
                 q = parse_qs(url.query)
                 info = obs_mosaic.steady_table(m.group(1), cache, q.get("center", ["1"])[0] != "0", q.get("color", ["0"])[0] != "0")
                 return self.send_json(info) if info else self.send_error(404, "Not in a pass")
+            m = re.match(r"^/frames/movie/([^/]+)\.sat\.webp$", url.path)
+            if m:
+                # a movie frame's saturation excess map, kept beside its picture drawn alone at SPICE's places
+                # (obs_mosaic.keep_picture_sat), for the page's colour mix (steady-local.html): served as kept, never drawn
+                if not FRAME_ID.match(m.group(1)):
+                    return self.send_error(400, "Not a frame id")
+                if reel._index is None:
+                    return self.send_error(404, "No index of the frames")
+                q = parse_qs(url.query)
+                try:
+                    size = int(q.get("size", [str(obs_mosaic.OUT)])[0])
+                except ValueError:
+                    return self.send_error(400, "size= takes a number")
+                data = obs_mosaic.movie_sat(m.group(1), size, cache, q.get("center", ["1"])[0] != "0", q.get("detail", ["1"])[0] != "0")
+                if data is None:
+                    return self.send_error(404, "No saturation map")
+                self.send_response(200)
+                self.send_header("Content-Type", "image/webp")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                self.end_headers()
+                self.wfile.write(data)
+                return
             m = re.match(r"^/frames/movie/([^/]+)\.(webp|json)$", url.path)
             if m:
                 # a frame played as a movie of its pass (obs_mosaic.movie_webp): centred by SPICE, on the pass's one

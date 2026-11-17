@@ -1506,6 +1506,22 @@ picture could not be placed. A map that fails is dropped (None), never the pictu
 """
 def _place_hdr_map(lbl, alpha, angle):
     sink = cal.hdr_sink()
+    sat = getattr(sink, "sat", None)
+    if sat and sat[-1] is not None:
+        # (and its saturation-level map, calibration.load_channels: nearest, so a patch keeps its level to its edge)
+        try:
+            m = sat[-1]
+            if m.shape != alpha.shape:
+                m = cv2.resize(m, alpha.shape[::-1], interpolation=cv2.INTER_NEAREST)
+            kept = lbl.color_img
+            try:
+                lbl.set_color(np.dstack([m, m, m, alpha]))
+                sat[-1] = np.ascontiguousarray(lbl.translate("png", 0, 0, angle, border)[..., 0])
+            finally:
+                lbl.set_color(kept)
+        except Exception as e:
+            print(f"No saturation map placed: {e}")
+            sat[-1] = None
     if not sink or sink[-1] is None:
         return
     try:
