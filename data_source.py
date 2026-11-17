@@ -504,6 +504,12 @@ def check_originals():
         print("Originals: off (CASSINI_ORIGINALS=off): 12BIT frames calibrated from the archive's squeezed codes", flush=True)
         return {"frames": 0, "volumes": 0}
     _originals_index()
+    if _originals_info.get("volumes", 0) < ORIGINALS_VOLUMES and lean():
+        # (a lean archive's left-out frames are read from the originals: one missing would stop the build at that
+        # frame, or be dropped by a caller that carries on without it, so a partial download is never enough)
+        raise OriginalsMissing(f"{get_source()} is a lean archive and {ORIGINALS} holds {_originals_info.get('volumes', 0)} "
+                               f"of {ORIGINALS_VOLUMES} complete volumes: it needs them all (CASSINI_ORIGINALS_PARTIAL "
+                               f"does not apply)")
     if (_originals_info.get("volumes", 0) < ORIGINALS_VOLUMES
             and os.environ.get("CASSINI_ORIGINALS_PARTIAL", "") not in ("1", "yes", "true")):
         raise OriginalsMissing(f"{ORIGINALS} holds {_originals_info.get('volumes', 0)} of {ORIGINALS_VOLUMES} complete "
@@ -593,7 +599,10 @@ class LeanFrameMissing(OriginalsMissing):
 
 def lean():
     """True when the data is a lean archive (it has the tool's LEAN_ARCHIVE.txt)"""
-    return exists("LEAN_ARCHIVE.txt")
+    try:
+        return exists("LEAN_ARCHIVE.txt")
+    except FileNotFoundError:   # (no data at all: not a lean archive)
+        return False
 
 
 def lean_stub(data):

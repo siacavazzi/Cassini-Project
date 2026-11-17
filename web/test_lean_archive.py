@@ -79,10 +79,10 @@ with tempfile.TemporaryDirectory() as tmp:
     env = dict(os.environ, CASSINI_ORIGINALS_PARTIAL="1", CASSINI_INDEX_CACHE=os.path.join(tmp, "zip_index"))
     run = lambda *a: subprocess.run([sys.executable, TOOL, *a, "--data", full, "--originals", originals, "--workers", "2"],
                                     env=env, capture_output=True, text=True)
-    p = run("build", "--out", lean)
+    p = run("build", "--out", lean, "--floor-gb", "0")   # (a few KB: no free-disk floor for the test)
     assert p.returncode == 0, p.stdout + p.stderr
     assert "3 PNGs left out" in p.stdout, p.stdout
-    assert run("build", "--out", lean).returncode != 0   # never over an existing file
+    assert run("build", "--out", lean, "--floor-gb", "0").returncode != 0   # never over an existing file
     p = run("verify", "--lean", lean)
     assert p.returncode == 0 and "OK" in p.stdout, p.stdout + p.stderr
     checks += 3
@@ -146,6 +146,15 @@ with tempfile.TemporaryDirectory() as tmp:
         except ds.LeanFrameMissing as e:
             assert "CASSINI_ORIGINALS" in str(e)
         assert np.array_equal(ds.imread("nac_data/N1000000005_1.png", cv2.IMREAD_GRAYSCALE), frames["N1000000005_1"][1])
+        if setting is None:   # (a partial download is never enough for a lean archive's build, test pass or not)
+            ds.ORIGINALS, ds._originals = originals, None
+            os.environ["CASSINI_ORIGINALS_PARTIAL"] = "1"
+            try:
+                ds.check_originals(); raise AssertionError("a build on a lean archive with a partial download")
+            except ds.OriginalsMissing as e:
+                assert "lean archive" in str(e)
+            del os.environ["CASSINI_ORIGINALS_PARTIAL"]
+            ds.ORIGINALS = None
         if setting == "off":   # (a build's guard says so before it starts)
             try:
                 ds.check_originals(); raise AssertionError("a build on a lean archive with the originals off")
