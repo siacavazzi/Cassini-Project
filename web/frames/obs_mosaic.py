@@ -81,7 +81,8 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-VERSIONS = {"balanced": "obs-v131", "raw": "obs-v114", "eye": "obs-v131-eye", "false": "obs-v131-false", "classic": "obs-v100-classic"}
+# obs-v135/v118/v104: an empty sky's whole noise taken for sky where the sky test's cut ran through it (calibration._sky): black, not a gray floor with line stripes (numbered past #552, the lit-sky pass and #558)
+VERSIONS = {"balanced": "obs-v135", "raw": "obs-v118", "eye": "obs-v135-eye", "false": "obs-v135-false", "classic": "obs-v104-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
