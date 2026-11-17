@@ -85,7 +85,10 @@ import label_handler  # noqa: E402
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
 # obs-v133/v116/v102: a transit's saturation excess moves with its plane (_per_body_planes)
-VERSIONS = {"balanced": "obs-v133", "raw": "obs-v116", "eye": "obs-v133-eye", "false": "obs-v133-false", "classic": "obs-v102-classic"}
+# obs-v134/v117/v103: a mosaic's colour picture takes each filter mosaic's saturation excess, composed with it
+# (_filter_excess: its tiles as the light they saturated on, the picture's own corrections and blend decisions): a thin
+# saturated ring blended under CLIP_FROM is filled from the other bands (269RI HIPHASEFB001's cyan F ring)
+VERSIONS = {"balanced": "obs-v134", "raw": "obs-v117", "eye": "obs-v134-eye", "false": "obs-v134-false", "classic": "obs-v103-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -5922,9 +5925,10 @@ def _rewrite(path, kept):
     os.replace(part, path)
 
 
-def _window(u, p, mine, rect, cache):
+def _window(u, p, mine, rect, cache, light=False):
     """The tiles mine drawn on the view rect's canvas, one RGBA frame each, as mosaic.compose takes them:
-    ([(frame, None, None, None)], the tiles that are in the view)."""
+    ([(frame, None, None, None)], the tiles that are in the view). light: each tile as the light its camera saturated
+    on (_light_part), for a mosaic's saturation excess (_filter_excess)."""
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
     window, shown = [], []
@@ -5937,7 +5941,8 @@ def _window(u, p, mine, rect, cache):
         sw, sh = max(1, round(bw * k)), max(1, round(bh * k))
         if left >= W or top >= H or left + sw <= 0 or top + sh <= 0:
             continue
-        part = _shade(_part(_pic(u, cache, p["display_scale"], t), sw, sh), t)
+        part = _shade((_light_part if light else _part)(_pic(u, cache, p["display_scale"], t), sw, sh,
+                                                        *((u, cache, p["display_scale"], t) if light else ())), t)
         if SUBPIXEL:
             part = _subpixel_at(part, t, rect, k, left, top)
         frame = np.zeros((H, W, 4), np.uint8)
@@ -5946,6 +5951,22 @@ def _window(u, p, mine, rect, cache):
         window.append((frame, None, None, None))
         shown.append(t)
     return window, shown
+
+
+def _light_part(path, w, h, u, cache, scale, t):
+    """Tile t (its picture at path) at w x h as _part has it, but where its camera saturated drawn as the light it
+    saturated on (its <n>.sat.webp, _keep_tile_sat) rather than as drawn (white for a patch with an edge): the picture a
+    mosaic's saturation excess is measured against (_filter_excess). The tile as _part has it when it has no map."""
+    sat = os.path.join(_tiles(u, cache, scale), f"{t['n']}.sat.webp")
+    if not t.get("sat") or not os.path.exists(sat):
+        return _part(path, w, h)
+    pic = np.array(Image.open(path).convert("RGBA"))
+    level = np.asarray(Image.open(sat).convert("L"))
+    if level.shape != pic.shape[:2]:
+        return _part(path, w, h)
+    at = (level > 0) & (pic[..., 0] > level)
+    pic[..., :3][at] = level[at][:, None]
+    return np.asarray(Image.fromarray(pic).resize((w, h), Image.LANCZOS))
 
 
 SAME_PLACE = 0.25   # of a frame: tiles of different filters this close are the same pointing (seams)
@@ -6214,13 +6235,56 @@ CLIPPED_TAG = "_cu"   # in a mosaic picture's name: a saturated pointing is draw
 VISIT_TAG = "-v2"
 
 
-def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag=""):
+def _filter_excess(u, p, mine, rect, cache, rgba, corrections, kept, path, balanced):
+    """A filter mosaic's saturation excess (linear, how much of each pixel is the white its tiles' saturated pixels were
+    drawn over the light they saturated on), kept beside it as <path>.sat.png (16 bits, 0-65535 for 0-1): its tiles
+    drawn as that light (_window light) composed with the picture's own corrections and the blend step's decisions for
+    it (mosaic._blended's kept, given back: the same seams and leveling), decoded, the picture less that. So it lies
+    under exactly the pixels the saturated tiles drew, however they were blended (269RI HIPHASEFB001's thin F ring and A
+    ring edge, blended into the canvas under CLIP_FROM)."""
+    import mosaic_native
+    try:
+        window, _ = _window(u, p, mine, rect, cache, light=True)
+        decided = [mosaic_native._decided(d, 1.0, 0, 0) for d in kept] if kept and len(kept) == len(window) else None
+        k, g = p["k"], p["display_scale"].get("gamma", 2.2)
+        kw = {"corrections": corrections} if corrections else {}
+        if balanced:
+            kw["gamma"] = g
+        light = _compose(window, k, pin=None, decided=decided, **kw) if len(window) > 1 else np.asarray(window[0][0])
+        ex = np.maximum(calibration.decode(rgba[..., 0].astype(np.float32) / 255, g)
+                        - calibration.decode(light[..., 0].astype(np.float32) / 255, g), 0)
+        ex = np.where(rgba[..., 3] > 0, ex, 0)
+        q = np.clip(ex * 65535 + 0.5, 0, 65535).astype(np.uint16)
+        buf = io.BytesIO()
+        Image.fromarray(q).save(buf, "PNG")
+        reel._cached(path[:-len(".png")] + ".sat.png", buf.getvalue)
+    except Exception as e:
+        print(f"No saturation excess for {path}: {e}")
+
+
+def filter_sat(path):
+    """The saturation excess kept beside the filter mosaic at path (_filter_excess), float32, or None."""
+    sp = path[:-len(".png")] + ".sat.png"
+    if not os.path.exists(sp):
+        return None
+    return np.asarray(Image.open(sp)).astype(np.float32) / 65535
+
+
+_last_filter = threading.local()   # the path filter_mosaic last drew or found on this thread (colour_planes' sat)
+
+
+def colour_planes(u, p, colour, tiles, rect, cache, ref=None, tag="", sat=False):
     """The colour filters' mosaics a colour picture is made of (filter_mosaic of each), drawn of whole visits only
     (visit_tiles), under names of their own when that leaves tiles out; which tiles go under (dim_places) is decided
-    on all of the pass's tiles, as for its other pictures."""
+    on all of the pass's tiles, as for its other pictures. sat: (the mosaics, each one's saturation excess kept
+    beside it or None: filter_sat)."""
     mine = visit_tiles(u, tiles, colour)
     extra = VISIT_TAG if len(mine) < len(tiles) or any(t.get("long") for t in mine) else ""
-    return [filter_mosaic(u, p, f, mine, rect, cache, ref, tag + extra, every=tiles) for f in colour]
+    planes, sats = [], []
+    for f in colour:
+        planes.append(filter_mosaic(u, p, f, mine, rect, cache, ref, tag + extra, every=tiles))
+        sats.append(filter_sat(_last_filter.path) if sat else None)
+    return (planes, sats) if sat else planes
 
 
 def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
@@ -6249,6 +6313,7 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
     # (the base's saturated fills in its name: one can come and go as tiles arrive, at the same count, blown_fills)
     filled = "".join(f"-B{t['n']}" for t in mine if t.get("blown_fill"))
     path = path[:-len(".png")] + tag + filled + _places_tag(mine) + ".png"
+    _last_filter.path = path   # (colour_planes' sat: its saturation excess kept beside it, filter_sat)
     k = p["k"]
     W, H = math.ceil(rect[2] * k), math.ceil(rect[3] * k)
 
@@ -6269,13 +6334,19 @@ def filter_mosaic(u, p, f, tiles, rect, cache, ref=None, tag="", every=None):
             corrections = (np.array([[g] * 3 for g, _ in pick]), np.array([[o] * 3 for _, o in pick]))
             if f != ref:
                 corrections = mosaic.seams([w[0] for w in window], None, p["display_scale"]["gamma"], corrections)
+        sat = window and any(t.get("sat") for t in shown)
+        kept = [] if sat else None
         if not window:
             rgba = np.zeros((H, W, 4), np.uint8)
         elif corrections:
-            rgba = _compose(window, k, pin=None, gamma=p["display_scale"]["gamma"], corrections=corrections)
+            rgba = _compose(window, k, pin=None, gamma=p["display_scale"]["gamma"], corrections=corrections, kept=kept)
         else:
-            rgba = _compose(window, k, pin=None)
+            # (the corrections _compose works out, held_level, worked out here, so the light window takes the same)
+            corrections = held_level([np.asarray(w[0]) for w in window]) if len(window) > 1 else None
+            rgba = _compose(window, k, pin=None, **({"corrections": corrections} if corrections else {}), kept=kept)
         drew["rgba"] = rgba
+        if sat:
+            _filter_excess(u, p, mine, rect, cache, rgba, corrections, kept, path, balanced)
         return _png(rgba)
 
     with _lock:
@@ -6833,6 +6904,7 @@ def _despiked(planes, gamma):
 
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
+SAT_EXCESS = 0.02   # (colour_picture, a mosaic's sat) linear: a band whose saturation excess is over this is clipped there
 CLIP_EDGE = 2   # (colour_picture, with saturation maps) px round a clipped band left out of the floor its fill keeps (fill_saturated's edge)
 
 
@@ -7384,13 +7456,13 @@ def _target_off(ref, g, at, r, guess=(0.0, 0.0), exclude=None, wide=False):
     return float(best[1]), float(best[2])
 
 
-def colour_picture(u, p, colour, planes, away=None, sat=None):
+def colour_picture(u, p, colour, planes, away=None, sat=None, mark=False):
     """The colour picture of a pass's three colour filters' planes (RGBA, each on the pass's display scale), RGBA:
     the pass's mosaic and its movie frames mixed alike. Natural color: a true color pass turned into what an eye
     would see, a false color one balanced so the body comes out gray, on the pass's own measure of its body
     (pass_scale's balance); without the mix the bands stay on the grey scale, where the blue and green of a red
     body are close to black. away: pixels a clipped band's color is not measured on (other bodies, movie_frame).
-    sat: one saturation excess map per plane (_place_sat: linear, float32) or None (a mosaic: none): how much of the band's
+    sat: one saturation excess map per plane (_place_sat; a mosaic's filter_sat, with mark: linear, float32) or None: how much of the band's
     value there is the white its saturated pixels were drawn over the light they saturated on; the band is filled there
     and floored at what it read less that, not at its white."""
     scale = p["display_scale"]
@@ -7417,6 +7489,11 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
     # (only a band drawn CLIP_FROM and up is clipped: the excess, resampled with the picture, spreads a pixel or two past
     # it, and marking those sky pixels clipped floored them bright: a ring's edge grew 1-3 px, 003SA 3X3MOVIEA002)
     clipped = [(rgb[..., i] >= CLIP_FROM) & (alpha > 0) for i in range(3)]
+    if mark:
+        # (a mosaic's sat, _filter_excess: composed with its picture, so it lies under exactly the pixels the saturated
+        # tiles drew; there a band with any is clipped too, drawn under CLIP_FROM: a thin saturated ring blended into
+        # the canvas, 269RI HIPHASEFB001's F ring and A ring edge, BL1 and GRN saturated, drew cyan and yellow-green)
+        clipped = [c | ((e > SAT_EXCESS) & (alpha > 0)) if e is not None else c for c, e in zip(clipped, excess)]
     if any(c.any() for c in clipped) and not all(np.array_equal(clipped[0], c) for c in clipped[1:]):
         # a band clipped where another is not (the camera saturated in it, or it is past the scale's white): filled
         # from the bands that are not, as a colour set's camera window draws it (calibration.tone's fill_saturated),
@@ -7447,6 +7524,11 @@ def colour_picture(u, p, colour, planes, away=None, sat=None):
         # few levels under 255 along its edges)
         w = np.clip((rgb.astype(np.float32) - CLIP_FROM) / (255 - CLIP_FROM), 0, 1)
         w = np.moveaxis(w * w * (3 - 2 * w), -1, 0)
+        if mark:
+            # (and filled wholly where its excess is twice SAT_EXCESS: what the band read there is mostly that white)
+            for i, e in enumerate(excess):
+                if e is not None:
+                    w[i] = np.maximum(w[i], np.clip(e / (2 * SAT_EXCESS), 0, 1))
         x = x + w * (np.stack(filled) - x)
         if every is not None:
             every &= np.logical_and.reduce([c >= 255 for c in np.moveaxis(rgb, -1, 0)])
@@ -7511,8 +7593,9 @@ def so_far(u, n, cache, made=None, out=OUT):
     base = lum_base(u, p, tiles, used)
     if len(used) > 1:
         colour = used
-        acc = colour_planes(u, p, colour, tiles, rect, cache, ref, tag)
-        rgba, used = colour_picture(u, p, colour, acc), colour
+        acc, sats = colour_planes(u, p, colour, tiles, rect, cache, ref, tag, sat=True)
+        # (each filter mosaic's saturation excess, composed with it: colour_picture's sat, marking clipped)
+        rgba, used = colour_picture(u, p, colour, acc, sat=sats if any(m is not None for m in sats) else None, mark=True), colour
         if base:
             grey = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
             if mixes(u, p, tiles, colour):
