@@ -2685,7 +2685,8 @@ function targetLabel(k) {
     // no stored picture for plays Auto instead: it would be drawn on request (a movie pass laid out as a mosaic took the
     // server 4-5 minutes a picture and up to ~15 GB, cache completeness check 2026-11-16)
     const storedModes = k => {
-      const toss = tossPasses.has(passOf(k));
+      // (a toss-up: the replay data says so from the start (passInfo's 6th field), else the server's warm answer)
+      const info = passInfo(k), toss = tossPasses.has(passOf(k)) || !!(info && info[5]);
       if (lapPass(k)) return ["mosaic_movie"];
       if (mosaicPass(k)) return toss ? ["mosaic", "movie"] : ["mosaic"];
       if (moviePass(k)) return toss ? ["movie", "mosaic"] : ["movie"];
