@@ -81,7 +81,10 @@ import label_handler  # noqa: E402
 # obs-v131/v114/v100: a narrow-angle movie frame's own black is measured without the pixels it lost in downlink (tile_scale's
 # black_of, clean_lost; wide-angle frames as they were): 133TI CLOUD002 no longer flickers between two colours, 207SA
 # NHEMMOV001's near-black frames are back (#536; renumbered on the integration branch)
-VERSIONS = {"balanced": "obs-v131", "raw": "obs-v114", "eye": "obs-v131-eye", "false": "obs-v131-false", "classic": "obs-v100-classic"}
+# obs-v137/v120/v106: a sky's black margin measured at the old display copy's precision (FINE_CODES, _sky_fine): the
+# scattered light and E ring wings round a sky-filled pass under black again, as before #491 (195RI's wide green-grey
+# glow, taste call 28); numbered past #558-#563, renumber at merge
+VERSIONS = {"balanced": "obs-v137", "raw": "obs-v120", "eye": "obs-v137-eye", "false": "obs-v137-false", "classic": "obs-v106-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2512,10 +2515,33 @@ SKY_OUTLIER = 6  # a movie frame's own sky (tile_scale): pixels further under it
                  # the 99.9th percentile) or this many times its noise are not sky (a lost line calibrates to ~-1 I/F)
 
 
+FINE_CODES = 254   # _sky_fine: each picture's fine structure measured on its range in this many even steps, the
+                   # precision of the 8-bit display copy every picture was calibrated from before #491. The black margin
+                   # over a sky (pass_scale's sky_tops, tile_scale's own height) was tuned on skies measured that way,
+                   # where a code step was most of the grain; at full depth the grain is the noise alone, 2 to 4 times
+                   # smaller, and the black sank under the smooth light the margin keeps under it: 195RI's scattered
+                   # light and E ring wings came up as a wide green-grey glow (GRN black 33% lower, BL1 21%, VIO 22%,
+                   # IR3 14%; RED, set by its noise floor, the same). Only the margin is measured so: the pictures and
+                   # their detail over black stay at full depth. 0: the grain as it is (full depth)
+
+
+def _codes(i):
+    """A picture on its own range in FINE_CODES even steps (the display copy's levels), for measuring its grain"""
+    if not FINE_CODES:
+        return i
+    lo, hi = float(np.min(i)), float(np.max(i))
+    step = (hi - lo) / FINE_CODES
+    if not step > 0:
+        return i
+    return (np.round((i - lo) / step) * step + lo).astype(np.float32)
+
+
 def _sky_fine(iofs, masks):
     """The sky's fine structure in the pictures iofs (sky masks): the sky less its own mean over SKY_SMOOTH pixels
     (row and column stray-light stripes, compression blocks, noise), on the darker half of the sky by its 5 pixel
-    mean, as one array. Smooth faint light (haze, a ring, the body's glow) is not in it."""
+    mean, as one array. Smooth faint light (haze, a ring, the body's glow) is not in it. Measured at the display
+    copy's precision (FINE_CODES)."""
+    iofs = [_codes(i) for i in iofs]
     local = [cv2.blur(i, (5, 5)) for i in iofs]
     sky = np.concatenate([l[m] for l, m in zip(local, masks)])
     return np.concatenate([(i - cv2.blur(i, (SKY_SMOOTH, SKY_SMOOTH)))[m & (l <= np.median(sky))]
