@@ -631,7 +631,19 @@ def extract_to_cache(path):
         with open(part, "wb") as dst:
             for data in _member_chunks(i, source=source):
                 dst.write(data)
-        os.replace(part, out)
+        # never swap a whole kernel under a process that has it loaded (several builds share the cache): a file
+        # already there whole (another process finished first) is kept and the part dropped; only a wrong one is
+        # replaced. SPICE reopening a loaded kernel whose file was replaced failed "reconnect logical unit" (11-17),
+        # and that failure was stored as frames' geometry (bootleg_autonav.transient)
+        size = int(_zip_index(source)["sizes"][i])
+        try:
+            os.link(part, out)
+        except FileExistsError:
+            if os.path.getsize(out) != size:
+                os.replace(part, out)
+                part = None
+        if part and os.path.exists(part):
+            os.remove(part)
     return out
 
 
