@@ -1517,7 +1517,7 @@ def _polarized_pass(u):
         idx, row = _row_of()
         pol = idx["polarized"].to_numpy() if "polarized" in idx else None
         u["_polarized"] = pol is not None and any(row.get(fr[1]) is not None and bool(pol[row[fr[1]]])
-                                                  for fr in u.get("all", u["frames"]))
+                                                  for fr in (u["all"] if "all" in u else u.get("frames", ())))
     return u["_polarized"]
 
 
