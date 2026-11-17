@@ -84,8 +84,8 @@ import label_handler  # noqa: E402
 # obs-v132/v115/v101: a band of a colour movie frame the camera saturated is floored at the light it saturated
 # on (each tile's <n>.sat.webp, colour_picture's sat), not at the white it was drawn: 154RH MUTUALEVE002's lime-green
 # Rhea, 150SA NHEMMOVIE001's salmon patch
-# obs-v133/v116/v102: a transit's saturation excess moves with its plane (_per_body_planes)
-VERSIONS = {"balanced": "obs-v133", "raw": "obs-v116", "eye": "obs-v133-eye", "false": "obs-v133-false", "classic": "obs-v102-classic"}
+# obs-v134/v117/v103: a transit's saturation excess moves with its plane (_per_body_planes) (numbered past #552's v133)
+VERSIONS = {"balanced": "obs-v134", "raw": "obs-v117", "eye": "obs-v134-eye", "false": "obs-v134-false", "classic": "obs-v103-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
