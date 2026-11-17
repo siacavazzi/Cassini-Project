@@ -134,17 +134,19 @@ def polarized_index(idx, filter_cols=True):
     filter_cols) with its polarized colour frames (polarized_as_colour) read as CL1 and their colour filter, in place:
     FILTER_NAME "(CL1,GRN)", filter1 "CL1", and a column "polarized" marking them. The index loaders (reel.load_index, stacking.load_index) read it so, so
     sets, passes, plans and repeat stacking all take the frame as its colour. Returns idx."""
-    names = idx["FILTER_NAME"].astype(str).tolist()
+    # (each value as text, a missing one as "": pandas 3's astype(str) keeps a missing value as NaN, a float)
+    text = lambda col: [v if isinstance(v, str) else "" for v in idx[col].tolist()]
+    names = text("FILTER_NAME")
     parts = [n.strip("()").split(",") + [""] for n in names]
-    f1s = idx["filter1"].astype(str).tolist() if filter_cols else [p[0] for p in parts]
-    f2s = idx["filter2"].astype(str).tolist() if filter_cols else [p[1] for p in parts]
+    f1s = text("filter1") if filter_cols else [p[0] for p in parts]
+    f2s = text("filter2") if filter_cols else [p[1] for p in parts]
     use = polarized_as_colour(idx["INSTRUMENT_ID"].tolist(), idx["TARGET_NAME"].tolist(), idx["OBSERVATION_ID"].tolist(),
                               f1s, f2s)
     idx["polarized"] = use
     if any(use):
-        idx["FILTER_NAME"] = [f"(CL1,{b})" if u else n for u, n, b in zip(use, names, f2s)]
+        idx["FILTER_NAME"] = [f"(CL1,{b})" if u else n for u, n, b in zip(use, idx["FILTER_NAME"].tolist(), f2s)]
         if filter_cols:
-            idx["filter1"] = ["CL1" if u else a for u, a in zip(use, f1s)]
+            idx["filter1"] = ["CL1" if u else a for u, a in zip(use, idx["filter1"].tolist())]
     return idx
 
 
