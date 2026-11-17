@@ -8175,8 +8175,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     null while the chain is worked out (in the background). "detail": a filled pass, whose frames end in detail()
     ("sigma", "amount"): the page gains, mixes and trails the frames drawn without it (sharpen False) and sharpens
     them itself."""
-    if u.get("track") or not calibration.step("align") or auto_steady(u, cache):
-        return {"local": False}   # (a pass stabilized by default, auto_steady: the server draws it, steady)
+    if u.get("track") or not calibration.step("align"):
+        return {"local": False}
     rec = _record(u, cache)
     if not _steady_ready(u, cache, rec):
         warm_movie(u, n, 6, cache, steady=True)
@@ -8215,7 +8215,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             server.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
-    return {"local": True, "fixed": True, "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
+    # (a pass stabilized by default, auto_steady: its frames are served, and pre-built, at STEADY_SMOOTH, and the page
+    # moves them from there for any other smoothing, never asking the server to draw one)
+    return {"local": True, "fixed": True, "auto": STEADY_SMOOTH if auto_steady(u, cache) else 0,
+            "ids": [fr[1] for fr in u["frames"]], "n": ns, "exposure": exposure,
             "partial": [m for m in ns if not_shown(m)], "over": [m for m in ns if over_exposed(tiles[m])], "step": step, "tint": tint,
             "server": server, "sets": _colour_recipes(u, p, cache, ns, tiles) if colour and p.get("colour") else None,
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
