@@ -958,11 +958,12 @@ SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move furth
                            # first, none from the second) keeps its own: the glow's one-code steps move a code at most, a
                            # crescent's terminator, too steep for the blur, was pulled down to the edge of the smoothing and
                            # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14).
-SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets have their color sets' channels aligned on the frames as smoothed
-                           # without it (color_image: Titan crescents' channels matched on the guarded slope came out apart).
-                           # The guard itself is on every frame since 11-17: on a Saturn limb, sky pixels the glow smoothing
-                           # pulled up from the limb's soft edge (0.04 -> 0.11 of white 10 px out on N1469611288_1, the
-                           # edge pixels left dark between) drew a thin black gap and a grainy halo (Sam, 11-17)
+SKY_SLOPE_BODIES = ("TITAN",)   # (where the guard first ran, 11-14.) Since 11-17 it guards every frame: on a Saturn limb,
+                           # sky pixels the glow smoothing pulled up from the limb's soft edge (0.04 -> 0.11 of white 10 px out
+                           # on N1469611288_1, the edge pixels left dark between) drew a thin black gap and a grainy halo
+                           # (Sam, 11-17). Color sets still align their channels on the frames as smoothed without it
+                           # (slope_guarded, color_image): matched on the guarded frames, the 2005 Saturn movie's channels
+                           # came out apart (a double limb), as Titan crescents' did
 SKY_LINE = (32, 0.75)      # the glow's rise and reach are measured from each line's dark sky (its median over that line's
                            # pixels of the measured dark sky, with at least SKY_LINE[0] of them; a line with fewer takes the
                            # nearest lines') on a line less than SKY_LINE[1] dark sky, not the whole line's median: on a line mostly across Saturn that median is the
@@ -1263,10 +1264,13 @@ def slope_guard(on):
         _slopes.reset(token)
 
 
-"""Whether sky smoothing's slope guard changes how any of the frames of labels is calibrated (SKY_SLOPE_BODIES)."""
+"""Whether sky smoothing's slope guard changes how the frames of labels are calibrated: on every frame while it is on (11-17), so
+color sets align their channels on the frames as smoothed without it, as they did before (color_image)."""
 def slope_guarded(labels):
-    return _slopes.get() and step("skysmooth") and any(
-        _value(lbl.get_info(), "TARGET_NAME", "") in SKY_SLOPE_BODIES for lbl in labels)
+    # (only where a frame is sky smoothed at all: one calibrated from its true 12-bit original is not, _smooth_off, and
+    # needs no second calibration for its channels)
+    return bool(_slopes.get() and step("skysmooth") and any(
+        SKY_SMOOTH_ORIGINALS or not _smooth_off(lbl.get_info()) for lbl in labels))
 
 
 def let_go():
