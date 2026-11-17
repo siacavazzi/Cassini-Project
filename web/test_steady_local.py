@@ -8,13 +8,35 @@ the frame the server draws with both. Then both through WebP (q95, as served): h
 browser's picture and the server's are. Synthetic pass as web/test_movie_stabilize.py (one textured field the camera
 creeps across, SPICE a few px off each frame).
 Run: python web/test_steady_local.py"""
+# the page moves the frame drawn at SPICE's places by whole canvas pixels; the server draws tiles at their sub-pixel
+# places (obs_mosaic.SUBPIXEL, #396), so the two are equal pixel for pixel only with that off (with it on the page's
+# picture is at most half a pixel from the server's)
+import os as _os; _os.environ["CASSINI_SUBPIXEL"] = "0"
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
-import io, json, re, subprocess, tempfile  # noqa: E402
+import io, json, math, re, subprocess, tempfile  # noqa: E402
 import numpy as np  # noqa: E402
+import atexit, glob, shutil  # noqa: E402
+# every scratch folder this test makes (the pass caches, node's planes and pictures: gigabytes a run) under one root,
+# removed when it ends, failed or not; a root an earlier run left (killed, timed out: atexit never ran) whose process
+# is gone is removed first. Child processes (node) get it as TMPDIR
+_name = os.path.splitext(os.path.basename(__file__))[0]
+for _old in glob.glob(os.path.join(tempfile.gettempdir(), f"{_name}_*_*")):
+    try:
+        os.kill(int(os.path.basename(_old)[len(_name) + 1:].split("_")[0]), 0)
+    except ProcessLookupError:
+        shutil.rmtree(_old, True)
+    except (ValueError, IndexError, PermissionError):
+        pass
+tempfile.tempdir = tempfile.mkdtemp(prefix=f"{_name}_{os.getpid()}_")
+os.environ["TMPDIR"] = tempfile.tempdir
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
 import calibration  # noqa: E402
 import obs_mosaic as om  # noqa: E402
+# (these made-up passes' frame ids are no frames with JPL's or USGS's measured pointing: hold them as such, so the
+# server draws them at SPICE's places at steady 0; the pass stabilized by default is checked on its own below)
+om._raw_pointing = lambda u: False
 
 rng = np.random.default_rng(5)
 field = cv2.GaussianBlur(rng.random((2200, 1400)).astype(np.float32), (0, 0), 5)
@@ -57,8 +79,11 @@ for n, (x, y) in enumerate(truth):
     Image.fromarray(im).save(f"{TD2}/{n}.png")
     json.dump({"n": n, "id": fr2[n][1], "filter": FILTERS[n % 3], "t": fr2[n][3], "offset": spice[n], "box": [-S / 2, -S / 2, S, S]},
               open(f"{TD2}/{n}.json", "w"))
+# (its grey filter a methane band, as a Saturn pass's often is: a set's frames are drawn as the set, which the page
+# mixes. With a grey filter that gives its own picture (RED), every frame is drawn tinted, its own grey frame in the
+# set's colour (obs_mosaic.shown_of's "near"), which the table lists ("tint") and the page leaves to the server)
 json.dump({"key": list(u2["key"]), "display_scale": scale, "angle": 0, "footprint": [0, 0, 1800, 1100], "fixed": True,
-           "view": [1800, 1100], "k": 1, "colour": FILTERS, "grey": "RED", "whole": False}, open(os.path.join(d2, om.PLAN_FILE), "w"))
+           "view": [1800, 1100], "k": 1, "colour": FILTERS, "grey": "MT3", "whole": False}, open(os.path.join(d2, om.PLAN_FILE), "w"))
 
 # the page's arithmetic, as the page has it
 page = open(os.path.join(HERE, "cassini-os", "src", "steady-local.html")).read()
@@ -77,7 +102,7 @@ for c in range(12):
         logs[str(n)] = [round(float(crng.normal(0, 0.3) + (0.8 if crng.random() < 0.05 else 0)), 5), stretch,
                         colour and stretch % 3 != 0]
     CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
-                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE})
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE, "held": True})
 # and scenes that brighten or darken steadily (the rolling scale), with noise and a flash or two
 for c in range(6):
     M = int(crng.integers(20, 130))
@@ -85,7 +110,18 @@ for c in range(6):
     logs = {str(n): [round(slope * n / M + float(crng.normal(0, 0.15)) + (0.8 if crng.random() < 0.04 else 0), 5), 0, False]
             for n in range(M)}
     CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
-                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE})
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE, "held": True})
+# and chains that hold their pictures (a colour set held until the next is complete: the same log brightness for a run of
+# frames), with steps between the runs and now and then a picture shown once among them: one gain for each run (held_gains)
+for c in range(6):
+    logs, level, n = {}, 0.0, 0
+    while n < 20 + 12 * c:
+        level = round(level + float(crng.normal(0.05, 0.15)), 5)
+        for _ in range(1 if crng.random() < 0.25 else int(crng.integers(2, 8))):
+            logs[str(n)] = [level, 0, True]
+            n += 1
+    CHAINS.append({"logs": logs, "flash": om.EXPOSURE_FLASH, "gain": om.EXPOSURE_GAIN, "greyRun": om.EXPOSURE_GREY_RUN,
+                   "roll": om.EXPOSURE_ROLL, "free": om.EXPOSURE_FREE, "held": True})
 
 
 def server_gains(chain, smooth):
@@ -105,8 +141,8 @@ def server_lut(g, gm):
 
 def in_node(table):
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), t = " + json.dumps(table) + ";\n"
-          "const out = {};\nfor (const s of " + json.dumps(SMOOTHS) + ") { const p = M.places(t, s); "
-          "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a)) }; }\n"
+          "const out = {}, base = t.auto ? M.places(t, t.auto) : null;\nfor (const s of " + json.dumps(SMOOTHS) + ") { const p = M.places(t, s); "
+          "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a, base)) }; }\n"
           "const r = []; for (const x of [0.125, -0.125, 2.5, -2.5, 1.5, -1.5, 0.375, 1.005, 2.675, -3.14159]) r.push([x, M.pyRound(x), M.pyRound2(x)]);\n"
           "out.gains = {}; for (const x of " + json.dumps(EXPOSURES) + ") out.gains[x] = t.exposure ? M.gains(t.exposure, x) : null;\n"
           "out.chains = " + json.dumps(CHAINS) + ".map(c => " + json.dumps(EXPOSURES) + ".map(x => M.gains(c, x)));\n"
@@ -197,15 +233,50 @@ with calibration.looking("balanced"):
               f"{SMOOTHS}; {worst['exact']} pixels equal, at most {worst['edge']} uncovered at an edge; as WebP q95 the "
               f"moved picture is {min(worst['psnr']):.1f} dB (worst) / {np.median(worst['psnr']):.1f} dB (median) from the server's")
 
-def node_mix(cases, sets):
-    """The page's colour mix (cassiniSteadyMath.mix) of each case's planes, run in node on the raw bytes."""
+
+# a pass stabilized by default (obs_mosaic.auto_steady: a frame without measured pointing, its chain linked): the server
+# serves and pre-builds its frames at STEADY_SMOOTH, and the page moves those for any other smoothing, never asking the
+# server to draw one (Sam: the server does no hard processing at view time)
+om._raw_pointing = lambda u: True
+om._auto_steady.clear()
+with calibration.looking("balanced"):
+    table = om._steady_table(u, 0, cache, True)
+    assert table.get("local") and table.get("auto") == om.STEADY_SMOOTH, {k: table.get(k) for k in ("local", "auto")}
+    assert om.steady_of(u, 0, cache) == om.STEADY_SMOOTH
+    got = in_node(table)
+    moved_n = 0
+    for s in SMOOTHS:
+        for a, n in enumerate(table["n"]):
+            A = np.asarray(om.movie_frame(u, n, cache, colour=False, centre=True, steady=om.STEADY_SMOOTH)[0])
+            B = np.asarray(om.movie_frame(u, n, cache, colour=False, centre=True, steady=s)[0])
+            dx, dy = got[str(s)]["shifts"][a]
+            C = moved(A, dx, dy)
+            have = C[..., 3] > 0
+            assert ((C == B).all(axis=2))[have].all(), (s, n, dx, dy)
+            moved_n += (dx, dy) != (0, 0)
+    assert moved_n, "no frame moved"
+print(f"auto-stabilized pass: the page moves its served frames (at {om.STEADY_SMOOTH}) to smoothing {SMOOTHS} and equals "
+      f"the server's frame there pixel for pixel ({moved_n} frames moved)")
+om._raw_pointing = lambda u: False
+om._auto_steady.clear()
+
+def page_gains(g, colour_set):
+    """Whether the page puts exposure gain g on each plane (its worker's lookup table): not a colour set's under 1,
+    which goes on the mixed picture (setPicture, as movie_frame's _shade_rgb)."""
+    return g != 1.0 and not (colour_set and g < 1.0)
+
+
+def node_mix(cases, sets, gains=None, gamma=2.2):
+    """The page's colour set (cassiniSteadyMath.setPicture: its mix, and a gain under 1 after it) of each case's
+    planes, run in node on the raw bytes. gains: each case's exposure gain (1: none)."""
     tmp = tempfile.mkdtemp()
     for c, planes in enumerate(cases):
         for q, pl in enumerate(planes):
             pl.tofile(f"{tmp}/{c}_{q}.bin")
-    js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), c = " + json.dumps(sets) + ";\n"
+    G = json.dumps([float(g) for g in (gains or [1.0] * len(cases))])
+    js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), c = " + json.dumps(sets) + ", G = " + G + ";\n"
           f"for (let i = 0; i < {len(cases)}; i++) {{ const P = [0, 1, 2].map(q => new Uint8ClampedArray(fs.readFileSync('{tmp}/' + i + '_' + q + '.bin')));"
-          f" fs.writeFileSync('{tmp}/' + i + '.out', M.mix(P, c)); }}")
+          f" fs.writeFileSync('{tmp}/' + i + '.out', M.setPicture(P, c, {cases[0][0].shape[1] if cases else 1}, G[i], {json.dumps(gamma)})); }}")
     with open(f"{tmp}/mix.js", "w") as fh:
         fh.write(js)
     subprocess.run(["node", f"{tmp}/mix.js"], check=True)
@@ -218,19 +289,22 @@ with calibration.looking("balanced"):
     om.exposure_chain(u2, cache, None, True, True, 0)
     table = om._steady_table(u2, 0, cache, True, True)
     assert table["sets"] and table["sets"]["mix"] and table["exposure"]["local"], table.get("sets")
+    assert not table["tint"], table["tint"]
+    assert not table["server"], table["server"]
     got = in_node(table)
-    cases, wants, alone, labels = [], [], 0, []
+    cases, wants, alone, labels, case_gains = [], [], 0, [], []
     for s, x in ((12, 0), (12, 8)):
         gains = got["gains"][str(x)] if x else {}
         for n in range(N):
             recipe = table["sets"]["by"].get(str(n)) or [n]
             planes, strip = [], 0
+            g = gains.get(str(n), 1.0)
             for j in recipe:
                 A = np.asarray(om.movie_frame(u2, j, cache, colour=False, centre=True)[0])
                 dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
                 C = moved(A, dx, dy)
                 strip += abs(dx) * A.shape[0] + abs(dy) * A.shape[1]
-                if gains.get(str(n), 1.0) != 1.0:
+                if page_gains(g, len(recipe) > 1):
                     C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
                 planes.append(C)
             B = np.asarray(om.movie_frame(u2, n, cache, colour=True, centre=True, steady=s, exposure=x)[0])
@@ -239,6 +313,7 @@ with calibration.looking("balanced"):
                 alone += 1
             else:
                 cases.append(planes)
+                case_gains.append(g)
                 wants.append(B)
                 labels.append((s, x, n, recipe, strip))
     # numpy's 3x3 mix (tensordot) runs through BLAS, whose vector and remainder loops round a few pixels' sums
@@ -248,7 +323,7 @@ with calibration.looking("balanced"):
     # view had cut off, the page's picture has none: a view fitted to what the frames show, fitted_half, can cut the
     # corners of frames turned north up)
     off, total, edge = 0, 0, 0
-    for out, B, lab in zip(node_mix(cases, table["sets"]), wants, labels):
+    for out, B, lab in zip(node_mix(cases, table["sets"], case_gains, table["exposure"]["gamma"]), wants, labels):
         have = out[..., 3] > 0
         lack = (B[..., 3] > 0) & ~have
         assert lack.sum() <= lab[-1], (lab, int(lack.sum()))
@@ -293,11 +368,14 @@ with calibration.looking("balanced"):
         gains = got["gains"][str(x)] if x else {}
         for T in TRAILS:
             for a, n in enumerate(table["n"]):
-                planes = []
+                planes, strip = [], None
                 for j in order[str(T)][a] + [n]:
                     A = np.asarray(om.movie_frame(u, j, cache, colour=False, centre=True)[0])
                     dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
                     C = moved(A, dx, dy)
+                    # (the strip along the view's edge this move uncovers: none of this frame there on the page)
+                    gone = moved(np.ones(A.shape[:2], np.uint8), dx, dy) == 0
+                    strip = gone if strip is None else strip | gone
                     if gains.get(str(n), 1.0) != 1.0:
                         C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
                     planes.append(C)
@@ -305,27 +383,34 @@ with calibration.looking("balanced"):
                 assert rep.get("trail", 0) == len(planes) - 1, (s, x, T, n, rep.get("trail"), len(planes) - 1)
                 cases.append(planes)
                 wants.append(np.asarray(im))
-                labels.append((s, x, T, n))
+                labels.append((s, x, T, n, strip))
     _, outs = node_trail(table, TRAILS, cases)
+    edge = 0
     for out, B, lab in zip(outs, wants, labels):
-        if not (out == B).all():
-            w = np.argwhere(out != B)
-            print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
-        assert (out == B).all(), lab
+        # (as for one frame above: where a moved frame uncovers a strip along the view's edge, picture the steady-0
+        # view had cut off, the page's trail has none of that frame; everywhere else it is the server's exactly)
+        strip = lab[-1]
+        have = ~strip
+        assert not ((B[..., 3] > 0) & (out[..., 3] == 0) & have).any(), lab[:-1]
+        edge = max(edge, int(strip.sum()))
+        if not (out == B)[have].all():
+            w = np.argwhere((out != B) & have[..., None])
+            print("DIFF", lab[:-1], len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
+        assert (out == B)[have].all(), lab[:-1]
     print(f"trail: {len(cases)} trailed frames (trail {TRAILS}, stabilized and exposure-normalized (0, 0) and (12, 8)): "
-          "the page's trail equals the server's pixel for pixel")
+          f"the page's trail equals the server's pixel for pixel but in the strip a move uncovers along the view's edge (at most {edge} px)")
 
 def node_filled(table, cases):
     """The page's whole step for a filled pass, in node: each case's planes mixed (a colour set), blended (a trail)
     or alone, then the detail filter (the processor's blur, which test_detail_local.py holds to the GPU's)."""
     tmp = tempfile.mkdtemp()
-    for c, (_, planes) in enumerate(cases):
+    for c, (_, planes, _g) in enumerate(cases):
         for q, pl in enumerate(planes):
             pl.tofile(f"{tmp}/{c}_{q}.bin")
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), fs = require('fs'), t = " + json.dumps(table) + ";\n"
-          "const C = " + json.dumps([[how, len(planes), planes[0].shape[1], planes[0].shape[0]] for how, planes in cases]) + ";\n"
+          "const C = " + json.dumps([[how, len(planes), planes[0].shape[1], planes[0].shape[0], float(g)] for how, planes, g in cases]) + ";\n"
           "C.forEach(([how, k, W, H], i) => { const P = []; for (let q = 0; q < k; q++) P.push(new Uint8ClampedArray(fs.readFileSync('" + tmp + "/' + i + '_' + q + '.bin')));"
-          " let px = how === 'mix' ? M.mix(P, t.sets) : how === 'trail' ? M.blendTrail(P.slice(0, -1), P[k - 1]) : P[0];"
+          " let px = how === 'mix' ? M.setPicture(P, t.sets, W, C[i][4], t.exposure.gamma) : how === 'trail' ? M.blendTrail(P.slice(0, -1), P[k - 1]) : P[0];"
           " const g = M.gaussKernel(t.sigma), d = M.detailInputs(px);"
           " px = M.detailFinish(px, d.lum, M.blurCPU(d.a, W, H, g), M.blurCPU(d.la, W, H, g), t.amount, t.knee, t.edge);"
           " fs.writeFileSync('" + tmp + "/' + i + '.out', px); });")
@@ -333,6 +418,11 @@ def node_filled(table, cases):
         fh.write(js)
     subprocess.run(["node", f"{tmp}/filled.js"], check=True)
     return [np.fromfile(f"{tmp}/{c}.out", np.uint8).reshape(cases[c][1][0].shape) for c in range(len(cases))]
+
+
+def calibration_kernel(sigma):
+    """cv2's Gaussian kernel for detail()'s blur of sigma (GaussianBlur's ksize (0, 0) on float32)."""
+    return cv2.getGaussianKernel(int(round(sigma * 4 * 2 + 1)) | 1, sigma, cv2.CV_32F)
 
 
 def filled_copy(src_u, src_d, tag):
@@ -354,43 +444,58 @@ with calibration.looking("balanced"):
     u3, u4 = filled_copy(u2, d2, "F"), filled_copy(u, d, "F")
     real_unit = om.unit_of
     om.unit_of = lambda fid: next(((v, [q[1] for q in v["frames"]].index(fid)) for v in (u3, u4) if fid in [q[1] for q in v["frames"]]), None) or real_unit(fid)
-    cases, wants, labels = [], [], []
     for v, colour in ((u3, True), (u4, False)):
+        cases, wants, labels = [], [], []
         om.steady_chain(v, cache)
         om.exposure_chain(v, cache, None, colour, True, 0)
         table = om._steady_table(v, 0, cache, True, colour)
         assert table["detail"] and table["exposure"]["local"], table.get("exposure")
         got = in_node(table)
-        for s_, x, T in ((12, 8, 0), (0, 0, 3)) if not colour else ((12, 8, 0),):
+        for s_, x, T in ((12, 8, 0), (0, 8, 0), (0, 0, 3)) if not colour else ((12, 8, 0), (0, 8, 0)):
             gains = got["gains"][str(x)] if x else {}
             for n in range(0, N, 3):
                 recipe = (table["sets"]["by"].get(str(n)) or [n]) if colour else list(range(max(0, n - 8 * T), n))[-T:] + [n] if T else [n]
                 if not colour and T:
                     recipe = [j for j in range(n - 1, max(-1, n - 8 * T), -1)][:T][::-1] + [n]
-                planes = []
+                planes, strip = [], None
                 for j in recipe:
                     A = np.asarray(om.movie_frame(v, j, cache, colour=False, centre=True, sharpen=False)[0])
                     dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
                     C = moved(A, dx, dy)
-                    if gains.get(str(n), 1.0) != 1.0:
+                    gone = moved(np.ones(A.shape[:2], np.uint8), dx, dy) == 0
+                    strip = gone if strip is None else strip | gone
+                    if page_gains(gains.get(str(n), 1.0), colour and len(recipe) > 1):
                         C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
                     planes.append(C)
                 B = np.asarray(om.movie_frame(v, n, cache, trail=T, colour=colour, centre=True, steady=s_, exposure=x)[0])
-                cases.append(("mix" if len(planes) > 1 and colour else "trail" if len(planes) > 1 else "one", planes))
+                cases.append(("mix" if len(planes) > 1 and colour else "trail" if len(planes) > 1 else "one", planes, gains.get(str(n), 1.0)))
                 wants.append(B)
-                labels.append((v["key"][1], s_, x, T, n))
-        off = total = 0
+                labels.append((v["key"][1], s_, x, T, n, strip))
+        off = total = near_most = 0
+        # (as above: where a move uncovers a strip along the view's edge the page has none of that frame, and its detail
+        # filter's mean, a blur, sees that within its reach of the strip; everywhere else it is the server's)
+        reach = (len(calibration_kernel(table["sigma"])) - 1) // 2
+        # (a colour set: numpy's 3x3 mix runs through BLAS, which may put a pixel's channel a level from the page's on
+        # another machine (the colour check above, Linux's OpenBLAS against the Mac's Accelerate), and detail() then moves
+        # the pixel by DETAIL times its luminance's change, a third of that level: up to 1 + DETAIL / 3 levels, 2. Seen
+        # on Linux, frame 15 of the unmoved case: blue 50 against 48, its set mixed and dimmed (gain 0.52) the same on
+        # the Mac to the level and no clipped-band fill in it)
+        tol = math.ceil(1 + om.DETAIL / 3) if colour else 1
         for out, B, lab in zip(node_filled(table, cases), wants, labels):
-            diff = np.abs(out.astype(int) - B.astype(int))
+            lab, strip = lab[:-1], lab[-1]
+            near = cv2.dilate(strip.astype(np.uint8), np.ones((2 * reach + 1, 2 * reach + 1), np.uint8)) > 0 if strip.any() else strip
+            near_most = max(near_most, int(near.sum()))
+            diff = np.abs(out.astype(int) - B.astype(int)) * ~near[..., None]
             if diff.max() > 1:
                 w = np.argwhere(diff > 1)
                 print("DIFF", lab, len(w), [(tuple(map(int, i)), int(out[tuple(i)]), int(B[tuple(i)])) for i in w[:4]])
-            assert diff.max() <= 1, int(diff.max())
+            assert diff.max() <= tol, int(diff.max())
             off += int((diff > 0).sum())
             total += diff.size
         assert off <= total * 1e-4, (off, total)
         print(f"filled {'colour' if colour else 'grey'} pass: {len(cases)} pictures (gained, moved, {'mixed' if colour else 'trailed'}, then "
-              f"the detail filter): the page's equals the server's but for {off} values of {total} a level apart")
+              f"the detail filter): the page's equals the server's but for {off} values of {total} a level apart, and within "
+              f"the detail blur's reach ({reach} px) of the strip a move uncovers (at most {near_most} px)")
         cases, wants, labels = [], [], []
     om.unit_of = real_unit
 
@@ -452,32 +557,35 @@ with calibration.looking("balanced"):
                 assert (planes0[n] == planes0[s]).all(), (n, s)
         for s_, x, T in ((12, 8, 0), (0, 0, 3), (12, 8, 3)) if not colour else ((12, 8, 0), (0, 0, 0)):
             gains = got["gains"][str(x)] if x else {}
-            cases, wants, labels = [], [], []
+            cases, wants, labels, case_gains = [], [], [], []
             for a, n in enumerate(table["n"]):
                 shown = held["held"][a]
                 recipe = (table["sets"]["by"].get(str(n)) if colour else None) or \
                     ((held["trails"][str(T)][a] if T else []) + [shown])
-                pl = []
+                pl, strip = [], np.zeros(planes0[n].shape[:2], bool)
                 for j in recipe:
                     # (the page loads the frame's own plane for the frame shown, another frame's for the rest)
                     A = planes0[n] if j in (n, shown) else planes0[j]
                     dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
                     C = moved(A, dx, dy)
-                    if gains.get(str(n), 1.0) != 1.0:
+                    # (as above: the strip along the view's edge a move uncovers has none of this frame on the page)
+                    strip |= moved(np.ones(A.shape[:2], np.uint8), dx, dy) == 0
+                    if page_gains(gains.get(str(n), 1.0), colour and len(recipe) > 1):
                         C[..., :3] = np.array(server_lut(gains[str(n)], table["exposure"]["gamma"]), np.uint8)[C[..., :3]]
                     pl.append(C)
                 B = np.asarray(om.movie_frame(v, n, cache, trail=T, colour=colour, centre=True, steady=s_, exposure=x)[0])
                 if len(pl) == 1 and not (T and not colour):
-                    assert (pl[0] == B).all(), (v["key"][1], s_, x, T, n)
+                    assert (pl[0] == B)[~strip].all(), (v["key"][1], s_, x, T, n)
                 else:
                     cases.append(pl)
+                    case_gains.append(gains.get(str(n), 1.0))
                     wants.append(B)
-                    labels.append((v["key"][1], s_, x, T, n, recipe))
+                    labels.append((v["key"][1], s_, x, T, n, recipe, strip))
             if cases:
-                outs = node_mix(cases, table["sets"]) if colour else node_trail(table, (), cases)[1]
+                outs = node_mix(cases, table["sets"], case_gains, table["exposure"]["gamma"]) if colour else node_trail(table, (), cases)[1]
                 for out, B, lab in zip(outs, wants, labels):
-                    diff = np.abs(out.astype(int) - B.astype(int))
-                    assert diff.max() <= (1 if colour else 0), (lab, int(diff.max()))
+                    diff = np.abs(out.astype(int) - B.astype(int)) * ~lab[-1][..., None]
+                    assert diff.max() <= (1 if colour else 0), (lab[:-1], int(diff.max()))
         if colour:
             # no colour set the page mixes holds a partial frame
             assert not any(j in lost for r in table["sets"]["by"].values() for j in r), table["sets"]["by"]

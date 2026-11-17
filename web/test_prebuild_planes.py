@@ -5,12 +5,18 @@ movieUrl(id, 1024, 0, 0, 0, 0) + "&detail=0"): asked for afterwards, every one i
 tiles on one still field, one filled pass and one not. Run: python web/test_prebuild_planes.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, tempfile  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 from urllib.parse import parse_qs  # noqa: E402
 import numpy as np  # noqa: E402
 import cv2  # noqa: E402
 from PIL import Image  # noqa: E402
 import calibration  # noqa: E402
 import obs_mosaic as om  # noqa: E402
+om._raw_pointing = lambda u: False   # (made-up frame ids, no measured pointing: drawn at SPICE's places, not stabilized by default)
 import prebuild  # noqa: E402
 
 rng = np.random.default_rng(5)
@@ -19,7 +25,10 @@ field = (field - field.min()) / (field.max() - field.min())
 S, N = 400, 6
 cache = tempfile.mkdtemp()
 passes, units = [], {}
-FALSE = ["MT3", "MT2", "CB2"]   # a false colour set: the page leaves its exposure normalization to the server
+# a false colour set: the page leaves its exposure normalization to the server. (MT3, MT2, CB2 was one until #237 drew
+# methane sets in natural colour emulation by default: the page mixes and evens those itself, and this test then found
+# no evened frames pre-built; IR1, GRN, UV3 is still a false colour mix, calibration.FalseMix)
+FALSE = ["IR1", "GRN", "UV3"]
 for p, (filled, colour) in enumerate(((True, None), (False, None), (False, FALSE))):
     scale = {"blacks": {}, "white": 1, "gamma": 2.2, "balance": {"RED": 1.0, "GRN": 1.0, **{f: 1.0 for f in FALSE}},
              **({"filled": True} if filled else {})}
@@ -62,6 +71,8 @@ def route(frame_id, query):
 # the page's plane requests, Auto center on (cassiniMovieStyle leaves center out) and off
 PAGE = "size=1024&color=0&trail=0&laps=1"
 with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration.COLORS[0]):
+    # the third pass is drawn by the server in the default look (its mix is a false colour one), as the test needs
+    assert isinstance(calibration.color_mix("N", FALSE, "SATURN", [1.0] * 3, obs="ISS_TEST"), calibration.FalseMix)
     todo = prebuild.items("movies")
     assert [name for name, _ in todo] == ["_".join(map(str, u["key"])) for u, _ in passes], todo
     for _, work in todo:
@@ -83,17 +94,24 @@ with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration
     assert a != b
     print("movies phase: %d planes at 1024 (each frame alone) + %d _d0; the page's requests all found in the cache" %
           (sum(len(u["frames"]) for u, _ in passes), len(d0)))
-    # Exposure normalization (on by default): the false colour pass's frames with it at the default smoothing, as the
-    # window asks for them, are pre-built; the passes the page evens itself have none
+    # Exposure normalization (on by default): every pass's frames with it at the default smoothing are pre-built, at
+    # both sizes (make_evened every=True, #487). The camera windows even two of these passes themselves (page_evens)
+    # and ask the server only for the false colour pass's; but the Movie Editor's pictures, a Pre-process and a film
+    # ask the server for the evened frame of any pass, and with none kept it drew each one on the request (a 999 frame
+    # stretch took 131 s to open on a finished cache, 2026-11-15). Until #487 only the false colour pass had them
     e8 = sorted(f for f in built if f"_e{om.EXPOSURE_SMOOTH}r{om.EXPOSURE_RULE}" in os.path.basename(f) and f.endswith(".webp"))
-    assert e8 and all("ISS_TEST_PLANES2" in f for f in e8) and len(e8) == 2 * N, e8
+    assert len(e8) == 2 * N * len(passes), e8
+    for u, _ in passes:
+        assert sum(u["key"][1] in f for f in e8) == 2 * N, (u["key"][1], e8)
     assert [om.page_evens(u, cache) for u, _ in passes] == [True, True, False]
+    # asked for afterwards, as the window (the false colour pass) and the editor (any pass) ask: all found, none made
     before = files()
-    for f in passes[2][0]["frames"]:
-        for size in (1024, 512):
-            made = route(f[1], f"size={size}&color=1&trail=0&laps=1&exposure={om.EXPOSURE_SMOOTH}")
-            assert made and made[0] is not None, f[1]
+    for u, _ in passes:
+        for f in u["frames"]:
+            for size in (1024, 512):
+                made = route(f[1], f"size={size}&color=1&trail=0&laps=1&exposure={om.EXPOSURE_SMOOTH}")
+                assert made and made[0] is not None, f[1]
     assert not files() - before, sorted(files() - before)
-    print(f"Exposure normalization: {len(e8)} frames of the false colour pass pre-built at smoothing {om.EXPOSURE_SMOOTH}; "
-          "the window's requests for them all found; none for the passes the page evens")
+    print(f"Exposure normalization: {len(e8)} frames pre-built at smoothing {om.EXPOSURE_SMOOTH}, every pass's at both sizes; "
+          "the requests for them all found, none made")
 print("ok")

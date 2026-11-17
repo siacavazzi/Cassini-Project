@@ -8,6 +8,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
@@ -111,7 +116,8 @@ else:
     sys.path.insert(0, os.path.join(HERE, "frames"))
     import obs_mosaic
     # a WAC mosaic's tiles are searched only near SPICE's place (REGISTER_NEAR), their borders left out; the NAC's whole
-    assert "REGISTER_NEAR.get(u[\"key\"][2])" in inspect.getsource(obs_mosaic._register).replace("'", '"')
+    # (the match is _register_match; _register adds the limb check after it)
+    assert "REGISTER_NEAR.get(u[\"key\"][2])" in inspect.getsource(obs_mosaic._register_match).replace("'", '"')
     assert "N" not in obs_mosaic.REGISTER_NEAR and obs_mosaic.REGISTER_MAX == 0.04
     print("no guess, two frames: same as main")
 

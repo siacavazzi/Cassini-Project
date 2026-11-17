@@ -72,9 +72,11 @@ for t, (band, dx) in enumerate((("RED", 0), ("GRN", 6), ("BL1", 12))):
     png = np.clip(iof / 0.5 * 254, 0, 254).astype(np.uint8)
     png[40:44] = 0
     made[f"nac_data/N{t}_1.png"] = (Label(band, t), png, iof)
-stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False: \
-    (made[path][0], made[path][1].copy(), 1) + ((made[path][0].valid_mask(),) if valid else ())
+stacking.load_stacked = lambda path, window=120, max_frames=5, count=False, valid=False, deep=False: \
+    (made[path][0], made[path][1].copy(), 1) + ((made[path][0].valid_mask(),) if valid else ()) + \
+    ((np.asarray(made[path][1], np.float32)[..., 0] if np.ndim(made[path][1]) == 3 else np.asarray(made[path][1], np.float32),) if deep else ())
 cal.calibrate = lambda png, info, image=None: next(v[2] for v in made.values() if v[0].info is info)
+cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 cal.ds.imread = lambda path, flags=None: made[path][1]
 
 
@@ -105,8 +107,8 @@ for p, lb in labels.items():
     made[p] = (lb, np.full((H, H), 100, np.uint8), np.full((H, H), 0.1, np.float32))
 stacking.find_repeats = lambda path, window=120, max_frames=5: asked.append(max_frames) or [p for p, _ in repeats[path]][:max_frames]
 stacking.lh.label = lambda p, as_png=True: labels[p]
-stacking.ic.find_shift = lambda a, b, r: None
-stacking.places = lambda ids: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing, so merged unmatched
+stacking.ic.find_shift = lambda a, b, r: (0.0, 0.0)   # the frames line up as they are (one nothing lines up is left out)
+stacking.places = lambda ids, reach=False: {i: (0.0, 0.0, 1.0e5) for i in ids}   # SPICE: one pointing
 cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 stacking.cal = cal
 _, _, n = stacking.load_hdr("a.png")

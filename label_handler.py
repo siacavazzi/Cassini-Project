@@ -5,6 +5,7 @@ Created on Tue Nov  2 12:33:42 2021
 @author: Sam I
 """
 import os
+import re
 import gzip
 import subprocess
 import pandas as pd
@@ -364,8 +365,11 @@ class label:
         if ds.lut8():
             # the lean archive stores camera codes; stretch them like the old PNGs
             img = cal.display_stretch(img, self.info)
-        if int(self.info["LINES"]) < 1024:
-            
+        # (and a picture stored smaller than its label says: the one such frame in the archive, N1855753770_1, a
+        # 1024 line label over a 256 px PNG, stopped its processed picture and composite at 256 px against the
+        # label's 1024 line valid mask, 11-15)
+        if int(self.info["LINES"]) < 1024 or img.shape[0] < 1024:
+
             #scale_percent = 200
             #width = int(img.shape[1] * scale_percent / 100)
             #height = int(img.shape[0] * scale_percent / 100)
@@ -526,9 +530,30 @@ class label:
 Load all labels in the target directory
 folder_path = path of labels to load
 """
+STRAY_COPY = re.compile(r"^(.+?) \(\d+\)(\.lbl)$", re.IGNORECASE)   # "N1507733542_2 (1).LBL": a second download's name
+
+
+def frame_labels(names):
+    """The label files of names (a data folder's listing) that are frames' own: every .LBL but a stray copy, a file
+    named as a second download names it ("<frame> (1).LBL") beside the frame's own label. The archive holds 305 such
+    copies, each byte for byte its twin's (audit S5, 11-16); loaded, each made a second row of its frame in the index,
+    with a picture path ("<frame> (1).png") that does not exist. A copy with no twin is the frame's only label and is
+    kept."""
+    lower = {n.lower() for n in names}
+    out = []
+    for name in names:
+        if not name.upper().endswith(".LBL"):
+            continue
+        m = STRAY_COPY.match(name)
+        if m and (m.group(1) + m.group(2)).lower() in lower:
+            continue
+        out.append(name)
+    return out
+
+
 def load_lbls(folder_path):
-    data = ds.listdir(folder_path)
-    total = len(data) /2
+    data = frame_labels(ds.listdir(folder_path))
+    total = len(data)
     cur = 0
     labels = []
     for i in range(0,len(data)):

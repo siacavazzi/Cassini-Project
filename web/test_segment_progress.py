@@ -5,6 +5,11 @@ are made, the stretch's "through" moving with them, so the bar never sits still 
 Run: python web/test_segment_progress.py"""
 import sys; import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import tempfile  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import threading  # noqa: E402
 import time  # noqa: E402
 import prebuild  # noqa: E402
@@ -19,6 +24,7 @@ om.keep_reports = lambda u, cache, p: None
 om.solve_places = lambda u, cache: None
 om.tile_map = lambda fid, cache: None
 om._mosaic_made = lambda u, j, size, cache: False
+om.rolling_restart = lambda u, size, cache, *a, **k: 0   # (#524: a part-made pass check, which lays out real tiles)
 
 
 def unit(kind, mosaic):

@@ -1,0 +1,21 @@
+WAC channel matches used (full resolution frames only): 14894 of 19931
+offset per filter (frame px as drawn, relative to CL1,GRN):
+   CL1,GRN    (+0.00, +0.00)   in 7187 matches
+   CL1,RED    (+2.03, +1.16)   in 6301 matches
+   CB2,CL2    (+2.42, -0.85)   in 5667 matches
+   CL1,BL1    (+2.10, -1.35)   in 3301 matches
+   MT2,CL2    (+2.51, -0.32)   in 2717 matches
+   CL1,VIO    (+2.16, -1.75)   in 1588 matches
+   CB3,CL2    (+2.79, -0.65)   in 1069 matches
+   MT3,CL2    (+3.08, -0.11)   in 1010 matches
+   CL1,IR1    (+2.13, +1.35)   in 519 matches
+   IR2,IR1    (+0.44, -0.06)   in 244 matches
+SPICE's offset against the picture match, all matches: before median 2.36 p90 4.46 px; with the table median 1.26 p90 3.96 px
+held-out half of the sets: before median 2.36 px; with a table fitted on the other half median 1.25 px, p90 3.97
+   2004-2008          n= 11337  own fit: RED (+2.0,+1.2), BL1 (+2.2,-1.4), VIO (+2.2,-1.8), CB2 (+2.5,-0.8), MT2 (+2.5,-0.3)   with the one table: median 1.10 px (before 2.33)
+   2009-2012          n=  1991  own fit: RED (+1.9,+1.1), BL1 (+2.0,-1.3), VIO (+1.3,-1.1), CB2 (+2.4,-1.3), MT2 (+2.5,-0.7)   with the one table: median 1.75 px (before 2.47)
+   2013-2017          n=  1566  own fit: RED (+1.9,+1.2), BL1 (+1.9,-1.3), VIO (+1.4,-1.0), CB2 (+1.9,-0.4), MT2 (+2.1,+0.2)   with the one table: median 1.94 px (before 2.56)
+   2000-2001 Jupiter  n=  2594  own fit: RED (+2.1,+1.2), BL1 (+2.4,-2.1), VIO (+2.2,-1.8), CB2 (+2.6,-1.1), MT2 (+2.0,-2.0)   with the one table: median 0.37 px (before 2.69)
+   2004-2005          n=  2622  own fit: RED (+1.9,+1.3), BL1 (+2.1,-1.2), VIO (+1.1,-1.3), CB2 (+2.7,-1.1), MT2 (+2.8,-0.8)   with the one table: median 1.42 px (before 1.89)
+   2006-2008          n=  6113  own fit: RED (+1.8,+1.2), BL1 (+2.0,-1.3), VIO (+1.1,-0.5), CB2 (+2.2,-0.7), MT2 (+2.3,+0.1)   with the one table: median 1.42 px (before 2.17)
+   2014-2017          n=  1345  own fit: RED (+2.0,+1.2), BL1 (+1.9,-1.3), VIO (+1.4,-1.0), CB2 (+1.8,-0.0), MT2 (+2.1,+0.5)   with the one table: median 1.87 px (before 2.51)

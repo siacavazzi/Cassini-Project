@@ -1,0 +1,209 @@
+1497066398.222
+1497066398.222
+1497066398.222
+1497066434.085
+1497066434.085
+1497066434.085
+1497066467.116
+1497066467.116
+1497066467.116
+1497066500.119
+1497066500.119
+1497066500.119
+1497066534.010
+1497066534.010
+1497066534.010
+1497066551.011
+1497066551.011
+1497066551.011
+1497066567.127
+1497066567.127
+1497066567.127
+1497066584.128
+1497066584.128
+1497066584.128
+1497066612.130
+1497066612.130
+1497066612.130
+1497066684.130
+1497066684.130
+1497066684.130
+1497066760.131
+1497066760.131
+1497066760.131
+1497066854.131
+1497066854.131
+1497066854.131
+1497067051.218
+1497067051.218
+1497067051.218
+1497067087.082
+1497067087.082
+1497067087.082
+1497067120.113
+1497067120.113
+1497067120.113
+1497067153.116
+1497067153.116
+1497067153.116
+1497067187.006
+1497067187.006
+1497067187.006
+1497067204.007
+1497067204.007
+1497067204.007
+1497067220.123
+1497067220.123
+1497067220.123
+1497067237.125
+1497067237.125
+1497067237.125
+1497067265.126
+1497067265.126
+1497067265.126
+1497067337.126
+1497067337.126
+1497067337.126
+1497067405.127
+1497067405.127
+1497067405.127
+1497067445.127
+1497067445.127
+1497067445.127
+1497067480.063
+1497067480.063
+1497067480.063
+1497067496.003
+1497067496.003
+1497067496.003
+1497067706.218
+1497067706.218
+1497067706.218
+1497067742.082
+1497067742.082
+1497067742.082
+1497067775.113
+1497067775.113
+1497067775.113
+1497067808.116
+1497067808.116
+1497067808.116
+1497067842.006
+1497067842.006
+1497067842.006
+1497067859.007
+1497067859.007
+1497067859.007
+1497067875.123
+1497067875.123
+1497067875.123
+1497067892.125
+1497067892.125
+1497067892.125
+1497067942.126
+1497067942.126
+1497067942.126
+1497068046.126
+1497068046.126
+1497068046.126
+1497068124.127
+1497068124.127
+1497068124.127
+1497068164.127
+1497068164.127
+1497068164.127
+1497068202.128
+1497068202.128
+1497068202.128
+1497068247.065
+1497068247.065
+1497068247.065
+1497068279.005
+1497068279.005
+1497068279.005
+SATURN_ISS_009SA_1X2WPH120003_PRIME_W_0: footprint before the pass 894 MB; 1997 samples
+  solve_places     peak   2862 MB   at sky_to_surface<ring_plane<got<_tile_ring_samples
+  _mosaic_at       peak   2561 MB   at _bands_blended<_blended<composite<compose
+  _tile_made       peak   1947 MB   at peaks<spikes<load_aligned<processed_frame
+  pass_scale       peak   1907 MB   at pass_scale<plan<make_pass<<lambda>
+  tile_map         peak   1758 MB   at _row_of<unit_of<tile_map<make_pass
+  other            peak    894 MB   at 
+round the highest sample:
+     50.25 s    2695 MB  solve_places   sky_to_surface<ring_plane<got<_tile_ring_samples
+     50.31 s    2695 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.36 s    2695 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.42 s    2704 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.48 s    2704 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.54 s    2799 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.59 s    2862 MB  solve_places   sky_to_surface<ring_plane<got<_tile_ring_samples
+     50.64 s    2747 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.70 s    2720 MB  solve_places   sky_to_surface<ring_plane<got<_tile_ring_samples
+     50.76 s    2720 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.81 s    2720 MB  solve_places   sky_to_surface<ring_plane<got<_tile_ring_samples
+     50.87 s    2720 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+     50.92 s    2720 MB  solve_places   ring_plane<got<_tile_ring_samples<ring_places
+over the pass:
+       0.0 s     894 MB  other
+       5.0 s    1720 MB  pass_scale
+       9.7 s    1847 MB  pass_scale
+      14.4 s    1889 MB  _tile_made
+      19.1 s    1910 MB  _tile_made
+      23.7 s    1881 MB  _tile_made
+      28.4 s    1738 MB  _tile_made
+      33.1 s    1783 MB  _tile_made
+      37.8 s    1821 MB  _tile_made
+      42.5 s    1953 MB  solve_places
+      47.2 s    1757 MB  solve_places
+      52.0 s    2637 MB  solve_places
+      56.7 s    1820 MB  solve_places
+      61.6 s    1952 MB  _mosaic_at
+      66.3 s    1894 MB  _mosaic_at
+      71.1 s    1974 MB  _mosaic_at
+      75.8 s    2007 MB  _mosaic_at
+      80.7 s    1886 MB  _mosaic_at
+      85.4 s    1886 MB  _mosaic_at
+      90.2 s    1855 MB  _mosaic_at
+      94.8 s    2337 MB  _mosaic_at
+      99.6 s    2059 MB  _mosaic_at
+     104.2 s    1948 MB  _mosaic_at
+     108.9 s    2405 MB  _mosaic_at
+     113.7 s    2021 MB  _mosaic_at
+rises of the footprint, summed, by build step (MB): {'_mosaic_at': 9629, 'pass_scale': 1756, 'solve_places': 1736, '_tile_made': 479}
+... and by what was running (MB):
+       703  calm_of:894<_levels:924<_blended:1143
+       582  pass_scale:2693<plan:1710<make_pass:364
+       512  _subpixel:8264<_subpixel_at:8285<_window:5478
+       470  match_grey:2059<over_grey:2099<so_far:6722
+       425  set_mask:2344<so_far:6720<kept:6687
+       407  _shade:1990<_window:5476<make:5774
+       382  _subpixel:8271<_subpixel_at:8285<_window:5478
+       370  _levels:927<_blended:1143<composite:717
+       361  _seam_cut:1371<_blended:1173<composite:717
+       346  <lambda>:1359<<lambda>:1370<_seam_cut:1371
+       320  ring_plane:254<got:4051<_tile_ring_samples:3671
+       273  over_grey:2106<so_far:6722<kept:6687
+       251  <lambda>:1359<_seam_cut:1360<_blended:1173
+       248  detail:5885<so_far:6729<kept:6687
+       236  _inside:643<_blend_parts:440<prepare:673
+       206  sky_to_surface:232<ring_plane:262<got:4051
+       205  match_grey:2061<over_grey:2099<so_far:6722
+       204  calm_of:896<_levels:924<_blended:1143
+       192  _subpixel:8269<_subpixel_at:8285<_window:5478
+       187  _shoulder:2365<colour_picture:6663<so_far:6715
+       183  _toned:1084<<listcomp>:1134<_blended:1134
+       157  detail:5897<so_far:6729<kept:6687
+the largest single rises:
+  +  168 MB at    0.8 s ->  1280 MB  pass_scale   _parameters_made:356<_parameters:318<_dark:376 | _parameters:317<_dark:376<dark_dn:370 | pass_scale:2693<plan:1710<make_pass:364
+  +  146 MB at  105.4 s ->  2274 MB  _mosaic_at   _levels:927<_blended:1143<composite:717
+  +  135 MB at  111.9 s ->  2500 MB  _mosaic_at   calm_of:894<_levels:924<_blended:1143
+  +  126 MB at   95.2 s ->  2052 MB  _mosaic_at   set_mask:2344<so_far:6720<kept:6687
+  +  126 MB at   59.3 s ->  1786 MB  _mosaic_at   detail:5897<so_far:6729<kept:6687
+  +  125 MB at  102.4 s ->  2290 MB  _mosaic_at   calm_of:894<_levels:924<_blended:1143
+  +  115 MB at   89.3 s ->  1899 MB  _mosaic_at   match_grey:2059<over_grey:2099<so_far:6722
+  +  113 MB at   86.2 s ->  2172 MB  _mosaic_at   calm_of:896<_levels:924<_blended:1143
+  +  112 MB at   77.3 s ->  1907 MB  _mosaic_at   match_grey:2061<over_grey:2099<so_far:6722
+  +  108 MB at   94.1 s ->  2182 MB  _mosaic_at   calm_of:894<_levels:924<_blended:1143
+  +  107 MB at  103.5 s ->  1920 MB  _mosaic_at   match_grey:2059<over_grey:2099<so_far:6722
+  +  106 MB at  113.4 s ->  1986 MB  _mosaic_at   match_grey:2059<over_grey:2099<so_far:6722
+  +  105 MB at  106.6 s ->  1976 MB  _mosaic_at   match_grey:2059<over_grey:2099<so_far:6722
+  +  105 MB at  102.9 s ->  2418 MB  _mosaic_at   _seam_cut:1355<_blended:1173<composite:717

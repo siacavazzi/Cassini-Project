@@ -55,7 +55,7 @@ survey = [frame("ISS_241RI_PROPSURVY001_PIE", T0 + 90000 + 73 * i, (102.4 * i + 
 view = [frame("ISS_277RI_PROPRETRG001_PRIME", T0 + 100000 + 104 * i, (0.0, 102.4 * i)) for i in range(5)]
 
 idx = pd.DataFrame(rows)
-geo_of = lambda ids: {i: geo[i] for i in ids if i in geo}
+geo_of = lambda ids, reach=False: {i: geo[i] for i in ids if i in geo}
 
 # ---------- the rule ----------
 assert stacking.same_place((0, 0, 1), (20, 0, 1)) and stacking.same_place((0, 0, 1), (0, 21, 1)) is False
@@ -147,13 +147,20 @@ import calibration as cal  # noqa: E402
 stacking.lh.label = lambda p, as_png=True: Label(p)
 stacking.ds.imread = lambda p, flags=None: np.full((H, H), 100, np.uint8)
 stacking.cal.calibrate = lambda codes, info, image=None: codes.astype(np.float32) / 1000
+stacking.cal.depth_image = lambda codes, info, scale=None: np.asarray(codes, np.float32)   # (no archive here: lut8 unknown)
 stacking.cal.saturated = lambda codes, info, image=None: np.zeros(codes.shape, bool)
 asked = {}
 stacking.find_repeats = lambda p, window=120, max_frames=5: asked[p]
 stacking.ic.find_shift = lambda a, b, r: None   # nothing lines up (faint frames of empty sky)
+stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: (None, "not aligned")   # ... not even near SPICE's place
 asked[path(bracket[0])] = [path(bracket[0]), path(bracket[1]), path(step), path(unplaced)]
 _, _, n = stacking.load_hdr(path(bracket[0]))
+assert n == 2, n   # the bracket's other exposure, as taken (SPICE puts it here); not the step, nor the unplaced frame
+# ... and lined up where the fallback near SPICE's place matches it (image_correction.guided_shift)
+stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: ((float(guess[0]), float(guess[1])), "phase near SPICE")
+_, _, n = stacking.load_hdr(path(bracket[0]))
 assert n == 2, n   # the bracket's other exposure; not the step, nor the frame SPICE couldn't place
+stacking.ic.guided_shift = lambda a, b, guess, *k, **kw: (None, "not aligned")
 stacking.ic.find_shift = lambda a, b, r: (0.0, 0.0)   # everything lines up: still never the step's other pointing
 _, _, n = stacking.load_hdr(path(bracket[0]))
 assert n == 3, n

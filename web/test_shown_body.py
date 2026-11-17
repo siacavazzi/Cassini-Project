@@ -58,4 +58,20 @@ if ba.GEOMETRY_CACHE and os.path.exists(ba.GEOMETRY_CACHE) and FRAME in ba.shown
     view = om.centre_view(FRAME)
     assert view["centre"] and view["pass"][0] == "SATURN", view
     print("N1455663489_1 centred on Saturn:", view["pass"])
+# an archive target SPICE cannot name (SKY, UNK: seen_body): with a geometry cache whose seen table has the VIMS ring stare
+# ISS_237RI_0PHASEC001_VIMS (UNK), its WAC frame is a picture of Saturn, looking at the rings, placed on Saturn
+SEEN = "W1845606451_1"
+if ba.GEOMETRY_CACHE and os.path.exists(ba.GEOMETRY_CACHE):
+    db = ba._seen_db()
+    got = db.execute("SELECT body FROM seen WHERE frame = ? AND version = ?", (SEEN, ba.SEEN_VERSION)).fetchone()
+    if got:
+        assert got[0] == "SATURN", got
+        shown = ba.shown_targets()
+        assert SEEN in shown and shown[SEEN][0] == "SATURN", shown.get(SEEN)
+        # every frame of a relabelled group shows the same body (a pass is never split)
+        group, members = ba._index_groups(), {}
+        for f, g in group.items():
+            members.setdefault(g, []).append(f)
+        assert all(f in shown and shown[f][0] == "SATURN" for f in members[group[SEEN]])
+        print("a frame filed under UNK that looks at the rings is a picture of Saturn, its whole group with it")
 print("ok")

@@ -10,6 +10,11 @@ it shows wobbles) is matched only inside what both pictures show (film_steady.wi
 wobble hardly comes out. Run: python web/test_film_steady.py"""
 import sys; import os; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path[:0] = [os.path.join(HERE, "frames"), os.path.dirname(HERE)]
 import json, subprocess, tempfile  # noqa: E402
+import atexit, shutil  # noqa: E402
+# every temporary folder and file this test makes goes in one folder of its own, removed when the test ends, passed
+# or failed (test runs left GBs of folders in TMPDIR, and the Mini's boot drive filled, 2026-11-13)
+tempfile.tempdir = tempfile.mkdtemp(prefix="cassini-test-")
+atexit.register(shutil.rmtree, tempfile.tempdir, True)
 import numpy as np  # noqa: E402
 import film_steady as F  # noqa: E402
 
@@ -52,7 +57,7 @@ def ringed(e, seed, w=256, h=256):
 
 
 def in_node(pictures, keys, smooth):
-    tmp = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+    tmp = tempfile.mkdtemp()
     for i, a in enumerate(pictures):
         open(f"{tmp}/{i}.raw", "wb").write(a.tobytes())
     js = ("const fs = require('fs');\nconst window = {};\n" + script + "\nconst M = window.cassiniFilmSteady.math;\n"

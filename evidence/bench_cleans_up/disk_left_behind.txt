@@ -1,0 +1,33 @@
+== before: exit 0
+13:15:05   kiviuq-still 4 s (1 done, 0 waiting, 0 running)
+13:15:05 41fcd8ca3658: built 1 of 1 items in 0.1 min
+RESULT /Users/samiacavazzi/cassini-build/benchclean-ev/before/results/41fcd8ca3658-d41f048c0c
+-- left in the bench root:
+   .
+   ./cache
+   ./results
+   ./results/41fcd8ca3658-d41f048c0c
+   ./tmp/image-bench-tool-tg9_rudf
+   ./tmp/tmpu_9ivr8x.json
+   ./wt
+   ./wt/41fcd8ca3658
+-- worktree folder size: 198M
+-- left in TMPDIR:
+   image-bench-tool-tg9_rudf
+   tmpu_9ivr8x.json
+-- git worktrees registered for it: 1
+== after: exit 0
+13:15:14   kiviuq-still 4 s (1 done, 0 waiting, 0 running)
+13:15:14 41fcd8ca3658: built 1 of 1 items in 0.1 min
+RESULT /Users/samiacavazzi/cassini-build/benchclean-ev/after/results/41fcd8ca3658-d41f048c0c
+-- left in the bench root:
+   .
+   ./cache
+   ./results
+   ./results/41fcd8ca3658-d41f048c0c
+   ./wt
+-- worktree folder size:   0B
+-- left in TMPDIR:
+-- git worktrees registered for it: 0
+== after, low disk (CASSINI_BENCH_MIN_FREE_GB=100000):
+RuntimeError: only 158 GB free on the drive holding /Users/samiacavazzi/cassini-build/benchclean-ev/lowdisk; a build needs 100000 GB (CASSINI_BENCH_MIN_FREE_GB) so the Mac keeps room for swap

@@ -240,19 +240,23 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     # Settings > Processing turns steps off per request (calibration.step); stacking checks its own
     calibrating, fill, align = calibrate and cal.step("calibrate"), cal.step("fill"), cal.step("align")
     lbls, imgs, stacked, iofs, masks, clips = [], [], [], [], [], []
+    # each channel's picture at full depth (stacking.load_stacked's deep), filled and cleaned as its display copy is
+    # below: what it is calibrated from (calibration.calibrated_each); None where load_hdr calibrated it already
+    deeps = []
     spiked = 0
     for path in paths:
-        iof = clip = None
+        iof = clip = deep = None
         if hdr and calibrating:
             lbl, iof, n, mask, clip = stacking.load_hdr(path, repeat_window, valid=True, clipped=True)
         if iof is None:
-            lbl, img, n, mask = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
-                                                      count=True, valid=True)
+            lbl, img, n, mask, deep = stacking.load_stacked(path, repeat_window, max_frames = 5 if stack_repeats else 1,
+                                                            count=True, valid=True, deep=True)
         else:
             img = lbl.resize_image()
         lbls.append(lbl)
         imgs.append(img)
         iofs.append(iof)
+        deeps.append(deep)
         # what the camera saturated in every exposure merged (drawn white)
         clips.append(clip)
         stacked.append(n)
@@ -265,11 +269,13 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 return _linear(lh.label(p, as_png=True))
             except Exception as e:
                 print(f"Can't read {p} for spikes: {e}")
-        found = ic.spikes(_linear(lbls[0]), [neighbour(p) for p in around if p])
+        found = ic.spikes(_linear(lbls[0]), [neighbour(p) for p in around if p], cal.summing_of(lbls[0].info))
         if found.any():
-            imgs[0] = ic.unspike(imgs[0], found)
+            imgs[0] = ic.unspike(imgs[0], found, cal.summing_of(lbls[0].info))
+            if deeps[0] is not None:
+                deeps[0] = ic.unspike(deeps[0], found, cal.summing_of(lbls[0].info))
             if iofs[0] is not None:
-                iofs[0] = ic.unspike(iofs[0], found)
+                iofs[0] = ic.unspike(iofs[0], found, cal.summing_of(lbls[0].info))
             spiked = int(found.sum())
     lost = sum(int((~m).sum()) for m in masks)
     if fill and lost:
@@ -280,11 +286,16 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                  for img, mask, lbl in zip(imgs, masks, lbls)]
         lined = [ic.fill_lines(img, mask, fills=f) for img, mask, f in zip(imgs, masks, fills)]
         iofs = [None if iof is None else ic.fill_lines(iof, mask, fills=f)[0] for iof, mask, f in zip(iofs, masks, fills)]
+        deeps = [None if d is None else ic.fill_lines(d, mask, fills=f)[0] for d, mask, f in zip(deeps, masks, fills)]
         imgs, masks = [l[0] for l in lined], [l[1] for l in lined]
     left = sum(int((~m).sum()) for m in masks)
     if fill:
         imgs = [ic.fill_invalid(img, mask) for img, mask in zip(imgs, masks)]
         iofs = [None if iof is None else ic.fill_invalid(iof, mask) for iof, mask in zip(iofs, masks)]
+        deeps = [None if d is None else ic.fill_invalid(d, mask) for d, mask in zip(deeps, masks)]
+    # (the pixels still lost after the fills, before the edges are trimmed: what a picture's own black leaves out,
+    # cal.load_channels' valid; None when nothing is lost, so a whole frame is measured as it always was)
+    unfilled = masks if left else None
     # each frame's outermost lines and columns are not picture (edge_trimmed), so they move with the frame as it is
     # aligned and drop out of every picture made of it
     masks = [edge_trimmed(mask, lbl) for mask, lbl in zip(masks, lbls)]
@@ -292,7 +303,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
     if calibrating and len(lbls) > 1:
         # each frame calibrated once, here, for the display models below to share
         own = list(iofs)   # (as given: the guide below calibrates them again without the slope guard)
-        iofs = cal.calibrated_each(lbls, imgs, iofs)
+        iofs = cal.calibrated_each(lbls, imgs, iofs, deeps)
         keep = [j for j, iof in enumerate(iofs) if iof is not None]
         # a channel that can't be calibrated (an 8LSB frame: only its low 8 bits were sent) is left out
         # when two others calibrate, so the set is a calibrated two-filter picture instead of every
@@ -305,7 +316,10 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         if len(keep) < len(lbls):
             dropped = [os.path.basename(paths[j]).split(".")[0] for j in range(len(lbls)) if j not in keep]
             print(f"Can't calibrate {dropped}, making a {'two-filter' if len(keep) > 1 else 'grey'} picture of the others")
-            lbls, imgs, iofs, masks, stacked, clips, own = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own))
+            lbls, imgs, iofs, masks, stacked, clips, own, deeps = ([v[j] for j in keep] for v in (lbls, imgs, iofs, masks, stacked, clips, own, deeps))
+            if unfilled is not None:
+                # (each channel kept keeps its own lost pixels: load_channels' valid goes label by label)
+                unfilled = [unfilled[j] for j in keep]
             if scale is not None:
                 scale = dict(scale, blacks=[scale["blacks"][j] for j in keep])
     calibrated = False
@@ -323,7 +337,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 full = None if full[0] is None else full
                 share = float(full[0].mean()) if full else 0.0
             linear = cal.load_linear(lbls, imgs, iofs, floor=cal.saturated_floor(share), glow=cal.saturated_glow(share),
-                                     off_disk=lambda linear: dim_off_disk(lbls, linear))
+                                     off_disk=lambda linear: dim_off_disk(lbls, linear), deep=deeps)
         if linear is not None:
             calibrated = True
             if full is not None:
@@ -338,7 +352,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # out several pixels apart on some sets, h229/h230 ISS_229TI/230TI, fringes round the limb)
             if cal.slope_guarded(lbls):
                 with cal.looking("classic"), cal.slope_guard(False):
-                    guide = cal.load_channels(lbls, imgs, iofs=cal.calibrated_each(lbls, imgs, own))
+                    guide = cal.load_channels(lbls, imgs, iofs=cal.calibrated_each(lbls, imgs, own, deeps))
             else:
                 with cal.looking("classic"):
                     guide = cal.load_channels(lbls, imgs, iofs=iofs)
@@ -360,7 +374,8 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             # (a set drawn on its own: its sky black in every channel, as the balanced look's, fix plan D)
             alone = scale is None and len(lbls) > 1 and cal.look() == "classic"
             imgs = cal.load_channels(lbls, imgs, iofs=iofs, scale=scale, saturated=clips if scale is not None else None,
-                                     off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None)
+                                     valid=unfilled if scale is not None else None,
+                                     off_disk=(lambda linear: dim_off_disk(lbls, linear)) if alone else None, deep=deeps)
             calibrated = imgs is not before
 
     # align to the middle frame in time so the largest offset is as small as possible
@@ -382,6 +397,9 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         else:
             imgs = [i if w is None else warp_frame(i, w) for i, w in zip(imgs, warps)]
 
+    # which frames SPICE puts wholly on their target's disk, lit: a blank pair of them is the body's own even color, not a
+    # black sky stretched to gray (image_correction._flat)
+    filled = disk_filled(lbls, linear[0]) if align and len(lbls) > 1 and linear is not None else None
     # masks move with the frames, so pixels alignment leaves uncovered become invalid too
     aligned = []
     why = region = bodies = None
@@ -396,7 +414,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
             shifts = []
             # the channels before alignment, for per_body
             before = (list(guide), list(linear[0]), list(masks), None if full is None else list(full))
-            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess)
+            ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess, on_disk=filled)
             channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
             if full is not None:
                 full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
@@ -419,7 +437,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
                 imgs = neutral(imgs, region)
         else:
             before, shifts = (list(imgs), list(imgs), list(masks)), []
-            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess)
+            imgs, masks = ic.align_with_masks(imgs, masks, ref, aligned, found=shifts, guess=guess, on_disk=filled)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
             if why == "moved":
                 got = per_body(lbls, ref, *before, bands, None, shifts, warps)
@@ -916,7 +934,10 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
                 continue
             # SPICE's move of this body from the reference to channel j (the pointing fix the same in both)
             b0, bj = at[ref][name], at[j][name]
-            g = ((bj[1] - b0[1]) * k, (bj[2] - b0[2]) * k)
+            # (plus the WAC filters' own offset between the two channels, WAC_FILTER_OFFSETS, as spice_offsets adds it)
+            fo = filter_offset(lbls[j], lbls[ref])
+            fo = (fo[0] * k, fo[1] * k)
+            g = ic.Guess((bj[1] - b0[1]) * k + fo[0], (bj[2] - b0[2]) * k + fo[1], fo)
             grow = PER_BODY_GROW + PER_BODY_HAZE * b0[3]
 
             def part(im, b, at_):
@@ -936,7 +957,7 @@ def per_body(lbls, ref, guide, chans, masks, bands=None, full=None, whole=None, 
                 drift[j] = (found[1][0] - g[0], found[1][1] - g[1])
                 shifts.append(found[1])
                 continue
-            g = (g[0] + drift[j][0], g[1] + drift[j][1])
+            g = ic.Guess(g[0] + drift[j][0], g[1] + drift[j][1], fo)
             ic.align_with_masks(pair, [masks[ref].copy(), masks[j].copy()], 0, how, found=found, guess=[None, g],
                                 within=PER_BODY_NEAR * k)
             got = found[1] if found[1] is not None else g
@@ -1163,7 +1184,59 @@ def spice_offsets(lbls, ref):
     locs = _spice_locs(lbls)
     if locs is None or locs[ref] is None:
         return None
-    return [None if loc is None else (locs[ref][0] - loc[0], locs[ref][1] - loc[1]) for loc in locs]
+    out = []
+    for lbl, loc in zip(lbls, locs):
+        if loc is None:
+            out.append(None)
+            continue
+        fx, fy = filter_offset(lbl, lbls[ref])
+        # (the filters' part known apart, for image_correction.spice_shift's SPICE_SURE)
+        out.append(ic.Guess(locs[ref][0] - loc[0] + fx, locs[ref][1] - loc[1] + fy, (fx, fy)))
+    return out
+
+
+"""
+Where each wide-angle filter pair puts the picture, (x, y) in full resolution pixels of the frame as the pipeline
+draws it, against CL1/GRN's. SPICE has one boresight for the camera whatever the filter, but each WAC filter moves the
+picture a fixed two or three pixels (the filters are not quite parallel plates), so SPICE's offset between two channels
+of a WAC colour set was that far from where the pictures match: RED sat (+2.0, +1.2) px from GRN in 6,301 matches,
+BL1 (+2.1, -1.4), VIO (+2.2, -1.8). Measured on the full cache f9ab1b4 (2026-11-16): for every channel of a WAC colour
+set of full resolution frames that phase correlation matched (14,894 matches), the match less SPICE's offset, one
+offset per filter fitted to them all (evidence/wac_filter_offsets/fit.py). Held-out sets: SPICE's offset is a median
+2.36 px from the picture match without the table and 1.25 px with it (0.37 px on the Jupiter flyby's frames, whose
+pointing JPL corrected; the rest is the raw pointing's own frame to frame error). The same from 2000 to 2017 for RED
+and BL1 to 0.3 px; VIO, CB2 and MT2 to about 1 px. Summed frames are left out of the fit, not of the table: their
+matches lock to whole camera pixels (2 or 4 px), but the filters move their pictures as much. The narrow-angle
+camera's filters show no such offset (under 0.2 px between its visible filters) and have no table.The camera team measured the same before launch (ISS calibration report 699-416, section 5.4.3, table 5.4-1, 1997
+nav-target disks through CL, RED, GRN and BL1; COISS_0011 document/report/iss/5.0/5.4.pdf): against GRN, RED
+(+2.2, +0.8), BL1 (+2.0, -1.6), CL1/CL2 (+1.4, -0.1) px (sample, line), within 0.4 px of this table. SPICE's ISS
+instrument kernel (cas_iss_v10.ti) has one WAC boresight and no filter terms.
+"""
+WAC_FILTER_OFFSETS = {
+    ("CL1", "GRN"): (0.00, 0.00), ("CL1", "RED"): (2.03, 1.16), ("CL1", "BL1"): (2.10, -1.35), ("CL1", "VIO"): (2.16, -1.75),
+    ("CL1", "IR1"): (2.13, 1.35), ("CB2", "CL2"): (2.42, -0.85), ("MT2", "CL2"): (2.51, -0.32), ("CB3", "CL2"): (2.79, -0.65),
+    ("MT3", "CL2"): (3.08, -0.11), ("IR2", "IR1"): (0.44, -0.06),
+    # the infrared filters of wheel 1 behind CL2, from fewer matches (60, 44, 23 and 16 full resolution matches; a
+    # model with one offset per wheel position predicts each to 0.15 px): evidence/wac_filter_offsets/fit_full_infrared.py
+    ("IR3", "CL2"): (2.73, -0.73), ("IR2", "CL2"): (-0.42, -1.48), ("IR4", "CL2"): (2.36, -1.18), ("IR5", "CL2"): (2.53, -1.34),
+}
+
+
+def _filter_pair(lbl):
+    names = str(lbl.info.get("FILTER_NAME", "")).strip("()").replace('"', "").split(",")
+    return tuple(n.strip().upper() for n in names)
+
+
+def filter_offset(lbl, ref):
+    """How far frame lbl's filter puts its picture from frame ref's, (dx, dy) in full resolution pixels as
+    image_correction.align_with_masks takes a guess (spice_offsets adds it to SPICE's offset): the difference of the two
+    filters' WAC_FILTER_OFFSETS. (0, 0) for the narrow-angle camera, and when the table lacks either filter."""
+    if lbl.info.get("INSTRUMENT_ID") != "ISSWA" or ref.info.get("INSTRUMENT_ID") != "ISSWA":
+        return 0.0, 0.0
+    a, b = WAC_FILTER_OFFSETS.get(_filter_pair(lbl)), WAC_FILTER_OFFSETS.get(_filter_pair(ref))
+    if a is None or b is None:
+        return 0.0, 0.0
+    return a[0] - b[0], a[1] - b[1]
 
 
 def _spice_locs(lbls):
@@ -1204,6 +1277,13 @@ def spice_warps(lbls, ref):
             out.append(None)
             continue
         scale = float(loc[2]) / float(locs[ref][2])
+        on_disk = _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc)
+        if on_disk and _on_disk(lbls[ref], locs[ref]) and _on_disk(lbls[len(out)], loc):
+            # both wholly on the disk: the ground under them grows by the ratio of its ranges, not the centre's (a close
+            # Titan: 2,425 km to the ground at 5,000 from the centre, so 100 km nearer is 4%, not 2%; stacking._range)
+            near, here = _ground(lbls[len(out)], loc), _ground(lbls[ref], locs[ref])
+            if near and here:
+                scale = near / here
         turn = ((float(loc[3]) - float(locs[ref][3]) + 180) % 360) - 180
         moves = HALF_DIAGONAL * (abs(scale - 1) + abs(np.radians(turn)))
         if moves < WARP_LEAST or abs(scale - 1) > WARP_MOST or abs(turn) > WARP_TURN:
@@ -1211,11 +1291,46 @@ def spice_warps(lbls, ref):
             continue
         # about the target's centre; a close-up wholly on its target's disk about the frame's middle: its centre
         # is thousands of px off (Titan at 6,000 km), and a scale about it moves the whole frame by hundreds
-        if _on_disk(lbls[ref], locs[ref]) or _on_disk(lbls[len(out)], loc):
+        if on_disk:
             out.append((ba.CCD_CENTER, ba.CCD_CENTER, scale, turn))
         else:
             out.append((ba.CCD_CENTER - float(loc[0]), ba.CCD_CENTER - float(loc[1]), scale, turn))
     return out
+
+
+def _ground(lbl, loc):
+    """The range (km) to the ground in the frame's middle (stacking.ground_range), or None"""
+    scale = (getattr(lbl, "geometry", None) or {}).get("scale")
+    if loc is None or not scale:
+        return None
+    return stacking.ground_range(tuple(loc[:3]), ba._radius_km(lbl.info.get("TARGET_NAME")), float(scale))
+
+
+"""
+Per frame, whether SPICE puts it wholly on its target's disk (_on_disk) and it is clearly lit: its median I/F at least
+FILLED_LIT times its own pixel-to-pixel noise. A frame on the night side, or one SPICE puts on the disk while the camera
+pointed at the sky (raw pointing is 5 to 12 px off, tens for a small moon), is blank too, but its "color" is the ratio
+of the filters' dark noise stretched (W1448930891_1's white): it stays gray. channels = the set's linear (calibrated)
+channels, not yet aligned. None without the geometry cache.
+"""
+FILLED_LIT = 20.0
+
+
+def disk_filled(lbls, channels):
+    locs = _spice_locs(lbls)
+    if locs is None:
+        return None
+    return [_on_disk(lbl, loc) and _lit_well(c) for lbl, loc, c in zip(lbls, locs, channels)]
+
+
+def _lit_well(channel):
+    c = np.asarray(channel, np.float32)
+    if c.ndim == 3:
+        c = c.mean(axis=2)
+    high = c - cv2.GaussianBlur(c, (0, 0), 3)
+    noise = 1.4826 * float(np.median(np.abs(high - np.median(high))))
+    level = float(np.median(c))
+    return level > 0 and level >= FILLED_LIT * max(noise, 1e-12)
 
 
 def _on_disk(lbl, loc):

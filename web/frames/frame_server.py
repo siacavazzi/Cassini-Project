@@ -246,6 +246,7 @@ import numpy as np  # noqa: E402
 import calibration  # noqa: E402
 import hdr_still  # noqa: E402
 import color_image  # noqa: E402
+import sharpen  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import reel  # noqa: E402
 import obs_mosaic  # noqa: E402
@@ -260,6 +261,19 @@ SIZES = (128, 256, 384, 512, 768, 1024)
 # size=full: the picture at full resolution, capped so a whole-pass mosaic cannot run away with the bandwidth
 FULL = "full"
 FULL_MAX = int(os.environ.get("CASSINI_FULL_MAX", "2048"))
+
+
+def full_out(frame_id, cache):
+    """The longest side of a mosaic's or mosaic movie's picture at size=full (the mosaic route's ?size=full and
+    mode=rolling&size=full, an "up to 2048" film's (export.Pictures.canvas), and the prebuild's fullview phase, which
+    stores it under the same name): the biggest size the pass has detail for (export.bucket of its native size, 1024,
+    1536 or 2048), never the canvas enlarged past it. One size per pass, so a full view and a film find the same
+    stored picture (2026-11-16: the mosaic route drew every pass at 2048 and a film at its bucket, two pictures, the
+    film's never stored)."""
+    try:
+        return export.bucket(mosaic_native.native_side(frame_id, cache) or obs_mosaic.OUT, min(obs_mosaic.CANVAS, FULL_MAX))
+    except (FileNotFoundError, ValueError, KeyError):
+        return min(obs_mosaic.CANVAS, FULL_MAX)
 # the sizes the camera windows ask for (head-quiet.html size()): true resolution, or full in full view
 WINDOW_SIZES = (1024, FULL)
 FOLDERS = {"N": "nac_data", "W": "wac_data"}
@@ -373,6 +387,16 @@ def keep_failed(path, part, e):
     if time.monotonic() - _keep_failed[0] > 60:
         _keep_failed[0] = time.monotonic()
         print(f"cannot keep {path} in the cache ({e}); sending it anyway", flush=True)
+
+
+def frame_size(query, default, fmt="webp"):
+    """size_of for a single frame's picture (a frame, a processed frame, a movie frame): its full size is the stored
+    1024 (Cassini's frames are 1024 px at most, and the build stores every frame's picture at 1024), so a full view
+    or a studio asking size=full is answered from the cache instead of drawn again on request (2026-11-16, cache
+    completeness check: 10 of 13 such asks were drawn). A PNG download (format=png) keeps FULL: it is made from the
+    frame itself."""
+    size = size_of(query, default)
+    return 1024 if size == FULL and fmt == "webp" else size
 
 
 def size_of(query, default):
@@ -518,8 +542,8 @@ def webp(frame_id, size, cache, fmt="webp"):
 # the caches of the pictures drawn from I/F, one per display model (calibration.style), so the classic look keeps the
 # pictures made before the balanced display model and raw colors the balanced ones made before natural color
 # color-v57/v40/v35, proc-v24/v18, thumb-v16, ctr10: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; color-v56/v39/v34, proc-v23/v17, thumb-v9: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); color-v55/v38/v33, proc-v22/v16, thumb-v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); color-v54/v37/v32, proc-v21/v15, thumb-v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); color-v53/v36/v31 (proc and thumb unchanged): #353 (limb matches only on frames that are at least 90 % picture: no colored rim round Titan on 153DI); color-v52/v35/v30 (proc and thumb unchanged): #351 (a hazy far body's limb ring filled in its own color under a transiting moon: no gray wedge across Titan); color-v51/v34/v29 (proc and thumb unchanged): #348 (storm-watch methane sets filed under a rider moon or UNK mixed as their observation's body); color-v50/v33/v28 (proc and thumb unchanged): #339 (no hard clipping at white or black in moon mosaics and movies), #345 (color-hold seam) and #346 (transits: per_body off for warped sets, hazy limb ring gray); color-v49/v32/v27 (proc and thumb unchanged): the gray color sets batch: #340 (featureless sets at SPICE's place, gray sets labeled black and white), #341 (limbs matched on their outline), #342 (movie frames far from their color set play their own picture in its color) and #343 (transits: far body filled in its own color, per_body on warped sets); color-v48/v31/v26 (proc and thumb unchanged): #336 (each body of a color set aligned on its own where it moved: transit Moments no longer gray); color-v47/v30/v25 (proc and thumb unchanged): the batch of #323 (weak color-set matches checked on edges) and #325 (round-7 mosaic leftovers: Saturn 3x3 seams, 00BSA limb notches, Rhea 162RH wedge); color-v46/v29/v24, proc-v20/v14, thumb-v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); color-v45/v28/v23: #294 (grey single-filter colour sets); color-v44/v27/v22, proc-v19/v13: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); color-v43/v26/v21, proc-v18/v12: the WAC's geometric distortion correction and per-filter focal length (CISSCAL step 11, geometric_correction.py); color-v42/v25/v20, proc-v17/v11: the batch of #247 (summed and full-size colour sets), #239 (edge trim), #240 (pass layout), #252 (grey where a moving body can't register), #249 (light sharpening), #258 (classic black sky), #261 (dark sky: edge glow and column stripes), #262 (mosaic despike) and #263 (steady mosaic movie colour, 3x3 seams, saturated frames held); color-v41/v24/v18 (proc unchanged): neutral black sky: a color set's sky off its body's disk and a neutral toe at black (#248); color-v40/v23/v17 (proc unchanged): natural colour emulation keeps today's brightness with methane belt detail at twice a band's share (#254); color-v39/v22/v16 (proc unchanged): the colour-set alignment fixes, wild star and edge fits rejected and grey where a channel is not aligned (#236); color-v38/v21/v15, proc-v16/v10: the tone shoulder, shadow floor and saturated colour fill (#241) and the dark-sky row band fixes (#242); color-v37/v20/v14 (proc unchanged): the colour-set registration fixes (#235) and natural filters and palette for colour sets (#237); color-v36/v19/v13, proc-v15/v9: the CISSCAL 4.1 dark current (#231) and the colour-set repeat and pointing rule (#232); color-v35/v18/v12, proc-v14/v8: the CISSCAL 2 Hz noise, pixel pair and sky band steps (#230); color-v34/v17/v11, proc-v13/v7: thin ringlets kept by the garbled-line check (#212), heavily compressed frames smoothed and saturated frames' glow black softened (#222), natural color (eye, #219); color-v33/v16/v10, proc-v12/v6: Titan color (#198), saturated white kept white (#205), movie strobe (#206), line holes after lost packets and star spikes (#201); color-v32/v15/v9, proc-v11/v5: star boxes, fill dashes, garbled lines (group I), color sets aligned near SPICE and two-filter/methane balance (group F); color-v31/v14/v8, proc-v10/v4: the calibration fixes (overclock lines, UV2 flat, pinholes) and the single-picture tone; color-v30/v13/v7, proc-v9/v3: calibration takes the flat field (dust rings, mottle) and the nonlinearity out
-COLOR_VERSIONS = {"balanced": "color-v58", "raw": "color-v41", "eye": "color-v58-eye", "false": "color-v58-false", "classic": "color-v36"}   # v58/v41/v36: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator
-PROC_VERSIONS = {"balanced": "proc-v25", "raw": "proc-v25", "eye": "proc-v25", "false": "proc-v25", "classic": "proc-v19"}   # one frame: no colors to mix; v25/v19: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator
+COLOR_VERSIONS = {"balanced": "color-v70", "raw": "color-v53", "eye": "color-v70-eye", "false": "color-v70-false", "classic": "color-v48"}   # v70/v53/v48: summed frames' white guard and spike cleaning at the camera's own pixel size (finding 21; numbered past #491/#493/#532); v69/v52/v47: a lossy frame's compression blocks smoothed in full from 10 to 1, not 20 (calibration.LOSSY_RATIO): no ragged dark block patches on 103RI's dim rings; v68/v51/v46: sky smoothing measures a glow from each line's dark sky, not the line's median (calibration.SKY_LINE): no second darker limb inside Saturn's; v67/v50/v45: a colour set's channels lined up on a one-way ridge of shared edges (image_correction.ridge_shift: a ring edge across cloud tops) and a blank pair wholly on its target's disk as its even colour (_flat filled): gray sets in colour; v66/v49/v44: the wide-angle camera's filters each sit a fixed 2 to 3 px from the others' (color_image.WAC_FILTER_OFFSETS): SPICE's offset between a WAC set's channels carries it, so a channel placed by SPICE lands on the others; v65/v48/v43: a repeat find_shift can't line up is matched near SPICE's place first (guided_shift phase or centroid), else merged as taken where SPICE puts it here; frames wholly on the disk sized by the ground's range (repeats and colour sets); v64/v47/v42: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges; v63/v46/v41: noise-aware fine sharpening as the last step (sharpen.adaptive_sharpen), the detail filter on a centred body's SPICE disk (obs_mosaic.detail_on_disk); v62/v45/v40: flat fields: NAC UV2/CL2 from the PDS slope file, fallback flats for pairs with no slope file (numbered past #491); color-v61: CISSCAL's bit weight step (calibration.bitweighted; numbered past #491/#493); color-v59: full-depth calibration input (calibration.depth_image: stored values, not the 0-254 display copy; stacked stills stacked at full depth too); v58/v41/v36: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator
+PROC_VERSIONS = {"balanced": "proc-v37", "raw": "proc-v37", "eye": "proc-v37", "false": "proc-v37", "classic": "proc-v31"}   # v37/v31: summed frames' white guard and spike cleaning at the camera's own pixel size (finding 21; numbered past #491/#493/#532); one frame: no colors to mix; v32/v26: a repeat find_shift can't line up is matched near SPICE's place first (guided_shift phase or centroid), else merged as taken where SPICE puts it here; frames wholly on the disk sized by the ground's range (repeats and colour sets); v31/v25: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges; one frame: no colors to mix; v30/v24: noise-aware fine sharpening as the last step (sharpen.adaptive_sharpen), the detail filter on a centred body's SPICE disk (obs_mosaic.detail_on_disk); one frame: no colors to mix; v29/v23: flat fields: NAC UV2/CL2 from the PDS slope file, fallback flats for pairs with no slope file (numbered past #491); one frame: no colors to mix; proc-v28: CISSCAL's bit weight step (calibration.bitweighted; numbered past #491/#493); proc-v26: full-depth calibration input (calibration.depth_image: stored values, not the 0-254 display copy; stacked stills stacked at full depth too); one frame: no colors to mix; v25/v19: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator
 # Auto center (center=1): the same pictures centred on the body by SPICE, cached beside them in folders of their own
 HOLD_AGREE = 40   # full resolution px: SPICE's place for a held still and the pass's may differ by this much
 CENTRE_VERSION = "ctr10"  # ctr10: centred on the body a frame shows when its archive target is a dot (bootleg_autonav.shown_targets); ctr2: the shift stops at the frame's data edge; ctr3: only when the body's disk is cut by it;
@@ -578,12 +602,40 @@ def composite(ids, channel=None, centre=None):
     chans = [img[..., 0] if img.ndim == 3 else img for img in imgs]
     alpha = np.where(valid, 255, 0).astype(np.uint8)
     report["ids"] = list(ids)
-    # (no sharpening: #249's unsharp mask came out on 11-08, Sam: it added to the over-processed look)
+    # the last step of every still and composite: noise-aware fine sharpening (sharpen.adaptive_sharpen, 11-16; not
+    # #249's fixed unsharp mask, which came out on 11-08)
     if len(chans) == 1:
-        return _with_hdr(Image.fromarray(np.dstack([chans[0], alpha]), "LA"), sink), report
+        return _with_hdr(Image.fromarray(_sharpened(np.dstack([chans[0], alpha]), ids, report), "LA"), sink), report
     if len(chans) == 2:
         chans = [chans[0], ((chans[0].astype(np.uint16) + chans[1]) // 2).astype(np.uint8), chans[1]]
-    return _with_hdr(Image.fromarray(np.dstack(chans + [alpha]), "RGBA"), sink), report
+    return _with_hdr(Image.fromarray(_sharpened(np.dstack(chans + [alpha]), ids, report), "RGBA"), sink), report
+
+
+def _lossy(frame_id):
+    """True when the frame was sent lossy-compressed (its label's INST_CMPRS_TYPE)"""
+    try:
+        info = color_image.lh.label(f"{FOLDERS[frame_id[0]]}/{frame_id}.png", as_png=True).info
+        return str(info.get("INST_CMPRS_TYPE", "")).replace('"', "").strip().upper() == "LOSSY"
+    except Exception:   # noqa: BLE001  (no label: taken as lossless, as the picture was made)
+        return False
+
+
+def _filters(frame_id):
+    """The frame's filter names (its label's FILTER_NAME), [] when it has no label"""
+    try:
+        info = color_image.lh.label(f"{FOLDERS[frame_id[0]]}/{frame_id}.png", as_png=True).info
+        return [n.strip() for n in str(info.get("FILTER_NAME", "")).replace('"', "").strip("()").split(",")]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _sharpened(px, ids, report):
+    """px (uint8 LA or RGBA) through sharpen.adaptive_sharpen, gentler when one of its frames is lossy; its grain and
+    the amount it took go in report["sharpen"]"""
+    rep = {}
+    out = sharpen.adaptive_sharpen(px, lossy=any(_lossy(i) for i in ids), report=rep)
+    report["sharpen"] = {k: rep[k] for k in ("grain", "amount", "changed") if k in rep}
+    return out
 
 
 # HDR stills (calibration.hdr_capture): each composite and processed frame also keeps its recovery map, a grey
@@ -738,10 +790,20 @@ def centred(ids, view):
         sink[-1] = cut if m.shape[:2] == (h, w) else None
     report = dict(report, ids=list(ids), centred_view={"side": side, "pass": view.get("pass"),
                                                           "centre": bool(view.get("centre"))})
-    # one frame on its one channel (no sharpening since 11-08)
+    # the close-up passes' detail filter on the body's own disk (obs_mosaic.detail_on_disk; Sam, 11-16: "run it almost
+    # everywhere, mask the body even if it's small"), where Auto center put it in the middle by SPICE
+    radius = body_radius(lbl) if lbl is not None else None
+    target = str(lbl.info.get("TARGET_NAME", "")).replace('"', "").strip() if lbl is not None else ""
+    haze = target in obs_mosaic.DISK_DETAIL_HAZE and not any(
+        calibration.SURFACE_WINDOW.get(target) in _filters(i) for i in ids)
+    if view.get("centre") and radius and target not in obs_mosaic.DISK_DETAIL_SKIP and not haze:
+        out = obs_mosaic.detail_on_disk(out, cx - left, cy - top, radius, target=target,
+                                         haze=target in obs_mosaic.DISK_DETAIL_HAZE)
+        report["disk_detail"] = {"radius": round(float(radius), 1)}
+    # one frame on its one channel; the last step, noise-aware fine sharpening (_sharpened), on the view as shown
     if len(ids) == 1:
-        return Image.fromarray(np.ascontiguousarray(out[..., [0, 3]]), "LA"), report
-    return Image.fromarray(out, "RGBA"), report
+        return Image.fromarray(_sharpened(np.ascontiguousarray(out[..., [0, 3]]), ids, report), "LA"), report
+    return Image.fromarray(_sharpened(out, ids, report), "RGBA"), report
 
 
 # the last few composites made, so a window opening each of a set's channels in turn runs load_aligned once
@@ -814,18 +876,33 @@ def color_webp(ids, size, cache, fmt="webp", channel=None, centre=None):
     return data, report
 
 
+POLARIZED_NAME = "_p1"   # a polarized colour frame's own pictures' name after its id (frame_name)
+
+
+def frame_name(frame_id):
+    """The name of frame frame_id's own processed pictures in the cache: its id, and POLARIZED_NAME after it for a
+    frame the index reads as a polarized colour frame (sets_passes.polarized_index: calibrated to its plain frame's
+    I/F, its filter's three angles stacked), so the pictures made of it before are not served for it"""
+    try:
+        polarized = obs_mosaic.polarized_frame(frame_id)
+    except FileNotFoundError:   # (no index: a synthetic cache)
+        polarized = False
+    return frame_id + (POLARIZED_NAME if polarized else "")
+
+
 def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     """One frame made like a composite's channel (composite with one id: repeat exposures stacked, lost pixels
     filled, calibrated to I/F and put on the pipeline's display scale), for movie mode; and its report. Cached
     like the composites. centre: centred on the body (composite)."""
-    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), frame_id)
+    name = frame_name(frame_id)
+    base = os.path.join(centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), size_dir(size, fmt), name)
     report = {}
     def make():
         with _movie_slots:
             # kept for its other sizes, as a composite is (the segment pre-render asks for 512, then 1024): one frame
             # made once, not once a size
             im, made = _recent_composite([frame_id], centre)
-        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), frame_id)
+        keep_hdr(im, centre_folder(os.path.join(cache, PROC_VERSIONS[calibration.style()] + calibration.variant() + QSUFFIX), centre), name)
         report.update(made)
         cached(base + ".json", lambda: json.dumps(made).encode())
         reel.keep_report(base + ".json", made)
@@ -834,13 +911,13 @@ def processed_webp(frame_id, size, cache, fmt="webp", centre=None):
     if not report:
         report = reel.report_of(base + ".json", {})
     folder = processed_folder(cache, centre)
-    calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), frame_id + ".webp"),
-                                os.path.join(folder, HDR_DIR, frame_id + ".webp"))
+    calibration.hdr_note_served(os.path.join(folder, size_dir(1024, "webp"), name + ".webp"),
+                                os.path.join(folder, HDR_DIR, name + ".webp"))
     return data, report
 
 
 # ---------- highlight thumbnails: one small picture per highlight, picked by the page's old rule and kept ----------
-THUMB_VERSION = "thumb-v23"   # v23: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; v23: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; v22: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); v21: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); v20: an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; v19: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; v17: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; v16: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; v15: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); v14: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; v13: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; v12: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; v11: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; v10: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; v9: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); v8: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
+THUMB_VERSION = "thumb-v36"   # v36: summed frames' white guard and spike cleaning at the camera's own pixel size (finding 21; numbered past #491/#493/#532); v35: a lossy frame's compression blocks smoothed in full from 10 to 1, not 20 (calibration.LOSSY_RATIO): no ragged dark block patches on 103RI's dim rings; v34: sky smoothing measures a glow from each line's dark sky, not the line's median (calibration.SKY_LINE): no second darker limb inside Saturn's; v33: a colour set's channels lined up on a one-way ridge of shared edges (image_correction.ridge_shift: a ring edge across cloud tops) and a blank pair wholly on its target's disk as its even colour (_flat filled): gray sets in colour; v32: a filter's match onto its pointing's other filter is checked on the body's lit limb (obs_mosaic._limb_register: the 2004 approach movies' doubled limbs, audit finding 14); v31: the wide-angle camera's filters each sit a fixed 2 to 3 px from the others' (color_image.WAC_FILTER_OFFSETS): SPICE's offset between a WAC set's channels carries it, so a channel placed by SPICE lands on the others; v30: a repeat find_shift can't line up is matched near SPICE's place first (guided_shift phase or centroid), else merged as taken where SPICE puts it here; frames wholly on the disk sized by the ground's range (repeats and colour sets); v29: a repeat exposure taken nearer or further is brought to the frame's range before it is merged (stacking.to_range): Phoebe 2004-06-11's crater shadows with three edges; v28: stills end in noise-aware fine sharpening (sharpen.adaptive_sharpen); v27: flat fields: NAC UV2/CL2 from the PDS slope file, fallback flats for pairs with no slope file (numbered past #491); thumb-v26: CISSCAL's bit weight step (calibration.bitweighted; numbered past #491/#493); thumb-v24: full-depth calibration input (calibration.depth_image: stored values, not the 0-254 display copy; stacked stills stacked at full depth too); v23: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; v23: sky smoothing leaves a slope steeper than a glow's one-code steps as taken (calibration.SKY_GLOW_MOVE): no hard line along a crescent's terminator; v22: a Saturn ring pass's pointing the camera saturated, whose lit disk it drew white, stays as taken, not ring-redrawn (2004-10-28 COMPHIDRK001's disk brightened past white and cut by #457); v21: a saturated patch is drawn as its glow only when that glow is far under white (SAT_WHITE 64-96 of 255): clipped ringlets in long exposures white again (195RI); v20: an undrawn filter whose frames hold nothing over the drawn filters' lowest black gets that black (undrawn_blacks): Jupiter ATMOS02A's gray night-side panel; balanced look only; v19: the rings in a Saturn pass's tiles that show the disk redrawn as at the epoch too, the disk and the rings over it kept as taken (the Grand Finale HIPHASEFA/FB ring steps #449 left); numbered past #455/#456; v17: a pixel the camera saturated is drawn as bright as the light it saturated on (calibration.saturated_code), white only where that reaches white: the high-phase ring mosaics' cyan blob and white block; v16: a frame whose archive target is a dot is a picture of the body it shows (bootleg_autonav.shown_targets: its passes, centring and calibration); numbered past #449; v15: Saturn's ring passes redrawn as at the pass's epoch on SPICE's ring plane, ring pairs matched part by part (ISS_00ARI_COMPHIDRK001's 10 to 30 px ring steps); v14: a swept colour tile registration could not line up is left out of the colour (Iapetus' closest flyby's rainbow patch); numbered past #407/#409; v13: an airless body's disk is never its pass's dark sky (Iapetus' close flyby's dark material drew as black holes); numbered past #407; v12: a filter mosaic holding a long exposure taken again is composed whole, not grown (Day the Earth Smiled's lime patch by the limb); numbered past #403/#405; v11: a place whose colour tiles were not surface-redrawn keeps one colour visit, as a clouded pass does (Phoebe's closest pass fringed green and purple); numbered past #396-#403; v10: a place every frame of which saturated is filled by its least saturated frame under everything when drawn tiles lie close all round it (039RI's black square on the disk); numbered past #396-#402; v9: the batch of #383 (fill window, exposure6 chains), #384 (mosaic fixes), #385 (uncached frames), #388 (calibration filter table race), #389 (moon-finder sliver tile and behind-camera pointing) and #390 (reel wavelength race); v8: pictures face the nearest quarter turn to north up (obs_mosaic.pass_turn snaps the pass's axes to 0/90/180/270); v7: #379/#380/#381 (no sharpening on served pictures; Titan two-filter approximate color and tinted frames lined up on the frame; no north-up tilt); v6: no north-up tilt: every picture turned to its pass's own orientation (obs_mosaic.pass_turn); v5: #376/#377 (gentler floor black, FLOOR_SHARE 0.4 capped at FLOOR_GAIN 1.5; moved-body gray leaves dim light in color); v4: the batch of #275 (small-moon centering), #279 (movie glow sky), #286 (small-moon movie stabilization), #300 (white under gain), #301 (sky streaks), #302 (Phoebe dark box), #303 (Auto center for cruise bodies), #305 (color-set cover), #315 (long repeats) and #317 (lossy repeated blocks); v3: the batch of #274 (080EN plume mosaic), #276 (plume sky smoothing), #277 (mosaic edge notch), #278 (Earth Smiled thin lines), #280 (panel registration limit), #282 (clip floor), #283 (blown filter), #284 (via-check as taken), #285 (lost lines) and #292 (hot pixels next to lost pixels); v2: the flat fielded pictures
 THUMB_SIZE = 256
 
 
@@ -1740,14 +1817,15 @@ def make_handler(site, cache, flags=None):
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
                 query = parse_qs(url.query)
-                size, fmt = size_of(query, 512), picture_format(query)
+                fmt = picture_format(query)
+                size = frame_size(query, 512, fmt)
                 centre = self.centre_of(query, m.group(1))
                 if centre is False:
                     return
                 try:
                     data, report = processed_webp(m.group(1), size, cache, fmt, centre)
                     if query.get("hdr", ["0"])[0] == "1" and fmt == "webp":
-                        return self.send_hdr(processed_folder(cache, centre), m.group(1), size, data, query,
+                        return self.send_hdr(processed_folder(cache, centre), frame_name(m.group(1)), size, data, query,
                                              f"Cassini_{m.group(1)}_processed", report)
                     return self.send_picture(data, fmt, query, f"Cassini_{m.group(1)}_processed", {"X-Composite": json.dumps(report)})
                 except FileNotFoundError:
@@ -1913,7 +1991,8 @@ def make_handler(site, cache, flags=None):
                     info = obs_mosaic.pass_info(m.group(1), cache)
                     return self.send_json(info) if info else self.send_error(404, "Not in a pass")
                 query = parse_qs(url.query)
-                size, fmt = size_of(query, 512), picture_format(query)
+                fmt = picture_format(query)
+                size = frame_size(query, 512, fmt)
                 # full resolution: the pass's view at its longest side (obs_mosaic.OUT), as saved from the window
                 size = max(SIZES) if size == FULL else size
                 try:
@@ -1930,13 +2009,7 @@ def make_handler(site, cache, flags=None):
                         full = size_of(query, 512) == FULL
                         # full: the biggest size the pass has detail for (export.bucket of its native size), never
                         # the canvas enlarged past it
-                        out = obs_mosaic.OUT
-                        if full:
-                            try:
-                                out = export.bucket(mosaic_native.native_side(m.group(1), cache) or obs_mosaic.OUT,
-                                                    min(obs_mosaic.CANVAS, FULL_MAX))
-                            except (FileNotFoundError, ValueError, KeyError):
-                                out = min(obs_mosaic.CANVAS, FULL_MAX)
+                        out = full_out(m.group(1), cache) if full else obs_mosaic.OUT
                         made = obs_mosaic.rolling_webp(m.group(1), FULL if full else size, cache, laps, _mosaic_slots, fmt,
                                                        out=out,
                                                        fade=fade, wait=query.get("whole", ["0"])[0] == "1")
@@ -2001,7 +2074,7 @@ def make_handler(site, cache, flags=None):
                     try:
                         # force=1: the window's Mosaic switch, the pass's mosaic whatever obs_mosaic calls it
                         made = obs_mosaic.mosaic_webp(m.group(1), size, cache, _mosaic_slots, fmt=fmt,
-                                                      out=min(obs_mosaic.CANVAS, FULL_MAX) if size == FULL else obs_mosaic.OUT,
+                                                      out=full_out(m.group(1), cache) if size == FULL else obs_mosaic.OUT,
                                                       force=bool(query.get("force")), tune=tune)
                     except FileNotFoundError:
                         made = None
@@ -2051,7 +2124,8 @@ def make_handler(site, cache, flags=None):
                         return self.send_bytes(data, mime, False, headers)   # the calibration may still improve
                     if kind == "png":
                         return self.send_picture(archive_png(frame_id), "png", query, f"Cassini_{frame_id}_archive")
-                    size, fmt = size_of(query, 512), picture_format(query)
+                    fmt = picture_format(query)
+                    size = frame_size(query, 512, fmt)
                     if reel._index is not None and size != FULL and size >= 512:
                         # a frame of a mosaic pass (the window asks for frames a few ahead): start its tiles; not
                         # for a small picture (a body's folder picture), which no camera window asks for
@@ -2185,6 +2259,12 @@ def main():
     # every year's kernels stay extracted once used, so a reel going back and forth in time is not slowed
     data_source.KEEP_SPICE_CACHE = True
     data_source._zip_index() if data_source.using_zip() else None  # build or load the zip index up front
+    # the 12-bit originals (data_source.check_originals): a server drawing pictures on request without them caches the
+    # squeezed-code pictures under the same names a build with them makes, so it says so loudly (and goes on: a preview)
+    try:
+        data_source.check_originals()
+    except Exception as e:   # (OriginalsMissing, or a manifest it can't read: a preview starts all the same)
+        print(f"WARNING: {e}. Pictures drawn here are not the rebuild's: keep this cache apart from it", flush=True)
     # the camera windows' mosaic route and centred pictures need the index, its observations (obs_mosaic.units) and
     # its frames' rows (obs_mosaic._row_of), and Pre-process its filter sets (warm_prebuild); made now rather than on
     # the first request
