@@ -56,7 +56,17 @@ glow[np.hypot(xx - 200, yy - 200) < 150] += 0.5
 assert np.array_equal(cal._sky([glow]), old_sky([glow]))
 checks += 1
 
-# 5. two channels: sky only where both are
+# 5. a faint ring band (3 times the noise over 45 % of the frame) under one bright ring that sets the 99.9th percentile:
+# the cut runs through the noise, but the frame is not noise alone (_noise_only), so the band keeps the old cut
+# (earth-fb-still, the Grand Finale's faint rings)
+band = rng.normal(0.0005, 0.004, (N, N)).astype(np.float32)
+band[(yy > 200) & (yy < 660)] += 0.012
+band[950:960] += 0.6
+assert not cal._noise_only(band, 0.0005, 0.004) and np.array_equal(cal._sky([band]), old_sky([band]))
+assert cal._noise_only(empty, 0.0005, 0.004)
+checks += 1
+
+# 6. two channels: sky only where both are
 assert cal._sky([empty, body]).sum() <= cal._sky([body]).sum()
 checks += 1
 print(f"{checks} checks ok")
