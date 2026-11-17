@@ -45,7 +45,8 @@ def test_refined_to_the_true_shift():
         shifts, how = [], []
         ic.align_with_masks(list(imgs), [m.copy() for m in masks], 0, how, found=shifts)
         before = np.hypot(shifts[1][0] - true[0], shifts[1][1] - true[1])
-        ci.refine_summed(imgs, [Lbl(256), Lbl(256)], 0, shifts, how)
+        # (with the frames' masks: the edge test keeps a refinement that lines them up better)
+        ci.refine_summed(imgs, [Lbl(256), Lbl(256)], 0, shifts, how, masks)
         after = np.hypot(shifts[1][0] - true[0], shifts[1][1] - true[1])
         assert after < 1.0 and after < before, (true, before, after, how)
         print(f"  true {true}: on the blocks {before:.2f} px off, refined {after:.2f} px off ({how[1]})")
@@ -58,6 +59,14 @@ def test_full_frames_and_mixed_sets_untouched():
     assert shifts[1] == (2.0, 0.0)
     ci.refine_summed(imgs, [Lbl(256), Lbl(1024)], 0, shifts, how)
     assert shifts[1] == (2.0, 0.0)
+    # a refinement that moves away from SPICE's offset (past SUMMED_NEAR) is not taken
+    base = scene()
+    moved = cv2.warpAffine(base, np.float32([[1, 0, 2.0], [0, 1, 1.2]]), (1024, 1024), flags=cv2.INTER_CUBIC)
+    pair, ones = [summed(base), summed(moved)], [np.ones((1024, 1024), bool)] * 2
+    shifts, how = [], []
+    ic.align_with_masks(list(pair), [m.copy() for m in ones], 0, how, found=shifts)
+    kept = shifts[1]
+    assert ci.refine_summed(pair, [Lbl(256), Lbl(256)], 0, shifts, how, ones, [None, kept]) == {} and shifts[1] == kept
     shifts, how = [None, (4.0, 0.0)], ["reference", "SPICE +4.0,+0.0"]
     ci.refine_summed(imgs, [Lbl(256), Lbl(256)], 0, shifts, how)
     assert shifts[1] == (4.0, 0.0)

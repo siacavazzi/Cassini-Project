@@ -482,12 +482,19 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
             # the channels before alignment, for per_body
             before = (list(guide), list(linear[0]), list(masks), None if full is None else list(full))
             ic.align_with_masks(guide, [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess, on_disk=filled)
-            refine_summed(guide, lbls, ref, shifts, aligned)
-            channels, masks = ic.align_with_masks(linear[0], masks, ref, use=shifts)
-            if full is not None:
-                full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
+            unrefined = refine_summed(guide, lbls, ref, shifts, aligned, masks, guess)
+            masks_in = list(masks)
+            channels, masks = ic.align_with_masks(linear[0], list(masks_in), ref, use=shifts)
             # a body that moved between the filters (grey_plan): drawn grey from the reference there, or everywhere
             why, region = grey_plan(aligned, channels, ref, np.logical_and.reduce(masks), bands)
+            if unrefined and why == "moved":
+                # a refinement never makes a set grey where the match before it did not (the channels as matched)
+                for j, (shift, how) in unrefined.items():
+                    shifts[j], aligned[j] = shift, how
+                channels, masks = ic.align_with_masks(linear[0], list(masks_in), ref, use=shifts)
+                why, region = grey_plan(aligned, channels, ref, np.logical_and.reduce(masks), bands)
+            if full is not None:
+                full = [m if d is None else ic.shift_image(m, *d) for m, d in zip(full, shifts)]
             if why == "moved":
                 # ... unless each body can be aligned on its own (per_body)
                 got = per_body(lbls, ref, before[0], before[1], before[2], bands, before[3], shifts, warps)
@@ -506,7 +513,7 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
         else:
             before, shifts = (list(imgs), list(imgs), list(masks)), []
             ic.align_with_masks(list(imgs), [m.copy() for m in masks], ref, aligned, found=shifts, guess=guess, on_disk=filled)
-            refine_summed(imgs, lbls, ref, shifts, aligned)
+            refine_summed(imgs, lbls, ref, shifts, aligned, masks, guess)
             imgs, masks = ic.align_with_masks(imgs, masks, ref, use=shifts)
             why, region = grey_plan(aligned, imgs, ref, np.logical_and.reduce(masks), bands)
             if why == "moved":
@@ -582,22 +589,30 @@ about 0.3 px, 1024 px grid). So each channel matched on the enlarged frames is m
 camera pixels (exact on the blocks), both are taken back to their own size (INTER_AREA: each block, its pixel) and
 matched again there (image_correction.find_shift), and a remainder within SUMMED_REFINE camera pixels is added. A set
 whose frames are not all summed alike, and a channel SPICE or nothing placed, is left as it was.
-shifts and aligned (the report) are changed in place.
+shifts and aligned (the report) are changed in place. A refinement is kept only where it lines the two frames' edges up
+better than the match it refines (image_correction._agreement, by SUMMED_AGREE) and, with SPICE's offset (guess),
+lands no farther from it than the match did or within SUMMED_NEAR px: the step at the frames' own size can take a wrong
+remainder (W1774753990_1 1.1 px off SPICE before, 2.6 px after, its limb doubled and the set drawn grey "moved";
+W1789443584_1 a new fringe on a ring edge). Returns {channel: (shift, how) before} for the channels refined, so the caller
+can put them back.
 """
 SUMMED_REFINE = 0.75   # camera pixels: past this the match on the blocks was not merely rounded
+SUMMED_AGREE = 0.005   # the least gain in edge agreement a refinement needs
+SUMMED_NEAR = 1.5      # px (1024 px grid): a refinement this near SPICE's offset is not held back by it
 
 
-def refine_summed(images, lbls, ref, shifts, aligned):
+def refine_summed(images, lbls, ref, shifts, aligned, masks=None, guess=None):
+    before = {}
     try:
         lines = {int(l.info.get("LINES", 1024)) for l in lbls}
     except (TypeError, ValueError):
-        return
+        return before
     h, w = images[ref].shape[:2]
     if len(lines) != 1:
-        return
+        return before
     n = lines.pop()
     if n <= 0 or n >= h or h % n or w % n:
-        return
+        return before
     f = h // n
 
     def own(im):
@@ -615,8 +630,18 @@ def refine_summed(images, lbls, ref, shifts, aligned):
         r = ic.find_shift(a, b, max_shift=4)
         if r is None or np.hypot(r[0], r[1]) > SUMMED_REFINE:
             continue
-        shifts[j] = (bx + r[0] * f, by + r[1] * f)
-        aligned[j] = f"{how} refined at {f}x{f} {shifts[j][0]:+.1f},{shifts[j][1]:+.1f}"
+        new = (bx + r[0] * f, by + r[1] * f)
+        g = guess[j] if guess is not None and j < len(guess) else None
+        if g is not None and np.hypot(new[0] - g[0], new[1] - g[1]) > max(np.hypot(shift[0] - g[0], shift[1] - g[1]), SUMMED_NEAR):
+            continue
+        if masks is not None:
+            agree = lambda s: ic._agreement(images[ref], images[j], masks[ref], masks[j], s)
+            if agree(new) < agree(shift) + SUMMED_AGREE:
+                continue
+        before[j] = (shift, how)
+        shifts[j] = new
+        aligned[j] = f"{how} refined at {f}x{f} {new[0]:+.1f},{new[1]:+.1f}"
+    return before
 
 
 """
