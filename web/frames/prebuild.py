@@ -374,6 +374,12 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
         # whole pass puts it from its first tile on: obs_mosaic.global_places)
         if u.get("kind") == "mosaic":
             obs_mosaic.solve_places(u, cache)
+    if not u["mosaic"] and last == len(u["frames"]) - 1:
+        # (a movie's stabilization chain before its first frame: a pass whose SPICE places jump against it is drawn
+        # stabilized by default (obs_mosaic.auto_steady), decided on the chain kept, so without it here its default
+        # frames were drawn at SPICE's places and named so, never asked for again, and the stabilized ones drawn at
+        # request time)
+        obs_mosaic.steady_chain(u, cache, p)
     kind, n = u.get("kind"), 0
 
     def movie(f, size):

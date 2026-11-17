@@ -7562,8 +7562,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     null while the chain is worked out (in the background). "detail": a filled pass, whose frames end in detail()
     ("sigma", "amount"): the page gains, mixes and trails the frames drawn without it (sharpen False) and sharpens
     them itself."""
-    if u.get("track") or not calibration.step("align"):
-        return {"local": False}
+    if u.get("track") or not calibration.step("align") or auto_steady(u, cache):
+        return {"local": False}   # (a pass stabilized by default, auto_steady: the server draws it, steady)
     rec = _record(u, cache)
     if not _steady_ready(u, cache, rec):
         warm_movie(u, n, 6, cache, steady=True)
@@ -9189,13 +9189,49 @@ MOVIE_DIR = "movie-3"   # movie-3: views sized to the frames' own boxes (movie_f
 MOVIE_SIZES = (512, 1024)   # the sizes the windows play a movie at, smallest first (a smaller one is shrunk from them)
 
 
-def steady_of(u, steady):
+STEADY_AUTO_JUMP = 10.0   # px (on the pass's canvas): a pass whose SPICE places jump frame to frame against what its
+#                           pictures show (the median of |d - d before|, d = SPICE's place - the stabilization chain's)
+#                           by more than this is stabilized even with stabilization off (steady_of): 133TI CLOUD002's
+#                           SPICE places jumped 24 to 54 px between frames 40 s apart while Titan held still in the
+#                           pictures (median 12.9 px), and the movie jolted (Sam 11-16); 215 movie passes of the mission
+_auto_steady = {}         # folder -> True/False, once the pass's chain is kept
+
+
+def auto_steady(u, cache):
+    """True when pass u's SPICE places jump against its stabilization chain by more than STEADY_AUTO_JUMP (median, frame
+    to frame), measured on the chain kept in the cache (never worked out here: a pass whose chain is not made yet is
+    drawn at SPICE's places, as before). Feature tracks are steady anyway."""
+    if cache is None or u.get("track") or not calibration.step("align"):
+        return False
+    key = folder(u, cache)
+    if key in _auto_steady:
+        return _auto_steady[key]
+    path = os.path.join(key, STEADY_FILE)
+    p = _plan_if_made(u, cache)
+    if p is None or not os.path.exists(path):
+        return False
+    with open(path) as fh:
+        chain = {int(n): xy for n, xy in (json.load(fh).get("places") or {}).items()}
+    d = {}
+    for n in sorted(chain):
+        place = tile(u, n, cache, p["display_scale"]).get("offset")
+        if place:
+            d[n] = (place[0] - chain[n][0], place[1] - chain[n][1])
+    jumps = [max(abs(d[n][0] - d[n - 1][0]), abs(d[n][1] - d[n - 1][1])) for n in d if n - 1 in d]
+    got = len(jumps) >= 5 and float(np.median(jumps)) > STEADY_AUTO_JUMP
+    _auto_steady[key] = got
+    return got
+
+
+def steady_of(u, steady, cache=None):
     """The stabilization smoothing a movie of pass u is drawn with: steady (Settings > Movie, frames) within
     0..STEADY_MOST, 0 for a feature track (always steady, track_places) and with Settings > Processing's alignment
-    off (SPICE's places)."""
+    off (SPICE's places); with steady 0, STEADY_SMOOTH for a pass whose SPICE places jump against its pictures
+    (auto_steady)."""
     if u.get("track") or not calibration.step("align"):
         return 0
-    return max(0, min(STEADY_MOST, int(steady or 0)))
+    steady = max(0, min(STEADY_MOST, int(steady or 0)))
+    return STEADY_SMOOTH if steady == 0 and auto_steady(u, cache) else steady
 
 
 def exposure_of(exposure):
@@ -9251,7 +9287,7 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
     if not found or found[1] < 0:
         return None
     u, n = found
-    steady, exposure = steady_of(u, steady), exposure_of(exposure)
+    steady, exposure = steady_of(u, steady, cache), exposure_of(exposure)
     rec = _record(u, cache)
     if not wait and ((_footprint_kept(u, rec) is None and
                       not all(os.path.exists(os.path.join(folder(u, cache), f)) for f in (PLAN_FILE, _footprint_file(u))))
