@@ -76,11 +76,15 @@ assert changed > 100 and a is not None and b is not None and np.hypot(a[0] - b[0
 print(f"{changed} lit pixels changed: {[round(v, 2) for v in a]} -> {[round(v, 2) for v in b]}")
 checks += 1
 
-# 6. a straight edge with no SPICE moves only across it, also where its peak is believed
+# 6. a straight edge moved 6 px across, with no SPICE: moved across it only (where its peak is believed, and where not)
 ic.LIMB_RESPONSE = believed
 edge1 = cv2.cvtColor(np.where(xx < 500, 180, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 edge2 = cv2.cvtColor(np.where(xx < 506, 120, 10).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 shift, how = ic.limb_shift(edge1, edge2, MASK, MASK)
-assert shift is None or abs(shift[1]) < 1.0, (how, shift)
-checks += 1
+assert shift is not None and abs(shift[0] - 6) < 0.5 and abs(shift[1]) < 1.0, (how, shift)
+ic.LIMB_RESPONSE = 2.0
+shift, how = ic.limb_shift(edge1, edge2, MASK, MASK)
+assert shift is not None and "limb ridge" in how and abs(shift[0] - 6) <= 0.5 and abs(shift[1]) < 1.0, (how, shift)
+ic.LIMB_RESPONSE = believed
+checks += 2
 print(f"{checks} checks ok")
