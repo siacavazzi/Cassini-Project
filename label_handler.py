@@ -393,9 +393,9 @@ class label:
         mask = getattr(self, "_camera_valid", None)
         if mask is None:
             mask = self._camera_valid = self._valid_camera(lines, samples)
+        mask = mask.copy()   # (the kept one is not handed out)
         if camera:
             return mask
-        mask = mask.copy()
         if lines < 1024:
             mask = cv2.resize(mask.astype(np.uint8), (1024, 1024), interpolation=cv2.INTER_NEAREST) > 0
         # moved as the WAC's calibrated frames are by the geometric correction (the "geom" step), so it still falls

@@ -802,15 +802,29 @@ def clipped_codes(codes, info):
 
 """
 values (2-D) with its lost pixels (lost: True where lost) bridged down their columns: each from the nearest kept
-pixels above and below it, in proportion to how near each is (the one there is, at a frame's top or bottom); a column
-with nothing kept takes the kept pixels' median. Only so they do not bleed when the frame is enlarged (enlarged): the
-picture's own fills (image_correction.fill_lines, fill_invalid) still take them as lost and fill them their way.
+pixels above and below it, in proportion to how near each is (the one there is, at a frame's top or bottom). A column
+with nothing kept (a summed frame's first and last: label.valid_mask always counts them lost) is bridged along its
+rows the same way, from the nearest pixels left and right that are kept or were bridged down their columns. (It took
+the kept pixels' median: where a ring or a limb crosses the frame's edge that is the sky's value, and enlarged it put
+a band 1 to 2 camera pixels wide, a fifth to a third too dark and then a tenth too bright, down the valid pixels beside
+each edge: PR 566's review.) Only so they do not bleed when the frame is enlarged (enlarged): the picture's own fills
+(image_correction.fill_lines, fill_invalid) still take them as lost and fill them their way.
 """
 def bridged(values, lost):
-    h, w = values.shape
-    kept = ~lost
+    kept = ~np.asarray(lost, bool)
     if not kept.any():
         return values
+    fill, found = _bridged_down(values, kept)
+    if not found.all():
+        # (every row has a pixel found: a kept pixel's whole column is)
+        across, _ = _bridged_down(fill.T, found.T)
+        fill = np.where(found, fill, across.T)
+    return np.where(kept, values, fill)
+
+
+def _bridged_down(values, kept):
+    # (values with each pixel not kept taken down its column from the nearest kept ones, whether its column has one)
+    h, w = values.shape
     rows = np.arange(h)[:, None]
     cols = np.broadcast_to(np.arange(w), (h, w))
     up = np.maximum.accumulate(np.where(kept, rows, -1), axis=0)                    # the nearest kept row above
@@ -819,8 +833,7 @@ def bridged(values, lost):
     a, b = values[np.clip(up, 0, h - 1), cols], values[np.clip(down, 0, h - 1), cols]
     t = (rows - up) / np.maximum(down - up, 1)
     fill = np.where(above & below, a + (b - a) * t, np.where(above, a, b))
-    fill = np.where(above | below, fill, np.median(values[kept]))
-    return np.where(lost, fill, values)
+    return np.where(kept, values, fill), above | below
 
 
 """

@@ -99,7 +99,32 @@ v = np.arange(20.0).reshape(5, 4)
 gone = np.zeros((5, 4), bool); gone[1:3, 0] = True; gone[0, 1] = True; gone[:, 3] = True
 out = cal.bridged(v, gone)
 assert out[1, 0] == v[0, 0] + (v[3, 0] - v[0, 0]) / 3 and out[2, 0] == v[0, 0] + 2 * (v[3, 0] - v[0, 0]) / 3   # in proportion
-assert out[0, 1] == v[1, 1] and np.all(out[:, 3] == np.median(v[~gone])) and np.array_equal(out[~gone], v[~gone])
+assert out[0, 1] == v[1, 1] and np.array_equal(out[~gone], v[~gone])
+assert np.array_equal(out[:, 3], v[:, 2])     # a column with nothing kept: along its rows, from the column beside it
+gone[2, 2] = True                             # ... which may itself have been bridged down its column
+assert np.array_equal(cal.bridged(v, gone)[:, 3], np.where(np.arange(5) == 2, (v[1, 2] + v[3, 2]) / 2, v[:, 2]))
+# a summed frame's first and last column always count as lost (label.valid_mask). Where a ring or a limb crosses the
+# frame's edge they must take the pixels beside them, not the frame's median (the sky's): enlarged, the median
+# darkened and then brightened the valid pixels next to each edge by a tenth to a third (PR 566's review)
+for lines in (512, 256):
+    s = 1024 // lines
+    info = {"LINES": str(lines), "LINE_SAMPLES": str(lines)}
+    scene = np.full((lines, lines), 0.01)
+    scene[:, :40] = 0.30                          # a bright ring down the left edge, sky elsewhere (the median)
+    scene[:, -25:] = 0.20 + 0.001 * np.arange(lines)[:, None]     # and a band that varies down the right edge
+    edges = np.zeros((lines, lines), bool)
+    edges[:, [0, -1]] = True
+    edges[lines // 2, 60:] = True                 # with a line's end lost up to the lost last column
+    archive = scene.copy()
+    archive[:, [0, -1]] *= 1.05                   # the archive's edge columns: a little brighter, and not used
+    archive[lines // 2, 60:] = 0
+    got = cal.enlarged(np.repeat(np.repeat(archive, s, 0), s, 1), info, edges)
+    assert np.abs(got[:, :30 * s] - 0.30).max() < 1e-9, np.abs(got[:, :30 * s] - 0.30).max()   # to the edge, exact
+    want = cal.enlarged(np.repeat(np.repeat(scene, s, 0), s, 1), info)
+    far = np.ones((1024, 1024), bool)
+    far[(lines // 2 - 3) * s:(lines // 2 + 4) * s, 57 * s:] = False     # (the lost line's end is another matter: above)
+    assert np.abs(got - want)[far].max() < 1e-9, np.abs(got - want)[far].max()
+    assert np.abs(got - want).max() < 0.002       # and where the lost line meets the lost column: from its neighbours
 # a full size frame is never touched
 full = rng.random((1024, 1024))
 assert cal.enlarged(full, {"LINES": "1024", "LINE_SAMPLES": "1024"}) is full
