@@ -612,6 +612,47 @@ def composite(ids, channel=None, centre=None):
     return _with_hdr(Image.fromarray(_sharpened(np.dstack(chans + [alpha]), ids, report), "RGBA"), sink), report
 
 
+DEPTH_MAX = 400               # frame ids one /frames/depth.json asks about (a whole-pass mosaic names a few hundred)
+DEPTH_KEEP = 20000            # answers kept (the last asked; a few MB), so a long session's never grow with the mission
+_depths = collections.OrderedDict()
+_depths_lock = threading.Lock()
+_CONVERSION = re.compile(r'^\s*DATA_CONVERSION_TYPE\s*=\s*"?([A-Z0-9]+)', re.M)
+
+
+def bit_depth(frame_id):
+    """What the frame's pictures are calibrated from, as calibration.full_values reads it: [12, "original"] for a
+    12BIT frame with its 12-bit original at hand (data_source.original_dn, CASSINI_ORIGINALS), else [8, why]: "table"
+    (the camera's own 12-to-8-bit table: 8 bits is all it sent), "8lsb" (the low 8 bits of each DN), "squeezed" (a
+    12BIT frame with no original here: the archive's 256 square-root codes, calibration.stored_values), or "png"
+    (an archive of stretched PNGs, data_source.lut8 off). From the label and the originals' index alone, nothing
+    decoded: the pipeline also leaves out an original that is garbled or isn't the frame (calibration.original_values,
+    one in tens of thousands), which this can't see without reading it. [None, "unknown"] with no label."""
+    with _depths_lock:
+        if frame_id in _depths:
+            _depths.move_to_end(frame_id)
+            return _depths[frame_id]
+    try:
+        m = _CONVERSION.search(data_source.read_text(f"{FOLDERS[frame_id[0]]}/{frame_id}.lbl"))
+        kind = m.group(1).upper() if m else ""
+    except Exception:   # noqa: BLE001  (no label)
+        kind = None
+    if kind is None:
+        out = [None, "unknown"]
+    elif not data_source.lut8():
+        out = [8, "png"]
+    elif kind == "12BIT":
+        has = (data_source.ORIGINALS and not data_source.ORIGINALS_OFF
+               and frame_id.upper() in data_source._originals_index())
+        out = [12, "original"] if has else [8, "squeezed"]
+    else:
+        out = [8, "8lsb" if kind == "8LSB" else "table"]
+    with _depths_lock:
+        _depths[frame_id] = out
+        while len(_depths) > DEPTH_KEEP:
+            _depths.popitem(last=False)
+    return out
+
+
 def _lossy(frame_id):
     """True when the frame was sent lossy-compressed (its label's INST_CMPRS_TYPE)"""
     try:
@@ -1794,6 +1835,13 @@ def make_handler(site, cache, flags=None):
                 return self.send_stats(url)
             if url.path == "/health":
                 return self.send_bytes(f"ok {data_source.get_source()}\n".encode(), "text/plain", False)
+            if url.path == "/frames/depth.json":
+                # each frame's bit depth as the pipeline reads it (bit_depth): the camera windows' and Studio's
+                # 12-bit / 8-bit tag
+                ids = [i for i in parse_qs(url.query).get("ids", [""])[0].split(",") if i]
+                if not 1 <= len(ids) <= DEPTH_MAX or not all(FRAME_ID.match(i) for i in ids):
+                    return self.send_error(400, f"ids= takes 1 to {DEPTH_MAX} frame ids")
+                return self.send_json({i: bit_depth(i) for i in ids})
             if url.path == "/frames/slices.json":
                 return self.send_json(slices.covered(cache, picture_versions()))
             if url.path == "/frames/color.webp":
