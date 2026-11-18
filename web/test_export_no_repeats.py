@@ -86,6 +86,74 @@ try:
 finally:
     obs_mosaic.folder, obs_mosaic._plan_if_made = saved
 
+# ---- a mosaic movie: frames whose tile changes nothing on screen (rolling_layout lays out the same tiles at the
+# same gains: the same name, so the same picture) are one run; a frame whose tile is not made is its own ----
+names = {0: "lap-1-a", 1: "lap-1-a", 2: "lap-1-a", 3: "lap-1-b", 4: None, 5: "lap-1-b", 6: "lap-1-c", 7: "lap-1-c"}
+um = {"kind": "mosaic_movie", "key": ("SATURN", "ISS_257SA_NPOLMAP001_VIMS", "W", 0),
+      "frames": [[0, f"W{n}_1", "F", 0.0] for n in range(8)]}
+tiles_dir = tempfile.mkdtemp()
+for n in names:
+    if names[n] is not None:
+        open(os.path.join(tiles_dir, f"{n}.json"), "w").write("{}")
+saved = obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles, obs_mosaic.rolling_layout, obs_mosaic.unit_of
+obs_mosaic._plan_if_made = lambda v, cache: {}
+obs_mosaic.plan = lambda v, cache: {"display_scale": {}}
+obs_mosaic._tiles = lambda v, cache, scale: tiles_dir
+obs_mosaic.rolling_layout = lambda v, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0): (None,) * 5 + (names[n],)
+try:
+    runs = obs_mosaic.rolling_runs(um, "cache")
+    assert runs == {"W0_1": "W0_1", "W1_1": "W0_1", "W2_1": "W0_1", "W6_1": "W6_1", "W7_1": "W6_1"}, runs
+    # the export's plan keeps one frame of each run (and every frame of no run)
+    obs_mosaic.unit_of = lambda fid: (um, int(fid[1:-2]))
+    p = [{"id": f"W{n}_1", "cam": "W", "t": float(T0 + 30 * n), "try": [("rolling", f"W{n}_1"), ("processed", f"W{n}_1")]}
+         for n in range(8)]
+    kept = [e["id"] for e in export.shown_once(p, {"size": 1024, "movie": {}}, cache="cache")]
+    assert kept == ["W0_1", "W3_1", "W4_1", "W5_1", "W6_1"], kept
+finally:
+    obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles, obs_mosaic.rolling_layout, obs_mosaic.unit_of = saved
+
+# ---- the window's note (kind_of) only reads the runs the pre-build kept: never a layout on request; a pass without
+# them (cold, or a style not built) gets none, and keep_rolling_runs writes what rolling_runs works out ----
+um2 = dict(um, mosaic=True, movie=False, repeats=2, tossup=False, jump_frac=None)
+passdir = tempfile.mkdtemp()
+saved = (obs_mosaic.unit_of, obs_mosaic.units, obs_mosaic.lap_ends, obs_mosaic.folder, obs_mosaic.rolling_layout,
+         obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles)
+
+
+def no_layout(*a, **k):
+    raise AssertionError("kind_of laid out a frame")
+
+
+obs_mosaic.unit_of = lambda fid: (um2, int(fid[1:-2]))
+obs_mosaic.units = lambda *key: [um2]
+obs_mosaic.lap_ends = lambda v: []
+obs_mosaic.folder = lambda v, cache: passdir
+obs_mosaic.rolling_layout = no_layout
+try:
+    note = obs_mosaic.kind_of("W3_1", "cache")
+    assert "rolling_same" not in note, note
+    # the pre-build's step writes the runs (laid out from the made tiles), and the note then reads them
+    obs_mosaic._plan_if_made = lambda v, cache: {}
+    obs_mosaic.plan = lambda v, cache: {"display_scale": {}}
+    obs_mosaic._tiles = lambda v, cache, scale: tiles_dir
+    obs_mosaic.rolling_layout = lambda v, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0): (None,) * 5 + (names[n],)
+    obs_mosaic._rolling_runs.clear()
+    kept = obs_mosaic.keep_rolling_runs(um2, "cache")
+    obs_mosaic.rolling_layout = no_layout
+    note = obs_mosaic.kind_of("W3_1", "cache")
+    assert note.get("rolling_same") == kept == {"W0_1": "W0_1", "W1_1": "W0_1", "W2_1": "W0_1", "W6_1": "W6_1", "W7_1": "W6_1"}, note
+    # another style (laps 2) was not built: none, and still nothing laid out
+    assert "rolling_same" not in obs_mosaic.kind_of("W3_1", "cache", laps=2)
+    # a pass made again with other tiles: the pre-build's step writes its new runs, not the file before or the memo
+    names[1] = "lap-1-z"
+    obs_mosaic.rolling_layout = lambda v, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0): (None,) * 5 + (names[n],)
+    again = obs_mosaic.keep_rolling_runs(um2, "cache")
+    obs_mosaic.rolling_layout = no_layout
+    assert again == {"W6_1": "W6_1", "W7_1": "W6_1"} == obs_mosaic.kind_of("W3_1", "cache")["rolling_same"], again
+finally:
+    (obs_mosaic.unit_of, obs_mosaic.units, obs_mosaic.lap_ends, obs_mosaic.folder, obs_mosaic.rolling_layout,
+     obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles) = saved
+
 
 def picture(seed, w=SIZE, h=SIZE):
     r = np.random.default_rng(seed)

@@ -486,6 +486,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
             n += 1
             if made:
                 made(f[3])
+    if kind == "mosaic_movie" and last == len(u["frames"]) - 1 and not (stopped and stopped()):
+        # every picture made: the runs of frames in a row whose picture is one, which movie mode steps over, kept for
+        # the window's note to read (obs_mosaic.keep_rolling_runs; laid out from the tiles and names made above)
+        obs_mosaic.keep_rolling_runs(u, cache, style.get("laps", 1), (style.get("fade", 0), style.get("persist", 0)))
     return n
 
 

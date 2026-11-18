@@ -2103,6 +2103,9 @@ function targetLabel(k) {
   // again, and a frame not fit to show shows the one before it. Movie mode stops on one frame of a run, so it never
   // shows a picture twice in a row (Sam, 2026-11-17: "We should never, ever, ever, ever, ever be repeating frames like that")
   const movieSame = { 0: new Map(), 1: new Map() };
+  // the same for a mosaic movie's pictures (kind_of rolling_same: frames whose tile changes nothing on screen, a colour
+  // filter's copy before its place's set is whole), at the laps and fade they were worked out for (rollStyle)
+  const rollingSame = new Map(), rollStyle = () => `${S.get("movies.laps") || 1}|${S.get("movies.mosaicFrames") !== "whole" && S.get("movies.fade") || 0}|${S.get("movies.persist") ?? 35}`;
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -3706,13 +3709,14 @@ function targetLabel(k) {
           if (warnedObs.has(o)) continue;
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}${window.cassiniMovieStyle({ center: centreOn() })}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
             if (a && a.movie) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
             if (a && a.movie_same) for (const c of ["0", "1"]) for (const [id, run] of Object.entries(a.movie_same[c] || {})) movieSame[c].set(id, run);
+            if (a && a.rolling_same) for (const [id, run] of Object.entries(a.rolling_same)) rollingSame.set(id, `${rollStyle()}|${run}`);
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -3833,11 +3837,12 @@ function targetLabel(k) {
   // window plays as a movie: one frame of a run of frames that play as one picture (movieSame).
   function complete(k, body) {
     if (!completeAlone(k, body)) return false;
-    // a frame of a run that plays as one picture (movieSame): only the run's first frame that is a picture of its own
-    const runs = movieSame[S.get("cameras.composites") ? 1 : 0], run = runs.get(catalog.id[k]);
-    if (run === undefined) return true;
-    const cam = catalog.cam[k];
-    if (![...allFeeds].some(f => f.cam === cam && f.playsAs && f.playsAs(k) === "movie")) return true;
+    // a frame of a run that plays as one picture (movieSame; rollingSame, at the window's mosaic movie style): only
+    // the run's first frame that is a picture of its own
+    const cam = catalog.cam[k], as = how => [...allFeeds].some(f => f.cam === cam && f.playsAs && f.playsAs(k) === how);
+    let runs = movieSame[S.get("cameras.composites") ? 1 : 0], run = runs.get(catalog.id[k]);
+    if (run === undefined && rollingSame.has(catalog.id[k])) { runs = rollingSame; run = runs.get(catalog.id[k]); if (!run.startsWith(rollStyle() + "|") || !as("mosaic_movie")) return true; }
+    else if (run === undefined || !as("movie")) return true;
     const ks = framesOf(cam, body).ks;
     for (let p = lastOfCam(cam, catalog.et[k] - 1e-3, body); p >= 0 && runs.get(catalog.id[ks[p]]) === run; p--)
       if (completeAlone(ks[p], body)) return false;
