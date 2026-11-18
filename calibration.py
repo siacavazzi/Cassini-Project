@@ -960,6 +960,11 @@ SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move furth
                            # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14). Only on the
 SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets: every other frame keeps the smoothing as it was (on all of them,
                            # the change moved Jupiter's approach movie's evening and ring movies' registration)
+                           # The lift guard: on every frame SKY_GLOW_MOVE stops the smoothing lifting a pixel over its own codes
+                           # (since 11-17): spread from a limb's soft edge 16 px into the faint sky beside it, it lifted the
+                           # sky 0.04 -> 0.11 of white 10 px past Saturn's limb (N1469611288_1) while the edge pixels, kept
+                           # out of it, stayed dark: a thin black gap, then a grainy halo fading out (Sam, 11-17). Guarding
+                           # both ways on every frame moved movie registration (the 2005 Saturn movie, 57 px)
 SKY_LINE = (32, 0.75)      # the glow's rise and reach are measured from each line's dark sky (its median over that line's
                            # pixels of the measured dark sky, with at least SKY_LINE[0] of them; a line with fewer takes the
                            # nearest lines') on a line less than SKY_LINE[1] dark sky, not the whole line's median: on a line mostly across Saturn that median is the
@@ -1021,9 +1026,10 @@ def smooth_sky(iof, png, sky, slopes=False):
         spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / under
         # the codes that smoothing would give, against the pixel's own: past SKY_GLOW_MOVE it is a slope, not a step
         smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / under
-        if slopes:
-            moved = np.abs(smoothed - codes)
-            near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
+        # (on every frame, a pixel the smoothing would lift more than SKY_GLOW_MOVE over its own codes keeps them, and
+        # on SKY_SLOPE_BODIES' frames one it would move either way)
+        moved = np.abs(smoothed - codes) if slopes else smoothed - codes
+        near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
         blur = blur + glow * near * (spread - blur)
         # and on past the dark sky into the glow's bright part, up to SKY_GLOW_TOP codes over the sky: a plume's root
         # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
