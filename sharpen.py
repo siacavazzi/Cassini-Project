@@ -202,7 +202,9 @@ def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, gra
         grain = picture_grain(lum, d, valid & ~sat & ~black, sigma)
     share = denoise_share(grain) if denoise else 0.0
     if share > 0:
-        rgb = light_denoise(rgb, lum, grain, inner & ~sat & ~_spikes(lum, grain), share)
+        # (not within 2 px of the canvas edge: the 5 x 5 average would reach past it; review of #594)
+        inner5 = cv2.erode(valid.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+        rgb = light_denoise(rgb, lum, grain, inner5 & ~sat & ~_spikes(lum, grain), share)
         lum = rgb[..., 0] if colors == 1 else rgb.mean(axis=2)
         blur = _blur(lum, sigma, alpha)
         d = lum - blur
