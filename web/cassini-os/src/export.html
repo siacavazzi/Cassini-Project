@@ -621,7 +621,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     const ac = sound ? await audioCodec(sound.sampleRate, sound.numberOfChannels) : null;
     const target = new ArrayBufferTarget();
     const muxer = new Muxer({ target, fastStart: "in-memory", firstTimestampBehavior: "offset",
-      video: { codec: vc.mux, width: W, height: H, frameRate: FPS },
+      video: { codec: vc.mux, width: W, height: H, frameRate: plan.rate || FPS },
       ...(ac ? { audio: { codec: ac.mux, numberOfChannels: sound.numberOfChannels, sampleRate: sound.sampleRate } } : {}) });
     let failed = null;
     // each frame's hold given to the muxer as is (an encoder may not hand a frame's duration on, and the film's last
@@ -632,13 +632,27 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       muxer.addVideoChunkRaw(data, c.type, c.timestamp, holds.get(c.timestamp) ?? c.duration ?? 0, m); holds.delete(c.timestamp);
     } });
     // every frame of the film is a new picture, so it gets about the bits the server's crf 20 gives one
-    venc.configure({ codec: vc.codec, width: W, height: H, framerate: FPS, bitrate: Math.round(Math.min(20e6, 6e6 * W * H / (1024 * 1072))), latencyMode: "quality",
+    venc.configure({ codec: vc.codec, width: W, height: H, framerate: plan.rate || FPS, bitrate: Math.round(Math.min(20e6, 6e6 * W * H / (1024 * 1072))), latencyMode: "quality",
       ...(vc.mux === "avc" ? { avc: { format: "avc" } } : {}) });
     const film = document.createElement("canvas"); film.width = W; film.height = H;
     const g = film.getContext("2d", { alpha: false }); g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
     const font = Math.max(10, Math.round(ch * 0.36)), small = Math.max(9, Math.round(ch * 0.3)), mono = `Menlo, "DejaVu Sans Mono", monospace`;
     const pics = plan.pictures, ahead = 6, todo = [], building = {}, kinds = {};
-    let nxt = 0, at = 0, lastKey = -Infinity;
+    let nxt = 0, at = 0, lastKey = -Infinity, shown = null;
+    // the film never repeats a frame (export.py Film): the plan's steps are its own rate's (a fixed rate film is a video
+    // at that rate, one frame a picture), and each picture on screen is one frame lasting its whole hold, encoded once
+    // the next picture replaces it; a frame held behind a mosaic, or a picture the same as the one its pane shows,
+    // makes the frame before it last longer (render's held and shown)
+    const RATE = plan.rate || FPS, panes = {};
+    const flush = () => {
+      if (!shown) return;
+      const keyFrame = shown.at - lastKey >= 2 * RATE;
+      if (keyFrame) lastKey = shown.at;
+      const ts = Math.round(shown.at * 1e6 / RATE);
+      holds.set(ts, Math.round((shown.at + shown.frames) * 1e6 / RATE) - ts);
+      venc.encode(shown.vf, { keyFrame }); shown.vf.close();
+      shown = null;
+    };
     // Color smoothing (Settings > Processing, colour-smooth.html), as the camera windows do it: each picture's palette
     // measured as it comes in, and each color picture moved toward the palette of the film's pictures round it of its
     // camera and target (CS.SPAN either side: those pictures are among the ones fetched ahead)
@@ -653,7 +667,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     });
     try {
       for (let n = 0; n < pics.length; n++) {
-        if (X.job !== job) { stop.done = true; venc.close(); return; }
+        if (X.job !== job) { stop.done = true; if (shown) shown.vf.close(); venc.close(); return; }
         if (failed) throw failed;
         while (nxt < pics.length && nxt < n + ahead) { todo.push(measured(pics[nxt], pictureOf(pics[nxt], size, stop))); nxt++; }
         const e = pics[n], got = await todo.shift(), { what } = got;
@@ -677,6 +691,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (what === "mosaic" || what === "mosaic movie") building[e.cam] = e.obs;
         else if (building[e.cam] === e.obs && e.obs) held = true;
         else delete building[e.cam];
+        let same = false;
         if (held) kinds["held behind mosaic"] = (kinds["held behind mosaic"] || 0) + 1;
         else {
           // Film.put: the pane black, the picture in its middle, the caption under it
@@ -695,19 +710,23 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
             g.drawImage(src, x0 + Math.floor((size - w) / 2), Math.floor((size - h) / 2), w, h);
             if (bmp.close) bmp.close();
           }
-          if (ch) {
+          // a picture the same as the one its pane shows is not shown again (render's shown): its caption stays too
+          const px = g.getImageData(x0, 0, size, size).data, was = panes[e.cam];
+          same = !!was && was.length === px.length && was.every((v, i) => v === px[i]);
+          panes[e.cam] = px;
+          if (same) kinds["same picture as before"] = (kinds["same picture as before"] || 0) + 1;
+          if (ch && !same) {
             g.fillStyle = "rgb(8,10,14)"; g.fillRect(x0, size, size, ch);
             g.textBaseline = "middle"; g.textAlign = "left"; g.fillStyle = "rgb(222,228,236)"; g.font = `${font}px ${mono}`;
             g.fillText(label(e, what), x0 + ch * 0.35, size + ch / 2);
             if (e.skipped) { g.textAlign = "right"; g.fillStyle = "rgb(138,182,255)"; g.font = `${small}px ${mono}`; g.fillText(`skipped ${durOf(e.skipped)}`, x0 + size - ch * 0.35, size + ch / 2); }
           }
         }
-        // the picture is one frame of the film, held for its whole frames (Film.hold), a key frame at least every 2 s
-        const keyFrame = at - lastKey >= 2 * FPS;
-        if (keyFrame) lastKey = at;
-        const ts = Math.round(at * 1e6 / FPS), vf = new VideoFrame(film, { timestamp: ts, duration: Math.round(e.frames * 1e6 / FPS) });
-        holds.set(ts, vf.duration);
-        venc.encode(vf, { keyFrame }); vf.close();
+        if (shown && (held || same)) shown.frames += e.frames;
+        else {
+          flush();
+          shown = { at, frames: e.frames, vf: new VideoFrame(film, { timestamp: Math.round(at * 1e6 / RATE), duration: Math.round(e.frames * 1e6 / RATE) }) };
+        }
         at += e.frames;
         while (venc.encodeQueueSize > 4) await sleep(5);
         if (n % 5 === 0 || n === pics.length - 1) {
@@ -715,14 +734,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
           setState(`${(n + 1).toLocaleString()} of ${pics.length.toLocaleString()} pictures · here · ${fmtDur(Math.round(left))} left`, (n + 1) / pics.length * 0.97);
         }
       }
-      // an MP4's time-to-sample table gives its last frame the step before it, not the frame's own hold: two
-      // one-frame copies of the last picture end the film where the server's does
-      if (pics.length && pics[pics.length - 1].frames >= 3) {
-        for (const back of [2, 1]) {
-          const ts = Math.round((at - back) * 1e6 / FPS), vf = new VideoFrame(film, { timestamp: ts, duration: Math.round(1e6 / FPS) });
-          holds.set(ts, vf.duration); venc.encode(vf, { keyFrame: false }); vf.close();
-        }
-      }
+      // the last picture, once (an MP4's time-to-sample table gives it the step before it, while the film's length says
+      // its own hold: it was written twice more, one-step copies, to end where the server's film does, and those were
+      // repeated frames)
+      flush();
       await venc.flush();
       if (failed) throw failed;
       venc.close();
@@ -730,7 +745,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
       muxer.finalize();
     } catch (err) {
       stop.done = true;
-      try { venc.close(); } catch (e) {}
+      try { if (shown) shown.vf.close(); venc.close(); } catch (e) {}
       console.warn("export here", err);
       return setState(`Failed here: ${err.message || err}`, 0);
     }
