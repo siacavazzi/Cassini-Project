@@ -434,14 +434,18 @@ Playback crossing Huygens's entry into Titan's air (2005-01-14 09:05 UTC), the "
 "Huygens lands on Titan" Moment, the release cutscene's "Watch the landing", or `?huygens-landing` plays the landing
 (`src/huygens-landing.html`, under two minutes): the entry glow at up to 12 g, the parachutes and the heat shield falling
 away, Cassini listening from 69,000 km, the drogue descent over the probe's own landing-site map, touchdown at 4.5 m/s
-on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, ending on the first data at ESOC
-(16:19 UTC). The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
+on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, the first data at ESOC
+(16:19 UTC), and last the probe standing on Titan under the closing card (about 1 min 40 s in all). The camera's moves
+are blends eased over screen time, so nothing jumps while the picture shows; through the descent it aims at the middle
+of the probe and its parachute, and a drag cannot take it under the ground. A soft bed sits under the whole of it, the
+rumble follows the air (none in vacuum or in Cassini's shots), and in Cassini's shots the probe's carrier is a faint
+tone that stops when the link ends. The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
 the event times and facts are in `src/huygens-landing-data.json` with their sources. The probe is ESA's own models
 (`models/make_huygens_shell.py` and `models/make_huygens_dm.py` turn the ESA SPICE Service's Cosmographia meshes into
 `models/*.glb.b64.txt`; sources on branch `assets/huygens-models`): the entry shell comes off in two parts in the real
 order, and the parachutes are disk-gap-band canopies at their real sizes. Inside Titan's haze the sky closes in around the
 probe; near the ground the probe is held to the landing point on the globe at the descent table's altitude. The last card
-stays with Huygens or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+stays with Huygens (paused, the view staying exactly where the last shot left it) or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
 
 Huygens stays on Titan after the landing, at any time to the end of the mission: its marker and label sit on the landing
 point while the camera is near Titan (within a dozen Titan radii, the site on the near side) or the view is on Huygens,
