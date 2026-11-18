@@ -1499,7 +1499,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
 .depthtag.d8, .chdepth.d8, .medepth.d8 { color: rgba(255,196,107,.95); }
 .depthtag.dmix { color: var(--q-text, #e8ecf2); }
 body.idle .depthtag { opacity: .7; }
-.chdepth { position: absolute; right: 2px; top: 2px; font: 8px/1 var(--hudf); text-shadow: 0 0 2px #000, 0 0 4px #000; pointer-events: none; }
+.chdepth { position: absolute; right: 3px; top: 3px; font: 8px/1 var(--hudf); text-shadow: 0 0 2px #000, 0 0 4px #000; pointer-events: none; }
 .filmstrip .thumbs img[data-depth="12"] { border-bottom: 2px solid rgba(138,182,255,.8); }
 .filmstrip .thumbs img[data-depth="8"] { border-bottom: 2px solid rgba(255,196,107,.8); }
 .medepth { font-style: normal; margin-left: 4px; }
@@ -13202,16 +13202,17 @@ void main() {
   // a color set's channel tile: the frame it shows
   function channel(fig) {
     const tile = fig.querySelector(".tile"), im = tile && tile.querySelector("img");
-    // (its title names it; a held color's tiles have none, their picture's address does)
+    // (its title names it, until the window drills into its channels; then, and in a held color, its picture's
+    // address does. The tag goes on the figure, never in the tile, which the camera window fills when it is empty)
     const id = (fig.title.match(ID) || (im && (im.getAttribute("src") || "").match(ID)) || [])[0];
-    if (!tile) return;
-    let el = tile.querySelector(":scope > .chdepth");
-    if (!el) { el = document.createElement("span"); el.className = "chdepth"; tile.appendChild(el); }
-    if (el.dataset.key === (id || "")) return;
-    el.dataset.key = id || "";
-    if (!id) return show(el, null, "chdepth");
+    let el = fig.querySelector(":scope > .chdepth");
+    if (!el) { el = document.createElement("span"); el.className = "chdepth"; fig.appendChild(el); }
+    if (!id) return;     // (a channel drawn from the composite: it keeps the tag it had)
+    if (el.dataset.key === id) return;
+    el.dataset.key = id;
     ask([id]).then(() => { if (el.dataset.key === id) show(el, summary([id]), "chdepth"); });
   }
+
   // a filmstrip thumbnail: its line (an img holds no text), and the reason added to its title
   function thumb(im) {
     const id = im.dataset.id;
@@ -14329,7 +14330,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"df7904e99a39";
+  const BUILD = /*BUILD*/"ae0a541a0b43";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
