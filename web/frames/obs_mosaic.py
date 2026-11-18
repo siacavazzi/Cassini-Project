@@ -1490,8 +1490,13 @@ def kind_of(frame_id, cache=None, laps=1, fade=(0, 0)):
     # here; none for a cold pass or a style not built, whose frames the window steps through as before), of which
     # movie mode shows one
     rolling = {i: r for v in us for i, r in (kept_rolling_runs(v, cache, laps, fade) or {}).items()}
-    return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
+    u = found[0]
+    return {"mosaic": bool(u["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
+            # this frame's own pass plays as a movie, by the build's rule (prebuild.movie_passes): "movie" above is
+            # the whole observation's, true too for a one-frame pass in a movie observation, whose frame the build
+            # stores as a processed frame and never as a movie frame (zero-render check 2017, 11-17)
+            "pass_movie": u.get("kind") == "movie" or bool(u.get("movie") and not u["mosaic"]),
+            "kind": u["kind"], "repeats": u["repeats"], "tossup": bool(u.get("tossup")), **({"lap_ends": ends} if ends else {}),
             **({"mosaic_steps": steps} if steps else {}), **({"movie_same": same} if any(same.values()) else {}),
             **({"rolling_same": rolling} if rolling else {})}
 
