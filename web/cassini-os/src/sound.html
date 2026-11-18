@@ -362,11 +362,32 @@ body.phone #ssound { width: 30px; height: 30px; }
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.02;
     bell(t, hz(35), 0.25, 0, 7, 1.2, 1.4); bell(t + 0.01, hz(47), 0.12, 0, 6, 0.8, 2);
+    // and the same note two octaves up, quietly: phone and laptop speakers play almost nothing of B1 and B2
+    bell(t + 0.02, hz(59), 0.05, 0, 5, 0.6, 2);
   };
   window.cassiniSound.chord = (steps = [0, 2, 4]) => {
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
+  };
+  // a cutscene's bed (cutscene.html takes it down when the cutscene ends): one soft held sound for the picture to sit
+  // on, so the chords under the captions do not ring out into silence. D and A only, the scale's root and fifth, so it
+  // agrees with every chord and every instrument (the minor one too); it breathes slowly. level 0..1 (0 takes it
+  // down), secs how long it takes to get there
+  let bedG = null;
+  window.cassiniSound.bed = (level, secs = 2) => {
+    if (!ctx || ctx.state !== "running" || (!bedG && !level)) return;
+    if (!bedG) {
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 460; f.Q.value = 0.5;
+      bedG = ctx.createGain(); bedG.gain.value = 0; f.connect(bedG); bedG.connect(bus);
+      [38, 45, 50, 57, 62].forEach((m, i) => {   // D2 A2 D3 A3 D4, most of it in the middle so small speakers carry it too
+        const o = ctx.createOscillator(), g = ctx.createGain(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4;
+        g.gain.value = [0.5, 0.7, 1, 0.6, 0.35][i]; o.connect(g); g.connect(f); o.start();
+      });
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.09; depth.gain.value = 140; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
+    }
+    // at level 1 it sits about 8 dB under a caption chord's peak, a little above the spacecraft tones
+    bedG.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.02, ctx.currentTime, Math.max(0.03, secs / 3));
   };
   // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
   let rumbleG = null;
@@ -379,7 +400,12 @@ body.phone #ssound { width: 30px; height: 30px; }
       const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
       const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
       rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
-      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus);
+      // a quiet layer of the same noise around 550 Hz, a quarter as loud: under 170 Hz alone the engine is silent on
+      // phone and laptop speakers
+      const mid = ctx.createBiquadFilter(), midG = ctx.createGain(); mid.type = "bandpass"; mid.frequency.value = 550; mid.Q.value = 0.8; midG.gain.value = 0.25;
+      src.connect(mid); mid.connect(midG); midG.connect(rumbleG);
+      src.start();
     }
     rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
   };

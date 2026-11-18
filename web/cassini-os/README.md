@@ -396,6 +396,25 @@ share of the chosen speed (Playback > Bursts slow playback to no less than, `pla
 so a faster speed always plays faster: during the Saturn tour, where Cassini images almost all the time, 1 day/s used to
 crawl at about 2 min/s.
 
+## Cutscenes
+
+Five moments of the mission play as short cutscenes: the launch, Saturn arrival, the Huygens release, the Huygens
+landing and the Grand Finale (each its own file in `src/`; what they share is `src/cutscene.html`). While one plays:
+
+- Escape or the Skip button ends it. Ended early, with the picture showing, it cuts to black and the interface comes up
+  from there, so the jump from the cutscene's camera to the viewer's own is never seen.
+- The rest of the page is out of reach. Its keys do nothing (Space, M, A, F, the arrows and the others would start
+  playback, movie mode, ambient mode or a full view under the cutscene); S still mutes, and Tab, Enter and Space work the
+  cutscene's own buttons. The faded interface cannot take the focus.
+- A drag looks around and the wheel or a two-finger pinch zooms; the view eases back a few seconds later. Neither does
+  anything while the black cover hides the picture (the cursor says so), and a view that was dragged goes back to the
+  cutscene's own under the cover.
+- With sound on but held by the browser until the first click (a cutscene opened from a link), a quiet "Click for
+  sound" sits by the Skip button.
+- A caption still fading out when the next is due leaves quickly first, so two never sit on top of each other.
+- `cassiniSound.bed(level)` is a soft held tone (D and A) a cutscene can put under its picture; it is taken down when the
+  cutscene ends.
+
 ## Launch
 
 Playing the mission from the very start of the data (the Launch moment does that, or `?t=1997-10-15T08:43` and

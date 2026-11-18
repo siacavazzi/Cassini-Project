@@ -79,6 +79,13 @@ body.phone .srow input[type=range] { width: 96px; }
 </section>
 
 <script>
+// First in line for keys. This is the page's first script, and listeners on the window run in the order they were
+// added, so this one runs ahead of every shortcut on the page (several of them listen in the capture phase too). A
+// part that has to keep the page's shortcuts off for a while (a cutscene playing, cutscene.html) sets
+// window.cassiniKeyGate(e) and stops the event there
+window.cassiniKeyGateWired = true;
+window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cassiniKeyGate(e); }, true);
+
 // ---------- settings: one registry for every option on the page, and the Settings window that shows it ----------
 (function () {
   const $ = id => document.getElementById(id);
