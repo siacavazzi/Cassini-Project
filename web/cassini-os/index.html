@@ -14177,7 +14177,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"1f58de0f6784";
+  const BUILD = /*BUILD*/"ae1f651e9e72";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -17302,6 +17302,7 @@ function frame(now) {
   function onMove(e) {
     if (!active || !fingers.has(e.pointerId)) return;
     e.stopImmediatePropagation();
+    if (e.pointerType === "mouse" && !e.buttons) { onUp(e); return; }   // the button came up outside the window
     const was = fingers.get(e.pointerId), now = [e.clientX, e.clientY];
     fingers.set(e.pointerId, now);
     if (!canLook()) return;
