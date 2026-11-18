@@ -635,7 +635,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
   }
   // the view on the landed probe: the orbit controls turn the camera about the scene's +Y; here their turn is taken as
   // a turn about the landing point's vertical and a tilt above its horizon, so the ground stays level
-  const LV = { on: false, az: 0, el: 0, last: new THREE.Vector3(), keep: false };
+  const LV = { on: false, az: 0, el: 0, last: new THREE.Vector3(), keep: false, lift: 0, liftAt: 0 };
   const sph = v => [Math.atan2(v.x, v.z), Math.acos(Math.max(-1, Math.min(1, v.y / v.length())))];
   function landedCamera() {
     const want = !H && !CS.active && state.focus === "HUYGENS" && landedAt(state.et) && !!probeObj;
@@ -666,7 +666,11 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     c.set(0, 0, 0).addScaledVector(F.east, ce * Math.cos(LV.az)).addScaledVector(F.north, ce * Math.sin(LV.az)).addScaledVector(F.up, Math.sin(LV.el)).multiplyScalar(r);
     LV.last.copy(c);
     // looking at the middle of the descent module up close
-    camera.up.copy(F.up); camera.lookAt(vC.copy(F.up).multiplyScalar(0.55e-6 * clamp01(30e-6 / r)));
+    // (coming from the cutscene's closing card, which keeps the probe above the middle of the view, clear of its
+    // lines, the view settles onto the probe over two seconds)
+    const lift = LV.lift ? LV.lift * (1 - ease((performance.now() - LV.liftAt) / 2000)) : 0;
+    if (LV.lift && !lift) LV.lift = 0;
+    camera.up.copy(F.up); camera.lookAt(vC.copy(F.up).multiplyScalar(0.55e-6 * clamp01(30e-6 / r) - lift * 1e-6));
     camera.updateMatrixWorld();
     if (P) {
       // the sky: Titan's haze from the camera's height above Titan's surface
@@ -719,6 +723,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       // playing when the cutscene began, so the pause comes after it)
       setTime(T0 + h.s); setPlaying(false);
       LV.keep = h.shot === "probe" && h.s >= EV.landing;
+      LV.lift = LV.keep && h.T >= LAST ? CARD_LIFT : 0; LV.liftAt = performance.now();
       setTimeout(() => { setFocus("HUYGENS"); setPlaying(false); }, 0);
       // from the last shot the view is already the one it stays on: no cut to black (cutscene.html's end)
       return { follow: false, seamless: LV.keep };
@@ -734,6 +739,8 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
 
   // ---------- the shots ----------
   const SHOTS = [[0, "probe"], [34.5, "cassini"], [44.5, "probe"], [73, "cassini"], [87.9, "probe"]], LAST = SHOTS[SHOTS.length - 1][0];
+  // under the closing card the view aims this far (m) below the probe, so the probe stands above the card's lines
+  const CARD_LIFT = 1.5;
   function shotAt(T) { let s = SHOTS[0][1]; for (const [t, n] of SHOTS) if (T >= t) s = n; return s; }
   function frame() {
     const now = performance.now();
@@ -959,7 +966,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
         const low = ease(1 - (alt - 0.3) / 6), near = ease((0.45 - alt) / 0.3), down = ease((0.1 - alt) / 0.096);
         const DN = mix(mix(48, 30, drogue) * narrow * (1 - 0.47 * low), last ? 10 : 11, down);
         const eN = mix(mix(mix(0.05, 0.35, drogue), 0.7, near), last ? Math.tan(0.2) : 0.12, down);
-        const along = mix(12, 7, drogue) * (1 - 0.65 * low) * (1 - down) * wN, up = 6 * wA + 0.5 * wB + mix(-1.5 * near, last ? 0.55 : 0.6, down) * wN;
+        const along = mix(12, 7, drogue) * (1 - 0.65 * low) * (1 - down) * wN, up = 6 * wA + 0.5 * wB + mix(-1.5 * near, last ? 0.55 - CARD_LIFT : 0.6, down) * wN;
         D = 64 * wA + 22 * wB + DN * wN;
         dirV.copy(around).addScaledVector(u, 0.08 * wA + 0.22 * wB + eN * wN);
         tgt.addScaledVector(u, up * 1e-6);
