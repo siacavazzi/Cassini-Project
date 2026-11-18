@@ -10344,10 +10344,11 @@ def _movie_name(u, n, size, cache, trail, colour, centre, steady, exposure, shar
 
 
 def movie_shown(frame_id, size, cache, trail=0, colour=True, centre=True, steady=0, exposure=0):
-    """(pass key, frame id) of the picture frame_id plays as in its pass's movie (movie_webp): another frame's where it
-    shows that one (its report's "held": a pass playing in colour shows each colour set at every frame until the next
-    is complete, a frame not fit to show shows the one before it), else its own. Read from the report kept beside the
-    picture; None while that picture is not made (nothing is drawn or worked out here)."""
+    """What picture frame_id plays as in its pass's movie (movie_webp), as a key two frames share when they play as
+    the same picture: in a pass playing in colour, a colour set's composite (its report's "ids") at every frame until
+    the next set is complete, whichever filter the frame took; a frame tinted in its set's colour, or one not fit to
+    show (its report's "held": the frame before it of its filter), that frame; else the frame itself. Read from the
+    report kept beside the picture; None while that picture is not made (nothing is drawn or worked out here)."""
     found = unit_of(frame_id)
     if not found or found[1] < 0:
         return None
@@ -10358,7 +10359,9 @@ def movie_shown(frame_id, size, cache, trail=0, colour=True, centre=True, steady
     rep = reel.report_of(path[:-len("webp")] + "json", None)
     if not rep or not rep.get("movie"):
         return None
-    return tuple(u["key"]), rep.get("held") or rep.get("id") or frame_id
+    shown = rep.get("held") or rep.get("id") or frame_id
+    ids = tuple(rep.get("ids") or ())
+    return (tuple(u["key"]), "set", ids) if ids and not rep.get("tint") else (tuple(u["key"]), shown, ids)
 
 
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
