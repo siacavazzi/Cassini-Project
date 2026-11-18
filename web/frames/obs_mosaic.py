@@ -87,9 +87,11 @@ import label_handler  # noqa: E402
 # without the lead (_register_match): Telesto's clear frames, 77 px off by SPICE, no longer stay there as a gray ghost
 # obs-v135/v118/v104: an empty sky's whole noise taken for sky where the sky test's cut ran through it (calibration._sky): black, not a gray floor with line stripes (numbered past #552, the lit-sky pass and #558)
 # obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
-# obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
+# obs-v141/v124/v110: sky smoothing's slope guard on every frame (calibration.SKY_GLOW_MOVE): no black gap and grainy halo outside Saturn's limb; obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
-VERSIONS = {"balanced": "obs-v140", "raw": "obs-v123", "eye": "obs-v140-eye", "false": "obs-v140-false", "classic": "obs-v109-classic"}
+# obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
+# and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
+VERSIONS = {"balanced": "obs-v142", "raw": "obs-v125", "eye": "obs-v142-eye", "false": "obs-v142-false", "classic": "obs-v111-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -1459,14 +1461,18 @@ def mosaic_steps(u, p=None):
     return [j for j in range(len(frames)) if names[j] is None or j in step]
 
 
-def kind_of(frame_id, cache=None):
+def kind_of(frame_id, cache=None, laps=1, fade=(0, 0)):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
     never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
     mosaic_movie or None), "tossup": the pointing alone cannot tell it a movie from a mosaic, so the build stores
     both its views (prebuild.make_pass) and the window may offer either, "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
     movies, when it has any, "mosaic_steps": the ids of the frames of its mosaic passes movie mode stops on
-    (mosaic_steps; by the pass's plan when cache holds it), when it has any}."""
+    (mosaic_steps; by the pass's plan when cache holds it), when it has any, "movie_same": {"1": {id: run}, "0": ...}
+    the runs of frames in a row of its movie passes that play as one picture in colour and in grey (movie_runs: each
+    frame of a run to the run's first frame), of which movie mode shows one, when it has any, "rolling_same": {id: run}
+    the same for its mosaic movies' pictures at laps and fade, as the pre-build kept them (kept_rolling_runs), when it
+    has any}."""
     found = unit_of(frame_id)
     if not found:
         return {"mosaic": False, "movie": False, "kind": None}
@@ -1476,9 +1482,23 @@ def kind_of(frame_id, cache=None):
     ends = [v["frames"][j][1] for v in us for j in lap_ends(v)]
     steps = [v["frames"][j][1] for v in us if v["mosaic"] and not v["movie"] and v.get("kind") != "mosaic_movie"
              for j in mosaic_steps(v, _plan_if_made(v, cache))]
-    return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
-            **({"mosaic_steps": steps} if steps else {})}
+    # movie_same: the runs of frames in a row of its movie passes that play as one picture, with colour (1) and
+    # without (0), of which movie mode shows one (movie_runs)
+    same = {c: {i: r for v in us for i, r in movie_runs(v, cache, c == "1").items()} for c in "01"}
+    # rolling_same: the runs of frames in a row of its mosaic movies whose picture is one, at the window's laps and
+    # fade (the time-lapse's by default), as the pre-build kept them (kept_rolling_runs: only read, never laid out
+    # here; none for a cold pass or a style not built, whose frames the window steps through as before), of which
+    # movie mode shows one
+    rolling = {i: r for v in us for i, r in (kept_rolling_runs(v, cache, laps, fade) or {}).items()}
+    u = found[0]
+    return {"mosaic": bool(u["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
+            # this frame's own pass plays as a movie, by the build's rule (prebuild.movie_passes): "movie" above is
+            # the whole observation's, true too for a one-frame pass in a movie observation, whose frame the build
+            # stores as a processed frame and never as a movie frame (zero-render check 2017, 11-17)
+            "pass_movie": u.get("kind") == "movie" or bool(u.get("movie") and not u["mosaic"]),
+            "kind": u["kind"], "repeats": u["repeats"], "tossup": bool(u.get("tossup")), **({"lap_ends": ends} if ends else {}),
+            **({"mosaic_steps": steps} if steps else {}), **({"movie_same": same} if any(same.values()) else {}),
+            **({"rolling_same": rolling} if rolling else {})}
 
 
 def _plan_if_made(u, cache):
@@ -3814,12 +3834,8 @@ def _detail(gray, mask, sigma=6.0):
 
 
 def _even(a):
-    """a padded with 0 to a size cv2.phaseCorrelate measures without bias: it pads to an optimal DFT size itself, and
-    where that is odd its peak comes out half a pixel off (a strip 218 px wide shifted 0 measured +0.5)."""
-    h, w = a.shape
-    H, W = cv2.getOptimalDFTSize(h), cv2.getOptimalDFTSize(w)
-    H, W = H if H % 2 == 0 else cv2.getOptimalDFTSize(H + 1), W if W % 2 == 0 else cv2.getOptimalDFTSize(W + 1)
-    return cv2.copyMakeBorder(a, 0, H - h, 0, W - w, cv2.BORDER_CONSTANT, value=0)
+    """a padded with 0 to a size cv2.phaseCorrelate measures without bias (image_correction.even_dft)."""
+    return image_correction.even_dft(a)
 
 
 def _agree(a, b, mask):
@@ -7211,7 +7227,10 @@ def _per_body_planes(u, js, places, planes, rect, k, radius, s):
     # (the bodies in front of it left out; one behind it, Saturn behind Titan in 165TI, is what its limb is seen on)
     ex = [(tr[0] + x * k, tr[1] + y * k, r * k * 1.2 + PER_BODY_GROW) for x, y, r, behind in named[ref].values() if not behind]
     for i in range(len(planes)):
-        if i == ref:
+        # (not Saturn: the ring 0.8 to 1.3 of its radius round its limb is its rings' edges, which matched 57 px off the
+        # limb in one plane of the 2005 Saturn movie, a double Saturn, 003SA 3X3MOVIEA002 frame 14; its planes are held
+        # on it by SPICE and the hold, as a bigger Saturn's are)
+        if i == ref or u["key"][0] == "SATURN":
             continue
         off = _target_off(gray[ref], gray[i], tr, radius * k, exclude=ex, wide=True)
         if off is None or math.hypot(*off) < 1.0:
@@ -7353,15 +7372,9 @@ def _limb_centre(g, at, r, exclude=()):
         yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
         for ex, ey, er in exclude:
             e[(xx - ex) ** 2 + (yy - ey) ** 2 <= er * er] = 0
-    th = np.linspace(0, 2 * np.pi, max(64, int(2 * np.pi * r)), endpoint=False).astype(np.float32)
-    cx, cy = np.cos(th) * r, np.sin(th) * r
 
     def score(dx, dy):
-        mx = (at[0] - x0 + dx + cx).astype(np.float32)
-        my = (at[1] - y0 + dy + cy).astype(np.float32)
-        v = cv2.remap(e, mx[None], my[None], cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)[0]
-        v = np.sort(v)
-        return float(v[len(v) // 2:].mean())
+        return color_image.circle_edges(e, at[0] - x0 + dx, at[1] - y0 + dy, r)
     base = score(0.0, 0.0)
     best = (base, 0.0, 0.0)
     n = int(reach)
@@ -8014,7 +8027,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
     # the chain alone keeps steady4's name
     # steady6: a ring pass's frames the pictures cannot be matched on linked by their ring profiles (steady_rings)
-    STEADY_FILE = f"steady6k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady7: a moon is found in the pictures only where its outline is (color_image.FIND_OUTLINE): a backlit
+    # Enceladus' plume was taken for the moon (279EN PLUME001)
+    STEADY_FILE = f"steady7k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -10333,6 +10348,164 @@ def _movie_twin(u, n, cache, colour, centre, steady, exposure, named):
     return (twin, rep) if rep.get("held") == (frames[s][1] if s != n else None) else None
 
 
+def _movie_name(u, n, size, cache, trail, colour, centre, steady, exposure, sharpen):
+    """Where movie_webp keeps frame n of pass u drawn so (steady and exposure as steady_of and exposure_of give them)."""
+    # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
+    # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
+    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
+    return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
+                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+
+
+def movie_shown(frame_id, size, cache, trail=0, colour=True, centre=True, steady=0, exposure=0):
+    """What picture frame_id plays as in its pass's movie (movie_webp), as a key two frames share when they play as
+    the same picture: in a pass playing in colour, a colour set's composite (its report's "ids") at every frame until
+    the next set is complete, whichever filter the frame took; a frame tinted in its set's colour, or one not fit to
+    show (its report's "held": the frame before it of its filter), that frame; else the frame itself. Read from the
+    report kept beside the picture; None while that picture is not made (nothing is drawn or worked out here)."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    u, n = found
+    if _plan_if_made(u, cache) is None:
+        return None
+    path = _movie_name(u, n, size, cache, trail, colour, centre, steady_of(u, steady, cache), exposure_of(exposure), True)
+    return _shown_key(u, reel.report_of(path[:-len("webp")] + "json", None), frame_id)
+
+
+def _shown_key(u, rep, frame_id):
+    """movie_shown's key from a movie picture's report (None for none)."""
+    if not rep or not rep.get("movie"):
+        return None
+    shown = rep.get("held") or rep.get("id") or frame_id
+    ids = tuple(rep.get("ids") or ())
+    return (tuple(u["key"]), "set", ids) if ids and not rep.get("tint") else (tuple(u["key"]), shown, ids)
+
+
+def rolling_runs(u, cache, laps=1, fade=(0, 0)):
+    """{frame id: the first frame id of its run} for mosaic movie u's runs of frames in a row whose picture is one:
+    the same layout (rolling_layout's name: the same tiles drawn at the same gains, so the same picture, kept under
+    the same name). A tile that changes nothing on screen (a colour filter's copy before its place's set is whole, a
+    polarizer, a filter the picture does not draw) is such a frame; movie mode and an export show one frame of a run
+    (kind_of "rolling_same", export.shown_once). Laid out from the tiles the cache keeps, as a window's cached
+    picture is: a frame whose own tile is not made, or whose picture would need a tile not made, is a picture of its
+    own (nothing is drawn or made here)."""
+    if cache is None or u.get("kind") != "mosaic_movie" or not u["frames"]:
+        return {}
+    if _plan_if_made(u, cache) is None:
+        return {}
+    there = _tiles(u, cache, plan(u, cache)["display_scale"])   # (the plan is made: only read)
+    fade = fade_style(*fade)
+    # worked out once while the pass's tiles are the same (seconds for a long movie: every frame laid out)
+    try:
+        made = sum(1 for f in os.listdir(there) if f.endswith(".json"))
+    except OSError:
+        made = 0
+    memo = (there, laps, fade, made)
+    with _lock:
+        if memo in _rolling_runs:
+            _rolling_runs.move_to_end(memo)
+            return dict(_rolling_runs[memo])
+    kept = kept_rolling_runs(u, cache, laps, fade)
+    out = kept if kept is not None else _rolling_runs_of(u, cache, laps, fade, there)
+    with _lock:
+        _rolling_runs[memo] = out
+        while len(_rolling_runs) > ROLLING_RUNS_KEEP:
+            _rolling_runs.popitem(last=False)
+    return dict(out)
+
+
+_rolling_runs = collections.OrderedDict()   # (tiles folder, laps, fade, tiles made) -> rolling_runs' answer
+ROLLING_RUNS_KEEP = 64
+
+
+def _runs_path(u, cache, laps, fade):
+    fade = fade_style(*fade)
+    return os.path.join(folder(u, cache), f"rolling-runs-{LAP_RULE}-l{laps}-f{fade[0]}p{fade[1]}.json")
+
+
+def keep_rolling_runs(u, cache, laps=1, fade=(0, 0)):
+    """The pre-build's step, once a mosaic movie's pictures in a style are made (prebuild.make_pass): its runs
+    (rolling_runs) written beside its plan, which the window's note reads (kind_of) instead of laying out every frame
+    on request. Its runs."""
+    # (worked out afresh from the tiles just made, never an older file's or the memo's: a pass made again in the same
+    # tiles folder keeps no runs of its tiles before)
+    if cache is None or u.get("kind") != "mosaic_movie" or _plan_if_made(u, cache) is None:
+        return {}
+    there = _tiles(u, cache, plan(u, cache)["display_scale"])
+    out = _rolling_runs_of(u, cache, laps, fade_style(*fade), there)
+    path = _runs_path(u, cache, laps, fade)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+    with open(tmp, "w") as fh:
+        json.dump(out, fh)
+    os.replace(tmp, path)
+    return out
+
+
+def kept_rolling_runs(u, cache, laps=1, fade=(0, 0)):
+    """A mosaic movie's runs in a style as the pre-build kept them (keep_rolling_runs); None when it has not (a cold
+    pass, a style it did not draw). Only read: nothing is laid out."""
+    if cache is None or u.get("kind") != "mosaic_movie":
+        return None
+    try:
+        with open(_runs_path(u, cache, laps, fade)) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def _rolling_runs_of(u, cache, laps, fade, there):
+    out, last, first = {}, None, None
+    for n, fr in enumerate(u["frames"]):
+        key = None
+        if os.path.exists(os.path.join(there, f"{n}.json")):
+            skipped = []
+            made = rolling_layout(u, n, cache, laps, made_only=True, skipped=skipped, fade=fade)
+            key = made[5] if made and not skipped else None
+        if key is not None and key == last:
+            out[first] = out[fr[1]] = first
+        else:
+            first = fr[1]
+        last = key
+    return out
+
+
+def movie_runs(u, cache, colour):
+    """{frame id: the first frame id of its run} for movie pass u's runs of frames in a row that play as one picture
+    (movie_shown's key: a colour set's composite shown again at its other filters' frames, a frame not fit to show
+    showing the one before it), colour or not; movie mode shows one frame of a run (kind_of "movie_same"). Which
+    picture a frame plays as does not depend on the size, trail, centring, stabilization or exposure it is drawn
+    with, so any report the cache keeps for it answers; a frame with none is a picture of its own (nothing is drawn
+    or worked out here)."""
+    if cache is None or not u.get("movie") or _plan_if_made(u, cache) is None:
+        return {}
+    root, c, kept = os.path.join(folder(u, cache), MOVIE_DIR), str(int(bool(colour))), {}
+    try:
+        sizes = sorted(os.listdir(root))
+    except OSError:
+        return {}
+    for d in sizes:
+        try:
+            names = os.listdir(os.path.join(root, d))
+        except OSError:
+            continue
+        for f in names:
+            parts = f[:-len(".json")].split("_") if f.endswith(".json") else []
+            # (n_trail_colour[...].json, as _movie_name names a picture)
+            if len(parts) >= 3 and parts[0].isdigit() and parts[2] == c:
+                kept.setdefault(int(parts[0]), os.path.join(root, d, f))
+    out, last, first = {}, None, None
+    for n, fr in enumerate(u["frames"]):
+        key = _shown_key(u, reel.report_of(kept[n], None), fr[1]) if n in kept else None
+        if key is not None and key == last:
+            out[first] = out[fr[1]] = first
+        else:
+            first = fr[1]
+        last = key
+    return out
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -10358,14 +10531,8 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
                    footprint=True)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3],
                       **_progress(u, cache, rec)}
-    # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
-    # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
-    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
-
     def named(colour, exposure):
-        return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                            f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                            f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+        return _movie_name(u, n, size, cache, trail, colour, centre, steady, exposure, sharpen)
     path = named(colour, exposure)
     report, meta = {}, path[:-4] + "json"
 

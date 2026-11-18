@@ -58,4 +58,18 @@ assert color_image.find_small_body(canvas([(200, 200, 120, 1)]), 1000, 1100, 60)
 # two moons within reach: the one nearer SPICE's place, not the bigger
 f = color_image.find_small_body(canvas([(760, 700, 50, 1), (520, 520, 70, 1)]), 700, 700, 55)
 assert f is not None and abs(f[0] - 760) < 1.5 and abs(f[1] - 700) < 1.5, f
+# a backlit moon's plume is not the moon (279EN PLUME001, 2017-06-18): a dark disk with a thin lit crescent where SPICE
+# puts it, and the plume's bright fan, a blob the size of the disk, under its south pole. Only a blob with the moon's
+# outline round it is the moon; here that is SPICE's place
+im = canvas()
+yy, xx = np.mgrid[:H, :H]
+disk = (yy - 700) ** 2 + (xx - 700) ** 2 < 60 * 60
+im[disk, :3] = 3
+im[disk & (xx > 700 + 0.8 * 60), :3] = 230                           # the lit crescent
+plume = (((yy - 800) / 1.2) ** 2 + (xx - 700) ** 2 < 52 * 52) & ~disk
+im[plume, :3] = 200
+assert color_image.find_small_body(im, 700, 700, 60) is None, color_image.find_small_body(im, 700, 700, 60)
+# ... and where SPICE is far off the moon (Atlas' 340 px), its outline lies on the moon's edges, not on sky: found
+f = color_image.find_small_body(canvas([(1000, 700, 60, 1)]), 700, 700, 60)
+assert f is not None and abs(f[0] - 1000) < 1.5 and abs(f[1] - 700) < 1.5, f
 print("ok")

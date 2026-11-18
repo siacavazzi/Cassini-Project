@@ -5,7 +5,7 @@ A Cassini Studio look applied to a finished picture, as the studio's WebGL pass 
 
 The look is the color part of a studio recipe (the same short string the studio puts in links and gallery items,
 e.g. "ex:0.3,ct:20,sa:15,fi:warm,st:80"): exposure, contrast, black and white levels, midtones, saturation, warmth,
-tint, sharpness, sepia tone, and a filter at a strength, which moves those sliders by its own amounts. The frame keys
+tint, denoise, sharpness, sepia tone, and a filter at a strength, which moves those sliders by its own amounts. The frame keys
 (turns, flips, straighten, crop, trim) are not a film's and are ignored here. Like the studio, this works on the
 picture the pipeline made; nothing here touches the pipeline.
 
@@ -21,7 +21,8 @@ from PIL import Image
 # the studio's sliders: key, short key, range, rest (studio.html ADJ, TONE, DEF)
 ADJ = {"exposure": ("ex", -4, 4, 0), "contrast": ("ct", -100, 100, 0), "black": ("bk", 0, 60, 0),
        "white": ("wt", 40, 100, 100), "midtones": ("md", -100, 100, 0), "saturation": ("sa", -100, 100, 0),
-       "warmth": ("wa", -100, 100, 0), "tint": ("ti", -100, 100, 0), "sharpness": ("sh", 0, 100, 0),
+       "warmth": ("wa", -100, 100, 0), "tint": ("ti", -100, 100, 0), "denoise": ("dn", 0, 100, 0),
+       "sharpness": ("sh", 0, 100, 0),
        "tone": ("to", 0, 100, 0)}
 # the studio's filters (studio.html FILTERS): their own amounts, at the recipe's strength
 FILTERS = {"none": {}, "vivid": {"saturation": 35, "contrast": 15}, "mono": {"saturation": -100},
@@ -95,6 +96,25 @@ def override(s):
     return ",".join(f"{k}:{got[k]}" for k in order if k in got)
 
 
+def smooth5(c, dn):
+    """The studio's denoise (studio.html smooth5): an edge-keeping average of the 5 x 5 pixels about each one, weighted
+    by distance (spatial sigma 1.5 px) and by color difference from the middle pixel (range sigma dn, on the mean of
+    the channels' squared differences), the edge repeated."""
+    q = np.pad(c, ((2, 2), (2, 2), (0, 0)), mode="edge")
+    H, W = c.shape[:2]
+    acc = np.zeros_like(c)
+    ws = np.zeros(c.shape[:2], np.float32)
+    rg = 1 / (6 * dn * dn)
+    for j in range(-2, 3):
+        for i in range(-2, 3):
+            n = q[2 + j:2 + j + H, 2 + i:2 + i + W]
+            d = n - c
+            w = np.exp(-(i * i + j * j) * (2 / 9) - (d * d).sum(-1) * rg).astype(np.float32)
+            acc += n * w[..., None]
+            ws += w
+    return acc / ws[..., None]
+
+
 def apply(im, p, ev=0.0):
     """Picture im (PIL) with look p drawn over it, as the studio's shader draws it, RGB. ev: exposure added to the
     look's (the movie editor's exposure level for the picture), the sum within the exposure slider's range."""
@@ -106,6 +126,9 @@ def apply(im, p, ev=0.0):
     e = effective(p)
     c = np.asarray(im.convert("RGB"), np.float32) / 255
     sharp = e["sharpness"] / 100 * 2.5
+    dn = (e["denoise"] / 100) ** 2 * 0.12  # squared, as the studio: fine control at the gentle end
+    if dn > 0:
+        c = smooth5(c, dn)
     if sharp > 0:
         # the four neighbours, the edge repeated (the texture clamps to its edge)
         q = np.pad(c, ((1, 1), (1, 1), (0, 0)), mode="edge")

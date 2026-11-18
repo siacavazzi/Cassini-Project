@@ -248,7 +248,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         cal.still_look.reset(token)
     # (how much of the picture is drawn white: the camera's saturation, which a still's report does not always carry)
     white = max(float(np.mean((img[..., 0] if img.ndim == 3 else img) >= 254)) for img in imgs) if imgs else 0.0
-    if look.get("detail") and len(imgs) in (1, 2, 3) and max(report.get("saturated_share", 0), white) <= om_clipped():
+    if look.get("detail") and cal.step("detail") and len(imgs) in (1, 2, 3) and max(report.get("saturated_share", 0), white) <= om_clipped():
         imgs = _still_detail(imgs, valid, look, None if look.get("nodisk") else _still_disk(lbl, imgs[0].shape[:2]))
         report["saturn_look"] = {k: v for k, v in look.items() if k != "disk"}
     return imgs, valid, lbl, report
@@ -1582,6 +1582,24 @@ FIND_MAX_RADIUS = 256  # px: bigger bodies fill the frame; SPICE places them, as
 FIND_REACH = 400       # px: the blob is looked for only this near SPICE's place (Atlas N1870699340_2 was 342 px off), and
                        # of the blobs there, the nearest to it is taken, not the biggest: another moon or a bright
                        # ring arc elsewhere in the frame is not the body
+FIND_OUTLINE = 1.0     # a blob is the body only where the circle of its disk round the blob lies on the picture's
+                       # brightness edges at least this well, against the same circle round SPICE's place (circle_edges):
+                       # a backlit Enceladus' plume is a bright blob the size of its disk under its south pole, and was
+                       # taken for the moon 40 to 85 px off it while SPICE sat on its limb within 3 px (279EN PLUME001)
+
+FIND_RADII = (0.8, 0.9, 1.0, 1.1, 1.2)   # of SPICE's radius: the circles FIND_OUTLINE's check tries
+
+
+def circle_edges(e, x, y, r):
+    """How well the circle of radius r round (x, y) lies on the edges e (a gradient magnitude picture): the mean of
+    the stronger half of e along it (bilinear, 0 off e), so the lit half of a limb is enough."""
+    th = np.linspace(0, 2 * np.pi, max(64, int(2 * np.pi * r)), endpoint=False).astype(np.float32)
+    cx, cy = np.cos(th) * r, np.sin(th) * r
+    mx = (x + cx).astype(np.float32)
+    my = (y + cy).astype(np.float32)
+    v = cv2.remap(e, mx[None], my[None], cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)[0]
+    v = np.sort(v)
+    return float(v[len(v) // 2:].mean())
 
 
 """
@@ -1632,6 +1650,23 @@ def find_small_body(image, cx, cy, radius, reach=FIND_REACH):
     cut = bool((labels[y:y + h, x:x + w] == best)[~inside[y:y + h, x:x + w]].any())
     if (area < FIND_LIT * disk or cut) and away <= radius:
         return None
+    # (and the blob must have the body's outline: a circle of its disk round it lies on the picture's edges at least as
+    # well as round SPICE's place, or it is something else the size of the disk near the body, a plume, a glow)
+    if away > 1.0:
+        half = int(radius * FIND_RADII[-1] + 4)
+        x0 = max(int(min(fx, cx)) - half, 0)
+        y0 = max(int(min(fy, cy)) - half, 0)
+        x1 = min(int(max(fx, cx)) + half + 2, lum.shape[1])
+        y1 = min(int(max(fy, cy)) + half + 2, lum.shape[0])
+        if x1 - x0 > 2 and y1 - y0 > 2:
+            a = np.ascontiguousarray(lum[y0:y1, x0:x1])
+            e = np.hypot(cv2.Sobel(a, cv2.CV_32F, 1, 0), cv2.Sobel(a, cv2.CV_32F, 0, 1))
+            # (each circle at the radius between FIND_RADII of SPICE's that lies best: a small moon is irregular and
+            # SPICE's radius its mean, and its disk drawn a pixel or two bigger or smaller)
+            def outline(x, y):
+                return max(circle_edges(e, x - x0, y - y0, radius * f) for f in FIND_RADII)
+            if outline(fx, fy) < FIND_OUTLINE * outline(cx, cy):
+                return None
     return fx, fy
 
 

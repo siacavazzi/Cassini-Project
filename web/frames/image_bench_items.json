@@ -13,6 +13,7 @@
   {"name": "daphnis09-movie", "kind": "pass", "frame": "N1627449306_1", "group": "hard", "watch": "A ring must not go black (#400 speck veil)"},
   {"name": "ringclose124-movie", "kind": "pass", "frame": "N1641890798_1", "group": "hard", "watch": "ring close-up not drawn as glow (#401)"},
   {"name": "gring-still", "kind": "still", "frame": "N1572059544_1", "group": "hard", "watch": "G ring frame keeps its glow rule (#401)"},
+  {"name": "plume279-movie", "kind": "pass", "frame": "N1876470940_1", "group": "hard", "watch": "backlit Enceladus plume movie: the moon, not the plume, holds still (steady7 outline check, phase_correlate without the half-pixel bias)"},
   {"name": "plume-bloom-still", "kind": "still", "frame": "N1831473782_1", "group": "hard", "watch": "CCD column bloom and Saturnshine night side"},
   {"name": "approach-movie", "kind": "pass", "frame": "N1455700978_1", "group": "hard", "watch": "approach movie exposure from frame to frame (#445 evened frames)"},
   {"name": "ringmovie04-movie", "kind": "pass", "frame": "N1477691357_1", "group": "hard", "watch": "ring movie brightness (#402 movie headroom)"},

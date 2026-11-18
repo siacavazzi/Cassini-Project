@@ -289,7 +289,7 @@ const SMOOTH = ["VENUS", "EARTH", "JUPITER"];   // cloud-covered: no procedural 
 const FOV_HALF = { N: 0.3516 / 2, W: 3.4884 / 2 };   // ISS fields of view, degrees (half width)
 const SPEEDS = [[1, "1×"], [60, "1 min/s"], [600, "10 min/s"], [3600, "1 h/s"], [21600, "6 h/s"], [86400, "1 day/s"], [604800, "1 wk/s"]];
 const ZOOMS = [[86400, "Day"], [7 * 86400, "Week"], [30 * 86400, "Month"], [365 * 86400, "Year"]];
-const titleCase = s => s.charAt(0) + s.slice(1).toLowerCase();
+const titleCase = s => s ? s.charAt(0) + s.slice(1).toLowerCase() : "";   // no name: nothing, never an error in the frame loop
 const fmtInt = n => Math.round(n).toLocaleString("en-US");
 
 // ---------- small vector helpers (Float64 world math) ----------

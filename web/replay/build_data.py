@@ -133,12 +133,28 @@ def main():
     json.dump(slim, open(os.path.join(args.out, "catalog.json"), "w"), separators=(",", ":"))
     if args.attitude:
         raw = attitude_for(args.attitude, args.year, len(slim["et"]))
-        shutil.copy(os.path.join(args.attitude, f"{args.year}.bin"), os.path.join(args.out, "attitude.bin"))
+        with open(os.path.join(args.out, "attitude.bin"), "wb") as fh:
+            fh.write(raw)
         with open(os.path.join(args.out, "attitude.b64.txt"), "w") as fh:
             fh.write(base64.b64encode(raw).decode())
     if args.huygens:
         export_huygens(args.huygens, [args.year], args.out)
     print(f"{len(bodies)} bodies, {len(enc)} encounters, {len(slim['et'])} images")
+
+
+# each year's catalog rows kept (their places in the export's catalog) and the export's row count, for attitude_for:
+# frames that hold no picture are left out of the page's catalog (not_pictures)
+_KEPT = {}
+
+
+def _not_pictures():
+    """The frames that hold no picture (darks, lamp frames: web/frames/not_pictures.py), which the pipeline leaves
+    out (reel.load_index) and export_tracks.export_catalog leaves out too. An export made before that rule (11-16)
+    still lists them, and the page then shows and asks for frames the build never makes, so the server drew them on
+    request (zero-render check 2017, 11-17): they are left out here as well, whatever the export holds."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frames"))
+    import not_pictures
+    return not_pictures.ids()
 
 
 def slim_catalog(data, year, groups=None):
@@ -147,7 +163,10 @@ def slim_catalog(data, year, groups=None):
         slim = {k: [] for k in CATALOG_KEYS}
     else:
         cat = json.load(open(path))
-        slim = {k: cat[k] for k in CATALOG_KEYS}
+        dark = _not_pictures()
+        keep = [i for i, f in enumerate(cat["id"]) if f not in dark]
+        _KEPT[year] = (len(cat["id"]), keep)
+        slim = {k: [cat[k][i] for i in keep] for k in CATALOG_KEYS}
         slim["et"] = [round(t, 1) for t in slim["et"]]
         slim["target"] = [TARGET_ALIASES.get(t, t) for t in slim["target"]]
     if groups:
@@ -434,13 +453,19 @@ def highlights(args, years, enc, bodies):
 
 
 def attitude_for(folder, year, n_catalog):
-    """The year's pointing file, checked against the catalog it must come from."""
+    """The year's pointing file, checked against the catalog it must come from, with the image pointing of the
+    catalog rows slim_catalog left out (not_pictures) taken out too (export_attitude.py: a 16-byte header, then
+    four float32 per image in catalog order, then the background samples, kept as they are)."""
     src = os.path.join(folder, f"{year}.bin")
     raw = open(src, "rb").read()
     n_img = int.from_bytes(raw[8:12], "little")
-    if raw[:4] != b"CATT" or n_img != n_catalog:
-        raise SystemExit(f"{src}: {n_img} images, catalog has {n_catalog}; re-export one of them")
-    return raw
+    n_export, keep = _KEPT.get(year, (n_catalog, None))
+    if raw[:4] != b"CATT" or n_img != n_export or (keep is not None and len(keep) != n_catalog):
+        raise SystemExit(f"{src}: {n_img} images, catalog has {n_export}; re-export one of them")
+    if keep is None or len(keep) == n_img:
+        return raw
+    q = raw[16:16 + 16 * n_img]
+    return raw[:8] + struct.pack("<I", len(keep)) + raw[12:16] + b"".join(q[16 * i:16 * i + 16] for i in keep) + raw[16 + 16 * n_img:]
 
 
 def build_mission(args):
@@ -493,9 +518,10 @@ def build_mission(args):
             if 0 <= d < ndays:
                 per_day["N" if cam == "N" else "W"][d] += 1
         if args.attitude and slim["et"] and os.path.exists(os.path.join(args.attitude, f"{y}.bin")):
-            attitude_for(args.attitude, y, len(slim["et"]))
+            raw = attitude_for(args.attitude, y, len(slim["et"]))
             os.makedirs(os.path.join(out, "attitude"), exist_ok=True)
-            shutil.copy(os.path.join(args.attitude, f"{y}.bin"), os.path.join(out, "attitude", f"{y}.bin"))
+            with open(os.path.join(out, "attitude", f"{y}.bin"), "wb") as fh:
+                fh.write(raw)
             attitude[str(y)] = f"data/attitude/{y}.bin"
     mission = {"years": years, "coverage": [start, end], "bodies": bodies, "catalog": catalogs, "attitude": attitude,
                "frames_per_day": {"start_et": day0, **per_day}, "months": write_months(out, years, bodies, attitude, groups)}

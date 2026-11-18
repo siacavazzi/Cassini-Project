@@ -52,6 +52,18 @@ NYQ_SHARE = 1.0     # the local noise taken as this share of what the finest sca
 LOSSY_AMOUNT = 0.75  # a lossy frame takes this share of the amount (its finest detail is partly the codec's)
 GRAIN = 2.0         # levels: a picture whose smoothest places show this much grain takes half the amount
 GRAIN_SHARE = 0.3   # its smoothest places: this share of its pixels (black and white clipping left out)
+# light automatic denoise (Sam, 2026-11-17: a light denoise on pictures whose measured noise is over a threshold,
+# never anything extreme; taste call 15). A picture whose grain (picture_grain: the spread left in its smoothest places,
+# in display levels) is over DENOISE_FROM is mixed with an edge-keeping (bilateral) average of each pixel's 5 x 5
+# neighbours, by a share rising linearly from 0 there to DENOISE_MAX at DENOISE_FULL. The average's range is
+# DENOISE_RANGE times the grain: differences the grain could make are smoothed, edges, limbs and ring structure well
+# over it are kept. Stars and other one-pixel spikes, saturated pixels and the picture's own edge are left as they are,
+# the same change goes on every color, and the fine sharpening after it is the same amount as without it.
+DENOISE_FROM = 1.8    # levels of grain: no denoise at or under this (three stills in four in 2017)
+DENOISE_FULL = 5.0    # levels of grain: the whole DENOISE_MAX from here (about one still in fifty in 2017)
+DENOISE_MAX = 0.7     # at most this share of the edge-keeping average
+DENOISE_RANGE = 2.5   # the average's range sigma, in grains
+DENOISE_SPACE = 1.5   # px: its spatial sigma (5 x 5 pixels)
 QUANT = 1.0 / 12    # 8-bit rounding's variance (levels^2): the least noise any picture has
 
 
@@ -133,12 +145,40 @@ def noise_curve(lum, E, ok, bins=NOISE_BINS):
     return curve[idx].astype(np.float32), curve
 
 
-def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, grain=None, lossy=False):
+def denoise_share(grain, start=None, full=None, most=None):
+    """The share of the edge-keeping average a picture with this grain (levels) is mixed with: 0 up to DENOISE_FROM,
+    rising linearly to DENOISE_MAX at DENOISE_FULL"""
+    start = DENOISE_FROM if start is None else start
+    full = DENOISE_FULL if full is None else full
+    most = DENOISE_MAX if most is None else most
+    return float(np.clip((grain - start) / max(full - start, 1e-6), 0, 1) * most)
+
+
+def _spikes(lum, sig):
+    """one-pixel spikes (stars, cosmic rays, hot pixels): far off their 3x3 median, more than noise of sig levels could
+    put them, and well past the range of their 8 neighbours; grown by a pixel"""
+    med = cv2.medianBlur(np.clip(lum + 0.5, 0, 255).astype(np.uint8), 3).astype(np.float32)
+    ring = np.ones((3, 3), np.uint8); ring[1, 1] = 0
+    around = cv2.dilate(lum, ring) - cv2.erode(lum, ring)
+    off = np.abs(lum - med)
+    spike = (off > np.maximum(SPIKE * sig, SPIKE_MIN)) & (off > 2 * around)
+    return cv2.dilate(spike.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+
+
+def light_denoise(rgb, lum, grain, keep, share):
+    """rgb (float H x W x C) moved toward the edge-keeping average of its brightness by share, where keep; the same
+    change on every color"""
+    avg = cv2.bilateralFilter(lum, 5, float(DENOISE_RANGE * grain), DENOISE_SPACE, borderType=cv2.BORDER_REFLECT)
+    x = np.where(keep, np.float32(share) * (avg - lum), 0).astype(np.float32)
+    return np.clip(rgb + x[..., None], 0, 255)
+
+
+def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, grain=None, lossy=False, denoise=True):
     """px (uint8: H x W grey, or H x W x 2|3|4 with alpha last when 2 or 4) with its fine detail raised where it stands
     above the picture's own noise. mask: optional H x W float 0..1 (a body's disk, feathered) the change is scaled by.
     report: optional dict filled with the noise curve, blockiness and the share of pixels changed."""
     px = np.asarray(px)
-    if amount <= 0 or px.size == 0:
+    if (amount <= 0 and not denoise) or px.size == 0:
         return px.copy()
     a3 = px[..., None] if px.ndim == 2 else px
     n = a3.shape[2]
@@ -150,11 +190,31 @@ def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, gra
     inner = cv2.erode(valid.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     blur = _blur(lum, sigma, alpha)
     d = lum - blur
-    E = _blur(d * d, ENERGY_SIGMA, alpha)
     kd = _kernel_noise(sigma)
     sat = cv2.dilate((rgb.max(axis=2) >= SAT_LEVEL).astype(np.uint8), np.ones((2 * SAT_PX + 1,) * 2, np.uint8)) > 0
     # (noise is measured away from black clipping too: next to clipped sky E is low because half the grain was cut)
     black = cv2.dilate((rgb.max(axis=2) <= 1).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    # how stretched the picture is: the grain left in its smoothest places, in display levels (the stretch's gain
+    # times the camera's noise, with every summing, compression and 8-bit step it went through). It decides the light
+    # denoise and the sharpening's amount, both from the picture as it came.
+    # (a movie or a mosaic passes its pass's grain, so every frame and tile takes the same amount: no flicker)
+    if grain is None:
+        grain = picture_grain(lum, d, valid & ~sat & ~black, sigma)
+    share = denoise_share(grain) if denoise else 0.0
+    if share > 0:
+        # (not within 2 px of the canvas edge: the 5 x 5 average would reach past it; review of #594)
+        inner5 = cv2.erode(valid.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+        rgb = light_denoise(rgb, lum, grain, inner5 & ~sat & ~_spikes(lum, grain), share)
+        lum = rgb[..., 0] if colors == 1 else rgb.mean(axis=2)
+        blur = _blur(lum, sigma, alpha)
+        d = lum - blur
+    if amount <= 0:
+        x = np.zeros_like(lum)
+        w = x
+        curve = []
+        block = 1.0
+        return _finish(px, a3, rgb, x, alpha, valid, colors, n, report, grain, amount, share, curve, block, w)
+    E = _blur(d * d, ENERGY_SIGMA, alpha)
     ok = inner & ~sat & ~black
     N, curve = noise_curve(lum, E, ok)
     if N is None:
@@ -172,24 +232,13 @@ def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, gra
     N = np.maximum(N, np.float32(NYQ_SHARE) * local)
     N = np.maximum(N * np.float32(max(1.0, block) ** BLOCK_GAIN), np.float32(QUANT * kd))
     w = np.clip(1 - np.float32(WIENER / NOISE_P) * N / np.maximum(E, 1e-6), 0, 1)
-    # spikes: a pixel far off its 3x3 median, more than noise could put it
-    med = cv2.medianBlur(np.clip(lum + 0.5, 0, 255).astype(np.uint8), 3).astype(np.float32)
-    sig = np.sqrt(N / kd)
-    ring = np.ones((3, 3), np.uint8); ring[1, 1] = 0
-    around = cv2.dilate(lum, ring) - cv2.erode(lum, ring)
-    off = np.abs(lum - med)
-    # (and well past the range of its 8 neighbours: a ray hits one pixel, texture moves its neighbours too)
-    spike = (off > np.maximum(SPIKE * sig, SPIKE_MIN)) & (off > 2 * around)
-    spike = cv2.dilate(spike.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    # spikes: a pixel far off its 3x3 median, more than noise could put it (and well past the range of its 8
+    # neighbours: a ray hits one pixel, texture moves its neighbours too)
+    spike = _spikes(lum, np.sqrt(N / kd))
     w = np.where(inner & ~sat & ~spike, w, 0).astype(np.float32)
     if mask is not None:
         w = w * np.asarray(mask, np.float32)
-    # how stretched the picture is: the grain left in its smoothest places, in display levels (the stretch's gain
-    # times the camera's noise, with every summing, compression and 8-bit step it went through). A picture whose
-    # smooth places already show grain of GRAIN levels takes half the amount, a cleaner one nearly all of it.
-    # (a movie or a mosaic passes its pass's grain, so every frame and tile takes the same amount: no flicker)
-    if grain is None:
-        grain = picture_grain(lum, d, valid & ~sat & ~black, sigma)
+    # a picture whose smooth places already show grain of GRAIN levels takes half the amount, a cleaner one nearly all
     amount = amount / (1 + (grain / GRAIN) ** 2) * (LOSSY_AMOUNT if lossy else 1.0)
     x = np.float32(amount) * w * d
     x = x / (1 + np.abs(x) / np.float32(EDGE))
@@ -208,11 +257,15 @@ def adaptive_sharpen(px, amount=AMOUNT, sigma=SIGMA, mask=None, report=None, gra
     mag = np.abs(x)
     soft = np.where(mag > knee, knee + (room - knee) * (mag - knee) / np.maximum(mag - knee + room - knee, 1e-6), mag)
     x = np.sign(x) * soft
+    return _finish(px, a3, rgb, x, alpha, valid, colors, n, report, grain, amount, share, curve, block, w)
+
+
+def _finish(px, a3, rgb, x, alpha, valid, colors, n, report, grain, amount, share, curve, block, w):
     out = np.clip(rgb + x[..., None] + 0.5, 0, 255).astype(np.uint8)
     if alpha is not None:
         out = np.where(valid[..., None], out, a3[..., :colors])
     res = np.concatenate([out, a3[..., colors:]], axis=2) if colors < n else out
     if report is not None:
-        report.update(grain=round(float(grain), 2), amount=round(float(amount), 3), noise=[round(float(v), 2) for v in curve], block=round(block, 3),
+        report.update(grain=round(float(grain), 2), amount=round(float(amount), 3), denoise=round(float(share), 3), noise=[round(float(v), 2) for v in curve], block=round(block, 3),
                       changed=round(float((np.abs(x) >= 0.5).mean()), 4), weight=w)
     return res[..., 0] if px.ndim == 2 else res

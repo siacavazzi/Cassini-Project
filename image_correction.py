@@ -582,7 +582,7 @@ def limb_shift(im1, im2, mask1, mask2, g=None):
         return ok, before, after
     # the outlines' phase correlation first, where its peak stands out (as every limb match was found before)
     f1, f2 = [cv2.GaussianBlur(l.astype(np.float32), (0, 0), 2) for l in (l1, l2)]
-    (dx, dy), response = cv2.phaseCorrelate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
+    (dx, dy), response = phase_correlate(f1, f2, cv2.createHanningWindow(f1.shape[::-1], cv2.CV_32F))
     if response >= LIMB_RESPONSE:
         # (a peak that stands out but whose move fails the checks is not searched past: the outlines disagree, and their
         # least difference elsewhere is no better a place: N1633926412_1's Titan crescent, a 0.23 peak whose move left
@@ -1066,6 +1066,23 @@ min_response = phase correlation peak below which the match is rejected
 
 returns (dx, dy) or None if no trustworthy match was found
 """
+def even_dft(a):
+    """a padded with 0 (below and right) to a size cv2.phaseCorrelate measures without bias: it pads to an optimal DFT
+    size itself, and where that is odd its peak comes out half a pixel off (a strip 218 px wide shifted 0 measured +0.5;
+    a moon's square 364 rows tall, padded to 375, matched with itself measured 0.5 px down, and every stabilization link
+    of Enceladus' 279EN PLUME001 movie half a pixel off each way, which added up to 48 px of drift over its 288 frames)."""
+    h, w = a.shape
+    H, W = cv2.getOptimalDFTSize(h), cv2.getOptimalDFTSize(w)
+    H, W = H if H % 2 == 0 else cv2.getOptimalDFTSize(H + 1), W if W % 2 == 0 else cv2.getOptimalDFTSize(W + 1)
+    return cv2.copyMakeBorder(a, 0, H - h, 0, W - w, cv2.BORDER_CONSTANT, value=0)
+
+
+def phase_correlate(a, b, window):
+    """cv2.phaseCorrelate of a and b under window (all the same size), padded to an even DFT size first (even_dft), so
+    the shift has no half-pixel bias: ((dx, dy), response)."""
+    return cv2.phaseCorrelate(even_dft(a), even_dft(b), even_dft(window))
+
+
 def find_shift(im1, im2, max_shift=100, min_response=0.3):
     im1_gray = cv2.cvtColor(im1,cv2.COLOR_BGR2GRAY).astype(np.float32)
     im2_gray = cv2.cvtColor(im2,cv2.COLOR_BGR2GRAY).astype(np.float32)
@@ -1095,7 +1112,7 @@ def find_shift(im1, im2, max_shift=100, min_response=0.3):
     b = im2_gray[y0:y1, x0:x1]
 
     window = cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F)
-    (dx, dy), response = cv2.phaseCorrelate(a, b, window)
+    (dx, dy), response = phase_correlate(a, b, window)
 
     if response < min_response or abs(dx) > max_shift or abs(dy) > max_shift:
         print(f"Image alignment failure: shift ({dx:.1f}, {dy:.1f}) response {response:.2f}")
@@ -1110,7 +1127,7 @@ def find_shift_whole(im1, im2, max_shift, min_response):
     matched noise (195RI HIPHASEC001 W1752967654_1: a 0.74 peak over the whole overlap, 0.02 round its brightest part)."""
     a = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY).astype(np.float32)
     b = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    (dx, dy), response = cv2.phaseCorrelate(a, b, cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F))
+    (dx, dy), response = phase_correlate(a, b, cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F))
     if response < min_response or abs(dx) > max_shift or abs(dy) > max_shift:
         return None
     return dx, dy, response

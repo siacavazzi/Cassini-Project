@@ -258,6 +258,14 @@ for old, new in [
     study = study.replace(old, new)
 study += part("script") + "\n"
 
+# bit depth tags (depth.html): its style joins the head's and its script runs after the Movie Editor's and Cassini
+# Studio's (it tags their strip and picture) and the chrome script's (the camera windows' wells)
+dp = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "depth.html")).read()
+part = lambda tag: dp[dp.index(f"<{tag}"):dp.index(f"</{tag}>") + len(tag) + 3]
+assert study.count("</style>\n</head>") == 1
+study = study.replace("</style>\n</head>", part("style")[len("<style>"):] + "\n</head>")
+study += part("script") + "\n"
+
 # the body view (bodymode.html): its style joins the head's, its window goes into #app, and its script runs after the
 # chrome script (it reads the camera feeds and the window manager) and before the dock's, which opens it
 bm = open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), "bodymode.html")).read()

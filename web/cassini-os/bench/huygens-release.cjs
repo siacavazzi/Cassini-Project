@@ -32,7 +32,7 @@ const env = process.env, T0 = Date.now(), t = () => +((Date.now() - T0) / 1000).
   const cdp = await ctx.newCDPSession(page), frames = [];
   cdp.on("Page.screencastFrame", f => { frames.push({ ts: f.metadata.timestamp, data: f.data }); cdp.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {}); });
   await cdp.send("Page.startScreencast", { format: "jpeg", quality: 85, maxWidth: +W, maxHeight: +H });
-  const shots = (env.SHOTS || "3,13,18,26,34,44,56,70").split(",").map(Number);
+  const shots = (env.SHOTS || "3,10,14,20,24,30,36,44").split(",").map(Number);
   const start = Date.now();
   while (await page.evaluate(() => cassiniHuygensRelease.running)) {
     const el = (Date.now() - start) / 1000;

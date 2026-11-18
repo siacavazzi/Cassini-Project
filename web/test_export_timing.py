@@ -20,13 +20,14 @@ def pics(times):
     return [{"id": f"N{i}", "cam": "N", "t": float(t)} for i, t in enumerate(times)]
 
 
-# fixed rate: every picture, the last one too, holds 1/fps; the film lasts count/fps
+# fixed rate: every picture, the last one too, holds 1/fps, one step of the film's own rate (one frame of a video at
+# fps: test_export_no_repeats); the film lasts count/fps
 for fps in (2, 10, 12, 24, 30):
     p = pics(range(0, 10 * 60, 60))
     export.timing(p, fps)
-    secs = sum(e["frames"] for e in p) / FPS
-    assert abs(secs - len(p) / fps) <= 1 / FPS, (fps, secs)
-    assert abs(p[-1]["frames"] - FPS / fps) <= 1, (fps, p[-1]["frames"])
+    secs = sum(e["frames"] for e in p) / export.rate_of(fps)
+    assert abs(secs - len(p) / fps) < 1e-9, (fps, secs)
+    assert all(e["frames"] == 1 for e in p), (fps, [e["frames"] for e in p])
 
 # adaptive: the last picture holds the film's median hold, not 1.5 s
 p = pics([0, 30, 60, 90, 120, 150, 180, 2000])
@@ -38,13 +39,13 @@ assert abs(p[-1]["hold"] - sorted(holds)[len(holds) // 2]) < 1e-3, (p[-1]["hold"
 # a film of one picture still shows it a moment
 p = pics([0])
 export.timing(p, 12)
-assert p[0]["frames"] == round(export.ONLY * FPS), p
+assert p[0]["frames"] == round(export.ONLY * 12), p
 
 # Boomerang: a b c d -> a b c d c b a, each picture held as long on the way back, starts in order
 p = pics([0, 60, 120, 180])
 export.timing(p, 12)
 fwd = sum(e["frames"] for e in p)
-b = export.boomerang(p)
+b = export.boomerang(p, export.rate_of(12))
 assert [e["id"] for e in b] == ["N0", "N1", "N2", "N3", "N2", "N1", "N0"], [e["id"] for e in b]
 assert [bool(e.get("back")) for e in b] == [False] * 4 + [True] * 3
 assert all(b[n]["hold"] == b[export.mirror(n, 4)]["hold"] for n in range(len(b)))

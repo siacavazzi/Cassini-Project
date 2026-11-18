@@ -98,8 +98,9 @@ import slices  # noqa: E402
 import stacking  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened")
-ADDED = ("tables", "fullview", "evened")   # phases run on a finished cache, not recorded in slices.json
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened", "rawplaced",
+          "site")
+ADDED = ("tables", "fullview", "evened", "rawplaced", "site")   # phases run on a finished cache, not recorded in slices.json
 
 
 @functools.lru_cache(None)
@@ -211,6 +212,14 @@ def items(phase):
         # pass strip's (the windows asked it about as often as 1024 on 8790, 2026-10-26), cheap from the frame in memory
         return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512, 256)])
                 for i in frame_ids()]
+    if phase == "rawplaced":
+        # the camera windows' Raw with Auto center: each frame as Cassini sent it, every pipeline step off
+        # (calibration.ALL), only placed by SPICE as its processed picture is (centred and turned to its pass); a
+        # frame Auto center leaves as it is shows the frame route's picture, so nothing is made for it
+        def placed(c, i, view):
+            with calibration.stepping(calibration.ALL):
+                return [frame_server.processed_webp(i, z, c, centre=view) for z in (1024, 512, 256)]
+        return [(i, lambda c, i=i: (lambda v: placed(c, i, v) if v else [])(centred(i))) for i in frame_ids()]
     if phase == "mosaics":
         # (a toss-up mosaic pass plays as a movie too, make_pass's movie(): its evened frames with it, as the evened
         # phase adds them to a cache built before)
@@ -224,8 +233,8 @@ def items(phase):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         if phase == "strips":
             return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c, every=True))
-                for u in movie_passes()]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c, every=True)
+                 + make_grey(u, c)) for u in movie_passes()]
     if phase == "tables":
         movies = {tuple(u["key"]) for u in movie_passes()}
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_tables(u, c, tuple(u["key"]) in movies))
@@ -233,8 +242,41 @@ def items(phase):
     if phase == "fullview":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes()]
     if phase == "evened":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)) for u in evened_passes()]
+        # (and a movie pass's colours-off frames, make_grey, which a cache built before had none of)
+        movies = {tuple(u["key"]) for u in movie_passes()}
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)
+                 + (make_grey(u, c) if tuple(u["key"]) in movies else 0)) for u in evened_passes()]
+    if phase == "site":
+        return site_items(_site[0])
     raise ValueError(phase)
+
+
+_site = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cassini-os")]   # --site
+
+
+def site_items(site):
+    """The pictures the frame server otherwise makes as it starts (frame_server.warm_site): every Highlights
+    thumbnail (data/highlights.json, in the default look, as warm_thumbs makes them) and every body's folder
+    picture (data/targets.json "best", at ICON_SIZE, as warm_icons makes them). Whole-mission items, made by every
+    run whatever its stretch (found, not made, once there), so a cache-only server (--public) has them and no
+    server draws them (zero-render check 2017, 11-17). They come from the page's replay data at the build's commit
+    (web/replay/build_data.py): a site without it stops the phase."""
+    try:
+        with open(os.path.join(site, "data", "highlights.json")) as fh:
+            hints = [e["thumb"] for e in json.load(fh) if e.get("kind") != "milestone" and e.get("thumb")]
+        with open(os.path.join(site, "data", "targets.json")) as fh:
+            best = [b["best"] for b in json.load(fh)["bodies"].values() if b.get("best")]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise SystemExit(f"site: no replay data in {site}/data ({e}); make it at this commit first")
+    out = []
+    for hint in hints:
+        hint = {k: hint[k] for k in ("mosaic", "color", "frame") if hint.get(k)}
+        out.append(("thumb_" + frame_server.thumb_key(hint, frame_server.THUMB_SIZE),
+                    lambda c, h=hint: frame_server.thumb_webp(h, frame_server.THUMB_SIZE, c)))
+    for frame_id in dict.fromkeys(best):
+        if frame_server.FRAME_ID.match(frame_id):
+            out.append(("icon_" + frame_id, lambda c, i=frame_id: frame_server.webp(i, frame_server.ICON_SIZE, c)))
+    return out
 
 
 def only(phase, todo, path):
@@ -245,7 +287,7 @@ def only(phase, todo, path):
     with open(path) as fh:
         # one frame id a line, maybe followed by more columns (lost_lines_frames.txt: "id,own|repeat")
         ids = {line.replace(",", " ").split()[0] for line in fh if line.strip() and not line.startswith("#")}
-    if phase in ("frames", "processed"):
+    if phase in ("frames", "processed", "rawplaced"):
         return [t for t in todo if t[0] in ids]
     if phase == "composites":
         def set_ids(name):   # N1352055787_2_N1352055720_2 -> its frame ids (each one underscore)
@@ -317,9 +359,11 @@ def within(phase, todo, spans):
     cuts = [(slices.seconds(a) if a else -float("inf"), slices.seconds(b) if b else float("inf")) for a, b in spans]
     def hit(t):
         return any(a <= t < b for a, b in cuts)
+    if phase == "site":   # whole-mission pictures: every run makes them (site_items)
+        return todo
     idx, _ = reel.load_index()
     time_of = dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
-    if phase in ("frames", "processed"):
+    if phase in ("frames", "processed", "rawplaced"):
         return [t for t in todo if hit(time_of.get(t[0], float("nan")))]
     if phase == "composites":
         def set_ids(name):
@@ -478,6 +522,10 @@ def make_pass(u, cache, sizes=(1024, 512), within=None, style=None, made=None, s
             n += 1
             if made:
                 made(f[3])
+    if kind == "mosaic_movie" and last == len(u["frames"]) - 1 and not (stopped and stopped()):
+        # every picture made: the runs of frames in a row whose picture is one, which movie mode steps over, kept for
+        # the window's note to read (obs_mosaic.keep_rolling_runs; laid out from the tiles and names made above)
+        obs_mosaic.keep_rolling_runs(u, cache, style.get("laps", 1), (style.get("fade", 0), style.get("persist", 0)))
     return n
 
 
@@ -542,6 +590,19 @@ def make_planes(u, cache, centre=True):
     for f in u["frames"]:
         for sharpen in ((True, False) if filled else (True,)):
             obs_mosaic.movie_webp(f[1], 1024, cache, 0, False, wait=True, ahead=0, centre=centre, sharpen=sharpen)
+    return 0
+
+
+def make_grey(u, cache, sizes=(1024, 512), centre=True):
+    """A movie pass's frames as the window asks for them with Settings > colours off (cameras.composites off:
+    color=0): each frame alone in its own filter, at 512 (the 1024 one is make_planes') and evened (exposure=
+    EXPOSURE_SMOOTH) at 1024 and 512; a full-size request takes the 1024 one. Unstored, the server drew each on request
+    (zero-render check 2017, 11-17). Returns 0: make_pass has counted the pass's frames."""
+    for f in u["frames"]:
+        obs_mosaic.movie_webp(f[1], 512, cache, 0, False, wait=True, ahead=0, centre=centre)
+        for size in sizes:
+            obs_mosaic.movie_webp(f[1], size, cache, 0, False, wait=True, ahead=0, centre=centre,
+                                  exposure=obs_mosaic.EXPOSURE_SMOOTH)
     return 0
 
 
@@ -1264,6 +1325,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("phase", choices=PHASES + ("count",))
     ap.add_argument("--cache", required=True, help="the frame server's --cache folder to fill")
+    ap.add_argument("--site", default=_site[0], help="site: the page folder whose replay data (data/highlights.json, "
+                    "data/targets.json) names the Highlights thumbnails and body pictures")
     ap.add_argument("--status", help="folder for status.json and the progress page (e.g. web/cassini-os/prebuild)")
     ap.add_argument("--threads", type=int, default=3)
     ap.add_argument("--first", type=int, default=0, help="skip this many items (they are made)")
@@ -1300,6 +1363,7 @@ def main():
     # refresh_stale; the processes procs starts find nothing left), before any pass is grouped or planned
     import bootleg_autonav
     bootleg_autonav.refresh_stale()
+    _site[0] = args.site
     if args.phase == "count":
         ids, sets, passes, movies = frame_ids(), page_sets(), mosaic_passes(), movie_passes()
         spans = spans_of(args)

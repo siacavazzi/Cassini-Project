@@ -448,6 +448,15 @@ body:not(.idle):not(.s-noinfo):not(.phone) .camwin .well:not(.mosaic) .shottag a
 /* colour sets: the channels that went into the composite, under the main picture */
 /* small square tiles in one row, each named inside its corner; a set's other filters beside them, so the strip is one
    tile tall */
+/* the processing level under each camera window's picture (Raw, Processed, Color, Full): how much of the pipeline
+   the picture shows; the shaded part of the bar is the steps the picture on screen has been through */
+.levels { position: relative; display: grid; grid-template-columns: repeat(var(--lvn, 4), minmax(0, 1fr)); height: 18px; border: 1px solid var(--q-line); border-radius: 9px; background: rgba(0,0,0,.35); overflow: hidden; font-size: 9.5px; letter-spacing: .05em; }
+.levels::before { content: ""; position: absolute; inset: 0 auto 0 0; width: calc((var(--lv, 3) + 1) / var(--lvn, 4) * 100%); background: rgba(138,182,255,.15); border-right: 1px solid rgba(138,182,255,.6); transition: width .18s ease; pointer-events: none; }
+.levels button { position: relative; appearance: none; -webkit-appearance: none; border: 0; margin: 0; background: none; color: var(--q-dim); font: inherit; text-transform: uppercase; cursor: pointer; padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.levels button.under { color: rgba(232,236,242,.68); }
+.levels button[aria-checked="true"] { color: var(--q-text); font-weight: 600; }
+.levels button:hover { color: var(--q-text); }
+.levels button:focus-visible { outline: 1px solid var(--q-accent); outline-offset: -2px; border-radius: 8px; }
 .chans { display: none; grid-template-columns: repeat(var(--n, 3), minmax(0, 56px)) minmax(0, 1fr); gap: 5px; align-items: end; }
 .camwin.zoomed .chans { grid-template-columns: repeat(var(--n, 3), minmax(0, 72px)) minmax(0, 1fr); }
 .chans figure { position: relative; }
@@ -1977,6 +1986,15 @@ function targetLabel(k) {
   // Overrides of the Settings defaults for one window, kept on this device with the layout: the NAC and WAC windows
   // by their ids, a body window by its body and camera, so "Titan · NAC" keeps its choice when it opens again
   const WINOPTS = "cassini-os-window-options-v1";
+  // Processing level (Sam 2026-11-17): how much of the pipeline a camera window's picture shows, in the pipeline's
+  // order, from the frame as Cassini sent it to the whole picture. Every stop is a picture the cache already holds
+  // (raw: /frames/<ID>, the frames phase; processed: /frames/processed/<ID>, the processed phase; color:
+  // /frames/color.webp, the composites phase; full: what the window shows with every step, mosaics and movies). A
+  // new stop is a row here, in its place in the pipeline, and its picture in the feed's viewOf
+  const LEVELS = [["raw", "Raw", "the frame as Cassini sent it, nothing done to it; with Auto center, placed by SPICE"],
+    ["processed", "Processed", "each frame on its own: repeats stacked, calibrated, cleaned, on the display stretch"],
+    ["color", "Color", "a filter set's frames put together as one color picture; no mosaics or movies"],
+    ["full", "Full", "everything: color, mosaics, steadied movies"]];
   function winOpts(win, card) {
     const key = win.id || `body:${card.dataset.body}|${card.dataset.cam}`;
     const all = () => { try { return JSON.parse(localStorage.getItem(WINOPTS)) || {}; } catch (e) { return {}; } };
@@ -2079,6 +2097,15 @@ function targetLabel(k) {
   // before its colour), so a step of the movie is one new place of the mosaic, finished; stepsKnown: cam|pass the
   // note has listed them for (until then every frame that is a picture of its own counts, as before)
   const mosaicSteps = new Set(), stepsKnown = new Set();
+  // the runs of frames in a row of a movie pass that play as one picture, as the server's note lists them (kind_of
+  // movie_same, with colour "1" and without "0": each frame to its run's first frame): a pass playing in colour shows
+  // each colour set at every frame until the next set is complete, so its other filters' frames between are that set
+  // again, and a frame not fit to show shows the one before it. Movie mode stops on one frame of a run, so it never
+  // shows a picture twice in a row (Sam, 2026-11-17: "We should never, ever, ever, ever, ever be repeating frames like that")
+  const movieSame = { 0: new Map(), 1: new Map() };
+  // the same for a mosaic movie's pictures (kind_of rolling_same: frames whose tile changes nothing on screen, a colour
+  // filter's copy before its place's set is whole), at the laps and fade they were worked out for (rollStyle)
+  const rollingSame = new Map(), rollStyle = () => `${S.get("movies.laps") || 1}|${S.get("movies.mosaicFrames") !== "whole" && S.get("movies.fade") || 0}|${S.get("movies.persist") ?? 35}`;
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -2152,6 +2179,42 @@ function targetLabel(k) {
     // centred on its body by the frame server (the pipeline's processed frame, placed north up by SPICE) unless the
     // server said its pass is not centred (rings, sky, a body too big) or could not place the frame: then as it is
     const opts = winOpts(win, card);
+    // the processing level (LEVELS): this window's own, else Settings > Processing > Processing level
+    const rankOf = v => LEVELS.findIndex(l => l[0] === v);
+    const levelOf = () => { const v = opts.get("level") ?? S.get("cameras.level") ?? "full"; return rankOf(v) >= 0 ? v : "full"; };
+    const fullLevel = () => levelOf() === "full";
+    let lvBar = card.querySelector(".levels"), lvShown;
+    if (!lvBar) {
+      lvBar = document.createElement("div"); lvBar.className = "levels"; lvBar.setAttribute("role", "radiogroup"); lvBar.setAttribute("aria-label", "Processing level");
+      well.after(lvBar);
+    }
+    lvBar.innerHTML = LEVELS.map(([v, l, n]) => `<button type="button" role="radio" data-v="${v}" aria-checked="false" title="${l}: ${n}">${l}</button>`).join("");
+    lvBar.style.setProperty("--lvn", LEVELS.length);
+    for (const t of ["dblclick", "pointerdown"]) lvBar.addEventListener(t, e => e.stopPropagation());
+    const setWinLevel = v => { opts.set("level", v === (S.get("cameras.level") ?? "full") ? null : v); update(true); };
+    lvBar.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; e.stopPropagation(); setWinLevel(b.dataset.v); if (e.detail) b.blur(); });
+    lvBar.addEventListener("keydown", e => {
+      const d = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
+      if (!d) return;
+      e.preventDefault(); e.stopPropagation();
+      const i = Math.min(LEVELS.length - 1, Math.max(0, rankOf(levelOf()) + d));
+      setWinLevel(LEVELS[i][0]); lvBar.children[i].focus();
+    });
+    // the level changed (here or in Settings): the bar says so, and what was up is let go of (a pass's mosaic, its
+    // movie), so the picture of this moment at the new level goes up
+    function levelSync() {
+      const cur = levelOf();
+      if (cur === lvShown) return;
+      const was = lvShown, r = rankOf(cur);
+      lvShown = cur;
+      lvBar.style.setProperty("--lv", r);
+      for (const b of lvBar.children) { const i = rankOf(b.dataset.v); b.setAttribute("aria-checked", String(i === r)); b.tabIndex = i === r ? 0 : -1; b.classList.toggle("under", i < r); }
+      if (was === undefined) return;
+      mosaicStop(); obsShown = null; obsK = -1; mosaicId = null; well.classList.remove("mosaic"); freshOff(); draw(null);
+      shapeOf = null; well.style.aspectRatio = "";
+      for (const L of Object.values(mLane)) { L.last = ""; L.next = null; if (L.ctl) L.ctl.abort(); }
+      shownKey = null; shown = null; lastK = -2;
+    }
     // the (i) button under the picture: the rest of the picture's details, remembered for each window
     const infoBtn = card.querySelector(".infobtn");
     if (infoBtn) {
@@ -2199,9 +2262,10 @@ function targetLabel(k) {
     // cannot make that way shows as archived
     const processedFailed = new Set();
     const processes = k => S.get("cameras.processedFrames") !== false && !processedFailed.has(catalog.id[k]);
-    const shownFrameUrl = (k, sz) => centres(k)
+    const rawPlacedUrl = (k, sz) => `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}&off=all&center=1`;
+    const shownFrameUrl = (k, sz, force) => centres(k)
       ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`
-      : processes(k) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
+      : (force ? !processedFailed.has(catalog.id[k]) : processes(k)) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
     // a picture at full resolution as a PNG to save (the frame server names the file)
     const saveUrl = url => (/size=/.test(url) ? url.replace(/size=[^&]*/, "size=full") : url + (url.includes("?") ? "&" : "?") + "size=full") + "&format=png&download=1";
     // the save menu: the picture shown and the levels under and around it (savesFor below), each at full resolution
@@ -2411,9 +2475,17 @@ function targetLabel(k) {
       csAgain = setTimeout(() => { if (!state.playing && want && shown && shownKey === want.key && colourPic(shown)) { shownKey = null; pump(); } }, 400);
     };
     function viewOf(k, et, sz) {
+      // the processing level: Raw, the archive frame; Processed, the frame through the pipeline on its own; Color,
+      // the frame's color set when it is taken, else the processed frame; Full, all that follows
+      const lv = levelOf();
+      // (Raw with Auto center: the frame as sent, every pipeline step off, placed by SPICE like the processed frame,
+      // the rawplaced phase; where the pass is not centred, or SPICE cannot place the frame, the frame as taken)
+      if (lv === "raw") return { key: centres(k) ? rawPlacedUrl(k, sz) : frameUrl(catalog.id[k], sz), set: -1, k, level: lv };
+      if (lv === "processed") return { key: shownFrameUrl(k, sz, true), set: -1, k, level: lv };
+      const full = lv === "full";
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
       // its color set drawn together), unless the server could not make that frame
-      if (playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
+      if (full && playsMovie(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
         // stabilized on this computer (steady-local.html): the server's frame at SPICE's places, at the 1024 px it is
         // drawn at, moved here; the key names the smoothing, so a new one is a new picture (the request is the same)
         const here = hereWant(k);
@@ -2421,7 +2493,7 @@ function targetLabel(k) {
         return { key: movieUrl(catalog.id[k], sz), set: -1, k, movie: true };
       }
       // a mosaic movie (a raster repeated over the same places): its rolling mosaic, every place's newest tile
-      if (playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
+      if (full && playsRolling(k) && !movieFailed.has(catalog.id[k]) && !passCold(k)) {
         // its older tiles faded on this computer (steady-local.html): the time-lapse picture the server has, at the
         // 1024 px it is made at, dimmed here; the server's faded picture when the page cannot
         const fh = window.cassiniFadeLocal ? window.cassiniFadeLocal.want(FRAMES, catalog.id[k]) : null;
@@ -2429,7 +2501,7 @@ function targetLabel(k) {
         return { key: rollingUrl(catalog.id[k], sz), set: -1, k, movie: true, rolling: true };
       }
       const si = catalog.setOf[k], s = si >= 0 ? catalog.sets[si] : null;
-      if (s && S.get("cameras.composites")) {
+      if (s && (!full || S.get("cameras.composites"))) {
         // any frame of a set whose channels are all taken shows the set's composite
         if (s.ready <= et && !failed.has(si)) return { key: colorUrl(s, sz), set: si, k };
         // while the next set of a colour movie is being taken (the camera cycling through its filters), the
@@ -2441,7 +2513,7 @@ function targetLabel(k) {
           break;
         }
       }
-      return { key: shownFrameUrl(k, sz), set: -1, k };
+      return full ? { key: shownFrameUrl(k, sz), set: -1, k } : { key: shownFrameUrl(k, sz, true), set: -1, k, level: "processed" };
     }
     // a quiet camera: a short strip saying when this camera takes its next picture, of what, with a button that goes
     // there. Kept up to date while the clock runs (a few
@@ -2503,9 +2575,9 @@ function targetLabel(k) {
       well.classList.add("has-frame"); well.classList.remove("kept"); heldBody = body; well.classList.toggle("composite", v.set >= 0); well.classList.toggle("movie", !!v.movie);
       // a frame of a movie pass shown as it is: the server is still working the pass out (a pass nobody has
       // watched takes seconds), so the window shows today's frame and says the steady one is coming
-      const steadying = !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
+      const steadying = fullLevel() && !v.movie && v.set < 0 && (playsMovie(v.k) || playsRolling(v.k));
       well.classList.toggle("steadying", steadying);
-      if (!keep) card.querySelector(".kindtag").textContent = v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : preparing.has(passOf(v.k)) ? `PREPARING MOVIE · ${preparing.get(passOf(v.k))}` : "STEADYING MOVIE…") : "";
+      if (!keep) card.querySelector(".kindtag").textContent = v.level === "raw" ? "RAW" : v.level === "processed" ? "PROCESSED" : v.set >= 0 ? KIND[catalog.sets[v.set].kind].toUpperCase() : v.rolling ? "MOSAIC MOVIE" : v.movie ? "MOVIE" : steadying ? (playsRolling(v.k) ? "BUILDING MOSAIC MOVIE…" : preparing.has(passOf(v.k)) ? `PREPARING MOVIE · ${preparing.get(passOf(v.k))}` : "STEADYING MOVIE…") : "";
       // a movie frame names itself and its place in the filmstrip when it goes up: at high speed the server can make
       // fewer frames a second than the clock passes, and the caption should say which frame is on screen (also a
       // frame shown as it is while its pass is steadied, which went up in place of the movie frame asked for)
@@ -2856,7 +2928,7 @@ function targetLabel(k) {
       if (v && shown === v && v.cat === catalog && !mosaicPass(v.k) && modeOf(v.k) !== "mosaic") mosaicOf(v);
     }
     function mosaicOf(w, pass) {
-      if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics")) return;
+      if (hold || window.cassiniMosaics === false || !S.get("cameras.mosaics") || !fullLevel()) return;
       const mode = modeOf(w.k), plays = playsAs(w.k);
       if (mode === "movie" || (mode === "auto" && moviePass(w.k))) return;   // a movie plays as frames
       if (plays === "mosaic_movie" && rolls()) return;   // a mosaic movie rolls (the movie route), never the pass mosaic
@@ -2992,7 +3064,16 @@ function targetLabel(k) {
       chans.querySelectorAll("figure").forEach((fig, j) => {
         const q = s.use[j], taken = catalog.et[q] <= et, tile = fig.querySelector(".tile");
         fig.classList.toggle("now", q === k); fig.classList.toggle("waiting", !taken);
-        if (taken && !tile.firstChild) tile.innerHTML = `<img alt="" src="${shownFrameUrl(q, 256)}" data-raw="${frameUrl(catalog.id[q], 256)}" onerror="if (this.src !== this.dataset.raw) this.src = this.dataset.raw; else this.style.visibility='hidden'">`;
+        // the picture as the window shows it, then (a frame the server does not centre: 404) the processed frame as
+        // it is, then the raw frame at 128 (the strip size the build stores for every frame; raw 256 is stored for
+        // none, so it was drawn on request: zero-render check 2017, 11-17)
+        if (taken && !tile.firstChild) {
+          // (processed frames off in Settings: the raw frame at 512, stored for every frame, first)
+          const tries = [...new Set([processes(q) ? shownFrameUrl(q, 256) : frameUrl(catalog.id[q], 512),
+            ...(processes(q) ? [`${FRAMES}/frames/processed/${catalog.id[q]}.webp?size=256${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(256) : ""}`] : []),
+            frameUrl(catalog.id[q], 128)])];
+          tile.innerHTML = `<img alt="" src="${tries[0]}" data-tries="${tries.slice(1).join(" ")}" onerror="const t = this.dataset.tries.split(' ').filter(Boolean); if (t.length) { this.dataset.tries = t.slice(1).join(' '); this.src = t[0]; } else this.style.visibility='hidden'">`;
+        }
         if (!taken && tile.firstChild) tile.replaceChildren();   // scrubbed back before this channel
       });
     }
@@ -3506,6 +3587,7 @@ function targetLabel(k) {
     }
     let cat = null, letGone = false, hiddenGone = false;
     function update(force) {
+      levelSync();
       orbitIcon();
       finishSync();
       if (dataWait()) { if (!letGone) { letGone = true; letGo(window.cassiniAway && cassiniAway.on); } return; }
@@ -3543,13 +3625,13 @@ function targetLabel(k) {
       if (coming) { p = 0; k = framesOf(cam, body).ks[0]; }
       // Complete mosaics only: inside a mosaic pass the window keeps the picture from before it, until the pass's
       // last frame brings up the finished mosaic
-      if (k >= 0 && !coming && completeMosaics() && playsAs(k) === "mosaic") {
+      if (k >= 0 && !coming && fullLevel() && completeMosaics() && playsAs(k) === "mosaic") {
         const [first, last] = passSpan(cam, body, p);
         if (p < last) { p = first - 1; k = p < 0 ? -1 : framesOf(cam, body).ks[p]; }
       }
       // Whole mosaics: inside a lap of a mosaic movie the window keeps the last finished lap (the picture from before
       // the pass in its first lap), so the mosaic changes once a lap, all of it new
-      if (k >= 0 && !coming && wholeLaps() && playsAs(k) === "mosaic_movie" && lapKnown.has(`${cam}|${passOf(k)}`)) {
+      if (k >= 0 && !coming && fullLevel() && wholeLaps() && playsAs(k) === "mosaic_movie" && lapKnown.has(`${cam}|${passOf(k)}`)) {
         const [first] = passSpan(cam, body, p), ks = framesOf(cam, body).ks;
         while (p >= first && !lapEnds.has(catalog.id[ks[p]])) p--;
         if (p < first) p = first - 1;
@@ -3570,7 +3652,9 @@ function targetLabel(k) {
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null; well.classList.remove("inpass");
-          if (k < 0 && holdUp) noFrame(`<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`, holdUp);
+          // (a camera's own window can hold too, with no body: ambient mode holds every window. Before that camera's
+          // first picture it is idle like any other; naming a body that is not there threw, and stopped the page)
+          if (k < 0 && holdUp && body) noFrame(`<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`, holdUp);
           else { noFrame(IDLE_HTML); idleAt = 0; }
           for (const f of ["frame", "filter", "colour", "details", "range", "obs"]) field(f).textContent = "";
           orbitIcon(-1);
@@ -3636,12 +3720,16 @@ function targetLabel(k) {
           if (warnedObs.has(o)) continue;
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);
-          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
-            if (a && a.movie) { moviePasses.add(o); chipText(); }
+          fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}${window.cassiniMovieStyle({ center: centreOn() })}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
+            // (pass_movie: this pass itself is a movie; a one-frame pass in a movie observation is not, and the build
+            // stores its frame as a processed frame only)
+            if (a && a.movie && a.pass_movie !== false) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
+            if (a && a.movie_same) for (const c of ["0", "1"]) for (const [id, run] of Object.entries(a.movie_same[c] || {})) movieSame[c].set(id, run);
+            if (a && a.rolling_same) for (const [id, run] of Object.entries(a.rolling_same)) rollingSame.set(id, `${rollStyle()}|${run}`);
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -3758,8 +3846,22 @@ function targetLabel(k) {
   // Whole mosaics (movies.mosaicFrames): of a mosaic movie, only the frames that finish a lap. Repeat exposures
   // (catalog.repeat; with Stack repeat exposures on, outside a pass played as a movie, whose frames are each their
   // own): only the first of a run, since the pipeline shows the run as one stacked picture. Of a pass a window
-  // plays as a mosaic: the frames the server's note says (mosaicSteps), one step a new place of the mosaic.
+  // plays as a mosaic: the frames the server's note says (mosaicSteps), one step a new place of the mosaic. Of a pass a
+  // window plays as a movie: one frame of a run of frames that play as one picture (movieSame).
   function complete(k, body) {
+    if (!completeAlone(k, body)) return false;
+    // a frame of a run that plays as one picture (movieSame; rollingSame, at the window's mosaic movie style): only
+    // the run's first frame that is a picture of its own
+    const cam = catalog.cam[k], as = how => [...allFeeds].some(f => f.cam === cam && f.playsAs && f.playsAs(k) === how);
+    let runs = movieSame[S.get("cameras.composites") ? 1 : 0], run = runs.get(catalog.id[k]);
+    if (run === undefined && rollingSame.has(catalog.id[k])) { runs = rollingSame; run = runs.get(catalog.id[k]); if (!run.startsWith(rollStyle() + "|") || !as("mosaic_movie")) return true; }
+    else if (run === undefined || !as("movie")) return true;
+    const ks = framesOf(cam, body).ks;
+    for (let p = lastOfCam(cam, catalog.et[k] - 1e-3, body); p >= 0 && runs.get(catalog.id[ks[p]]) === run; p--)
+      if (completeAlone(ks[p], body)) return false;
+    return true;
+  }
+  function completeAlone(k, body) {
     const cam = catalog.cam[k];
     // how the camera's windows play k's pass (any of them), asked only when a rule needs it
     const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
@@ -3782,7 +3884,7 @@ function targetLabel(k) {
   window.cassiniFeeds = { frames: FRAMES, cameraFeed, framesOf, lastOfCam, prep, weight, nextPicture, prevPicture, behind, liveCams, reopenCams, stale: () => S.get("cameras.stale") * 3600, windows: feeds };
   document.addEventListener("cassini:bodymode", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a change to what the windows show takes effect straight away
-  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "cameras.hdr", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.colorSmooth", "movies.colorSmoothStrength", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
+  for (const key of ["cameras.composites", "cameras.stale", "cameras.steady", "cameras.passes", "cameras.balancedColor", "cameras.colors", "cameras.lingerColor", "cameras.lingerMosaic", "movies.steady", "cameras.autoCenter", "cameras.processedFrames", "cameras.level", "cameras.hdr", "movies.trail", "movies.stabilize", "movies.stabilizeSmooth", "movies.stabilizeLocal", "movies.exposure", "movies.exposureSmooth", "movies.colorSmooth", "movies.colorSmoothStrength", "movies.filmstrip", "movies.laps", "movies.fade", "movies.persist", "movies.mosaicFrames", "playback.completeMosaics", ...(window.cassiniSteps || []).map(st => st.key)]) S.on(key, () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
   // a pass's table for stabilizing on this computer arrived (steady-local.html): its frames are asked for again
   window.addEventListener("cassini-steady-local", () => { if (typeof catalog !== "undefined" && catalog && catalog.byCam) feeds.forEach(f => f(true)); });
 

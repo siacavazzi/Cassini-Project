@@ -960,6 +960,11 @@ SKY_GLOW_MOVE = (1.0, 2.0) # ... but a glow pixel its smoothing would move furth
                            # drawn as a hard line along it (Titan's color crescents, 2015-2017; Sam 11-14). Only on the
 SKY_SLOPE_BODIES = ("TITAN",)   # frames of these targets: every other frame keeps the smoothing as it was (on all of them,
                            # the change moved Jupiter's approach movie's evening and ring movies' registration)
+                           # The lift guard: on every frame SKY_GLOW_MOVE stops the smoothing lifting a pixel over its own codes
+                           # (since 11-17): spread from a limb's soft edge 16 px into the faint sky beside it, it lifted the
+                           # sky 0.04 -> 0.11 of white 10 px past Saturn's limb (N1469611288_1) while the edge pixels, kept
+                           # out of it, stayed dark: a thin black gap, then a grainy halo fading out (Sam, 11-17). Guarding
+                           # both ways on every frame moved movie registration (the 2005 Saturn movie, 57 px)
 SKY_LINE = (32, 0.75)      # the glow's rise and reach are measured from each line's dark sky (its median over that line's
                            # pixels of the measured dark sky, with at least SKY_LINE[0] of them; a line with fewer takes the
                            # nearest lines') on a line less than SKY_LINE[1] dark sky, not the whole line's median: on a line mostly across Saturn that median is the
@@ -1021,9 +1026,10 @@ def smooth_sky(iof, png, sky, slopes=False):
         spread = cv2.GaussianBlur(iof * near, (0, 0), wide) / under
         # the codes that smoothing would give, against the pixel's own: past SKY_GLOW_MOVE it is a slope, not a step
         smoothed = cv2.GaussianBlur(codes * near, (0, 0), wide) / under
-        if slopes:
-            moved = np.abs(smoothed - codes)
-            near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
+        # (on every frame, a pixel the smoothing would lift more than SKY_GLOW_MOVE over its own codes keeps them, and
+        # on SKY_SLOPE_BODIES' frames one it would move either way)
+        moved = np.abs(smoothed - codes) if slopes else smoothed - codes
+        near = near * np.clip((SKY_GLOW_MOVE[1] - moved) / (SKY_GLOW_MOVE[1] - SKY_GLOW_MOVE[0]), 0, 1).astype(np.float32)
         blur = blur + glow * near * (spread - blur)
         # and on past the dark sky into the glow's bright part, up to SKY_GLOW_TOP codes over the sky: a plume's root
         # is too bright for the dark sky, so it kept its stored codes, a few flat levels whose edge with the smoothed
@@ -1235,7 +1241,11 @@ cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle a
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
 while the sky moves, dark_current.repair_hot), "geom" (calibrate's last step, CISSCAL's geometric correction of the
 WAC: its barrel distortion and each filter pair's focal length taken out, every WAC frame resampled onto one straight
-grid, geometric_correction.py; the masks of lost and saturated pixels moved with it), "align" (a color set's channels moved onto one another), "blend" (a
+grid, geometric_correction.py; the masks of lost and saturated pixels moved with it), "align" (a color set's channels moved onto one another),
+"stretch" (the lean archive's stored camera codes stretched as the old PNGs were, label_handler.resize_image; off keeps the
+codes as Cassini sent them, the frame route's picture), "detail" (the local contrast a still takes on its body's disk:
+the Saturn look, color_image._still_detail, and the close-up detail filter, obs_mosaic.detail_on_disk), "sharpen" (a
+still's last step, noise-aware fine sharpening, sharpen.adaptive_sharpen), "blend" (a
 mosaic's tiles blended where they meet, mosaic.composite), "level" (each tile leveled to the tiles round it along
 their seams, mosaic._level), "surface" (a mosaic's tiles' surface redrawn as at one moment,
 obs_mosaic.surface_pictures) and "panels" (a mosaic's pointings moved onto one another where they overlap,
@@ -1245,7 +1255,10 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align",
+         "stretch", "detail", "sharpen", "blend", "level", "surface", "panels")
+# every step off (off=all): the frame as Cassini sent it, only placed by SPICE (the camera windows' Raw with Auto center)
+ALL = "all"
 _off = contextvars.ContextVar("off", default=frozenset())
 _slopes = contextvars.ContextVar("slopes", default=True)
 
@@ -1291,9 +1304,12 @@ def variant():
 
 @contextlib.contextmanager
 def stepping(names):
-    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored) turned off."""
+    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored; ALL: every step)
+    turned off."""
     if isinstance(names, str):
         names = names.split(",")
+    if ALL in names:
+        names = STEPS
     token = _off.set(frozenset(n for n in names if n in STEPS))
     try:
         yield

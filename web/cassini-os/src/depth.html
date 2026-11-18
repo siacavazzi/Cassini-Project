@@ -1,0 +1,230 @@
+<!-- Bit depth tags for Cassini OS (Sam 2026-11-17): whether each picture was calibrated from the camera's 12-bit
+     original or from 8 bits, so noise and tone can be judged knowing which. build.py splices the style into the head and
+     the script after the Movie Editor's and the Studio's (it reads cassiniStudio.state) and before the dock's.
+
+     The frame server says per frame (/frames/depth.json?ids=…, frame_server.bit_depth), from its label and the
+     originals' index: 12 for a 12BIT frame whose original the pipeline reads (CASSINI_ORIGINALS), else 8 and why (the
+     camera's own 12-to-8-bit table, the low 8 bits, or a 12BIT frame with no original here, read from the archive's
+     8-bit codes). Nothing is decoded and nothing new is cached: a label read per frame, kept by the server.
+
+     Where: every picture window's well (camera windows, body windows, reels: any .well with a .shottag) gets a tag in
+     its top left corner for the frames its caption names (one frame, a composite's channels, the movie frame on
+     screen) and, for a mosaic, every frame of it (its tile map); a movie frame drawn as a composite of a color set
+     counts the set's frames (its X-Movie report), one only tinted by a set is its own depth, the set's on hover.
+     The tag reads 12-BIT, 8-BIT, or 8+12-BIT when they differ, the counts and reasons on hover. A color
+     set's channel tiles each get 12 or 8; the filmstrip's thumbnails a thin line under them (blue 12-bit, amber
+     8-bit) and the same on hover; the Movie Editor's strip tiles 12 or 8 beside their camera; Cassini Studio the
+     picture's tag in its top right corner.
+
+     window.cassiniDepth = { ask(ids) -> Promise<Map id -> [bits, why]>, summary(ids, map) -> { text, title, kind } } -->
+<style>
+.depthtag { position: absolute; left: 5px; top: 4px; z-index: 2; font: 9px/1 var(--hudf); letter-spacing: .04em; text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: auto; cursor: default; display: none; }
+.well.has-frame .depthtag:not(:empty) { display: block; }
+.depthtag.d12, .chdepth.d12, .medepth.d12, .studepth.d12 { color: rgba(138,182,255,.95); }
+.depthtag.d8, .chdepth.d8, .medepth.d8, .studepth.d8 { color: rgba(255,196,107,.95); }
+.depthtag.dmix { color: var(--q-text, #e8ecf2); }
+body.idle .depthtag { opacity: .7; }
+.chdepth { position: absolute; right: 3px; top: 3px; font: 8px/1 var(--hudf); text-shadow: 0 0 2px #000, 0 0 4px #000; pointer-events: none; }
+.filmstrip .thumbs img[data-depth="12"] { border-bottom: 2px solid rgba(138,182,255,.8); }
+.filmstrip .thumbs img[data-depth="8"] { border-bottom: 2px solid rgba(255,196,107,.8); }
+.medepth { font-style: normal; margin-left: 4px; }
+.studepth { position: absolute; right: 8px; top: 7px; z-index: 2; font: 9.5px/1 var(--hudf); letter-spacing: .06em; text-shadow: 0 0 3px #000; pointer-events: auto; cursor: default; }
+.studepth:empty { display: none; }
+</style>
+
+<script>
+// ---------- bit depth tags (depth.html)
+(() => {
+  const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
+    const q = new URLSearchParams(location.search).get("frames");
+    if (q) return q.replace(/\/$/, "");
+    if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|claude\.site$/.test(location.hostname)) return location.origin;
+    return "http://localhost:8765";
+  })();
+  const ID = /[NW]\d{10}_\d+/g, BATCH = 400;
+  const known = new Map(), pending = new Map();
+  let timer = 0, failed = false;
+  // the server's answers, a batch at a time (the ids asked within a few ms go together)
+  function flush() {
+    timer = 0;
+    const ids = [...pending.keys()].slice(0, BATCH), waits = ids.map(i => pending.get(i));
+    ids.forEach(i => pending.delete(i));
+    if (pending.size) timer = setTimeout(flush, 0);
+    fetch(`${FRAMES}/frames/depth.json?ids=${ids.join(",")}`, { priority: "low" }).then(r => r.ok ? r.json() : null).then(got => {
+      if (!got) failed = true;    // (an older frame server, without the route: no tags, and no more asking)
+      ids.forEach((i, j) => { if (got && got[i]) known.set(i, got[i]); waits[j].forEach(f => f()); });
+    }).catch(() => ids.forEach((i, j) => waits[j].forEach(f => f())));
+  }
+  function ask(ids) {
+    ids = [...new Set(ids)];
+    const want = ids.filter(i => !known.has(i));
+    if (!want.length || failed) return Promise.resolve(known);
+    return Promise.all(want.map(i => new Promise(res => {
+      if (!pending.has(i)) pending.set(i, []);
+      pending.get(i).push(res);
+      if (!timer) timer = setTimeout(flush, 15);
+    }))).then(() => known);
+  }
+  const WHY = {
+    original: "calibrated from the camera's 12-bit original",
+    table: "the camera sent it in 8 bits (its 12-to-8-bit table)",
+    "8lsb": "the camera sent the low 8 bits of each value",
+    squeezed: "a 12-bit frame with no original here: read from the archive's 8-bit codes",
+    png: "read from the archive's 8-bit picture",
+  };
+  // what a set of frames comes to: one tag, and its explanation on hover
+  function summary(ids, m = known) {
+    ids = [...new Set(ids)];
+    const got = ids.map(i => m.get(i)).filter(d => d && d[0]);
+    if (!got.length) return null;
+    const n12 = got.filter(d => d[0] === 12).length, n8 = got.length - n12;
+    const kind = !n8 ? "12" : !n12 ? "8" : "mix";
+    const text = kind === "12" ? "12-BIT" : kind === "8" ? "8-BIT" : "8+12-BIT";
+    const whys = new Map();
+    got.forEach(d => whys.set(d[1], (whys.get(d[1]) || 0) + 1));
+    let title;
+    if (got.length === 1) title = `${got[0][0]}-bit: ${WHY[got[0][1]] || got[0][1]}`;
+    else {
+      title = kind === "mix" ? `Mixed: ${n12} of ${got.length} frames 12-bit, ${n8} 8-bit` : `All ${got.length} frames ${kind}-bit`;
+      title += [...whys].map(([w, n]) => `\n${n} ${WHY[w] || w}`).join("");
+    }
+    if (got.length < ids.length) title += `\n(${ids.length - got.length} not known)`;
+    return { text, title, kind };
+  }
+  window.cassiniDepth = { ask, summary };
+
+  const show = (el, s, cls) => {
+    el.textContent = s ? (cls === "depthtag" || cls === "studepth" ? s.text : s.kind === "mix" ? "8+12" : s.kind) : "";
+    el.title = s ? s.title : "";
+    el.className = `${cls}${s ? " d" + s.kind : ""}`;
+  };
+  const mosaics = new Map();
+  function mosaicIds(id) {
+    if (mosaics.has(id)) return mosaics.get(id);
+    mosaics.set(id, undefined);
+    fetch(`${FRAMES}/frames/mosaic/${id}.json`, { priority: "low" }).then(r => r.ok ? r.json() : null)
+      .then(j => { mosaics.set(id, j ? JSON.stringify(j.pointings || j.layers || []).match(ID) || [] : null); later(); })
+      .catch(() => { mosaics.set(id, null); later(); });
+    return undefined;
+  }
+  // a movie frame's report (its X-Movie header, the request answered from the browser cache as the camera window's
+  // own is): the color set it was drawn with (ids) and whether that set only tints the frame (tint: the frame's own
+  // brightness and detail in the set's hue) or makes the picture (a composite of the set)
+  const movies = new Map();
+  function movieRep(src) {
+    if (movies.has(src)) return movies.get(src);
+    movies.set(src, undefined);
+    while (movies.size > 300) movies.delete(movies.keys().next().value);
+    const done = rep => { if (movies.has(src)) movies.set(src, rep); later(); };
+    fetch(src, { priority: "low" }).then(r => r.ok ? JSON.parse(r.headers.get("X-Movie") || "null") : null).then(done, () => done(null));
+    return undefined;
+  }
+  // a picture window's tag: the frames its caption (shottag) names, a mosaic's every frame, a movie frame's color set
+  function well(w) {
+    const tag = w.querySelector(":scope > .shottag");
+    if (!tag) return;
+    let el = w.querySelector(":scope > .depthtag");
+    if (!el) { el = document.createElement("span"); el.className = "depthtag"; w.appendChild(el); }
+    // a mosaic: every frame of it (its tile map, /frames/mosaic/<ID>.json), not just the newest tiles the caption names
+    const shot = w.querySelector(":scope > .shot"), src = shot ? shot.src || "" : "";
+    const mos = w.classList.contains("mosaic") && (src.match(/\/frames\/mosaic\/([NW]\d{10}_\d+)[./]/) || [])[1];
+    const tiles = mos ? mosaicIds(mos) : null;
+    // a movie frame in color: a composite counts its set's frames; a tinted frame is its own depth (its brightness and
+    // detail), the set's (only its hue) named on hover
+    const rep = !mos && /\/frames\/movie\/[NW]\d{10}_\d+\./.test(src) ? movieRep(src) : null;
+    if (tiles === undefined || rep === undefined) return;      // (asked for: looked at again when it comes)
+    const set = rep && Array.isArray(rep.ids) ? rep.ids.filter(i => typeof i === "string" && /^[NW]\d{10}_\d+$/.test(i)) : [];
+    const hue = rep && rep.tint && set.length ? set : [];
+    const ids = [...new Set([...(tag.textContent.match(ID) || []), ...(tiles || []), ...(hue.length ? [] : set)])];
+    const key = ids.join(",") + (hue.length ? "|" + hue.join(",") : "");
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    if (!ids.length) return show(el, null, "depthtag");
+    const draw = () => {
+      if (el.dataset.key !== key) return;
+      const s = summary(ids), h = hue.length ? summary(hue) : null;
+      if (s && h) s.title += `\nIts color from a set of ${hue.length}: ${h.kind === "mix" ? h.title.split("\n")[0].replace(/^Mixed: /, "") : `all ${h.kind}-bit`}`;
+      show(el, s, "depthtag");
+    };
+    if ([...ids, ...hue].every(i => known.has(i))) return draw();
+    ask([...ids, ...hue]).then(draw);
+  }
+  // a color set's channel tile: the frame it shows
+  function channel(fig) {
+    const tile = fig.querySelector(".tile"), im = tile && tile.querySelector("img");
+    // (its title names it, until the window drills into its channels; then, and in a held color, its picture's
+    // address does. The tag goes on the figure, never in the tile, which the camera window fills when it is empty)
+    const id = (fig.title.match(ID) || (im && (im.getAttribute("src") || "").match(ID)) || [])[0];
+    let el = fig.querySelector(":scope > .chdepth");
+    if (!el) { el = document.createElement("span"); el.className = "chdepth"; fig.appendChild(el); }
+    if (!id) return;     // (a channel drawn from the composite: it keeps the tag it had)
+    if (el.dataset.key === id) return;
+    el.dataset.key = id;
+    ask([id]).then(() => { if (el.dataset.key === id) show(el, summary([id]), "chdepth"); });
+  }
+
+  // a filmstrip thumbnail: its line (an img holds no text), and the reason added to its title
+  function thumb(im) {
+    const id = im.dataset.id;
+    if (!id || im.dataset.depthOf === id) return;
+    im.dataset.depthOf = id; delete im.dataset.depth;
+    ask([id]).then(() => {
+      const d = known.get(id);
+      if (im.dataset.id !== id || !d || !d[0]) return;
+      im.dataset.depth = d[0];
+      if (!/-bit/.test(im.title)) im.title += ` · ${d[0]}-bit`;
+    });
+  }
+  // the Movie Editor's strip: a tile's tag beside its camera, asked for as the tile scrolls into view
+  const seen = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    seen.unobserve(e.target);
+    const b = e.target.querySelector("b"), id = (e.target.title.match(ID) || []).pop();
+    if (!b || !id || b.querySelector(".medepth")) return;
+    ask([id]).then(() => {
+      const s = summary([id]);
+      if (!s || b.querySelector(".medepth") || !(e.target.title.match(ID) || []).includes(id)) return;
+      const el = document.createElement("i"); show(el, s, "medepth"); b.appendChild(el);
+    });
+  }));
+  let watched = null;
+  function meStrip() {
+    const host = document.getElementById("mestrip");
+    if (!host || host.firstElementChild === watched) return;
+    watched = host.firstElementChild;
+    for (const b of host.children) seen.observe(b);
+  }
+
+  // the whole page, looked over at most once a frame after anything in it changes
+  let queued = false;
+  function scan() {
+    queued = false;
+    document.querySelectorAll(".well").forEach(well);
+    document.querySelectorAll(".chans figure").forEach(channel);
+    document.querySelectorAll(".filmstrip .thumbs img").forEach(thumb);
+    meStrip();
+    studio();
+  }
+  const later = () => { if (!queued) { queued = true; requestAnimationFrame(scan); } };
+  const app = document.getElementById("app") || document.body;
+  new MutationObserver(muts => {
+    // (its own tags' changes don't count, or every tag would look again)
+    if (muts.some(m => !(m.target.classList && /depth/.test(m.target.className)) && !(m.type === "childList" && [...m.addedNodes].every(n => n.classList && /depth/.test(n.className))))) later();
+  }).observe(app, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["src", "title", "data-id", "hidden"] });
+  later();
+
+  // Cassini Studio: the picture's frames (its item's ids: what the picture's caption named when it was opened or kept)
+  let stuTag = null;
+  function studio() {
+    const stu = window.cassiniStudio, stage = document.getElementById("stustage");
+    if (!stu || !stage) return;
+    if (!stuTag) { stuTag = document.createElement("span"); stuTag.className = "studepth"; stage.appendChild(stuTag); }
+    const st = stu.state || {}, ids = ((st.item && st.item.ids) || []).filter(i => typeof i === "string" && /^[NW]\d{10}_\d+$/.test(i));
+    const key = st.src ? ids.join(",") : "";
+    if (stuTag.dataset.key === key) return;
+    stuTag.dataset.key = key;
+    show(stuTag, null, "studepth");
+    if (key) ask(ids).then(() => { if (stuTag.dataset.key === key) show(stuTag, summary(ids), "studepth"); });
+  }
+})();
+</script>

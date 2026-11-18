@@ -99,7 +99,11 @@ with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration
     # and ask the server only for the false colour pass's; but the Movie Editor's pictures, a Pre-process and a film
     # ask the server for the evened frame of any pass, and with none kept it drew each one on the request (a 999 frame
     # stretch took 131 s to open on a finished cache, 2026-11-15). Until #487 only the false colour pass had them
-    e8 = sorted(f for f in built if f"_e{om.EXPOSURE_SMOOTH}r{om.EXPOSURE_RULE}" in os.path.basename(f) and f.endswith(".webp"))
+    import re
+    # (the colour frames: a movie frame's name is <n>_<trail>_<colour>_c..., colour 1; make_grey's colours-off ones,
+    # colour 0, are checked below)
+    e8all = sorted(f for f in built if f"_e{om.EXPOSURE_SMOOTH}r{om.EXPOSURE_RULE}" in os.path.basename(f) and f.endswith(".webp"))
+    e8 = [f for f in e8all if re.match(r"\d+_\d+_1_", os.path.basename(f))]
     assert len(e8) == 2 * N * len(passes), e8
     for u, _ in passes:
         assert sum(u["key"][1] in f for f in e8) == 2 * N, (u["key"][1], e8)
@@ -114,4 +118,17 @@ with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration
     assert not files() - before, sorted(files() - before)
     print(f"Exposure normalization: {len(e8)} frames pre-built at smoothing {om.EXPOSURE_SMOOTH}, every pass's at both sizes; "
           "the requests for them all found, none made")
+    # colours off (Settings, cameras.composites off: color=0): the windows ask each frame alone at 512 and evened at
+    # 1024 and 512 (the 1024 plain one is a plane, above); the movies phase keeps them (make_grey): all found, none made
+    grey = [f for f in e8all if re.match(r"\d+_\d+_0_", os.path.basename(f))]
+    assert len(grey) == 2 * N * len(passes), grey
+    before = files()
+    for u, _ in passes:
+        for f in u["frames"]:
+            for query in ("size=512&color=0&trail=0&laps=1", f"size=1024&color=0&trail=0&laps=1&exposure={om.EXPOSURE_SMOOTH}",
+                          f"size=512&color=0&trail=0&laps=1&exposure={om.EXPOSURE_SMOOTH}"):
+                made = route(f[1], query)
+                assert made and made[0] is not None, (f[1], query)
+    assert not files() - before, sorted(files() - before)
+    print(f"Colours off: {len(grey)} evened frames and the 512 plain ones pre-built; the requests for them all found, none made")
 print("ok")

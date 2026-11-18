@@ -396,14 +396,37 @@ share of the chosen speed (Playback > Bursts slow playback to no less than, `pla
 so a faster speed always plays faster: during the Saturn tour, where Cassini images almost all the time, 1 day/s used to
 crawl at about 2 min/s.
 
+## Cutscenes
+
+Five moments of the mission play as short cutscenes: the launch, Saturn arrival, the Huygens release, the Huygens
+landing and the Grand Finale (each its own file in `src/`; what they share is `src/cutscene.html`). While one plays:
+
+- Escape or the Skip button ends it. Ended early, with the picture showing, it cuts to black and the interface comes up
+  from there, so the jump from the cutscene's camera to the viewer's own is never seen.
+- The rest of the page is out of reach. Its keys do nothing (Space, M, A, F, the arrows and the others would start
+  playback, movie mode, ambient mode or a full view under the cutscene); S still mutes, and Tab, Enter and Space work the
+  cutscene's own buttons. The faded interface cannot take the focus.
+- A drag looks around and the wheel or a two-finger pinch zooms; the view eases back a few seconds later. Neither does
+  anything while the black cover hides the picture (the cursor says so), and a view that was dragged goes back to the
+  cutscene's own under the cover.
+- With sound on but held by the browser until the first click (a cutscene opened from a link), a quiet "Click for
+  sound" sits by the Skip button.
+- A caption still fading out when the next is due leaves quickly first, so two never sit on top of each other.
+- `cassiniSound.bed(level)` is a soft held tone (D and A) a cutscene can put under its picture; it is taken down when the
+  cutscene ends.
+
 ## Launch
 
 Playing the mission from the very start of the data (the Launch moment does that, or `?t=1997-10-15T08:43` and
 Play), or opening `?launch`, plays a short opening (`src/launch.html`, about 25 seconds; Escape or Skip ends it, as in
 every cutscene). The data begins where the Centaur upper stage let Cassini go, 42 min 40 s after liftoff, in low Earth
-orbit: the screen fades to black, then up on Cassini on its own with Earth falling away beneath it, the clock reading
-its real distance and speed from Earth, and the captions name the plan ahead (borrow speed from Venus twice, Earth and
-Jupiter, then Saturn). Then the interface comes back and the mission plays on from there.
+orbit: the screen fades to black, then up on Cassini on its own with Earth falling away beside it (above it on a phone
+held upright, where there is no room beside), the clock reading its real height above Earth and how fast it is leaving,
+and the captions name the plan ahead (borrow speed from Venus twice, Earth and Jupiter, then Saturn). A soft held tone
+sits under the caption chords from the moment the picture comes up. The camera pulls back and drifts round, slowing all
+the way, and settles onto Cassini over its last seconds, so at the end it is exactly where the viewer's own view takes
+over: there is no cut and no cover, the interface fades back in around the same picture, and the mission plays on from
+there. A drag looks around and the wheel or a pinch zooms, and the view stays where the visitor left it.
 
 ## Huygens landing
 
@@ -411,14 +434,18 @@ Playback crossing Huygens's entry into Titan's air (2005-01-14 09:05 UTC), the "
 "Huygens lands on Titan" Moment, the release cutscene's "Watch the landing", or `?huygens-landing` plays the landing
 (`src/huygens-landing.html`, under two minutes): the entry glow at up to 12 g, the parachutes and the heat shield falling
 away, Cassini listening from 69,000 km, the drogue descent over the probe's own landing-site map, touchdown at 4.5 m/s
-on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, ending on the first data at ESOC
-(16:19 UTC). The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
+on the DISR mosaic, then Cassini as the site sets at 12:50 UTC and its turn to Earth, the first data at ESOC
+(16:19 UTC), and last the probe standing on Titan under the closing card (about 1 min 40 s in all). The camera's moves
+are blends eased over screen time, so nothing jumps while the picture shows; through the descent it aims at the middle
+of the probe and its parachute, and a drag cannot take it under the ground. A soft bed sits under the whole of it, the
+rumble follows the air (none in vacuum or in Cassini's shots), and in Cassini's shots the probe's carrier is a faint
+tone that stops when the link ends. The probe's speed, altitude and deceleration come from its track (needs `--huygens` in the data build);
 the event times and facts are in `src/huygens-landing-data.json` with their sources. The probe is ESA's own models
 (`models/make_huygens_shell.py` and `models/make_huygens_dm.py` turn the ESA SPICE Service's Cosmographia meshes into
 `models/*.glb.b64.txt`; sources on branch `assets/huygens-models`): the entry shell comes off in two parts in the real
 order, and the parachutes are disk-gap-band canopies at their real sizes. Inside Titan's haze the sky closes in around the
 probe; near the ground the probe is held to the landing point on the globe at the descent table's altitude. The last card
-stays with Huygens or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
+stays with Huygens (paused, the view staying exactly where the last shot left it) or goes back to Cassini. `bench/huygens-landing.cjs` records it on a hand-stepped clock.
 
 Huygens stays on Titan after the landing, at any time to the end of the mission: its marker and label sit on the landing
 point while the camera is near Titan (within a dozen Titan radii, the site on the near side) or the view is on Huygens,
