@@ -112,6 +112,42 @@ try:
 finally:
     obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles, obs_mosaic.rolling_layout, obs_mosaic.unit_of = saved
 
+# ---- the window's note (kind_of) only reads the runs the pre-build kept: never a layout on request; a pass without
+# them (cold, or a style not built) gets none, and keep_rolling_runs writes what rolling_runs works out ----
+um2 = dict(um, mosaic=True, movie=False, repeats=2, tossup=False, jump_frac=None)
+passdir = tempfile.mkdtemp()
+saved = (obs_mosaic.unit_of, obs_mosaic.units, obs_mosaic.lap_ends, obs_mosaic.folder, obs_mosaic.rolling_layout,
+         obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles)
+
+
+def no_layout(*a, **k):
+    raise AssertionError("kind_of laid out a frame")
+
+
+obs_mosaic.unit_of = lambda fid: (um2, int(fid[1:-2]))
+obs_mosaic.units = lambda *key: [um2]
+obs_mosaic.lap_ends = lambda v: []
+obs_mosaic.folder = lambda v, cache: passdir
+obs_mosaic.rolling_layout = no_layout
+try:
+    note = obs_mosaic.kind_of("W3_1", "cache")
+    assert "rolling_same" not in note, note
+    # the pre-build's step writes the runs (laid out from the made tiles), and the note then reads them
+    obs_mosaic._plan_if_made = lambda v, cache: {}
+    obs_mosaic.plan = lambda v, cache: {"display_scale": {}}
+    obs_mosaic._tiles = lambda v, cache, scale: tiles_dir
+    obs_mosaic.rolling_layout = lambda v, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0): (None,) * 5 + (names[n],)
+    obs_mosaic._rolling_runs.clear()
+    kept = obs_mosaic.keep_rolling_runs(um2, "cache")
+    obs_mosaic.rolling_layout = no_layout
+    note = obs_mosaic.kind_of("W3_1", "cache")
+    assert note.get("rolling_same") == kept == {"W0_1": "W0_1", "W1_1": "W0_1", "W2_1": "W0_1", "W6_1": "W6_1", "W7_1": "W6_1"}, note
+    # another style (laps 2) was not built: none, and still nothing laid out
+    assert "rolling_same" not in obs_mosaic.kind_of("W3_1", "cache", laps=2)
+finally:
+    (obs_mosaic.unit_of, obs_mosaic.units, obs_mosaic.lap_ends, obs_mosaic.folder, obs_mosaic.rolling_layout,
+     obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles) = saved
+
 
 def picture(seed, w=SIZE, h=SIZE):
     r = np.random.default_rng(seed)

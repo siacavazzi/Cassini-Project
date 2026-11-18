@@ -1469,7 +1469,8 @@ def kind_of(frame_id, cache=None, laps=1, fade=(0, 0)):
     (mosaic_steps; by the pass's plan when cache holds it), when it has any, "movie_same": {"1": {id: run}, "0": ...}
     the runs of frames in a row of its movie passes that play as one picture in colour and in grey (movie_runs: each
     frame of a run to the run's first frame), of which movie mode shows one, when it has any, "rolling_same": {id: run}
-    the same for its mosaic movies' pictures at laps and fade (rolling_runs), when it has any}."""
+    the same for its mosaic movies' pictures at laps and fade, as the pre-build kept them (kept_rolling_runs), when it
+    has any}."""
     found = unit_of(frame_id)
     if not found:
         return {"mosaic": False, "movie": False, "kind": None}
@@ -1482,9 +1483,11 @@ def kind_of(frame_id, cache=None, laps=1, fade=(0, 0)):
     # movie_same: the runs of frames in a row of its movie passes that play as one picture, with colour (1) and
     # without (0), of which movie mode shows one (movie_runs)
     same = {c: {i: r for v in us for i, r in movie_runs(v, cache, c == "1").items()} for c in "01"}
-    # rolling_same: the runs of frames in a row of its mosaic movies whose picture is one (rolling_runs), at the
-    # window's laps and fade (the time-lapse's by default), of which movie mode shows one
-    rolling = {i: r for v in us for i, r in rolling_runs(v, cache, laps, fade).items()}
+    # rolling_same: the runs of frames in a row of its mosaic movies whose picture is one, at the window's laps and
+    # fade (the time-lapse's by default), as the pre-build kept them (kept_rolling_runs: only read, never laid out
+    # here; none for a cold pass or a style not built, whose frames the window steps through as before), of which
+    # movie mode shows one
+    rolling = {i: r for v in us for i, r in (kept_rolling_runs(v, cache, laps, fade) or {}).items()}
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
             "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
             **({"mosaic_steps": steps} if steps else {}), **({"movie_same": same} if any(same.values()) else {}),
@@ -10402,7 +10405,8 @@ def rolling_runs(u, cache, laps=1, fade=(0, 0)):
         if memo in _rolling_runs:
             _rolling_runs.move_to_end(memo)
             return dict(_rolling_runs[memo])
-    out = _rolling_runs_of(u, cache, laps, fade, there)
+    kept = kept_rolling_runs(u, cache, laps, fade)
+    out = kept if kept is not None else _rolling_runs_of(u, cache, laps, fade, there)
     with _lock:
         _rolling_runs[memo] = out
         while len(_rolling_runs) > ROLLING_RUNS_KEEP:
@@ -10412,6 +10416,36 @@ def rolling_runs(u, cache, laps=1, fade=(0, 0)):
 
 _rolling_runs = collections.OrderedDict()   # (tiles folder, laps, fade, tiles made) -> rolling_runs' answer
 ROLLING_RUNS_KEEP = 64
+
+
+def _runs_path(u, cache, laps, fade):
+    fade = fade_style(*fade)
+    return os.path.join(folder(u, cache), f"rolling-runs-{LAP_RULE}-l{laps}-f{fade[0]}p{fade[1]}.json")
+
+
+def keep_rolling_runs(u, cache, laps=1, fade=(0, 0)):
+    """The pre-build's step, once a mosaic movie's pictures in a style are made (prebuild.make_pass): its runs
+    (rolling_runs) written beside its plan, which the window's note reads (kind_of) instead of laying out every frame
+    on request. Its runs."""
+    out = rolling_runs(u, cache, laps, fade)
+    path = _runs_path(u, cache, laps, fade)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
+    with open(tmp, "w") as fh:
+        json.dump(out, fh)
+    os.replace(tmp, path)
+    return out
+
+
+def kept_rolling_runs(u, cache, laps=1, fade=(0, 0)):
+    """A mosaic movie's runs in a style as the pre-build kept them (keep_rolling_runs); None when it has not (a cold
+    pass, a style it did not draw). Only read: nothing is laid out."""
+    if cache is None or u.get("kind") != "mosaic_movie":
+        return None
+    try:
+        with open(_runs_path(u, cache, laps, fade)) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
 
 
 def _rolling_runs_of(u, cache, laps, fade, there):
