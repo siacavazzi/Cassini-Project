@@ -1842,7 +1842,7 @@ body.idle .lbl.site:not(.focus) { opacity: .3; }
 .cs-root .cs-black { position: absolute; inset: 0; background: #000; opacity: 0; }
 .cs-root .cs-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
 .cs-root .cs-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
-  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; text-wrap: balance; }
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
 .cs-root .cs-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
 .cs-root .cs-cap.big { font-size: 26px; }
 .cs-root .cs-cap ul { list-style: none; margin: 0; padding: 0; }
@@ -1851,8 +1851,6 @@ body.idle .lbl.site:not(.focus) { opacity: .3; }
 .cs-root .cs-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
   background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
 .cs-root .cs-skip:hover { color: var(--q-text); }
-.cs-root .cs-sound { position: absolute; right: 86px; bottom: 17px; font-size: 10.5px; color: rgba(232,236,242,.4); opacity: 0; transition: opacity .8s ease; }
-.cs-root .cs-sound.on { opacity: 1; }
 .cs-root .cs-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
 .cs-root .cs-hint.on { opacity: 1; }
 /* a quiet mono readout line low in the middle, and a small dim note bottom left; .on shows them */
@@ -1864,9 +1862,6 @@ body.idle .lbl.site:not(.focus) { opacity: .3; }
 .cs-root .cs-note.on { opacity: 1; }
 body.cutscene #gl { cursor: grab; }
 body.cutscene.cs-drag #gl { cursor: grabbing; }
-body.cutscene.cs-nolook #gl { cursor: default; }
-/* once it is over the Skip button goes at once (the cover is still fading) */
-body.cutscene-out:not(.cutscene) .cs-root .cs-skip { opacity: 0; pointer-events: none; transition: opacity .3s ease; }
 body.cutscene #app > :not(#gl):not(.cs-root) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
 body.cutscene-out #app * { pointer-events: none !important; }
 body.phone .cs-root .cs-read { font-size: 9.5px; bottom: 9vh; }
@@ -1875,9 +1870,7 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
 
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
-#finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.66) 12%, rgba(0,0,0,.5) 24%, rgba(0,0,0,.31) 36%, rgba(0,0,0,.15) 47%, rgba(0,0,0,.05) 57%, rgba(0,0,0,0) 66%); }
-/* the readout's fields break between, never inside */
-#finale .cs-read span { white-space: nowrap; }
+#finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
 /* the real readings: a quiet strip chart, top right */
 #finale .fx-data { position: absolute; right: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box; padding: 9px 11px 8px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); opacity: 0; transition: opacity 1.5s ease; }
@@ -1919,11 +1912,6 @@ body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
 body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
 body.phone #finale .fx-roll dd { margin-bottom: 10px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
-/* on a phone the readout takes two lines above the note (it is wider than the screen), the captions sit above both,
-   and the hint keeps to the left of the readings */
-body.phone #finale .cs-read { white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; bottom: 108px; }
-body.phone #finale .cs-caps { bottom: 152px; }
-body.phone #finale .cs-hint { left: 14px; top: 16px; transform: none; max-width: calc(100vw - 260px); line-height: 1.35; }
 
 #soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
 /* the burn's readout is long: on a phone it wraps */
@@ -1963,6 +1951,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 #hrel .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
 #hrel .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
 #hrel .cs-cap small a { color: inherit; pointer-events: auto; }
+/* leaving (the closing fade, Skip, a choice on the last card): everything on top goes with the picture */
+#hrel.hr-out > :not(.cs-black):not(.hr-shade) { opacity: 0 !important; transition: opacity var(--hr-out, .45s) ease !important; }
 body.phone #hrel .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
 body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
 
@@ -2587,13 +2577,6 @@ body.ambient.phone .amb-where { font-size: 18px; }
 </div>
 
 <script>
-// First in line for keys. This is the page's first script, and listeners on the window run in the order they were
-// added, so this one runs ahead of every shortcut on the page (several of them listen in the capture phase too). A
-// part that has to keep the page's shortcuts off for a while (a cutscene playing, cutscene.html) sets
-// window.cassiniKeyGate(e) and stops the event there
-window.cassiniKeyGateWired = true;
-window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cassiniKeyGate(e); }, true);
-
 // ---------- settings: one registry for every option on the page, and the Settings window that shows it ----------
 (function () {
   const $ = id => document.getElementById(id);
@@ -9026,32 +9009,11 @@ function targetLabel(k) {
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.02;
     bell(t, hz(35), 0.25, 0, 7, 1.2, 1.4); bell(t + 0.01, hz(47), 0.12, 0, 6, 0.8, 2);
-    // and the same note two octaves up, quietly: phone and laptop speakers play almost nothing of B1 and B2
-    bell(t + 0.02, hz(59), 0.05, 0, 5, 0.6, 2);
   };
   window.cassiniSound.chord = (steps = [0, 2, 4]) => {
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
-  };
-  // a cutscene's bed (cutscene.html takes it down when the cutscene ends): one soft held sound for the picture to sit
-  // on, so the chords under the captions do not ring out into silence. D and A only, the scale's root and fifth, so it
-  // agrees with every chord and every instrument (the minor one too); it breathes slowly. level 0..1 (0 takes it
-  // down), secs how long it takes to get there
-  let bedG = null;
-  window.cassiniSound.bed = (level, secs = 2) => {
-    if (!ctx || ctx.state !== "running" || (!bedG && !level)) return;
-    if (!bedG) {
-      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 460; f.Q.value = 0.5;
-      bedG = ctx.createGain(); bedG.gain.value = 0; f.connect(bedG); bedG.connect(bus);
-      [38, 45, 50, 57, 62].forEach((m, i) => {   // D2 A2 D3 A3 D4, most of it in the middle so small speakers carry it too
-        const o = ctx.createOscillator(), g = ctx.createGain(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4;
-        g.gain.value = [0.5, 0.7, 1, 0.6, 0.35][i]; o.connect(g); g.connect(f); o.start();
-      });
-      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.09; depth.gain.value = 140; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
-    }
-    // at level 1 it sits about 8 dB under a caption chord's peak, a little above the spacecraft tones
-    bedG.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.02, ctx.currentTime, Math.max(0.03, secs / 3));
   };
   // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
   let rumbleG = null;
@@ -9064,12 +9026,7 @@ function targetLabel(k) {
       const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
       const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
       rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
-      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus);
-      // a quiet layer of the same noise around 550 Hz, a quarter as loud: under 170 Hz alone the engine is silent on
-      // phone and laptop speakers
-      const mid = ctx.createBiquadFilter(), midG = ctx.createGain(); mid.type = "bandpass"; mid.frequency.value = 550; mid.Q.value = 0.8; midG.gain.value = 0.25;
-      src.connect(mid); mid.connect(midG); midG.connect(rumbleG);
-      src.start();
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
     }
     rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
   };
@@ -14191,7 +14148,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"fce2914da06a";
+  const BUILD = /*BUILD*/"fff922ddadff";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -17267,80 +17224,36 @@ function frame(now) {
     lines.set(caps, el);
     return el;
   }
-  // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up.
-  // A line still on its way out of the box when the next one is due leaves quickly first (as line() does), so the two
-  // never sit on top of each other
+  // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up
   function runCaptions(caps, list, t, shown) {
     list.forEach(([at, dur, html, cls, chord], i) => {
-      if (!shown[i] && t >= at && t < at + dur) {
-        const going = [...caps.children].filter(el => fades.has(el) && fades.get(el).to === 0);
-        if (going.length) {
-          const el = shown[i] = document.createElement("div");
-          el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; el.style.opacity = 0; caps.appendChild(el);
-          going.forEach((g, n) => fadeTo(g, 0, 0.35, () => { g.remove(); if (!n && el.isConnected) fadeTo(el, 1, 1.2); }));
-        } else shown[i] = caption(caps, html, cls);
-        if (chord) sound("chord", chord);
-      }
+      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(caps, html, cls); if (chord) sound("chord", chord); }
       if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
     });
   }
   // take down every line still up
   function dropAll(shown) { shown.forEach((el, i) => { if (el && el !== true) { drop(el); shown[i] = true; } }); }
   const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
-  const muteKey = e => (e.key === "s" || e.key === "S") && !e.metaKey && !e.ctrlKey && !e.altKey;
-  // sound is on but the browser holds it until the first click or key (a cutscene opened from a link): a quiet line by
-  // the Skip button says so, and goes once the sound runs
-  const hint = document.createElement("div"); hint.className = "cs-sound"; hint.setAttribute("aria-hidden", "true");
 
-  // ---------- looking around: a drag turns the view, the wheel or a pinch zooms; it eases back a few seconds after ----------
-  // look.lock (a cutscene sets it): no looking around for now. look.drag: where the drag is, while there is one
-  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0, wheel: true, lock: false };
-  const fingers = new Map();   // the pointers held down on the view: id -> [x, y]
-  let spread = 0;              // how far apart two fingers were at their last move
-  const letGo = () => { fingers.clear(); spread = 0; look.drag = null; document.body.classList.remove("cs-drag"); };
-  const resetLook = () => { letGo(); Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, last: 0 }); };
-  // how far up the playing cutscene's black cover is, 0 to 1. More than half up, the view is hardly seen and a drag
-  // does nothing; fully up, the view goes back to the cutscene's own (what was dragged belonged to the shot before,
-  // and would show later as a picture that opens turned away and swings back)
-  const cover = () => { const b = active && scenes[active].root && scenes[active].root.querySelector(".cs-black"); return b ? +b.style.opacity || 0 : 0; };
-  const canLook = () => !!active && !look.lock && cover() <= 0.5;
-  const gap = () => { const [a, b] = [...fingers.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]); };
-  const zoomBy = k => { look.zoom = Math.max(0.35, Math.min(4, look.zoom * k)); };
+  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
+  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0, wheel: true };
+  const resetLook = () => Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
   function onDown(e) {
     if (!active || e.target !== document.getElementById("gl")) return;
-    e.stopImmediatePropagation();   // the viewer's own controls never see it
-    if (!canLook() || fingers.size >= 2) return;
-    fingers.set(e.pointerId, [e.clientX, e.clientY]);
-    spread = fingers.size === 2 ? gap() : 0;
     look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("cs-drag");
+    e.stopImmediatePropagation();
   }
   function onMove(e) {
-    if (!active || !fingers.has(e.pointerId)) return;
+    if (!active || !look.drag) return;
+    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
+    look.drag = [e.clientX, e.clientY]; look.last = performance.now();
     e.stopImmediatePropagation();
-    if (e.pointerType === "mouse" && !e.buttons) { onUp(e); return; }   // the button came up outside the window
-    const was = fingers.get(e.pointerId), now = [e.clientX, e.clientY];
-    fingers.set(e.pointerId, now);
-    if (!canLook()) return;
-    if (fingers.size === 2) {
-      // two fingers pinch: apart comes closer, together stands back, and nothing turns (each finger on its own would
-      // drag the view its own way)
-      const g = gap();
-      if (look.wheel && spread > 8 && g > 8) zoomBy(spread / g);
-      spread = g;
-    } else {
-      look.yaw -= (now[0] - was[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (now[1] - was[1]) * 0.005));
-    }
-    look.drag = now; look.last = performance.now();
   }
-  function onUp(e) {
-    fingers.delete(e.pointerId); spread = 0; look.last = performance.now();
-    if (!fingers.size) letGo();
-  }
+  function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("cs-drag"); }
   function onWheel(e) {
     if (!active || !look.wheel) return;
+    look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
     e.preventDefault(); e.stopImmediatePropagation();
-    if (!canLook()) return;
-    zoomBy(Math.exp(e.deltaY * 0.0012)); look.last = performance.now();
   }
   function easeLook(dt) {
     if (look.drag || performance.now() - look.last < 4000) return;
@@ -17422,32 +17335,16 @@ function frame(now) {
 
   // ---------- begin and end ----------
   // a cutscene's hooks and its section (root, with the .cs-root class); onEnd tidies up its own effects
-  function register(name, s) {
-    scenes[name] = s;
-    const b = s.root && s.root.querySelector(".cs-skip"); if (b) b.addEventListener("click", e => { e.stopPropagation(); end(name); });
-    // a key pressed on the cutscene's own things (its buttons, the credits roll) reaches their listeners and stops
-    // here, at its section, so the page's shortcuts never see it (S goes on, to mute)
-    if (s.root) s.root.addEventListener("keydown", e => { if (active === name && !muteKey(e)) e.stopPropagation(); });
-  }
+  function register(name, s) { scenes[name] = s; const b = s.root && s.root.querySelector(".cs-skip"); if (b) b.addEventListener("click", e => { e.stopPropagation(); end(name); }); }
   function begin(name) {
     const s = scenes[name];
     if (active || !s) return false;
     active = name; saved = { follow: state.follow, playing: state.playing };
-    resetLook(); look.wheel = true; look.lock = false;
-    // the faded interface is out of reach: nothing in it keeps or takes the focus (Space or Enter on a button that was
-    // clicked just before, or tabbed to, would work it unseen)
-    const had = document.activeElement;
-    if (had && had !== document.body && had.blur && !s.root.contains(had)) had.blur();
-    saved.inert = [...document.querySelectorAll("#app > :not(#gl):not(.cs-root)")].filter(el => !el.inert);
-    saved.inert.forEach(el => { el.inert = true; });
-    // letting go of the follow camera turns the view straight onto Cassini; it keeps looking where it did until the
-    // cover is up (studyCamera below), so that swing is never seen
-    saved.aim = state.follow ? camera.quaternion.clone() : null;
+    resetLook(); look.wheel = true;
     if (state.follow) setFollow(false);
     setPlaying(false);
     controls.enabled = false;
     s.root.hidden = false;
-    s.root.appendChild(hint); hint.textContent = document.body.classList.contains("phone") ? "Tap for sound" : "Click for sound";
     document.body.classList.add("cutscene");
     return true;
   }
@@ -17456,26 +17353,18 @@ function frame(now) {
   function end(name) {
     if (!active || (name && name !== active)) return;
     const s = scenes[active], was = saved; active = null; saved = null;
-    letGo(); document.body.classList.remove("cs-nolook");
-    was.inert.forEach(el => { el.inert = false; });
-    sound("bed", 0, 1.5);
-    // onEnd may return { follow: false } to leave follow off (an ending that leaves the view on something else), and
-    // { seamless: true } when its camera already is where the viewer's own view takes over (nothing to hide)
+    // onEnd may return { follow: false } to leave follow off (an ending that leaves the view on something else)
     const keep = (s.onEnd && s.onEnd()) || {};
     cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
     camera.up.set(0, 1, 0);
     controls.enabled = true;
     const black = s.root.querySelector(".cs-black");
     fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
-    // the view now jumps from the cutscene's camera to the viewer's own. Ended under its cover that is never seen;
-    // ended early (Skip, Escape) the cover may be down, so it cuts to black and the interface comes up from there
-    if (black && !keep.seamless) black.style.opacity = 1;
-    hint.classList.remove("on");
     if (was.follow && keep.follow !== false) setFollow(true);
     if (was.playing && state.et < coverage[1] - 1) setPlaying(true);
     document.body.classList.add("cutscene-out");
     document.body.classList.remove("cutscene", "cs-drag");
-    const done = () => { document.body.classList.remove("cutscene-out"); if (scenes[active] !== s) s.root.hidden = true; };
+    const done = () => { document.body.classList.remove("cutscene-out"); if (!active) s.root.hidden = true; };
     if (black) fadeTo(black, 0, 1.5, done); else done();
     if (window.cassiniPerf) cassiniPerf.invalidate();
   }
@@ -17486,11 +17375,6 @@ function frame(now) {
     if (!active) return;
     if (window.cassiniPerf) cassiniPerf.invalidate();
     state.playing = false;
-    const can = canLook();
-    if (!can && fingers.size) letGo();
-    if (cover() > 0.9) Object.assign(look, { yaw: 0, pitch: 0, zoom: 1 });
-    document.body.classList.toggle("cs-nolook", !can);
-    hint.classList.toggle("on", !!(window.cassiniSound && cassiniSound.blocked));
     easeLook(dt);
     const s = scenes[active];
     if (s.frame) s.frame(dt);
@@ -17498,11 +17382,7 @@ function frame(now) {
   const hook = k => (...a) => { if (active && scenes[active][k]) scenes[active][k](...a); };
   window.studyPositions = hook("positions");
   window.studyAttitude = hook("attitude");
-  window.studyCamera = (...a) => {
-    if (!active) return;
-    if (saved.aim) { if (cover() > 0.9) saved.aim = null; else camera.quaternion.copy(saved.aim); }
-    if (scenes[active].camera) scenes[active].camera(...a);
-  };
+  window.studyCamera = hook("camera");
 
   // ---------- triggers ----------
   // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
@@ -17544,29 +17424,7 @@ function frame(now) {
     }, 250);
   }
 
-  // Escape ends it. Every other key stays with the cutscene: the page's shortcuts (Space plays, M is movie mode, A is
-  // ambient mode, F is full view...) would start under it and leave the page in a state it cannot get out of. S still
-  // mutes (sound.html); the browser's own keys are not prevented. The plain keys that work the cutscene's own things
-  // (Tab, Enter and Space on its buttons, the arrows and paging keys that scroll the credits) go to them when the focus
-  // is there, and stop at its section (register)
-  // It has to run ahead of every other key listener on the page, some of which listen in the capture phase and were
-  // added earlier (G adds to the gallery, Cmd+comma opens Settings): the page's first script calls it first
-  // (window.cassiniKeyGate, settings.html)
-  function keyGate(e) {
-    if (!active) return;
-    if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); return; }
-    if (muteKey(e)) return;
-    // on the cutscene's own things (one Tab puts the focus on Skip) only the plain keys that work them go on: every
-    // other key would still reach the page's capture-phase shortcuts (Settings, the gallery, the Studio), which run
-    // before the section can stop it
-    if (scenes[active].root.contains(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey && OWN_KEYS.test(e.key)) return;
-    e.stopImmediatePropagation();
-    if (e.key === " ") e.preventDefault();
-  }
-  const OWN_KEYS = /^(Tab|Enter| |Arrow(Up|Down|Left|Right)|Page(Up|Down)|Home|End)$/;
-  window.cassiniKeyGate = keyGate;
-  if (!window.cassiniKeyGateWired) window.addEventListener("keydown", keyGate, true);
-  window.addEventListener("blur", letGo);
+  window.addEventListener("keydown", e => { if (active && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); } }, true);
   window.addEventListener("pointerdown", onDown, true);
   window.addEventListener("pointermove", onMove, true);
   window.addEventListener("pointerup", onUp, true);
@@ -18028,7 +17886,7 @@ window.huygensModels = (() => {
 <script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
-  const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air"), shade = root.querySelector(".fx-shade");
+  const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
   const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   // what every cutscene shares (cutscene.html)
   const CS = cassiniCutscene, { fadeTo, drop, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
@@ -18065,27 +17923,18 @@ window.huygensModels = (() => {
   const RECAP = images => [
     [FLARE, 6.5, `Moments later, Cassini burned up like a meteor, and became part of Saturn.`, "", null],
     [10, 7, `<b>Received on Earth</b>Its last signal crossed the solar system for 83 minutes. At 11:55:46 UTC, the antennas in Canberra, Australia, heard it fall silent.`, "", [4, 5, 7]],
-    [17.5, 6.5, `<b>The last data</b>Eight instruments reported to the end. Its mass spectrometer tasted Saturn's air directly, the first and only time anything has.`, "", [3, 5, 7]],
-    [24.5, 7.5, `<b>1997 &ndash; 2017</b>Twenty years in space. Thirteen at Saturn. 294 orbits. ${fmtInt(NASA_IMAGES)} pictures.${images ? `<small>${fmtInt(images)} of them play in this replay.</small>` : ""}`, "big", [1, 3, 5, 6]],
-    [32.5, 8, `<b>What it found</b><ul><li>An ocean under the ice of Enceladus, spraying into space</li><li>Seas and lakes of liquid methane on Titan, and Huygens on its surface</li><li>A six-sided jet stream circling Saturn's north pole</li><li>Moonlets stirring propellers in the rings, and new moons</li></ul>`, "", [0, 2, 3, 5]],
-    [41, 7.5, `Cassini turned points of light into worlds. Much of what we know about Saturn and its moons, we know because it went and looked.`, "big", [0, 3, 5, 7, 8]],
-    [49, 5.5, `<b>Cassini-Huygens · 1997 &ndash; 2017</b>Thank you, Cassini.`, "big", [0, 2, 3, 5, 7, 10]],
+    [17.5, 7, `<b>The last data</b>Eight instruments reported to the end. Its mass spectrometer tasted Saturn's air directly, the first and only time anything has.`, "", [3, 5, 7]],
+    [25, 6, `<b>1997 &ndash; 2017</b>Twenty years in space. Thirteen at Saturn. 294 orbits.`, "big", [1, 3, 5, 6]],
+    [31.5, 6, `<b>Pictures</b>${fmtInt(NASA_IMAGES)} pictures of Saturn, its rings and its moons.${images ? `<small>${fmtInt(images)} of them play in this replay.</small>` : ""}`, "big", [0, 2, 3, 5]],
+    [38, 8.5, `<b>What it found</b><ul><li>An ocean under the ice of Enceladus, spraying into space</li><li>Seas and lakes of liquid methane on Titan, and Huygens on its surface</li><li>A six-sided jet stream circling Saturn's north pole</li><li>Moonlets stirring propellers in the rings, and new moons</li></ul>`, "", [2, 3, 5, 7]],
+    [47, 8, `Cassini turned points of light into worlds. Much of what we know about Saturn and its moons, we know because it went and looked.`, "big", [0, 3, 5, 7, 8]],
+    [55.5, 5.5, `<b>Cassini-Huygens · 1997 &ndash; 2017</b>Thank you, Cassini.`, "big", [0, 2, 3, 5, 7, 10]],
   ];
-  const RECAP_END = 55.5;
-  // the view of Saturn in the recap: close in on the burn-up, out to the whole planet, then slowly away
-  const CLOSE = 9;             // thousand km from the burn-up at first
-  const OUT_AT = 6.5, OUT_S = 11;   // s into the recap the pull-out starts, and how long it takes
-  const RINGS = 140;           // thousand km, the rings' outer edge: at the end of the pull-out they span 4/5 of the width
-  const AWAY = 1.4;            // by the last line Saturn is this many times further still
-  const TURN = 0.008;          // rad/s the view goes on turning round Saturn's axis
+  const RECAP_END = 62;
   const ROLL_IN = 1.4;         // s of darkness between "Thank you, Cassini" and the credits
-  const ROLL_TIME = 95;        // s the credits take to roll by, at a speed kept between ROLL_SPEED's two ends
-  const ROLL_SPEED = [60, 110];   // px/s the credits move up, at least and at most
+  const ROLL_SPEED = 60;       // px/s the credits move up (48 on a phone)
   const ROLL_HOLD = 3.5;       // s after a hand scroll before the roll moves on its own again
-  const ROLL_REST = 7;         // s the last card stays before it all fades back to the mission
-  const ROLL_CHORD = 10;       // s between the quiet chords under the credits
-  // the chords under the credits, a slow round on the recap's scale that keeps coming home to D major
-  const ROLL_CHORDS = [[3, 5, 7], [2, 3, 5], [4, 5, 7], [1, 3, 5], [0, 2, 3], [3, 5, 6], [2, 5, 7], [0, 3, 5]];
+  const ROLL_REST = 9;         // s the last card stays before it all fades back to the mission
 
   let F = null;   // the running finale
   const tmpS = v3(), tmpC = v3(), tmpE = v3();
@@ -18319,25 +18168,17 @@ window.huygensModels = (() => {
   function buildRoll() {
     rollIn.innerHTML = `<p class="head">${esc(TEAM.intro.head)}</p><p class="lede">${esc(TEAM.intro.text)}</p>`
       + TEAM.sections.map(s => `<section>${block(s, `<h3>${esc(s.title)}</h3>`)}${(s.groups || []).map(g => block(g, `<h4>${esc(g.title)}</h4>`)).join("")}</section>`).join("")
-      + `<div class="end"><p>${esc(TEAM.closing)}</p><div class="btns">${window.cassiniAbout ? `<button type="button" data-roll="about">About Cassini OS</button>` : ""}<button type="button" data-roll="again">Watch again</button><button type="button" data-roll="back">Back to the mission</button></div>`
+      + `<div class="end"><p>${esc(TEAM.closing)}</p><div class="btns">${window.cassiniAbout ? `<button type="button" data-roll="about">About Cassini OS</button>` : ""}<button type="button" data-roll="back">Back to the mission</button></div>`
       + `<div class="src">${TEAM.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(" · ")}</div></div>`;
     roll.scrollTop = 0;
   }
   // a hand on the roll (wheel, touch, drag, keys) holds it where it is put; it moves on again a few seconds later
   const holdRoll = () => { if (F && F.phase === "credits") { F.rollHeld = performance.now(); F.rollEnd = 0; } };
   ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach(t => roll.addEventListener(t, holdRoll, { passive: true }));
-  // a scroll the roll did not make itself is a hand too, however it was made (the arrow keys and Space, which the
-  // cutscene keeps from the page, a scroll bar, a swipe still coasting): the roll takes it from where it was put
-  roll.addEventListener("scroll", () => {
-    if (!F || F.phase !== "credits" || !F.rollOn) return;
-    if (Math.abs(roll.scrollTop - F.rollY) > 2) holdRoll();
-    if (performance.now() - F.rollHeld < ROLL_HOLD * 1000) F.rollY = roll.scrollTop;
-  });
+  roll.addEventListener("scroll", () => { if (F && F.phase === "credits" && performance.now() - F.rollHeld < ROLL_HOLD * 1000) F.rollY = roll.scrollTop; });
   roll.addEventListener("click", e => {
     const b = e.target.closest("[data-roll]"); if (!b) return;
-    e.stopPropagation();
-    if (b.dataset.roll === "again") { again(); return; }
-    finish();
+    e.stopPropagation(); finish();
     if (b.dataset.roll === "about" && window.cassiniAbout) setTimeout(() => cassiniAbout.open("Mission team"), 1600);
   });
   // the same list as a tab in the About window (about.html), when it is there
@@ -18355,45 +18196,28 @@ window.huygensModels = (() => {
     if (!F.rollOn) {
       F.rollOn = true; F.rollY = 0; F.rollHeld = 0; F.rollEnd = 0;
       buildRoll(); roll.classList.add("on"); fadeTo(roll, 1, 2.5); fadeTo(black, 0.86, 4);
-      roll.focus({ preventScroll: true });   // so the arrow keys and Space scroll it
-      sound("chord", [0, 2, 4, 7]); F.rollChordAt = now; F.rollChords = 0;
+      sound("chord", [0, 2, 4, 7]);
       return;
     }
     const max = roll.scrollHeight - roll.clientHeight;
     if (now - F.rollHeld > ROLL_HOLD * 1000) {
-      F.rollY = Math.min(max, F.rollY + dt * Math.max(ROLL_SPEED[0], Math.min(ROLL_SPEED[1], max / ROLL_TIME)));
+      F.rollY = Math.min(max, F.rollY + dt * (document.body.classList.contains("phone") ? ROLL_SPEED * 0.8 : ROLL_SPEED));
       roll.scrollTop = F.rollY;
     }
-    // a quiet chord every few seconds while the names go by, one at a time so a skip leaves nothing waiting to sound
-    if (!F.rollEnd && now - F.rollChordAt > ROLL_CHORD * 1000) { F.rollChordAt = now; sound("chord", ROLL_CHORDS[F.rollChords++ % ROLL_CHORDS.length]); }
     // the last card rests a while, then the roll fades and the mission comes back
     if (F.rollY >= max - 1 && now - F.rollHeld > ROLL_HOLD * 1000) {
       if (!F.rollEnd) { F.rollEnd = now; if (!F.rollChord) { F.rollChord = true; sound("chord", [0, 2, 3, 5, 7, 10]); } }
-      if (now - F.rollEnd > ROLL_REST * 1000 && !F.rollClose) { F.rollClose = now; fadeTo(roll, 0, 2); fadeTo(black, 1, 2); sound("bed", 0, 2); }
+      if (now - F.rollEnd > ROLL_REST * 1000 && !F.rollClose) { F.rollClose = now; fadeTo(roll, 0, 2); fadeTo(black, 1, 2); }
     } else if (!F.rollClose) F.rollEnd = 0;
     if (F.rollClose && now - F.rollClose > 2100) finish();
   }
 
-  // a run from its start: black first, then the descent (cal: when and how high the signal is lost, from calibrate)
-  const fresh = cal => ({ tLos: cal.tLos, hLos: cal.hLos, span: cal.span, t0: performance.now(), phase: "out", tau: null, lost: false,
-    tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(), shownD: [], shownR: [], fx: null, recapAt: 0, lastFrame: performance.now() });
-  // from the last card: the same again from the top, without the mission coming back in between
-  function again() {
-    if (!F || F.phase !== "credits") return;
-    const f = F;
-    removeEffects(f.fx); removeFlare(f.flare);
-    roll.classList.remove("on"); fadeTo(roll, 0, 0.8, () => { if (F && F.phase !== "credits") rollIn.textContent = ""; });
-    if (root.contains(document.activeElement)) document.activeElement.blur();
-    cassini.visible = true; look.wheel = true; CS.resetLook(); sound("bed", 0, 1);
-    F = fresh(f);
-    fadeTo(black, 1, 1);
-  }
   function play() {
     if (F || CS.active || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
     const cal = calibrate();
     if (!cal) return;
-    F = fresh(cal);
-    shade.style.opacity = "";
+    F = Object.assign(cal, { t0: performance.now(), phase: "out", tau: null, lost: false, tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(),
+      shownD: [], shownR: [], fx: null, recapAt: 0, lastFrame: performance.now() });
     CS.begin("finale");
     fadeTo(black, 1, 1.5);
   }
@@ -18402,7 +18226,7 @@ window.huygensModels = (() => {
   document.addEventListener("cassini:away", e => {
     if (e.detail.away || !F) return;
     const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms;
-    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose", "rollChordAt"]) if (F[k]) F[k] += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
   });
   // its own tidying when it ends (cutscene.html brings the interface back)
   function cleanUp() {
@@ -18410,11 +18234,6 @@ window.huygensModels = (() => {
     sound("carrier", 0, 0); sound("drone", 0);
     removeEffects(f.fx); removeFlare(f.flare);
     caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
-    // ended early it cuts to black (cutscene.html) and the mission fades up from there: the shade under the captions
-    // goes with the cutscene (left on, it would darken the mission's view and then vanish in one frame), and the
-    // readouts, which sit above the black, go at once instead of fading out over it
-    shade.style.opacity = 0;
-    for (const e of [read, note, hint, dataBox]) { e.style.transition = "none"; requestAnimationFrame(() => requestAnimationFrame(() => { e.style.transition = ""; })); }
     roll.style.opacity = 0; rollIn.textContent = "";
     air.style.opacity = 0;
     setTime(coverage[1]);
@@ -18425,8 +18244,6 @@ window.huygensModels = (() => {
   // before the bodies are placed: the finale runs its own clock
   function frame(dt) {
     const T = (performance.now() - F.t0) / 1000;
-    // a drag's turn is kept within half a turn either way, so easing back never unwinds whole turns
-    if (Math.abs(look.yaw) > Math.PI) look.yaw = Math.atan2(Math.sin(look.yaw), Math.cos(look.yaw));
     if (F.phase === "out" && T >= 1.7) {
       // behind the black: back to a minute before loss of signal, on Cassini
       F.phase = "descent"; F.tau = F.tLos - LEAD; F.fx = addEffects();
@@ -18462,8 +18279,6 @@ window.huygensModels = (() => {
       F.tau += dt;   // Cassini's last seconds go on, seen from afar
       stepFlare(R);
       runCaptions(F.recap, R, F.shownR);
-      // after the silence and the bell, a soft held tone comes in under the recap and stays through the credits
-      if (R > F.recap[1][0] && !F.bed) { F.bed = true; sound("bed", 0.7, 8); }
       if (R > RECAP_END - 2.5 && !F.closing) { F.closing = true; fadeTo(black, 1, 2.5); }
       if (R > RECAP_END) {
         // after a moment of darkness, the credits roll
@@ -18548,7 +18363,7 @@ window.huygensModels = (() => {
     }
     air.style.opacity = 0.1 * Math.min(1, L) ** 2;
     if (!F.lost) { sound("carrier", signal, Math.min(1, L)); sound("drone", Math.min(1, 0.15 + L)); }
-    read.innerHTML = `<span>Altitude ${fmtInt(h)} km ·</span> <span>Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> ·</span> <span>Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth ·</span> <span>Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i></span>`;
+    read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
     drawData(F.tau);
   }
   // the camera: beside Cassini with Saturn's clouds below and the horizon level, drifting round toward the rings;
@@ -18581,36 +18396,17 @@ window.huygensModels = (() => {
       const R = iauMatrix(bodies.SATURN, state.et), pole = toScene(R[2], new THREE.Vector3()).normalize();
       toScene(norm(sub(pos.SUN, pos.SATURN, tmpS)), vScene).normalize();
       const side = new THREE.Vector3().crossVectors(pole, vScene).normalize();
-      const k = (performance.now() - F.recapAt) / 1000, ease = x => x * x * (3 - 2 * x);
-      // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back (eased
-      // at both ends, so the drift neither starts nor stops with a jolt), and turning slowly about the axis throughout
-      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), up = spot.clone().normalize(), m = ease(clamp01(k / 28));
-      const dir = up.clone().multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
-      // (the slow turn goes the way the drift goes round the axis, so the view never slows, stops and comes back)
-      if (!F.turn) F.turn = pole.dot(new THREE.Vector3().crossVectors(up, vScene.clone().multiplyScalar(0.75).addScaledVector(side, 0.55))) < 0 ? -1 : 1;
-      dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, F.turn * TURN * k + look.yaw);
-      // how far: close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out until
-      // the rings span 4/5 of the screen's width (and Saturn no more than half its height), so a tall phone screen
-      // stands further back than a wide one; from there slowly away to the last line. The pull-out runs at a steady
-      // rate of zoom (the distance grows by equal factors in equal times)
-      const tanV = Math.tan(camera.fov * Math.PI / 360), tanH = tanV * camera.aspect;
-      const whole = Math.max(RINGS / (0.8 * tanH), bodies.SATURN.radii[0] / KM / (0.5 * tanV));
-      const e = ease(clamp01((k - OUT_AT) / OUT_S)), away = ease(clamp01((k - OUT_AT - OUT_S * 0.6) / (RECAP_END - OUT_AT - OUT_S * 0.6)));
-      const dist = CLOSE * Math.pow(whole / CLOSE, e) * Math.pow(AWAY, away);
-      // what it looks at: the burn-up while close in, Saturn once it is out (by the share of the way out in distance,
-      // which keeps the burn-up from racing across the screen), set in the upper part of the screen so the rings'
-      // near side clears the captions
-      const w = clamp01((dist - CLOSE) / (whole - CLOSE)), lift = 0.36 * dist * tanV;
-      const aim = spot.clone().multiplyScalar(1 - w).addScaledVector(pole, -lift * w);
-      // a drag while close in keeps the camera above the horizon of the spot Cassini went in at, and the camera is
-      // never under the clouds
-      // (the hold lets go as the view pulls out, so once Saturn is whole the camera is free to go round it)
-      const low = 0.25 * (1 - w) - dir.dot(up);
-      if (low > 0 && w < 1) dir.addScaledVector(up, low * (1 - w)).normalize();
+      const k = (performance.now() - F.recapAt) / 1000;
+      // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back
+      // starting closer, on the burn-up itself, so the flare and its trail read, then easing out to the whole planet
+      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), entry = spot.clone().normalize(), m = clamp01(k / 25);
+      const dir = entry.multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
+      dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, -0.003 * k + look.yaw);
+      // close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out to the planet
+      const out = clamp01((k - 6.5) / 10), e = out * out * (3 - 2 * out);
+      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 1 - e), dist = 9 + 431 * e;
       F.flareK = Math.min(1, 0.12 + dist / 160);
       camera.position.copy(aim).addScaledVector(dir, dist * look.zoom);
-      const clouds = bodies.SATURN.radii[0] / KM * 1.04;
-      if (camera.position.lengthSq() < clouds * clouds) camera.position.setLength(clouds);
       camera.up.copy(pole);
       camera.lookAt(aim);
     }
@@ -19050,29 +18846,35 @@ window.huygensModels = (() => {
   const RELEASE = utcToEt(DATA.release_utc);
   const SPEED = DATA.speed_m_s, SPIN = DATA.spin_rpm * 2 * Math.PI / 60;   // m/s, rad/s
   const LEAD = 8;              // s of mission time shown before the release
-  const REAL = 16;             // screen s that run in real time
+  const REAL = 15;             // screen s that run in real time
   const WARP = 30;             // how much faster the clock runs after that
-  const RAMP = 6;              // screen s to reach it
-  const PULL = 26;             // screen s when the camera starts to pull back
-  const END = 59;              // screen s when it closes by itself
+  const RAMP = 5;              // screen s to reach it
+  const PULL = 23;             // screen s when the camera sets off for the probe
+  const MOVE = 9;              // screen s that fly-over takes
+  const END = 46;              // screen s when it closes by itself
+  const CLOSE = 1.6;           // screen s of its closing fade
+  const LEAVE = 0.45;          // screen s of the fade when it is left early (Skip, a choice on the last card)
+  const BED = 0.2;             // the quiet tone under it (cassiniSound.drone's level)
   const SPIN_MAX = 2.4;        // rad/s, the most the drawn spin turns, so the sped-up clock does not strobe it
   const FAR_M = 11;            // m from the probe the camera ends
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const SOURCES = [...new Set(DATA.facts.map(f => f.source))].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(new URL(u).hostname.replace(/^www\./, ""))}</a>`).join(" · ");
-  // the near part, in mission seconds from the release: when, how long, the line, a class, the chord under it
+  // the lines, in screen seconds: when, how long, the line, a class, the chord under it. The release is at LEAD and
+  // has its own chord; the line before it is gone by then, and each line stays long enough to read (about three words
+  // a second). The near part first
   const NEAR = [
-    [-7.8, 4.2, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
-    [-3.6, 3.8, `Ten seconds before, Cassini's thrusters are switched off, so nothing nudges the probe on its way out.`, "", null],
-    [0.2, 4.5, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", [0, 2, 4, 7]],
-    [4.8, 7, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", null],
-    [60, 999, `A minute later Cassini's thrusters wake again.`, "", null],
+    [0.2, 3.8, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
+    [4.3, 2.9, `Cassini's thrusters are off, so nothing nudges the probe on its way out.`, "", null],
+    [LEAD + 0.2, 4.3, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", null],
+    [LEAD + 4.7, 5.6, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", [1, 3, 5]],
+    // what the attitude record shows next (only said when it does: recoil below)
+    [LEAD + 10.6, 999, `The push leaves Cassini turning slowly the other way, until its thrusters wake and steady it.`, "", [0, 3, 5], "recoil"],
   ];
-  // the far part, in screen seconds: when, how long, the line, a class, the chord
+  // the far part
   const FAR_CAPS = [
-    [PULL + 1, 7, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
-    [PULL + 8, 7, `Three days later Cassini fires its engine to swerve aside, so it can pass Titan 60,000 km away and listen.`, "", [0, 3, 5]],
-    [PULL + 15, 7, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
-    [PULL + 22, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
+    [PULL + 1, 6.3, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
+    [PULL + 7.6, 6.1, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
+    [PULL + 14, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
   ];
 
   let H = null;   // the running cutscene
@@ -19159,6 +18961,16 @@ window.huygensModels = (() => {
     co.axisS = co.axis.clone().applyQuaternion(t.q);
     co.axisJ = fromScene(co.axisS);
     co.p0J = fromScene(co.p0.clone().applyQuaternion(t.q)).map(x => x / 1000);
+    // the push that spins the probe up turns Cassini the other way (its attitude record has the turn: about the
+    // probe's axis, from the instant of the release). Where the record shows it, the probe is drawn spinning against
+    // it, so the two never turn the same way; recoil says the record shows it
+    co.sense = 1; co.recoil = false;
+    const later = t.real ? cassiniTurn(RELEASE + 60) : null;
+    if (later && later.real) {
+      const dq = later.q.clone().multiply(t.q.clone().invert());
+      const w = new THREE.Vector3(dq.x, dq.y, dq.z).multiplyScalar(dq.w < 0 ? -1 : 1);   // sin(half the turn) along its axis
+      if (w.length() > 0.05 && Math.abs(w.clone().normalize().dot(co.axisS)) > 0.5) { co.recoil = true; co.sense = w.dot(co.axisS) > 0 ? -1 : 1; }
+    }
   }
   // ESA's numbers: Cassini's position, plus where the probe sat on it, plus 0.35 m/s straight out
   function ownPlace(et, out) {
@@ -19197,7 +19009,7 @@ window.huygensModels = (() => {
     co.group.visible = on;
     if (!on) return;
     // spinning about its axis, which stays fixed in space; the cutscene may draw the spin slower
-    const ang = co.spin !== null ? co.spin : (et - RELEASE) * SPIN;
+    const ang = co.sense * (co.spin !== null ? co.spin : (et - RELEASE) * SPIN);
     co.group.quaternion.copy(qSpin.setFromAxisAngle(co.axisS, ang)).multiply(co.q0);
     // true size up close; far off it is enlarged like Cassini so it stays visible (the cutscene keeps it true)
     const d = camera.position.distanceTo(probeObj.position), s = H ? 1e-6 : Math.max(1e-6, d * 0.0012);
@@ -19235,21 +19047,40 @@ window.huygensModels = (() => {
   const fmtClock = s => { const a = Math.abs(Math.round(s)), m = Math.floor(a / 60), ss = String(a % 60).padStart(2, "0"); return `${s < 0 ? "T−" : "T+"}${m}:${ss}`; };
 
 
+  const gl = document.getElementById("gl"), skip = root.querySelector(".cs-skip");
   function play() {
     if (H || CS.active || !tracks.CASSINI) return;
+    // the view as it is, to hold through the fade to black (beginning lets the follow camera go, which would turn it)
+    const hold = camera.quaternion.clone();
     if (!CS.begin("huygens")) return;
+    coastSetup();
     H = { t0: performance.now(), phase: "out", T: 0, s: -LEAD, shownN: [], shownF: [], playing: state.playing, speed: state.speed,
-      spin: 0, lastFrame: performance.now(), fx: null, how: "back" };
+      spin: 0, lastFrame: performance.now(), fx: null, how: "back", hold,
+      near: NEAR.filter(l => l[5] !== "recoil" || (co && co.recoil)) };
+    root.classList.remove("hr-out"); root.style.removeProperty("--hr-out");
     fadeTo(black, 1, 1.4);
   }
   // how it ends: "stay" leaves the view on Huygens, paused, to look around it; "back" returns to Cassini and plays on
   // as before; "landing" jumps to Huygens entering Titan's air. Skip and Escape (cutscene.html) are "back"
   function finish(how) { if (H) H.how = how; CS.end("huygens"); }
+  // leaving early (Skip, a choice on the last card): a short fade to black first, everything on top going with it
+  function leave(how) {
+    if (!H || H.leaving) return;
+    if (H.phase !== "run" || H.closing) { finish(how); return; }
+    H.leaving = how; H.leaveAt = performance.now(); H.how = how;
+    root.style.setProperty("--hr-out", `${LEAVE}s`); root.classList.add("hr-out");
+    fadeTo(black, 1, LEAVE); sound("drone", 0);
+  }
   function cleanUp() {
     const h = H; H = null;
     if (!h) return;
     removeEffects(h.fx);
     if (co) co.spin = null;
+    sound("drone", 0);
+    CS.look.wheel = true; gl.style.cursor = "";
+    // ended with the picture still up (Escape, which cutscene.html ends at once): to black in one go, so the viewer's
+    // own view fades in under the cover instead of jumping in, and nothing of the cutscene's lingers on top of it
+    if (!(+black.style.opacity > 0.95)) { root.style.setProperty("--hr-out", "0s"); root.classList.add("hr-out"); black.style.opacity = 1; }
     caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
     Object.values(tags).forEach(e => e.classList.remove("on"));
     // the mission carries on from where the cutscene left it
@@ -19259,36 +19090,60 @@ window.huygensModels = (() => {
     if (h.how === "landing" && window.cassiniHuygensLanding) setTimeout(() => cassiniHuygensLanding.play(), 0);
     else if (h.how === "landing" && entry && typeof jump === "function") jump(entry);
     else if (h.how === "stay" && studyCoast.modelShown(state.et)) {
-      // paused on the probe, once cutscene.html has put the interface back (it picks playback up again if it was on)
-      setTimeout(() => { setPlaying(false); setFocus("HUYGENS"); }, 0);
+      // paused on the probe, once cutscene.html has put the interface back (it picks playback up again if it was on),
+      // from where the cutscene's camera stood, so the view carries on from the last shot
+      const rel = h.rel && h.T > PULL + MOVE ? h.rel.clone() : null;
+      setTimeout(() => { setPlaying(false); setFocus("HUYGENS"); if (rel && state.focus === "HUYGENS") camera.position.copy(rel); }, 0);
       return { follow: false };
     } else { setFocus("CASSINI"); if (h.playing) { setSpeed(h.speed); setPlaying(true); } }
   }
   caps.addEventListener("click", e => {
     const b = e.target.closest("[data-hr]"); if (!b) return;
-    e.stopPropagation(); finish(b.dataset.hr);
+    e.stopPropagation(); leave(b.dataset.hr);
   });
+  // Skip leaves the same way (ahead of cutscene.html's own listener on the button, which ends it at once)
+  skip.addEventListener("click", e => { if (!H) return; e.stopImmediatePropagation(); leave("back"); }, true);
 
   // the cutscene's clock, before the viewer places the bodies
-  function frame() {
+  function frame(dt) {
     const now = performance.now();
+    if (H.leaving && now - H.leaveAt >= LEAVE * 1000 + 30) { finish(H.leaving); return; }
+    // looking around is for the shots that hold. Through the fades and the fly-over it is let go: a drag there would
+    // turn a view that is not drawn yet, or fight the camera's own move
+    const Tn = H.phase === "run" ? (now - H.runAt) / 1000 : -1;
+    const held = Tn < 1.5 || (Tn > PULL - 0.5 && Tn < PULL + MOVE) || H.closing || H.leaving;
+    if (held) {
+      // what the viewer had turned eases back (gone at once while nothing is drawn); anything new is not taken
+      const L = CS.look, k = Tn < 1.5 ? 0 : Math.exp(-(dt || 0.016) / 0.3), w = H.look || [L.yaw, L.pitch, L.zoom];
+      L.yaw = w[0] * k; L.pitch = w[1] * k; L.zoom = 1 + (w[2] - 1) * k; L.drag = null;
+      H.look = [L.yaw, L.pitch, L.zoom];
+    } else H.look = null;
+    CS.look.wheel = !held; gl.style.cursor = held ? "default" : "";
     if (H.phase === "out" && now - H.t0 >= 1600) {
       // behind the black: a few seconds before the release, on Cassini
       H.phase = "run"; H.runAt = now;
       setFocus("CASSINI", 4e-5); markerPts.visible = false;
       fadeTo(black, 0, 2.5);
-      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
+      note.classList.add("on"); read.classList.add("on");
     }
     if (H.phase !== "run") return;
     const T = (now - H.runAt) / 1000;
     H.T = T; H.s = missionAt(T);
     if (!H.fx) H.fx = addEffects();
-    if (T > 7) hint.classList.remove("on");
+    hint.classList.toggle("on", T > 1.5 && T < 7);
     if (T > PULL) note.classList.remove("on");
-    runCaptions(NEAR, H.s, H.shownN);
-    if (T > PULL) { CS.dropAll(H.shownN); runCaptions(FAR_CAPS, T, H.shownF); }
+    if (T <= PULL) runCaptions(H.near, T, H.shownN);
+    else { CS.dropAll(H.shownN); runCaptions(FAR_CAPS, T, H.shownF); }
     if (H.s >= 0 && !H.chimed) { H.chimed = true; sound("chord", [0, 4, 7, 11]); }
-    if (T > END - 2 && !H.closing) { H.closing = true; fadeTo(black, 1, 2); }
+    // the quiet tone under it: in with the picture, a little fuller around the release, out with the closing fade
+    if (!H.leaving && !(now - H.bedAt < 200)) {
+      H.bedAt = now;
+      sound("drone", (BED * ease(T / 3) + 0.12 * Math.exp(-(((T - LEAD) / 3) ** 2))) * (1 - ease((T - (END - CLOSE)) / CLOSE)));
+    }
+    if (T > END - CLOSE && !H.closing && !H.leaving) {
+      H.closing = true; fadeTo(black, 1, CLOSE);
+      root.style.setProperty("--hr-out", `${CLOSE * 0.8}s`); root.classList.add("hr-out");
+    }
     if (T > END) { finish("stay"); return; }
     state.et = RELEASE + H.s;
   }
@@ -19327,47 +19182,78 @@ window.huygensModels = (() => {
       : `${fmtClock(s)} · Huygens <i>${out < 10 ? out.toFixed(1) : Math.round(out)} m</i> away · ${SPEED} m/s · Spin <i>${DATA.spin_rpm} rpm</i>${rate > 1.05 ? ` · Time <i>×${Math.round(rate)}</i>` : ""}`;
   }
   // the camera, through cutscene.html's orbit() and frameOn(), so its subject stays in the middle of the view and a drag
-  // turns round it: first the middle of the two craft, from beside Cassini with its dish up, widening as the probe
-  // drifts off; then the subject slides over to the probe and the camera swings round behind it, looking on toward
-  // Titan, and closes in
+  // turns round it. Its frame is fixed against the stars: Cassini's dish axis and the probe's way out as they were when
+  // the picture came up, a few seconds before the release (Cassini holds still until then). Cassini's own turn after
+  // the push is then Cassini turning in the view, not the sky going round.
+  // First the middle of the two craft, from beside Cassini with its dish up, widening as the probe drifts off; then one
+  // move (MOVE seconds, eased at both ends): the subject slides over to the probe while the camera comes round behind
+  // it and closes in, to look past it toward Titan, which sits off the middle of the view where the screen has room
   const vB2 = new THREE.Vector3(), pW = new THREE.Vector3();
+  const ease5 = x => { x = clamp01(x); return x * x * x * (x * (6 * x - 15) + 10); };
   function cameraAt() {
+    // through the fade to black the view stays as it was
+    if (H.phase === "out") { camera.quaternion.copy(H.hold); return; }
     if (H.phase !== "run") return;
     const T = H.T;
     probeScene(state.et, pW);
-    const up = co ? co.up : new THREE.Vector3(0, 0, 1), upW = up.clone().applyQuaternion(cassini.quaternion).normalize();
-    const axisW = co ? co.axisS.clone() : new THREE.Vector3(-1, 0, 0).applyQuaternion(cassini.quaternion);
+    const tW = relScene("TITAN", vB2).sub(cassini.position).normalize();
+    if (!H.ref) {
+      const up = (co ? co.up.clone() : new THREE.Vector3(0, 0, 1)).applyQuaternion(cassini.quaternion).normalize();
+      const axis = (co ? co.axis.clone() : new THREE.Vector3(-1, 0, 0)).applyQuaternion(cassini.quaternion).normalize();
+      // beside the probe's path, on the side away from Titan: Titan's part of the sky is then behind the two craft,
+      // and the move toward it later is a short one
+      const side = new THREE.Vector3().crossVectors(up, axis).normalize();
+      if (side.dot(tW) > 0) side.negate();
+      H.ref = { up, axis, side };
+    }
+    const upW = H.ref.up, axisW = H.ref.axis, side = H.ref.side;
     const gap = pW.distanceTo(cassini.position) / 1e-6;   // metres between the two
     // near: off to the side of the probe's path, a little ahead of it and above, drifting slowly round
-    const side = new THREE.Vector3().crossVectors(upW, axisW).normalize();
-    const yaw = -0.35 + 0.01 * T;
+    const yaw = -0.35 + 0.01 * Math.min(T, PULL);
     const fromN = side.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(axisW, Math.sin(yaw) + 0.25).addScaledVector(upW, 0.28).normalize();
-    // an upright phone sees less across, so the camera stands further back
+    // an upright phone sees less across, so the camera stands further back: for Cassini itself (fit), and more for the
+    // gap between the two (wide), which has to stay inside the narrow width
     const fit = Math.max(1, 0.9 / camera.aspect);
-    const dN = (15 + 1.1 * gap) * fit;
-    const tW = relScene("TITAN", vB2).sub(cassini.position).normalize();
-    // far: behind the probe and to one side, so it is seen heading on toward Titan
-    const sideW = new THREE.Vector3().crossVectors(upW, tW).normalize();
-    const fromF = sideW.clone().multiplyScalar(0.85).addScaledVector(tW, -0.45).addScaledVector(upW, 0.25).normalize();
-    const k = ease((T - PULL) / 10);
-    const subject = cassini.position.clone().lerp(pW, 0.5 + 0.5 * ease((T - PULL) / 3));
+    const wide = Math.max(1, 0.45 / Math.tan(0.7 * Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect)));
+    const dN = 15 * fit + 1.1 * gap * wide;
+    // far: behind the probe, looking on toward Titan. Titan sits off the middle, to the side on a wide screen and above
+    // on an upright one, on whichever side asks the camera to come round less. Settled once, as the move begins
+    if (!H.fromF) {
+      const halfV = camera.fov * Math.PI / 360, halfH = Math.atan(Math.tan(halfV) * camera.aspect), across = camera.aspect >= 1;
+      const ax = Math.tan((across ? 0.42 : 0.1) * halfH), ay = Math.tan((across ? 0.38 : 0.42) * halfV);
+      const right = new THREE.Vector3().crossVectors(tW, upW).normalize(), upT = new THREE.Vector3().crossVectors(right, tW).normalize();
+      const pick = sgn => tW.clone().addScaledVector(right, -sgn * ax).addScaledVector(upT, -ay).normalize().negate();
+      const a = pick(1), b = pick(-1);
+      H.fromF = a.dot(fromN) >= b.dot(fromN) ? a : b;
+    }
+    const fromF = H.fromF;
+    const k = ease5((T - PULL) / MOVE);
+    // the subject is on the probe before the camera has closed in, so the probe never nears the edge of the view
+    const subject = cassini.position.clone().lerp(pW, 0.5 + 0.5 * ease5((T - PULL) / (MOVE * 0.55)));
     const from = fromN.clone().applyQuaternion(new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(fromN, fromF), k));
     const dist = Math.exp(Math.log(dN) * (1 - k) + Math.log(FAR_M * fit) * k) * 1e-6;
     const o = CS.orbit(from.negate(), upW);
     CS.frameOn(subject, o.dir, dist, o.up);
-    // the tags, once the view has pulled back
-    const showTags = T > PULL;
-    const place = (el, w, extra) => {
+    // where the camera stands from the probe, for the view left on it at the end
+    H.rel = camera.position.clone().sub(pW);
+    // the tags, once the two are small in the view: each clear of what it names (r: its size in metres)
+    const showTags = T > PULL - 4, perM = innerHeight / 2 / Math.tan(camera.fov * Math.PI / 360);
+    const place = (el, w, r, extra) => {
       const v = w.clone().project(camera), on = showTags && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
       el.classList.toggle("on", on);
-      if (on) el.style.transform = `translate(${(v.x + 1) / 2 * innerWidth + 8}px, ${(1 - v.y) / 2 * innerHeight - 5}px)`;
-      if (extra !== undefined) el.innerHTML = extra;
+      if (extra !== undefined && el.innerHTML !== extra) el.innerHTML = extra;
+      if (!on) return;
+      // to the right of it; under it where the right edge of the screen is too near for the words
+      const off = r ? r / Math.max(1e-9, camera.position.distanceTo(w) / 1e-6) * perM : 0;
+      const x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight, wd = el.offsetWidth;
+      el.style.transform = x + 8 + off + wd < innerWidth - 8 ? `translate(${x + 8 + off}px, ${y - 5}px)`
+        : `translate(${Math.max(8, Math.min(innerWidth - 8 - wd, x - wd / 2))}px, ${y + off + 10}px)`;
     };
     camera.updateMatrixWorld();
-    place(tags.cassini, cassini.position);
-    place(tags.probe, pW);
+    place(tags.cassini, cassini.position, 2.6);
+    place(tags.probe, pW, 1.4);
     const titanKm = len(sub(pos.TITAN, pos.CASSINI, v3()));
-    place(tags.titan, cassini.position.clone().addScaledVector(tW, 50), `Titan <small>${(titanKm / 1e6).toFixed(1)} million km</small>`);
+    place(tags.titan, cassini.position.clone().addScaledVector(tW, 50), 0, `Titan <small>${(titanKm / 1e6).toFixed(1)} million km</small>`);
   }
 
   CS.register("huygens", { root, frame, attitude, camera: cameraAt, onEnd: cleanUp });
