@@ -7,7 +7,7 @@
      works on the finished picture, the way a photo app does.
 
      The edit is a recipe, never a new picture until it is saved: light (exposure, contrast, black and white levels,
-     midtones), color (saturation, warmth, tint), detail (sharpness), a filter at a strength, and the frame (quarter
+     midtones), color (saturation, warmth, tint), detail (denoise, sharpness), a filter at a strength, and the frame (quarter
      turns, flips, straighten, crop at a chosen shape; a film also its start and end). One WebGL pass draws it, the
      same for the preview, the saved JPEG and every frame of a film, so what is seen is what is saved.
 
@@ -212,10 +212,11 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
     { k: "saturation", label: "Saturation", min: -100, max: 100, step: 1, group: "Color" },
     { k: "warmth", label: "Warmth", min: -100, max: 100, step: 1, group: "Color", hint: "color balance: blue to amber" },
     { k: "tint", label: "Tint", min: -100, max: 100, step: 1, group: "Color", hint: "color balance: green to magenta" },
+    { k: "denoise", label: "Denoise", min: 0, max: 100, step: 1, group: "Detail", hint: "smooths grain and noise, keeping edges" },
     { k: "sharpness", label: "Sharpness", min: 0, max: 100, step: 1, group: "Detail" }
   ];
   const TONE = { k: "tone", min: 0, max: 100 };
-  const DEF = { exposure: 0, contrast: 0, black: 0, white: 100, midtones: 0, saturation: 0, warmth: 0, tint: 0, sharpness: 0, tone: 0,
+  const DEF = { exposure: 0, contrast: 0, black: 0, white: 100, midtones: 0, saturation: 0, warmth: 0, tint: 0, denoise: 0, sharpness: 0, tone: 0,
     filter: "none", strength: 100, quarter: 0, flipH: 0, flipV: 0, angle: 0, crop: [0, 0, 1, 1], aspect: "free", trim: null };
   const FILTERS = [
     { k: "none", label: "Original", d: {} },
@@ -237,7 +238,7 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
     return e;
   }
   // short keys, for links (&edit=ex:0.3,ct:20,cr:0.1_0.1_0.8_0.8)
-  const SHORT = { exposure: "ex", contrast: "ct", black: "bk", white: "wt", midtones: "md", saturation: "sa", warmth: "wa", tint: "ti", sharpness: "sh", tone: "to",
+  const SHORT = { exposure: "ex", contrast: "ct", black: "bk", white: "wt", midtones: "md", saturation: "sa", warmth: "wa", tint: "ti", denoise: "dn", sharpness: "sh", tone: "to",
     filter: "fi", strength: "st", quarter: "q", flipH: "fh", flipV: "fv", angle: "an", crop: "cr", aspect: "as", trim: "tr" };
   const LONG = Object.fromEntries(Object.entries(SHORT).map(([a, b]) => [b, a]));
   const r4 = v => +(+v).toFixed(4);
@@ -301,13 +302,29 @@ body.phone .stufoot .galbtn { padding: 6px 10px; }
   const VS = "attribute vec2 p; varying vec2 uv; void main() { uv = vec2(p.x * .5 + .5, .5 - p.y * .5); gl_Position = vec4(p, 0., 1.); }";
   const FS = `precision highp float;
 varying vec2 uv; uniform sampler2D img; uniform vec3 m0, m1; uniform vec2 texel;
-uniform float ev, con, blk, wht, gam, sat, warm, tint, sharp, tone, raw;
+uniform float ev, con, blk, wht, gam, sat, warm, tint, sharp, tone, raw, dn;
+// denoise: an edge-keeping (bilateral) average of the 5 x 5 pixels about s, each weighted by its distance (spatial
+// sigma 1.5 px) and by how far its color is from the middle one's (range sigma dn, mean of the channels' squares),
+// so grain is smoothed and edges, stars and limbs are kept
+vec3 smooth5(vec2 s) {
+  vec3 c0 = texture2D(img, s).rgb, acc = vec3(0.);
+  float ws = 0., rg = 1. / (6. * dn * dn);
+  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+    vec3 q = texture2D(img, s + vec2(float(i), float(j)) * texel).rgb, d = q - c0;
+    float w = exp(-float(i * i + j * j) * .2222222 - dot(d, d) * rg);
+    acc += q * w; ws += w;
+  }
+  return acc / ws;
+}
 void main() {
   vec2 s = vec2(dot(m0, vec3(uv, 1.)), dot(m1, vec3(uv, 1.)));
   if (s.x < 0. || s.y < 0. || s.x > 1. || s.y > 1.) { gl_FragColor = vec4(0., 0., 0., 1.); return; }
   vec3 c = texture2D(img, s).rgb;
   if (raw > .5) { gl_FragColor = vec4(c, 1.); return; }
-  if (sharp > 0.) {
+  if (dn > 0.) {
+    c = smooth5(s);
+    if (sharp > 0.) c += (c - (smooth5(s + vec2(texel.x, 0.)) + smooth5(s - vec2(texel.x, 0.)) + smooth5(s + vec2(0., texel.y)) + smooth5(s - vec2(0., texel.y))) * .25) * sharp;
+  } else if (sharp > 0.) {
     vec3 b = (texture2D(img, s + vec2(texel.x, 0.)).rgb + texture2D(img, s - vec2(texel.x, 0.)).rgb + texture2D(img, s + vec2(0., texel.y)).rgb + texture2D(img, s - vec2(0., texel.y)).rgb) * .25;
     c += (c - b) * sharp;
   }
@@ -330,7 +347,7 @@ void main() {
     const loc = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
     [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([k, v]) => gl.texParameteri(gl.TEXTURE_2D, k, v));
-    const U = {}; ["m0", "m1", "texel", "ev", "con", "blk", "wht", "gam", "sat", "warm", "tint", "sharp", "tone", "raw"].forEach(n => U[n] = gl.getUniformLocation(pr, n));
+    const U = {}; ["m0", "m1", "texel", "ev", "con", "blk", "wht", "gam", "sat", "warm", "tint", "sharp", "tone", "raw", "dn"].forEach(n => U[n] = gl.getUniformLocation(pr, n));
     let W = 0, H = 0;
     return {
       gl, max: gl.getParameter(gl.MAX_TEXTURE_SIZE),
@@ -348,6 +365,7 @@ void main() {
         gl.uniform1f(U.blk, e.black / 100); gl.uniform1f(U.wht, e.white / 100); gl.uniform1f(U.gam, Math.pow(2, -e.midtones / 100));
         gl.uniform1f(U.sat, 1 + e.saturation / 100); gl.uniform1f(U.warm, e.warmth / 100); gl.uniform1f(U.tint, e.tint / 100);
         gl.uniform1f(U.sharp, e.sharpness / 100 * 2.5); gl.uniform1f(U.tone, e.tone / 100); gl.uniform1f(U.raw, opts.raw ? 1 : 0);
+        gl.uniform1f(U.dn, Math.pow(e.denoise / 100, 2) * .12);   // squared: fine control at the gentle end
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       }
     };

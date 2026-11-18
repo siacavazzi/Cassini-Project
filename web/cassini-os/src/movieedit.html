@@ -732,7 +732,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     $("meshowout").checked = ME.showOut;
     sideLevels();
   }
-  const LOOKNAMES = { ex: "exposure", ct: "contrast", bk: "black", wt: "white", md: "midtones", sa: "saturation", wa: "warmth", ti: "tint", sh: "sharpness", to: "tone", fi: "filter", st: "strength" };
+  const LOOKNAMES = { ex: "exposure", ct: "contrast", bk: "black", wt: "white", md: "midtones", sa: "saturation", wa: "warmth", ti: "tint", dn: "denoise", sh: "sharpness", to: "tone", fi: "filter", st: "strength" };
   const lookText = r => r.split(",").map(kv => { const [k, v] = kv.split(":"); return `${LOOKNAMES[k] || k} ${/^-?[\d.]+$/.test(v) && +v > 0 && k !== "st" && k !== "wt" ? "+" : ""}${v}`; }).join(", ");
 
   function render() {
@@ -1297,7 +1297,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   // a frame's own look: the studio keys it sets over the movie's look, each kept even at rest, the last of a key
   // winning, in the studio's order (studio_look.override); the frame's look is decode(movie look + "," + these)
   const OWN = { ex: ["exposure", -4, 4], ct: ["contrast", -100, 100], bk: ["black", 0, 60], wt: ["white", 40, 100], md: ["midtones", -100, 100],
-    sa: ["saturation", -100, 100], wa: ["warmth", -100, 100], ti: ["tint", -100, 100], sh: ["sharpness", 0, 100], to: ["tone", 0, 100] };
+    sa: ["saturation", -100, 100], wa: ["warmth", -100, 100], ti: ["tint", -100, 100], dn: ["denoise", 0, 100], sh: ["sharpness", 0, 100], to: ["tone", 0, 100] };
   const OWNKEYS = [...Object.keys(OWN), "fi", "st"], FILTERNAMES = ["none", "vivid", "mono", "noir", "warm", "cool", "sepia"];
   function ownMap(r) {
     const m = new Map();

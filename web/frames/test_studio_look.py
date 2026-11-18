@@ -55,6 +55,22 @@ def test_pixels():
     assert out[..., 0].mean() > np.asarray(im)[..., 0].mean() and out[..., 2].mean() < np.asarray(im)[..., 2].mean()
 
 
+def test_denoise():
+    # off at rest; on, grain in a flat area is smoothed while a strong edge keeps its step and its place
+    assert L.parse("dn:0") is None
+    rng = np.random.default_rng(1)
+    a = np.zeros((48, 48, 3), np.float32)
+    a[:, 24:] = 0.6
+    a = np.clip(a + 0.2 + rng.normal(0, 0.02, a.shape), 0, 1)
+    im = Image.fromarray(np.round(a * 255).astype(np.uint8), "RGB")
+    out = np.asarray(L.apply(im, L.parse("dn:60")), np.float32) / 255
+    assert out[:, 3:20].std() < a[:, 3:20].std() / 3
+    assert abs((out[:, 27:].mean() - out[:, :21].mean()) - (a[:, 27:].mean() - a[:, :21].mean())) < 0.01
+    assert out[:, 22].mean() < 0.3 and out[:, 25].mean() > 0.7
+    # denoise with sharpness sharpens the smoothed picture, and links keep both
+    assert L.encode(L.parse("sh:20,dn:40")) == "dn:40,sh:20" and L.override("sh:10,dn:30") == "dn:30,sh:10"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
