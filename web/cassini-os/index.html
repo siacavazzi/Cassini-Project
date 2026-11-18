@@ -5928,6 +5928,12 @@ function targetLabel(k) {
   // before its colour), so a step of the movie is one new place of the mosaic, finished; stepsKnown: cam|pass the
   // note has listed them for (until then every frame that is a picture of its own counts, as before)
   const mosaicSteps = new Set(), stepsKnown = new Set();
+  // the runs of frames in a row of a movie pass that play as one picture, as the server's note lists them (kind_of
+  // movie_same, with colour "1" and without "0": each frame to its run's first frame): a pass playing in colour shows
+  // each colour set at every frame until the next set is complete, so its other filters' frames between are that set
+  // again, and a frame not fit to show shows the one before it. Movie mode stops on one frame of a run, so it never
+  // shows a picture twice in a row (Sam, 2026-11-17: "We should never, ever, ever, ever, ever be repeating frames like that")
+  const movieSame = { 0: new Map(), 1: new Map() };
   // a frame's pass: the pass id the data gives it (build_data.py --groups: the frame server's passes, obs_mosaic.units,
   // which split an observation where the camera pauses or the distance changes), else its target and observation
   const passKey = k => catalog.pass && catalog.pass[k] >= 0 ? `p${catalog.pass[k]}` : `${catalog.target[k]}|${catalog.obs[k]}`;
@@ -7491,6 +7497,7 @@ function targetLabel(k) {
             if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
             if (a && a.mosaic_steps) { a.mosaic_steps.forEach(id => mosaicSteps.add(id)); stepsKnown.add(`${cam}|${o}`); }
+            if (a && a.movie_same) for (const c of ["0", "1"]) for (const [id, run] of Object.entries(a.movie_same[c] || {})) movieSame[c].set(id, run);
             // the window is in that pass already: its frame is steadied (or rolls) from now on
             if (a && catalog === c0 && lastK >= 0 && passOf(lastK) === o && (playsMovie(lastK) || playsRolling(lastK))) update(true);
             if (!a || !a.mosaic) return;
@@ -7607,8 +7614,21 @@ function targetLabel(k) {
   // Whole mosaics (movies.mosaicFrames): of a mosaic movie, only the frames that finish a lap. Repeat exposures
   // (catalog.repeat; with Stack repeat exposures on, outside a pass played as a movie, whose frames are each their
   // own): only the first of a run, since the pipeline shows the run as one stacked picture. Of a pass a window
-  // plays as a mosaic: the frames the server's note says (mosaicSteps), one step a new place of the mosaic.
+  // plays as a mosaic: the frames the server's note says (mosaicSteps), one step a new place of the mosaic. Of a pass a
+  // window plays as a movie: one frame of a run of frames that play as one picture (movieSame).
   function complete(k, body) {
+    if (!completeAlone(k, body)) return false;
+    // a frame of a run that plays as one picture (movieSame): only the run's first frame that is a picture of its own
+    const runs = movieSame[S.get("cameras.composites") ? 1 : 0], run = runs.get(catalog.id[k]);
+    if (run === undefined) return true;
+    const cam = catalog.cam[k];
+    if (![...allFeeds].some(f => f.cam === cam && f.playsAs && f.playsAs(k) === "movie")) return true;
+    const ks = framesOf(cam, body).ks;
+    for (let p = lastOfCam(cam, catalog.et[k] - 1e-3, body); p >= 0 && runs.get(catalog.id[ks[p]]) === run; p--)
+      if (completeAlone(ks[p], body)) return false;
+    return true;
+  }
+  function completeAlone(k, body) {
     const cam = catalog.cam[k];
     // how the camera's windows play k's pass (any of them), asked only when a rule needs it
     const plays = how => { for (const f of allFeeds) if (f.cam === cam && f.playsAs && f.playsAs(k) === how) return true; return false; };
@@ -9462,6 +9482,46 @@ function targetLabel(k) {
   // ---------- the film made on this computer: export.py's render and Film, line for line, encoded by WebCodecs ----------
   const FPS = 30, CAPTION = 48, KIND = { true: "true color", false: "false color", two: "two-filter color (approximate)" };
   const MUXER = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.5/build/mp4-muxer.mjs";
+  // The film (an MP4's bytes) with its video's last frame lasting hold seconds: the muxer's time-to-sample table
+  // (stts) gives each frame the time to the next and the last one the step before it, so the film's last picture lost
+  // its own hold. Its stts entry is split off with its own duration (8 more bytes in the table: the boxes round it
+  // and the chunk offsets after it move with them). Anything not as expected: the film as it is.
+  function lastHeld(buf, hold) {
+    try {
+      const u8 = new Uint8Array(buf), dv = new DataView(buf), name = o => String.fromCharCode(u8[o + 4], u8[o + 5], u8[o + 6], u8[o + 7]);
+      const boxes = (from, to) => { const out = []; for (let o = from; o + 8 <= to;) { const n = dv.getUint32(o); if (n < 8 || o + n > to) break; out.push({ o, n, t: name(o) }); o += n; } return out; };
+      const moov = boxes(0, buf.byteLength).find(b => b.t === "moov");
+      if (!moov || !(hold > 0)) return buf;
+      for (const trak of boxes(moov.o + 8, moov.o + moov.n).filter(b => b.t === "trak")) {
+        const mdia = boxes(trak.o + 8, trak.o + trak.n).find(b => b.t === "mdia"); if (!mdia) continue;
+        const inMdia = boxes(mdia.o + 8, mdia.o + mdia.n), hdlr = inMdia.find(b => b.t === "hdlr"), mdhd = inMdia.find(b => b.t === "mdhd");
+        if (!hdlr || !mdhd || name(hdlr.o + 12) !== "vide") continue;
+        const scale = dv.getUint32(mdhd.o + (u8[mdhd.o + 8] === 1 ? 28 : 20)), want = Math.round(hold * scale);
+        const minf = inMdia.find(b => b.t === "minf"), stbl = minf && boxes(minf.o + 8, minf.o + minf.n).find(b => b.t === "stbl");
+        const stts = stbl && boxes(stbl.o + 8, stbl.o + stbl.n).find(b => b.t === "stts");
+        if (!stts) return buf;
+        const count = dv.getUint32(stts.o + 12), last = stts.o + 16 + 8 * (count - 1);
+        if (!count || dv.getUint32(last + 4) === want) return buf;
+        if (dv.getUint32(last) === 1) { dv.setUint32(last + 4, want); return buf; }
+        // split: the entry one sample shorter, and a new entry of one sample lasting the hold
+        const at = stts.o + stts.n, out = new Uint8Array(buf.byteLength + 8), ov = new DataView(out.buffer);
+        out.set(u8.subarray(0, at)); out.set(u8.subarray(at), at + 8);
+        ov.setUint32(last, dv.getUint32(last) - 1); ov.setUint32(at, 1); ov.setUint32(at + 4, want);
+        ov.setUint32(stts.o + 12, count + 1);
+        for (const b of [moov, trak, mdia, minf, stbl, stts]) ov.setUint32(b.o, b.n + 8);
+        // every chunk offset past the new bytes moves by 8 (moov before mdat: all of them)
+        const nb = (from, to) => { const r = []; for (let o = from; o + 8 <= to;) { const n = ov.getUint32(o); if (n < 8 || o + n > to) break; r.push({ o, n, t: String.fromCharCode(out[o + 4], out[o + 5], out[o + 6], out[o + 7]) }); o += n; } return r; };
+        const shiftNew = (from, to) => { for (const b of nb(from, to)) {
+          if (["moov", "trak", "mdia", "minf", "stbl"].includes(b.t)) shiftNew(b.o + 8, b.o + b.n);
+          else if (b.t === "stco") { for (let i = 0, n = ov.getUint32(b.o + 12); i < n; i++) { const p = b.o + 16 + 4 * i, v = ov.getUint32(p); if (v >= at) ov.setUint32(p, v + 8); } }
+          else if (b.t === "co64") { for (let i = 0, n = ov.getUint32(b.o + 12); i < n; i++) { const p = b.o + 16 + 8 * i, v = Number(ov.getBigUint64(p)); if (v >= at) ov.setBigUint64(p, BigInt(v + 8)); } }
+        } };
+        shiftNew(0, out.byteLength);
+        return out.buffer;
+      }
+    } catch (err) { console.warn("export: last hold", err); }
+    return buf;
+  }
   const WHAT = { movie: "movie", rolling: "mosaic movie", mosaic: "mosaic", color: "colour", processed: "processed", frame: "frame" };
   const editOf = key => new URLSearchParams(key).get("edit") || "";
   // the film's own video codec: H.264 where the browser encodes it, else VP9 (both in MP4)
@@ -9704,7 +9764,7 @@ function targetLabel(k) {
     const g = film.getContext("2d", { alpha: false }); g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
     const font = Math.max(10, Math.round(ch * 0.36)), small = Math.max(9, Math.round(ch * 0.3)), mono = `Menlo, "DejaVu Sans Mono", monospace`;
     const pics = plan.pictures, ahead = 6, todo = [], building = {}, kinds = {};
-    let nxt = 0, at = 0, lastKey = -Infinity, shown = null;
+    let nxt = 0, at = 0, lastKey = -Infinity, shown = null, lastHold = 0;
     // the film never repeats a frame (export.py Film): the plan's steps are its own rate's (a fixed rate film is a video
     // at that rate, one frame a picture), and each picture on screen is one frame lasting its whole hold, encoded once
     // the next picture replaces it; a frame held behind a mosaic, or a picture the same as the one its pane shows,
@@ -9808,9 +9868,9 @@ function targetLabel(k) {
           setState(`${(n + 1).toLocaleString()} of ${pics.length.toLocaleString()} pictures · here · ${fmtDur(Math.round(left))} left`, (n + 1) / pics.length * 0.97);
         }
       }
-      // the last picture, once (an MP4's time-to-sample table gives it the step before it, while the film's length says
-      // its own hold: it was written twice more, one-step copies, to end where the server's film does, and those were
-      // repeated frames)
+      // the last picture, once, with its own hold (lastHeld; it was written twice more, one-step copies, to end where
+      // the server's film does, and those were repeated frames)
+      if (shown) lastHold = Math.round((shown.at + shown.frames) * 1e6 / RATE) - Math.round(shown.at * 1e6 / RATE);
       flush();
       await venc.flush();
       if (failed) throw failed;
@@ -9823,7 +9883,7 @@ function targetLabel(k) {
       console.warn("export here", err);
       return setState(`Failed here: ${err.message || err}`, 0);
     }
-    const blob = new Blob([target.buffer], { type: "video/mp4" }), took = (performance.now() - t0) / 1000;
+    const blob = new Blob([lastHeld(target.buffer, lastHold / 1e6)], { type: "video/mp4" }), took = (performance.now() - t0) / 1000;
     X.made = { kinds, codec: vc.codec, audio: ac ? ac.codec : null, seconds: took, bytes: blob.size, frames: at };
     doneHere(blob, plan, took, !!ac);
   }
@@ -14169,7 +14229,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"abbf08802bb6";
+  const BUILD = /*BUILD*/"be2ef8f09764";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

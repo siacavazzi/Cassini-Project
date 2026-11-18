@@ -1122,7 +1122,10 @@ class Film:
         self.frame = None
         # each frame once, at its own time (-fps_mode vfr), on the MP4 timescale of the film's rate; no B-frames, so
         # every frame's duration in the MP4 is its own (with them the last picture's hold was cut to one step)
-        timed = ["-f", "matroska", "-i", "-", "-fps_mode", "vfr", "-video_track_timescale", str(self.rate)]
+        # (-enc_time_base: the encoder counts in the film's steps; left to itself ffmpeg guesses a frame rate from the
+        # first frames' times and snaps every frame to it, and an adaptive film's holds came out wrong)
+        timed = ["-f", "matroska", "-i", "-", "-fps_mode", "vfr", "-enc_time_base", f"1:{self.rate}",
+                 "-video_track_timescale", str(self.rate)]
         if self.hdr:
             import hdr_still
             self.proc = subprocess.Popen(

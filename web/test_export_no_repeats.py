@@ -65,6 +65,27 @@ try:
 finally:
     obs_mosaic.movie_shown = real
 
+# ---- movie mode (the page's complete(), kind_of "movie_same"): the runs of a movie pass's frames in a row that play
+# as one picture, read from the reports kept beside the pictures; the page stops on one frame of a run ----
+root = tempfile.mkdtemp()
+u = {"movie": True, "key": ("DAPHNIS", "ISS_257DA_DAPHNIS001_PIE", "N", 3),
+     "frames": [[0, f"N{n}_1", "F", 0.0] for n in range(7)]}
+reports = {0: {"ids": ["a", "b", "c"]}, 1: {"ids": ["a", "b", "c"]}, 2: {"ids": ["a", "b", "c"], "tint": True, "held": "N0_1"},
+           3: {"ids": ["d", "e", "f"]}, 4: {"held": "N3_1"}, 5: {"held": "N3_1"}}   # frame 6: not made yet
+for n, rep in reports.items():
+    os.makedirs(os.path.join(root, obs_mosaic.MOVIE_DIR, "1024"), exist_ok=True)
+    with open(os.path.join(root, obs_mosaic.MOVIE_DIR, "1024", f"{n}_0_1_c2_e8r3.json"), "w") as fh:
+        json.dump(dict(rep, movie=True, id=f"N{n}_1"), fh)
+saved = obs_mosaic.folder, obs_mosaic._plan_if_made
+obs_mosaic.folder, obs_mosaic._plan_if_made = (lambda v, cache: root), (lambda v, cache: {})
+try:
+    runs = obs_mosaic.movie_runs(u, "cache", True)
+    # 0 and 1 show one set; 2 is a tinted frame (a picture of its own); 4 and 5 hold frame 4's picture, 3 is a set
+    assert runs == {"N0_1": "N0_1", "N1_1": "N0_1", "N4_1": "N4_1", "N5_1": "N4_1"}, runs
+    assert obs_mosaic.movie_runs(u, "cache", False) == {}
+finally:
+    obs_mosaic.folder, obs_mosaic._plan_if_made = saved
+
 
 def picture(seed, w=SIZE, h=SIZE):
     r = np.random.default_rng(seed)
@@ -134,6 +155,24 @@ def repeats(fr):
 if not (os.path.exists(export.FFMPEG) or shutil.which(export.FFMPEG)):
     print(f"skipped the films: no ffmpeg at {export.FFMPEG} (CASSINI_FFMPEG); the plan's timing passed")
     sys.exit(0)
+
+# ---- each frame's own time and hold, exactly, however irregular the holds (ffmpeg left to guess a frame rate from the
+# first frames snapped them to it: holds 1, 15, 3, 12, 7 came out 3, 12, 3, 12, 6) ----
+for rate, holds in ((30, [1, 15, 3, 12, 7]), (30, [9, 1, 1, 2, 30, 1, 4]), (24, [1, 1, 3, 1, 2]), (12, [5, 1, 7])):
+    opt = {"cams": "N", "size": 64, "caption": False, "fps": "auto" if rate == 30 else rate, "movie": {}}
+    path = os.path.join(tempfile.mkdtemp(), "film.mp4")
+    film = export.Film(opt, path, rate)
+    for n, h in enumerate(holds):
+        film.canvas.paste(Image.fromarray(picture(100 + n, 64, 64)[..., :3]), (0, 0))
+        film.changed = True
+        film.hold(h)
+    film.close()
+    fr, info = decoded(path, film.w, film.h)
+    got = [(round(float(f["pts_time"]) * rate), round(float(f["duration_time"]) * rate)) for f in info["frames"]]
+    want = [(sum(holds[:n]), h) for n, h in enumerate(holds)]
+    print(f"holds {holds} at {rate}: frames at {got}")
+    assert got == want, (got, want)
+    assert abs(float(info["format"]["duration"]) - sum(holds) / rate) < 0.5 / rate, info["format"]
 
 for cams, fps, caption in (("N", 24, True), ("N", "auto", False), ("NW", 24, True), ("NW", "auto", True),
                            ("N", 12, False)):

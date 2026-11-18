@@ -1466,7 +1466,9 @@ def kind_of(frame_id, cache=None):
     mosaic_movie or None), "tossup": the pointing alone cannot tell it a movie from a mosaic, so the build stores
     both its views (prebuild.make_pass) and the window may offer either, "repeats": its laps, "lap_ends": the ids of the frames that finish a lap of its mosaic
     movies, when it has any, "mosaic_steps": the ids of the frames of its mosaic passes movie mode stops on
-    (mosaic_steps; by the pass's plan when cache holds it), when it has any}."""
+    (mosaic_steps; by the pass's plan when cache holds it), when it has any, "movie_same": {"1": {id: run}, "0": ...}
+    the runs of frames in a row of its movie passes that play as one picture in colour and in grey (movie_runs: each
+    frame of a run to the run's first frame), of which movie mode shows one, when it has any}."""
     found = unit_of(frame_id)
     if not found:
         return {"mosaic": False, "movie": False, "kind": None}
@@ -1476,9 +1478,12 @@ def kind_of(frame_id, cache=None):
     ends = [v["frames"][j][1] for v in us for j in lap_ends(v)]
     steps = [v["frames"][j][1] for v in us if v["mosaic"] and not v["movie"] and v.get("kind") != "mosaic_movie"
              for j in mosaic_steps(v, _plan_if_made(v, cache))]
+    # movie_same: the runs of frames in a row of its movie passes that play as one picture, with colour (1) and
+    # without (0), of which movie mode shows one (movie_runs)
+    same = {c: {i: r for v in us for i, r in movie_runs(v, cache, c == "1").items()} for c in "01"}
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
             "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
-            **({"mosaic_steps": steps} if steps else {})}
+            **({"mosaic_steps": steps} if steps else {}), **({"movie_same": same} if any(same.values()) else {})}
 
 
 def _plan_if_made(u, cache):
@@ -10356,12 +10361,51 @@ def movie_shown(frame_id, size, cache, trail=0, colour=True, centre=True, steady
     if _plan_if_made(u, cache) is None:
         return None
     path = _movie_name(u, n, size, cache, trail, colour, centre, steady_of(u, steady, cache), exposure_of(exposure), True)
-    rep = reel.report_of(path[:-len("webp")] + "json", None)
+    return _shown_key(u, reel.report_of(path[:-len("webp")] + "json", None), frame_id)
+
+
+def _shown_key(u, rep, frame_id):
+    """movie_shown's key from a movie picture's report (None for none)."""
     if not rep or not rep.get("movie"):
         return None
     shown = rep.get("held") or rep.get("id") or frame_id
     ids = tuple(rep.get("ids") or ())
     return (tuple(u["key"]), "set", ids) if ids and not rep.get("tint") else (tuple(u["key"]), shown, ids)
+
+
+def movie_runs(u, cache, colour):
+    """{frame id: the first frame id of its run} for movie pass u's runs of frames in a row that play as one picture
+    (movie_shown's key: a colour set's composite shown again at its other filters' frames, a frame not fit to show
+    showing the one before it), colour or not; movie mode shows one frame of a run (kind_of "movie_same"). Which
+    picture a frame plays as does not depend on the size, trail, centring, stabilization or exposure it is drawn
+    with, so any report the cache keeps for it answers; a frame with none is a picture of its own (nothing is drawn
+    or worked out here)."""
+    if cache is None or not u.get("movie") or _plan_if_made(u, cache) is None:
+        return {}
+    root, c, kept = os.path.join(folder(u, cache), MOVIE_DIR), str(int(bool(colour))), {}
+    try:
+        sizes = sorted(os.listdir(root))
+    except OSError:
+        return {}
+    for d in sizes:
+        try:
+            names = os.listdir(os.path.join(root, d))
+        except OSError:
+            continue
+        for f in names:
+            parts = f[:-len(".json")].split("_") if f.endswith(".json") else []
+            # (n_trail_colour[...].json, as _movie_name names a picture)
+            if len(parts) >= 3 and parts[0].isdigit() and parts[2] == c:
+                kept.setdefault(int(parts[0]), os.path.join(root, d, f))
+    out, last, first = {}, None, None
+    for n, fr in enumerate(u["frames"]):
+        key = _shown_key(u, reel.report_of(kept[n], None), fr[1]) if n in kept else None
+        if key is not None and key == last:
+            out[first] = out[fr[1]] = first
+        else:
+            first = fr[1]
+        last = key
+    return out
 
 
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
