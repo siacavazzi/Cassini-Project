@@ -6845,7 +6845,8 @@ function targetLabel(k) {
         // it is, then the raw frame at 128 (the strip size the build stores for every frame; raw 256 is stored for
         // none, so it was drawn on request: zero-render check 2017, 11-17)
         if (taken && !tile.firstChild) {
-          const tries = [...new Set([shownFrameUrl(q, 256),
+          // (processed frames off in Settings: the raw frame at 512, stored for every frame, first)
+          const tries = [...new Set([processes(q) ? shownFrameUrl(q, 256) : frameUrl(catalog.id[q], 512),
             ...(processes(q) ? [`${FRAMES}/frames/processed/${catalog.id[q]}.webp?size=256${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(256) : ""}`] : []),
             frameUrl(catalog.id[q], 128)])];
           tile.innerHTML = `<img alt="" src="${tries[0]}" data-tries="${tries.slice(1).join(" ")}" onerror="const t = this.dataset.tries.split(' ').filter(Boolean); if (t.length) { this.dataset.tries = t.slice(1).join(' '); this.src = t[0]; } else this.style.visibility='hidden'">`;
@@ -14156,7 +14157,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"3194c5c7c9af";
+  const BUILD = /*BUILD*/"a0cdd3ecd1dd";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

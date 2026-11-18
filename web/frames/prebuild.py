@@ -232,8 +232,8 @@ def items(phase):
         # strips: a movie pass's steadied frames at 128, the movie strip under a window
         if phase == "strips":
             return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c, (128,))) for u in movie_passes()]
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c, every=True))
-                for u in movie_passes()]
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_pass(u, c) + make_planes(u, c) + make_evened(u, c, every=True)
+                 + make_grey(u, c)) for u in movie_passes()]
     if phase == "tables":
         movies = {tuple(u["key"]) for u in movie_passes()}
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_tables(u, c, tuple(u["key"]) in movies))
@@ -241,7 +241,10 @@ def items(phase):
     if phase == "fullview":
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_fullview(u, c)) for u in mosaic_passes()]
     if phase == "evened":
-        return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)) for u in evened_passes()]
+        # (and a movie pass's colours-off frames, make_grey, which a cache built before had none of)
+        movies = {tuple(u["key"]) for u in movie_passes()}
+        return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)
+                 + (make_grey(u, c) if tuple(u["key"]) in movies else 0)) for u in evened_passes()]
     raise ValueError(phase)
 
 
@@ -554,6 +557,19 @@ def make_planes(u, cache, centre=True):
     for f in u["frames"]:
         for sharpen in ((True, False) if filled else (True,)):
             obs_mosaic.movie_webp(f[1], 1024, cache, 0, False, wait=True, ahead=0, centre=centre, sharpen=sharpen)
+    return 0
+
+
+def make_grey(u, cache, sizes=(1024, 512), centre=True):
+    """A movie pass's frames as the window asks for them with Settings > colours off (cameras.composites off:
+    color=0): each frame alone in its own filter, at 512 (the 1024 one is make_planes') and evened (exposure=
+    EXPOSURE_SMOOTH) at 1024 and 512; a full-size request takes the 1024 one. Unstored, the server drew each on request
+    (zero-render check 2017, 11-17). Returns 0: make_pass has counted the pass's frames."""
+    for f in u["frames"]:
+        obs_mosaic.movie_webp(f[1], 512, cache, 0, False, wait=True, ahead=0, centre=centre)
+        for size in sizes:
+            obs_mosaic.movie_webp(f[1], size, cache, 0, False, wait=True, ahead=0, centre=centre,
+                                  exposure=obs_mosaic.EXPOSURE_SMOOTH)
     return 0
 
 

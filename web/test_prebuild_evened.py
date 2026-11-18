@@ -29,10 +29,16 @@ todo = prebuild.items("evened")
 assert [name for name, _ in todo] == ["TITAN_ISS_133TI_CLOUD002_PRIME_N_0", "SATURN_ISS_000SA_TOSSUP001_PRIME_W_0"], todo
 for _, work in todo:
     work("/nowhere")
-assert len(made) == (3 + 2) * 2, made
-assert {(m[1], m[2], m[3]) for m in made} == {(1024, 0, True), (512, 0, True)}, made
-assert all(m[4] == {"wait": True, "ahead": 0, "centre": True, "exposure": om.EXPOSURE_SMOOTH} for m in made), made
-assert {m[0] for m in made} == {f[1] for u in (movie, tossup) for f in u["frames"]}
+colour = [m for m in made if m[3]]
+assert len(colour) == (3 + 2) * 2, made
+assert {(m[1], m[2], m[3]) for m in colour} == {(1024, 0, True), (512, 0, True)}, made
+assert all(m[4] == {"wait": True, "ahead": 0, "centre": True, "exposure": om.EXPOSURE_SMOOTH} for m in colour), made
+assert {m[0] for m in colour} == {f[1] for u in (movie, tossup) for f in u["frames"]}
+# ... and a movie pass's colours-off frames (make_grey: color=0 at 512 plain, evened at 1024 and 512), none for a
+# toss-up mosaic (its windows play it in colour)
+grey = [m for m in made if not m[3]]
+assert len(grey) == 3 * 3 and {m[0] for m in grey} == {f[1] for f in movie["frames"]}, made
+assert sorted((m[1], m[4].get("exposure", 0)) for m in grey) == sorted([(512, 0), (1024, om.EXPOSURE_SMOOTH), (512, om.EXPOSURE_SMOOTH)] * 3), grey
 
 # make_evened alone still leaves a pass the page evens to the page (the planes and plain frames it starts from)
 made.clear()
@@ -47,7 +53,9 @@ prebuild.make_pass = lambda u, c, *a, **k: 0
 prebuild.make_planes = lambda u, c, *a, **k: 0
 for name, work in prebuild.items("movies"):
     work("/nowhere")
-assert len(made) == 6 and {m[4]["exposure"] for m in made} == {om.EXPOSURE_SMOOTH}, made
+colour = [m for m in made if m[3]]
+assert len(colour) == 6 and {m[4]["exposure"] for m in colour} == {om.EXPOSURE_SMOOTH}, made
+assert len([m for m in made if not m[3]]) == 3 * 3, made   # and its colours-off frames (make_grey)
 
 # and the mosaics phase a toss-up pass's (its frames play as a movie too), none for a plain mosaic or a mosaic movie
 made.clear()
