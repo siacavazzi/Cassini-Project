@@ -227,8 +227,9 @@ body:not(.phone) #soi .cs-read { bottom: max(7vh, 52px); }
       LINES.forEach(([at, html], i) => { if (!S.shown[i] && s >= at) { S.shown[i] = true; line(html); } });
       // sound: the framework's soft bed grows through the approach and falls away under the engine over the burn's
       // first three seconds; one soft note as Cassini goes through the ring plane
-      if (S.tau < T_IGN) sound("bed", 0.4 + 0.6 * clamp01(screenAt(S.tau) / screenAt(T_IGN)), 1.5);
-      else if (!S.bedOff) { S.bedOff = true; sound("bed", 0, 3); }
+      // (the bed's level is set twice a second, not every frame; often enough for sound that starts late, at a click)
+      if (S.tau >= T_IGN) { if (!S.bedOff) { S.bedOff = true; sound("bed", 0, 3); } }
+      else if (!(T < S.bedAt + 0.5)) { S.bedAt = T; sound("bed", 0.4 + 0.6 * clamp01(screenAt(S.tau) / screenAt(T_IGN)), 1.5); }
       if (was < crossing() && S.tau >= crossing()) sound("chord", [7]);
       if (S.tau >= T_IGN && S.tau < T_OFF) sound("rumble", Math.min(1, s / 1.5));
       if (was < T_OFF && S.tau >= T_OFF) { sound("rumble", 0); sound("bell"); S.offAt = T; }
