@@ -2740,7 +2740,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       hint: "A frame shown on its own goes through the pipeline like a color picture's channels: repeat exposures stacked, calibrated, lost lines filled, on the same display stretch. Off shows the frame as it is in the archive." });
   D({ key: "cameras.level", section: "Processing", label: "Processing level", type: "choice", value: "full",
       options: [["raw", "Raw"], ["processed", "Processed"], ["color", "Color"], ["full", "Full"]],
-      hint: "How much of the pipeline the camera windows show, also set for each window on the bar under its picture. Raw: each frame as Cassini sent it, nothing done to it. Processed: each frame on its own, repeat exposures stacked, calibrated, cleaned and on the display stretch. Color: a filter set's frames put together as one color picture, but no mosaics or movies. Full: everything, with mosaics and steadied movies." });
+      hint: "How much of the pipeline the camera windows show, also set for each window on the bar under its picture. Raw: each frame as Cassini sent it, nothing done to it (with Auto center, only moved and turned into place by SPICE). Processed: each frame on its own, repeat exposures stacked, calibrated, cleaned and on the display stretch. Color: a filter set's frames put together as one color picture, but no mosaics or movies. Full: everything, with mosaics and steadied movies." });
   window.cassiniSteps = [
     { key: "processing.stack", step: "stack", label: "Stack repeat exposures",
       hint: "Frames Cassini took again of the same thing, with the same filter and exposure, are averaged into one picture, which cuts the noise (a plain stack). Off shows each frame alone." },
@@ -5843,7 +5843,7 @@ function targetLabel(k) {
   // (raw: /frames/<ID>, the frames phase; processed: /frames/processed/<ID>, the processed phase; color:
   // /frames/color.webp, the composites phase; full: what the window shows with every step, mosaics and movies). A
   // new stop is a row here, in its place in the pipeline, and its picture in the feed's viewOf
-  const LEVELS = [["raw", "Raw", "the frame as Cassini sent it, nothing done to it"],
+  const LEVELS = [["raw", "Raw", "the frame as Cassini sent it, nothing done to it; with Auto center, placed by SPICE"],
     ["processed", "Processed", "each frame on its own: repeats stacked, calibrated, cleaned, on the display stretch"],
     ["color", "Color", "a filter set's frames put together as one color picture; no mosaics or movies"],
     ["full", "Full", "everything: color, mosaics, steadied movies"]];
@@ -6105,6 +6105,7 @@ function targetLabel(k) {
     // cannot make that way shows as archived
     const processedFailed = new Set();
     const processes = k => S.get("cameras.processedFrames") !== false && !processedFailed.has(catalog.id[k]);
+    const rawPlacedUrl = (k, sz) => `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}&off=all&center=1`;
     const shownFrameUrl = (k, sz, force) => centres(k)
       ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook({ center: true })}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}`
       : (force ? !processedFailed.has(catalog.id[k]) : processes(k)) ? `${FRAMES}/frames/processed/${catalog.id[k]}.webp?size=${sz || size()}${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(sz || size()) : ""}` : frameUrl(catalog.id[k], sz);
@@ -6320,7 +6321,9 @@ function targetLabel(k) {
       // the processing level: Raw, the archive frame; Processed, the frame through the pipeline on its own; Color,
       // the frame's color set when it is taken, else the processed frame; Full, all that follows
       const lv = levelOf();
-      if (lv === "raw") return { key: frameUrl(catalog.id[k], sz), set: -1, k, level: lv };
+      // (Raw with Auto center: the frame as sent, every pipeline step off, placed by SPICE like the processed frame,
+      // the rawplaced phase; where the pass is not centred, or SPICE cannot place the frame, the frame as taken)
+      if (lv === "raw") return { key: centres(k) ? rawPlacedUrl(k, sz) : frameUrl(catalog.id[k], sz), set: -1, k, level: lv };
       if (lv === "processed") return { key: shownFrameUrl(k, sz, true), set: -1, k, level: lv };
       const full = lv === "full";
       // a pass played as a movie: the frame steadied by the server (SPICE-centered on the pass's one scale and view,
@@ -14210,7 +14213,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"936ff786e247";
+  const BUILD = /*BUILD*/"a17a11e7e446";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

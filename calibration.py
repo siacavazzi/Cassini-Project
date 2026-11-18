@@ -1235,7 +1235,11 @@ cisscal_noise.bright_dark), "flat" (calibrate's flat field: dust rings, mottle a
 detector's flat taken out, flat_field.py), "hotpix" (calibrate's repair of the hot and dead pixels, which stay put
 while the sky moves, dark_current.repair_hot), "geom" (calibrate's last step, CISSCAL's geometric correction of the
 WAC: its barrel distortion and each filter pair's focal length taken out, every WAC frame resampled onto one straight
-grid, geometric_correction.py; the masks of lost and saturated pixels moved with it), "align" (a color set's channels moved onto one another), "blend" (a
+grid, geometric_correction.py; the masks of lost and saturated pixels moved with it), "align" (a color set's channels moved onto one another),
+"stretch" (the lean archive's stored camera codes stretched as the old PNGs were, label_handler.resize_image; off keeps the
+codes as Cassini sent them, the frame route's picture), "detail" (the local contrast a still takes on its body's disk:
+the Saturn look, color_image._still_detail, and the close-up detail filter, obs_mosaic.detail_on_disk), "sharpen" (a
+still's last step, noise-aware fine sharpening, sharpen.adaptive_sharpen), "blend" (a
 mosaic's tiles blended where they meet, mosaic.composite), "level" (each tile leveled to the tiles round it along
 their seams, mosaic._level), "surface" (a mosaic's tiles' surface redrawn as at one moment,
 obs_mosaic.surface_pictures) and "panels" (a mosaic's pointings moved onto one another where they overlap,
@@ -1245,7 +1249,10 @@ only how tiles are drawn together, or redraw or move tiles from the tiles made, 
 left out of variant (a mosaic with them off draws the same tiles) and the mosaics name them themselves
 (mosaic.drawing; obs_mosaic.SURFACE_TAG, PANEL_TAG, EDGE_TAG).
 """
-STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align", "blend", "level", "surface", "panels")
+STEPS = ("stack", "hdr", "fill", "calibrate", "twohz", "twohzsky", "skysmooth", "dark", "darksky", "pairs", "flat", "hotpix", "geom", "align",
+         "stretch", "detail", "sharpen", "blend", "level", "surface", "panels")
+# every step off (off=all): the frame as Cassini sent it, only placed by SPICE (the camera windows' Raw with Auto center)
+ALL = "all"
 _off = contextvars.ContextVar("off", default=frozenset())
 _slopes = contextvars.ContextVar("slopes", default=True)
 
@@ -1291,9 +1298,12 @@ def variant():
 
 @contextlib.contextmanager
 def stepping(names):
-    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored) turned off."""
+    """The pipeline steps names (a comma list or an iterable of STEPS names; others are ignored; ALL: every step)
+    turned off."""
     if isinstance(names, str):
         names = names.split(",")
+    if ALL in names:
+        names = STEPS
     token = _off.set(frozenset(n for n in names if n in STEPS))
     try:
         yield

@@ -248,7 +248,7 @@ def load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None):
         cal.still_look.reset(token)
     # (how much of the picture is drawn white: the camera's saturation, which a still's report does not always carry)
     white = max(float(np.mean((img[..., 0] if img.ndim == 3 else img) >= 254)) for img in imgs) if imgs else 0.0
-    if look.get("detail") and len(imgs) in (1, 2, 3) and max(report.get("saturated_share", 0), white) <= om_clipped():
+    if look.get("detail") and cal.step("detail") and len(imgs) in (1, 2, 3) and max(report.get("saturated_share", 0), white) <= om_clipped():
         imgs = _still_detail(imgs, valid, look, None if look.get("nodisk") else _still_disk(lbl, imgs[0].shape[:2]))
         report["saturn_look"] = {k: v for k, v in look.items() if k != "disk"}
     return imgs, valid, lbl, report

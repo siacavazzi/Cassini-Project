@@ -642,6 +642,9 @@ def _target(frame_id):
 def _sharpened(px, ids, report):
     """px (uint8 LA or RGBA) through sharpen.adaptive_sharpen, gentler when one of its frames is lossy; its grain and
     the amount it took go in report["sharpen"]"""
+    if not calibration.step("sharpen"):   # Settings > Processing (off=sharpen, off=all)
+        report["sharpen"] = {"skipped": "off"}
+        return px
     if any(_target(i) in obs_mosaic.DISK_DETAIL_HAZE for i in ids):
         # a hazy body (Titan) takes no fine sharpening: its haze has no pixel-scale detail, and the step raised the
         # 2-pixel pattern along the haze's soft limb into a visible grid (Sam, 11-17: Titan's atmosphere looks harsh)
@@ -811,7 +814,7 @@ def centred(ids, view):
     target = str(lbl.info.get("TARGET_NAME", "")).replace('"', "").strip() if lbl is not None else ""
     haze = target in obs_mosaic.DISK_DETAIL_HAZE and not any(
         calibration.SURFACE_WINDOW.get(target) in _filters(i) for i in ids)
-    if view.get("centre") and radius and target not in obs_mosaic.DISK_DETAIL_SKIP and not haze:
+    if view.get("centre") and radius and target not in obs_mosaic.DISK_DETAIL_SKIP and not haze and calibration.step("detail"):
         out = obs_mosaic.detail_on_disk(out, cx - left, cy - top, radius, target=target,
                                          haze=target in obs_mosaic.DISK_DETAIL_HAZE)
         report["disk_detail"] = {"radius": round(float(radius), 1)}

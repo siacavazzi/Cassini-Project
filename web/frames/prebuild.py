@@ -98,8 +98,8 @@ import slices  # noqa: E402
 import stacking  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened")
-ADDED = ("tables", "fullview", "evened")   # phases run on a finished cache, not recorded in slices.json
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened", "rawplaced")
+ADDED = ("tables", "fullview", "evened", "rawplaced")   # phases run on a finished cache, not recorded in slices.json
 
 
 @functools.lru_cache(None)
@@ -211,6 +211,14 @@ def items(phase):
         # pass strip's (the windows asked it about as often as 1024 on 8790, 2026-10-26), cheap from the frame in memory
         return [(i, lambda c, i=i: [frame_server.processed_webp(i, z, c, centre=centred(i)) for z in (1024, 512, 256)])
                 for i in frame_ids()]
+    if phase == "rawplaced":
+        # the camera windows' Raw with Auto center: each frame as Cassini sent it, every pipeline step off
+        # (calibration.ALL), only placed by SPICE as its processed picture is (centred and turned to its pass); a
+        # frame Auto center leaves as it is shows the frame route's picture, so nothing is made for it
+        def placed(c, i, view):
+            with calibration.stepping(calibration.ALL):
+                return [frame_server.processed_webp(i, z, c, centre=view) for z in (1024, 512, 256)]
+        return [(i, lambda c, i=i: (lambda v: placed(c, i, v) if v else [])(centred(i))) for i in frame_ids()]
     if phase == "mosaics":
         # (a toss-up mosaic pass plays as a movie too, make_pass's movie(): its evened frames with it, as the evened
         # phase adds them to a cache built before)
