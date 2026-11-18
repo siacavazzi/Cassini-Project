@@ -1476,8 +1476,13 @@ def kind_of(frame_id, cache=None):
     ends = [v["frames"][j][1] for v in us for j in lap_ends(v)]
     steps = [v["frames"][j][1] for v in us if v["mosaic"] and not v["movie"] and v.get("kind") != "mosaic_movie"
              for j in mosaic_steps(v, _plan_if_made(v, cache))]
-    return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
-            "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
+    u = found[0]
+    return {"mosaic": bool(u["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
+            # this frame's own pass plays as a movie, by the build's rule (prebuild.movie_passes): "movie" above is
+            # the whole observation's, true too for a one-frame pass in a movie observation, whose frame the build
+            # stores as a processed frame and never as a movie frame (zero-render check 2017, 11-17)
+            "pass_movie": u.get("kind") == "movie" or bool(u.get("movie") and not u["mosaic"]),
+            "kind": u["kind"], "repeats": u["repeats"], "tossup": bool(u.get("tossup")), **({"lap_ends": ends} if ends else {}),
             **({"mosaic_steps": steps} if steps else {})}
 
 

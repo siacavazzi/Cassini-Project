@@ -6841,7 +6841,15 @@ function targetLabel(k) {
       chans.querySelectorAll("figure").forEach((fig, j) => {
         const q = s.use[j], taken = catalog.et[q] <= et, tile = fig.querySelector(".tile");
         fig.classList.toggle("now", q === k); fig.classList.toggle("waiting", !taken);
-        if (taken && !tile.firstChild) tile.innerHTML = `<img alt="" src="${shownFrameUrl(q, 256)}" data-raw="${frameUrl(catalog.id[q], 256)}" onerror="if (this.src !== this.dataset.raw) this.src = this.dataset.raw; else this.style.visibility='hidden'">`;
+        // the picture as the window shows it, then (a frame the server does not centre: 404) the processed frame as
+        // it is, then the raw frame at 128 (the strip size the build stores for every frame; raw 256 is stored for
+        // none, so it was drawn on request: zero-render check 2017, 11-17)
+        if (taken && !tile.firstChild) {
+          const tries = [...new Set([shownFrameUrl(q, 256),
+            ...(processes(q) ? [`${FRAMES}/frames/processed/${catalog.id[q]}.webp?size=256${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(256) : ""}`] : []),
+            frameUrl(catalog.id[q], 128)])];
+          tile.innerHTML = `<img alt="" src="${tries[0]}" data-tries="${tries.slice(1).join(" ")}" onerror="const t = this.dataset.tries.split(' ').filter(Boolean); if (t.length) { this.dataset.tries = t.slice(1).join(' '); this.src = t[0]; } else this.style.visibility='hidden'">`;
+        }
         if (!taken && tile.firstChild) tile.replaceChildren();   // scrubbed back before this channel
       });
     }
@@ -7486,7 +7494,9 @@ function targetLabel(k) {
           const c0 = catalog, sig = warnCtl.signal;
           warnedObs.add(o); notePending.set(o, sig);
           fetch(`${FRAMES}/frames/mosaic/${catalog.id[q]}.webp?warm=1${window.cassiniLook()}`, { priority: "low", signal: sig }).then(r => r.ok ? r.json() : null).then(a => {
-            if (a && a.movie) { moviePasses.add(o); chipText(); }
+            // (pass_movie: this pass itself is a movie; a one-frame pass in a movie observation is not, and the build
+            // stores its frame as a processed frame only)
+            if (a && a.movie && a.pass_movie !== false) { moviePasses.add(o); chipText(); }
             if (a && a.kind === "mosaic_movie") { lapPasses.add(o); chipText(); }
             if (a && a.tossup) { tossPasses.add(o); chipText(); }
             if (a && a.lap_ends) { a.lap_ends.forEach(id => lapEnds.add(id)); lapKnown.add(`${cam}|${o}`); }
@@ -14146,7 +14156,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b2a29f162433";
+  const BUILD = /*BUILD*/"3194c5c7c9af";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
