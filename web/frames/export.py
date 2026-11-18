@@ -547,17 +547,37 @@ def shown_once(pics, opt, cache):
     (Sam, 2026-11-17: "We should never, ever, ever, ever, ever be repeating frames like that"). Known from the reports
     the cache keeps beside the movie pictures (obs_mosaic.movie_shown); a frame whose picture is not made yet stays,
     and render shows a picture its pane already shows by holding it, never again. The Movie Editor's list keeps every
-    frame."""
+    frame. A mosaic pass played tile by tile steps as movie mode does (obs_mosaic.mosaic_steps)."""
     if cache is None:
         return pics
     import obs_mosaic
     m = {**MOVIE, **opt.get("movie", {})}
     size = max(SIZES) if big(opt) else min(opt["size"], max(SIZES))
-    out, last = [], {}
+    out, last, steps_of = [], {}, {}
+    tiles = not (m.get("complete") or m.get("whole"))
     for e in pics:
         kind, arg = e["try"][0]
         shown = None
-        if kind == "movie":
+        if kind == "mosaic" and tiles and e.get("pass"):
+            # a mosaic pass played tile by tile steps as movie mode does (obs_mosaic.mosaic_steps, by the pass's plan
+            # when the cache holds it): over a frame whose mosaic is the picture before's (a polarizer, a colour
+            # filter before the pass's colour is whole) and one whose pointing's next frames add another filter to
+            # it, so a step is a new place of the mosaic, finished; never the pass's first picture in the film
+            try:
+                found = obs_mosaic.unit_of(arg)
+                if found and found[1] >= 0 and found[0].get("mosaic") and not found[0].get("movie") \
+                        and found[0].get("kind") != "mosaic_movie":
+                    u = found[0]
+                    k = tuple(u["key"])
+                    if k not in steps_of:
+                        p = obs_mosaic._plan_if_made(u, cache)
+                        steps_of[k] = set(obs_mosaic.mosaic_steps(u, p)) if p is not None else None
+                    shown = (k, "mosaic")
+                    if steps_of[k] is not None and found[1] not in steps_of[k] and last.get(e["cam"]) == shown:
+                        continue
+            except Exception as err:   # a pass the cache cannot answer for: the frame stays
+                print(f"export: mosaic steps of {arg}: {type(err).__name__}: {err}", flush=True)
+        elif kind == "movie":
             try:
                 shown = obs_mosaic.movie_shown(arg, size, cache, m["trail"], centre=m["center"], steady=m.get("steady", 0),
                                                exposure=m.get("exposure", 0))
