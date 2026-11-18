@@ -144,6 +144,12 @@ try:
     assert note.get("rolling_same") == kept == {"W0_1": "W0_1", "W1_1": "W0_1", "W2_1": "W0_1", "W6_1": "W6_1", "W7_1": "W6_1"}, note
     # another style (laps 2) was not built: none, and still nothing laid out
     assert "rolling_same" not in obs_mosaic.kind_of("W3_1", "cache", laps=2)
+    # a pass made again with other tiles: the pre-build's step writes its new runs, not the file before or the memo
+    names[1] = "lap-1-z"
+    obs_mosaic.rolling_layout = lambda v, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0): (None,) * 5 + (names[n],)
+    again = obs_mosaic.keep_rolling_runs(um2, "cache")
+    obs_mosaic.rolling_layout = no_layout
+    assert again == {"W6_1": "W6_1", "W7_1": "W6_1"} == obs_mosaic.kind_of("W3_1", "cache")["rolling_same"], again
 finally:
     (obs_mosaic.unit_of, obs_mosaic.units, obs_mosaic.lap_ends, obs_mosaic.folder, obs_mosaic.rolling_layout,
      obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles) = saved

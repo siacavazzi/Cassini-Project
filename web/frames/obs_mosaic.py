@@ -10427,7 +10427,12 @@ def keep_rolling_runs(u, cache, laps=1, fade=(0, 0)):
     """The pre-build's step, once a mosaic movie's pictures in a style are made (prebuild.make_pass): its runs
     (rolling_runs) written beside its plan, which the window's note reads (kind_of) instead of laying out every frame
     on request. Its runs."""
-    out = rolling_runs(u, cache, laps, fade)
+    # (worked out afresh from the tiles just made, never an older file's or the memo's: a pass made again in the same
+    # tiles folder keeps no runs of its tiles before)
+    if cache is None or u.get("kind") != "mosaic_movie" or _plan_if_made(u, cache) is None:
+        return {}
+    there = _tiles(u, cache, plan(u, cache)["display_scale"])
+    out = _rolling_runs_of(u, cache, laps, fade_style(*fade), there)
     path = _runs_path(u, cache, laps, fade)
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.part"
     with open(tmp, "w") as fh:
