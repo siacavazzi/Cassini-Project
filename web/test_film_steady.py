@@ -112,6 +112,28 @@ def main():
         if smooth <= F.SMOOTH and abs(trend - 10) > 3:
             fails.append(f"smooth {smooth}: drift {trend:.1f} px, not 10")
 
+    # an odd optimal DFT size (364 rows pad to 375): the page pads to an even size as image_correction.phase_correlate
+    # does, so the page and Python find the same match, and a picture matched with itself does not move (OpenCV's own
+    # odd padding put it half a pixel off)
+    import image_correction  # noqa: E402
+    for (h, w), (cx, cy) in (((364, 289), (140.0, 170.0)), ((369, 375), (180.3, 190.6))):
+        a, b = moon(cx, cy, 11, w, h, 40), moon(cx + 3.4, cy - 2.2, 11, w, h, 40)
+        tmp = tempfile.mkdtemp()
+        open(f"{tmp}/a.raw", "wb").write(a.tobytes()); open(f"{tmp}/b.raw", "wb").write(b.tobytes())
+        js = ("const fs = require('fs');\nconst window = {};\n" + script + "\nconst M = window.cassiniFilmSteady.math;\n"
+              f"const w = {w}, h = {h};\n"
+              f"const g = n => M.grey(new Uint8Array(fs.readFileSync('{tmp}/' + n + '.raw')), w, h);\n"
+              "console.log(JSON.stringify([M.findShift(g('a'), g('b'), w, h, 200), M.findShift(g('a'), g('a'), w, h, 200)]));")
+        open(f"{tmp}/odd.js", "w").write(js)
+        page, self_page = json.loads(subprocess.run(["node", f"{tmp}/odd.js"], capture_output=True, text=True, check=True).stdout)
+        bgr = lambda im: np.ascontiguousarray(im[..., 2::-1])
+        python = image_correction.find_shift(bgr(a), bgr(b), 200)
+        print(f"odd DFT size {h}x{w}: page {np.round(page, 4).tolist()}, Python {np.round(python, 4).tolist()}, self-match {self_page}")
+        if page is None or python is None or max(abs(p - q) for p, q in zip(page, python)) > 1e-3:
+            fails.append(f"odd size {h}x{w}: page {page} vs Python {python}")
+        if self_page is None or max(abs(v) for v in self_page) > 1e-6:
+            fails.append(f"odd size {h}x{w}: a picture matched with itself moved {self_page}")
+
     # Atlas's kind of picture: matched inside what both show, against matched with the picture's edge in
     m = 19
     drift = np.stack([np.linspace(0, 4, m), np.linspace(0, -3, m)], 1)

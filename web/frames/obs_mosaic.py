@@ -89,7 +89,9 @@ import label_handler  # noqa: E402
 # obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
 # obs-v141/v124/v110: sky smoothing's slope guard on every frame (calibration.SKY_GLOW_MOVE): no black gap and grainy halo outside Saturn's limb; obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
-VERSIONS = {"balanced": "obs-v141", "raw": "obs-v124", "eye": "obs-v141-eye", "false": "obs-v141-false", "classic": "obs-v110-classic"}
+# obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
+# and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
+VERSIONS = {"balanced": "obs-v142", "raw": "obs-v125", "eye": "obs-v142-eye", "false": "obs-v142-false", "classic": "obs-v111-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3814,12 +3816,8 @@ def _detail(gray, mask, sigma=6.0):
 
 
 def _even(a):
-    """a padded with 0 to a size cv2.phaseCorrelate measures without bias: it pads to an optimal DFT size itself, and
-    where that is odd its peak comes out half a pixel off (a strip 218 px wide shifted 0 measured +0.5)."""
-    h, w = a.shape
-    H, W = cv2.getOptimalDFTSize(h), cv2.getOptimalDFTSize(w)
-    H, W = H if H % 2 == 0 else cv2.getOptimalDFTSize(H + 1), W if W % 2 == 0 else cv2.getOptimalDFTSize(W + 1)
-    return cv2.copyMakeBorder(a, 0, H - h, 0, W - w, cv2.BORDER_CONSTANT, value=0)
+    """a padded with 0 to a size cv2.phaseCorrelate measures without bias (image_correction.even_dft)."""
+    return image_correction.even_dft(a)
 
 
 def _agree(a, b, mask):
@@ -7356,15 +7354,9 @@ def _limb_centre(g, at, r, exclude=()):
         yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
         for ex, ey, er in exclude:
             e[(xx - ex) ** 2 + (yy - ey) ** 2 <= er * er] = 0
-    th = np.linspace(0, 2 * np.pi, max(64, int(2 * np.pi * r)), endpoint=False).astype(np.float32)
-    cx, cy = np.cos(th) * r, np.sin(th) * r
 
     def score(dx, dy):
-        mx = (at[0] - x0 + dx + cx).astype(np.float32)
-        my = (at[1] - y0 + dy + cy).astype(np.float32)
-        v = cv2.remap(e, mx[None], my[None], cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)[0]
-        v = np.sort(v)
-        return float(v[len(v) // 2:].mean())
+        return color_image.circle_edges(e, at[0] - x0 + dx, at[1] - y0 + dy, r)
     base = score(0.0, 0.0)
     best = (base, 0.0, 0.0)
     n = int(reach)
@@ -8017,7 +8009,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
     # the chain alone keeps steady4's name
     # steady6: a ring pass's frames the pictures cannot be matched on linked by their ring profiles (steady_rings)
-    STEADY_FILE = f"steady6k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady7: a moon is found in the pictures only where its outline is (color_image.FIND_OUTLINE): a backlit
+    # Enceladus' plume was taken for the moon (279EN PLUME001)
+    STEADY_FILE = f"steady7k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
