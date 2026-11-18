@@ -60,7 +60,7 @@ GRAIN_SHARE = 0.3   # its smoothest places: this share of its pixels (black and 
 # over it are kept. Stars and other one-pixel spikes, saturated pixels and the picture's own edge are left as they are,
 # the same change goes on every color, and the fine sharpening after it is the same amount as without it.
 DENOISE_FROM = 1.8    # levels of grain: no denoise at or under this (three stills in four in 2017)
-DENOISE_FULL = 5.0    # levels of grain: the whole DENOISE_MAX from here (one still in fifty in 2017)
+DENOISE_FULL = 5.0    # levels of grain: the whole DENOISE_MAX from here (about one still in fifty in 2017)
 DENOISE_MAX = 0.7     # at most this share of the edge-keeping average
 DENOISE_RANGE = 2.5   # the average's range sigma, in grains
 DENOISE_SPACE = 1.5   # px: its spatial sigma (5 x 5 pixels)
