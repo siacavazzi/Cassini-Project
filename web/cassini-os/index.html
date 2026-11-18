@@ -1923,7 +1923,7 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 body.phone #soi .cs-read { white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
 
 /* a shade under the captions so they read over Earth */
-#launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
+#launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); opacity: 0; }
 #launch .cs-cap.big { font-size: 30px; letter-spacing: .03em; }
 /* the road to Saturn: five stops on a line, each lighting up in turn */
 #launch .lx-road { display: flex; justify-content: space-between; position: relative; margin: 16px 4px 2px; }
@@ -14184,7 +14184,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"ce3ef3baea83";
+  const BUILD = /*BUILD*/"6bd51b983fdf";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -18869,21 +18869,25 @@ window.huygensModels = (() => {
 // ---------- the start of the mission: Cassini on its own in low Earth orbit, and the road to Saturn ahead ----------
 (function () {
   const CS = window.cassiniCutscene, { fadeTo } = CS;
-  const root = document.getElementById("launch"), black = root.querySelector(".cs-black");
+  const root = document.getElementById("launch"), black = root.querySelector(".cs-black"), shade = root.querySelector(".lx-shade");
   const caps = root.querySelector(".cs-caps"), clock = root.querySelector(".lx-clock");
   const UP = 1.4;             // s into the cutscene the black lifts off Cassini
   const SPEED = 40;           // mission seconds per second, so Earth visibly falls away
-  const END = 24;             // s into the cutscene the interface comes back
-  // the captions: screen seconds in, how long, the line, a class, a chord under it (steps on the scale, see sound.html)
+  const END = 24.6;           // s into the cutscene the interface comes back
+  const SETTLE = 4.5;         // s before the end the camera starts to settle onto Cassini, for the hand-back
+  const D0 = 2.6e-5, D1 = 6e-5;   // how far the camera stands from Cassini (scene units) at the start and at the end
+  // the captions: screen seconds in, how long, the line, a class, a chord under it (steps on the scale, see sound.html).
+  // About 17 characters a second of reading for the two long ones; the short last one needs less
   const CAPS = [
-    [3, 6.6, `<b>October 15, 1997 · 42 minutes after launch</b>The Centaur upper stage lets go. Cassini is on its own, and ten minutes later a dish near Canberra, Australia, hears its first signal.`, "", [0, 2, 4]],
-    [10.2, 7.4, `<b>The road to Saturn</b>Too heavy to fly straight there, it plans to borrow speed from the planets on the way.`
+    [2.6, 7.6, `<b>October 15, 1997 · 42 minutes after launch</b>The Centaur upper stage lets go. Cassini is on its own, and ten minutes later a dish near Canberra, Australia, hears its first signal.`, "", [0, 2, 4]],
+    [11, 8, `<b>The road to Saturn</b>Too heavy to fly straight there, it plans to borrow speed from the planets on the way.`
       + `<div class="lx-road"><span>Venus<small>Apr 1998</small></span><span>Venus<small>Jun 1999</small></span><span>Earth<small>Aug 1999</small></span><span>Jupiter<small>Dec 2000</small></span><span>Saturn<small>Jul 2004</small></span></div>`, "road", [1, 3, 5]],
-    [18.2, 4.4, `<b>3.4 billion kilometers · 6 years, 8 months</b>Next stop: Venus.`, "big", [0, 2, 4, 7]],
+    [19.8, 3.4, `<b>3.4 billion kilometers · 6 years, 8 months</b>Next stop: Venus.`, "big", [0, 2, 4, 7]],
   ];
 
   let L = null;   // the running opening
-  const tmpA = v3(), tmpB = v3(), tmpC = v3(), vE = new THREE.Vector3(), vS = new THREE.Vector3();
+  const tmpA = v3(), tmpB = v3(), tmpC = v3(), vE = new THREE.Vector3(), vS = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+  const clamp01 = x => Math.max(0, Math.min(1, x)), smooth = x => x * x * (3 - 2 * x);
 
   // ---------- captions (cutscene.html runs them); the stops on the road light up one by one ----------
   function runCaptions(T) {
@@ -18893,7 +18897,8 @@ window.huygensModels = (() => {
       if (el && el !== true) el.querySelectorAll(".lx-road span").forEach((s, j) => s.classList.toggle("on", T > at + 1 + j * 0.9));
     });
   }
-  // the mission clock from liftoff, with Cassini's distance and speed from Earth
+  // the mission clock from liftoff, with Cassini's height above Earth (as the viewer's own read-out says it) and how
+  // fast it is leaving
   const pad = n => String(n).padStart(2, "0");
   const hms = s => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(Math.floor(s) % 60)}`;
   function stepClock(T) {
@@ -18901,14 +18906,15 @@ window.huygensModels = (() => {
     const s = L.tau - LAUNCH_MS / 1000 + etToMs(0) / 1000;
     const d = len(sub(positionAt(tracks.CASSINI, L.tau, tmpA), positionAt(tracks.EARTH, L.tau, tmpB), tmpA));
     const rate = len(sub(positionAt(tracks.CASSINI, L.tau + 1, tmpB), positionAt(tracks.EARTH, L.tau + 1, tmpC), tmpB)) - d;
-    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d)} km from Earth · ${document.body.classList.contains("phone") ? "" : "moving away at "}<i>${rate.toFixed(1)}</i> km/s`;
+    clock.innerHTML = `T+<i>${hms(s)}</i> · ${fmtInt(d - bodyRadius("EARTH"))} km above Earth · ${document.body.classList.contains("phone") ? "" : "moving away at "}<i>${rate.toFixed(1)}</i> km/s`;
   }
 
   function play() {
     if (L || !tracks.CASSINI || !tracks.EARTH) return;
     const was = { speed: state.speed };
     if (!CS.begin("launch")) return;
-    L = Object.assign(was, { t0: performance.now(), up: false, tau: coverage[0], shown: [] });
+    L = Object.assign(was, { t0: performance.now(), up: false, tau: coverage[0], shown: [], bed: -1, bedAt: -9 });
+    shade.style.opacity = 0;
     fadeTo(black, 1, 0.8);
   }
   // cutscene.html ends it (Escape, Skip, or the end below); the mission carries on from where the opening left it
@@ -18917,10 +18923,13 @@ window.huygensModels = (() => {
     caps.textContent = ""; clock.classList.remove("on");
     setTime(l.tau);
     start.spend();   // playback picks up from here, which may be the very start of the data: not a second launch
-    if (state.focus !== "CASSINI") setFocus("CASSINI");
-    setFocus("CASSINI", 6e-5);
     setSpeed(l.speed); setPlaying(true);
-    black.style.opacity = Math.max(+black.style.opacity || 0, 0.6);
+    // run to its end, or ended before the black first lifted, the view is already the viewer's own: nothing to hide
+    if (state.focus === "CASSINI" && (l.done || !l.up)) return { seamless: true };
+    // ended part way (Skip, Escape): the view is mid-move, looking beside Cassini, so cutscene.html cuts to black
+    // and the interface comes up from there, on Cassini from the same side at the usual distance
+    shade.style.opacity = 0;
+    if (state.focus !== "CASSINI") setFocus("CASSINI", D1); else camera.position.sub(cassini.position).setLength(D1);
   }
 
   // the viewer's frame loop, before it places the bodies: the opening runs its own clock
@@ -18931,31 +18940,49 @@ window.huygensModels = (() => {
       // behind the black: close to Cassini with Earth beyond it, then the black lifts
       L.up = true; L.upAt = T;
       setFocus("CASSINI", 5e-5); markerPts.visible = false;
-      fadeTo(black, 0, 2.6);
+      fadeTo(black, 0, 2.4); fadeTo(shade, 1, 2.4);
     }
     if (L.up) L.tau = Math.min(coverage[1], coverage[0] + (T - L.upAt) * SPEED);
-    if (T > END - 1.5 && !L.closing) { L.closing = true; fadeTo(black, 0.6, 1.4); }
+    if (T > END - 1.5 && !L.closing) { L.closing = true; fadeTo(shade, 0, 1.4); }
+    // the held tone comes up with the picture and is gone just before the viewer's own sound takes over (asked for again
+    // every half second, so it also starts if the sound was only switched on part way)
+    const bed = L.up && T < END - 1 ? 1 : 0;
+    if (bed !== L.bed || T - L.bedAt > 0.5) { CS.sound("bed", bed, bed ? 3 : 2); L.bed = bed; L.bedAt = T; }
     runCaptions(T);
     stepClock(T);
     state.et = L.tau;
-    if (T >= END) CS.end("launch");
+    if (T >= END) { L.done = true; CS.end("launch"); }
   }
-  // beside Cassini, looking past it at Earth falling away behind
+  // beside Cassini, looking past it at Earth falling away behind. It pulls back and drifts round, slowing all the way
+  // to rest at the end, and over the last SETTLE seconds turns onto Cassini with the viewer's own up: at the end it is
+  // where the viewer's own controls (looking at Cassini from where the camera is, up along the scene's Y) would put it
   function camera_() {
     if (!L || !L.up) return;
-    const k = (performance.now() - L.t0) / 1000 - L.upAt;
+    const k = (performance.now() - L.t0) / 1000 - L.upAt, span = END - UP;
+    const f = 1 - Math.pow(1 - clamp01(k / span), 1.5);          // 0 to 1, fastest at the start, at rest at the end
+    const own = smooth(clamp01((k - (span - SETTLE)) / SETTLE));   // 0 to 1 over the last seconds: the viewer's own framing
     relScene("EARTH", vE).sub(cassini.position);   // Cassini -> Earth
     const toEarth = vE.clone().normalize();
     toScene([0, 0, 1], vS).normalize();             // the celestial north pole, for an up
     const side = new THREE.Vector3().crossVectors(toEarth, vS).normalize();
+    // a tall screen (a phone held upright) has no room beside Cassini: Earth goes above it instead, and the camera
+    // stands back further
+    const tall = camera.aspect < 1;
     // behind Cassini as seen from Earth, swung off to one side so Earth sits beside it, drifting slowly round
-    const yaw = (62 - 0.6 * k) * Math.PI / 180, pitch = 0.3;
-    const dir = toEarth.clone().applyAxisAngle(vS, yaw).addScaledVector(vS, pitch).normalize();
-    // a tall screen (a phone held upright) keeps Cassini in the middle and stands back further
-    const tall = camera.aspect < 1, d = (2.6e-5 + 1.2e-6 * k) * (tall ? 1.7 : 1);
-    camera.position.copy(cassini.position).addScaledVector(dir, -d);
-    camera.up.copy(vS).addScaledVector(side, 0.08).normalize();
-    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35));
+    const yaw = ((tall ? 24 : 62) - 14 * f) * Math.PI / 180;
+    const dir = toEarth.clone();
+    if (tall) dir.applyAxisAngle(side, -40 * Math.PI / 180).applyAxisAngle(vS, yaw).normalize();
+    else dir.applyAxisAngle(vS, yaw).addScaledVector(vS, 0.3).normalize();
+    const d = (D0 + (D1 - D0) * f) * (tall ? 1.7 : 1);
+    // a drag turns it about Cassini and the wheel or a pinch zooms (cutscene.html)
+    const up = vS.clone().addScaledVector(side, tall ? 0 : 0.08).normalize().lerp(Y, own).normalize();
+    const o = CS.orbit(dir, up);
+    camera.position.copy(cassini.position).addScaledVector(o.dir, -d * CS.look.zoom);
+    camera.up.copy(up);   // not o.up: the view looks beside Cassini, and the horizon keeps its own tilt
+    // looking a little toward Earth, so the two share the picture; less so once the visitor turns the view themself,
+    // and not at all by the end
+    const turned = clamp01(1 - (Math.abs(CS.look.yaw) + Math.abs(CS.look.pitch)) / 0.7);
+    camera.lookAt(cassini.position.clone().addScaledVector(toEarth, tall ? 0 : d * 0.35 * (1 - own) * turned));
   }
   CS.register("launch", { root, frame, camera: camera_, onEnd });
   // playback setting off forward from the very start of the data plays it (the Launch moment does that): the data
