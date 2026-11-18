@@ -644,6 +644,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
     // the next picture replaces it; a frame held behind a mosaic, or a picture the same as the one its pane shows,
     // makes the frame before it last longer (render's held and shown)
     const RATE = plan.rate || FPS, panes = {};
+    const equalPx = (a, b) => {
+      if (a.length !== b.length) return false;
+      const x = new Uint32Array(a.buffer, a.byteOffset, a.length >> 2), y = new Uint32Array(b.buffer, b.byteOffset, b.length >> 2);
+      for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+      return true;
+    };
     const flush = () => {
       if (!shown) return;
       const keyFrame = shown.at - lastKey >= 2 * RATE;
@@ -672,6 +678,12 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         while (nxt < pics.length && nxt < n + ahead) { todo.push(measured(pics[nxt], pictureOf(pics[nxt], size, stop))); nxt++; }
         const e = pics[n], got = await todo.shift(), { what } = got;
         let { bmp } = got;
+        // the picture as made (before color smoothing, the look and framing): whether its pane already shows it
+        // (render's key: a movie pass playing in colour shows each colour set at every frame until the next is complete)
+        let src = null;
+        if (bmp) { const c = new OffscreenCanvas(bmp.width, bmp.height), cg = c.getContext("2d"); cg.drawImage(bmp, 0, 0); src = cg.getImageData(0, 0, bmp.width, bmp.height).data; }
+        const was = panes[e.cam];
+        const same = src && was && was !== "blank" ? equalPx(was, src) : !src && was === "blank" && !!shown;
         if (got.cs) {
           const me = got.cs, later = (await Promise.all(todo.slice(0, CS.SPAN))).map(r => r.cs).filter(Boolean);
           const run = [...past, me, ...later].filter(q => q.group === me.group), i = run.indexOf(me);
@@ -691,9 +703,10 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
         if (what === "mosaic" || what === "mosaic movie") building[e.cam] = e.obs;
         else if (building[e.cam] === e.obs && e.obs) held = true;
         else delete building[e.cam];
-        let same = false;
         if (held) kinds["held behind mosaic"] = (kinds["held behind mosaic"] || 0) + 1;
+        else if (same) { kinds["same picture as before"] = (kinds["same picture as before"] || 0) + 1; if (bmp && bmp.close) bmp.close(); }
         else {
+          panes[e.cam] = src || "blank";
           // Film.put: the pane black, the picture in its middle, the caption under it
           const x0 = cams.indexOf(e.cam) * size;
           g.fillStyle = bg(); g.fillRect(x0, 0, size, size);
@@ -710,12 +723,7 @@ body.phone #excard:not(.full) { width: calc(100% - 16px) !important; left: 8px !
             g.drawImage(src, x0 + Math.floor((size - w) / 2), Math.floor((size - h) / 2), w, h);
             if (bmp.close) bmp.close();
           }
-          // a picture the same as the one its pane shows is not shown again (render's shown): its caption stays too
-          const px = g.getImageData(x0, 0, size, size).data, was = panes[e.cam];
-          same = !!was && was.length === px.length && was.every((v, i) => v === px[i]);
-          panes[e.cam] = px;
-          if (same) kinds["same picture as before"] = (kinds["same picture as before"] || 0) + 1;
-          if (ch && !same) {
+          if (ch) {
             g.fillStyle = "rgb(8,10,14)"; g.fillRect(x0, size, size, ch);
             g.textBaseline = "middle"; g.textAlign = "left"; g.fillStyle = "rgb(222,228,236)"; g.font = `${font}px ${mono}`;
             g.fillText(label(e, what), x0 + ch * 0.35, size + ch / 2);

@@ -470,6 +470,8 @@ def plan(opt, cache=None, work=False, progress=None):
     if opt["movie"].get("complete"):
         out = complete_mosaics(out)
     out = cut(out, opt)
+    if not opt.get("list"):
+        out = shown_once(out, opt, cache)
     if MAX_PICTURES and len(out) > MAX_PICTURES and not opt.get("list"):
         raise OverflowError(f"{len(out):,} pictures: an export holds at most {MAX_PICTURES:,}; pick a shorter stretch")
     tell(int(hi - lo), int(hi - lo), "frames")
@@ -535,6 +537,37 @@ def full_size(opt, pics, cache, work=False):
 def pane(opt):
     """A camera's pane in the film, px: the size asked for, or the one full_size worked out (Full, up to a size)."""
     return opt.get("pane", 1024) if big(opt) else opt["size"]
+
+
+def shown_once(pics, opt, cache):
+    """The plan's pictures without a movie frame that plays as the same picture as the camera's picture before it (a
+    pass playing in colour shows each colour set at every frame until the next set is complete, so its other
+    filters' frames between, a polarizer triple or an IR frame, are that set again; a frame not fit to show shows the
+    one before it): it is not a picture of its own, and the film's timing closes over it as over a frame cut by hand
+    (Sam, 2026-11-17: "We should never, ever, ever, ever, ever be repeating frames like that"). Known from the reports
+    the cache keeps beside the movie pictures (obs_mosaic.movie_shown); a frame whose picture is not made yet stays,
+    and render shows a picture its pane already shows by holding it, never again. The Movie Editor's list keeps every
+    frame."""
+    if cache is None:
+        return pics
+    import obs_mosaic
+    m = {**MOVIE, **opt.get("movie", {})}
+    size = max(SIZES) if big(opt) else min(opt["size"], max(SIZES))
+    out, last = [], {}
+    for e in pics:
+        kind, arg = e["try"][0]
+        shown = None
+        if kind == "movie":
+            try:
+                shown = obs_mosaic.movie_shown(arg, size, cache, m["trail"], centre=m["center"], steady=m.get("steady", 0),
+                                               exposure=m.get("exposure", 0))
+            except Exception as err:   # a pass the cache cannot answer for: the frame stays
+                print(f"export: shown picture of {arg}: {type(err).__name__}: {err}", flush=True)
+            if shown is not None and last.get(e["cam"]) == shown:
+                continue
+        last[e["cam"]] = shown
+        out.append(e)
+    return out
 
 
 def cut(pics, opt):
@@ -1217,6 +1250,9 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                                             opt["size"] if big(opt) and not full else None))
                     nxt += 1
                 im, what = todo.popleft().result()
+                # the picture as made (before color smoothing, the editor's look, level and framing, which move a
+                # picture shown again a little): what says whether it is the picture its pane already shows
+                key = (im.size, hashlib.blake2b(im.tobytes(), digest_size=16).digest()) if im is not None else "blank"
                 stops = im.info.get("hdr") if im is not None and opt.get("hdr") else None
                 if cs and im is not None:
                     group, st = palette_of(n, (im, what))
@@ -1255,9 +1291,9 @@ def render(opt, p, pictures, path, progress=lambda done, total: None, workers=3)
                     continue
                 else:
                     building.pop(e["cam"], None)
-                # a picture the same as the one its pane shows (two frames the cache answers with one picture) is not
+                # a picture the same as the one its pane shows (a movie pass playing in colour shows each colour set at
+                # every frame until the next set is complete; a frame not fit to show shows the one before it) is not
                 # shown again: the one up stays longer, so the film never shows a picture twice in a row
-                key = (im.size, im.tobytes()) if im is not None else "blank"
                 if shown.get(e["cam"]) == key:
                     kinds["same picture as before"] += 1
                     film.hold(e["frames"])

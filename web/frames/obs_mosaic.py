@@ -10333,6 +10333,34 @@ def _movie_twin(u, n, cache, colour, centre, steady, exposure, named):
     return (twin, rep) if rep.get("held") == (frames[s][1] if s != n else None) else None
 
 
+def _movie_name(u, n, size, cache, trail, colour, centre, steady, exposure, sharpen):
+    """Where movie_webp keeps frame n of pass u drawn so (steady and exposure as steady_of and exposure_of give them)."""
+    # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
+    # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
+    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
+    return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
+                        f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
+                        f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+
+
+def movie_shown(frame_id, size, cache, trail=0, colour=True, centre=True, steady=0, exposure=0):
+    """(pass key, frame id) of the picture frame_id plays as in its pass's movie (movie_webp): another frame's where it
+    shows that one (its report's "held": a pass playing in colour shows each colour set at every frame until the next
+    is complete, a frame not fit to show shows the one before it), else its own. Read from the report kept beside the
+    picture; None while that picture is not made (nothing is drawn or worked out here)."""
+    found = unit_of(frame_id)
+    if not found or found[1] < 0:
+        return None
+    u, n = found
+    if _plan_if_made(u, cache) is None:
+        return None
+    path = _movie_name(u, n, size, cache, trail, colour, centre, steady_of(u, steady, cache), exposure_of(exposure), True)
+    rep = reel.report_of(path[:-len("webp")] + "json", None)
+    if not rep or not rep.get("movie"):
+        return None
+    return tuple(u["key"]), rep.get("held") or rep.get("id") or frame_id
+
+
 def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6, centre=True, steady=0, exposure=0, sharpen=True):
     """(WebP, report) of frame_id played as a movie of its pass (movie_frame), made once and kept in the cache;
     None when the frame is in no pass. A pass whose plan is not worked out yet (seconds: it measures the pass's
@@ -10358,14 +10386,8 @@ def movie_webp(frame_id, size, cache, trail=0, colour=True, wait=False, ahead=6,
                    footprint=True)
         return None, {"why": "working out the pass", "observation": u["key"][1], "pass": u["key"][3],
                       **_progress(u, cache, rec)}
-    # (a feature track's frames, at their steady places, are named apart from the frames it played before, and so
-    # are a stabilized movie's, by its smoothing; a filled pass's frame before detail() by _d0)
-    filled = not sharpen and sharpens(plan(u, cache)["display_scale"])
-
     def named(colour, exposure):
-        return os.path.join(folder(u, cache), MOVIE_DIR, str(size),
-                            f"{n}_{trail}_{int(bool(colour))}{'_c2' if centre else ''}{'_k2' if u.get('track') else ''}"
-                            f"{f'_s{steady}' if steady else ''}{f'_e{exposure}r{EXPOSURE_RULE}' if exposure else ''}{'_d0' if not sharpen and filled else ''}.webp")
+        return _movie_name(u, n, size, cache, trail, colour, centre, steady, exposure, sharpen)
     path = named(colour, exposure)
     report, meta = {}, path[:-4] + "json"
 
