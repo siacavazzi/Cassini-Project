@@ -122,9 +122,11 @@ body.idle .depthtag { opacity: .7; }
     if (ids.every(i => known.has(i))) return show(el, summary(ids), "depthtag");
     ask(ids).then(() => { if (el.dataset.key === key) show(el, summary(ids), "depthtag"); });
   }
-  // a color set's channel tile: the frame its title names
+  // a color set's channel tile: the frame it shows
   function channel(fig) {
-    const tile = fig.querySelector(".tile"), id = (fig.title.match(ID) || [])[0];
+    const tile = fig.querySelector(".tile"), im = tile && tile.querySelector("img");
+    // (its title names it; a held color's tiles have none, their picture's address does)
+    const id = (fig.title.match(ID) || (im && (im.getAttribute("src") || "").match(ID)) || [])[0];
     if (!tile) return;
     let el = tile.querySelector(":scope > .chdepth");
     if (!el) { el = document.createElement("span"); el.className = "chdepth"; tile.appendChild(el); }

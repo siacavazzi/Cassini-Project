@@ -13199,9 +13199,11 @@ void main() {
     if (ids.every(i => known.has(i))) return show(el, summary(ids), "depthtag");
     ask(ids).then(() => { if (el.dataset.key === key) show(el, summary(ids), "depthtag"); });
   }
-  // a color set's channel tile: the frame its title names
+  // a color set's channel tile: the frame it shows
   function channel(fig) {
-    const tile = fig.querySelector(".tile"), id = (fig.title.match(ID) || [])[0];
+    const tile = fig.querySelector(".tile"), im = tile && tile.querySelector("img");
+    // (its title names it; a held color's tiles have none, their picture's address does)
+    const id = (fig.title.match(ID) || (im && (im.getAttribute("src") || "").match(ID)) || [])[0];
     if (!tile) return;
     let el = tile.querySelector(":scope > .chdepth");
     if (!el) { el = document.createElement("span"); el.className = "chdepth"; tile.appendChild(el); }
@@ -14327,7 +14329,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"14c3eb511cc7";
+  const BUILD = /*BUILD*/"df7904e99a39";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
