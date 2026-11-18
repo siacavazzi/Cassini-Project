@@ -19,7 +19,7 @@ def textured(amp, noise=3.0):
 def test_detail_over_noise():
     t = textured(24)
     r = {}
-    o = S.adaptive_sharpen(t, report=r)
+    o = S.adaptive_sharpen(t, report=r, denoise=False)    # the sharpening alone (its grain is over the denoise's start)
     assert r["weight"][:, :240].mean() < 0.01, r["weight"][:, :240].mean()        # sky grain: untouched
     assert r["weight"][:, 270:].mean() > 0.3, r["weight"][:, 270:].mean()          # detail: raised
     assert abs(o[:, :240].astype(float).std() - t[:, :240].std()) < 0.1
@@ -68,7 +68,7 @@ def test_server_applies():
         fs._sharpened(np.dstack([textured(24), np.full((512, 512), 255, np.uint8)]), ["N0000000000_1"], rep)
     finally:
         fs.sharpen.adaptive_sharpen = real
-    assert seen == [(512, 512, 2)] and set(rep["sharpen"]) == {"grain", "amount", "changed"}, (seen, rep)
+    assert seen == [(512, 512, 2)] and set(rep["sharpen"]) == {"grain", "denoise", "amount", "changed"}, (seen, rep)
     assert "_sharpened(" in open(fs.__file__).read().split("def composite(")[1].split("def _lossy(")[0]
     assert "_sharpened(" in open(fs.__file__).read().split("def centred(")[1].split("\ndef ")[0]
     print("frame_server: stills and composites end in it")
