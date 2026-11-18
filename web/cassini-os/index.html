@@ -1921,6 +1921,13 @@ body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; 
 #soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
 /* the burn's readout is long: on a phone it wraps */
 body.phone #soi .cs-read { white-space: normal; text-align: center; width: calc(100vw - 32px); line-height: 1.5; }
+/* Saturn is bright behind the first lines (on a phone they sit right on it): a closer, darker shadow under the letters */
+#soi .cs-cap { text-shadow: 0 0 3px rgba(0,0,0,.95), 0 1px 6px rgba(0,0,0,.9), 0 1px 16px rgba(0,0,0,.9); }
+#soi .cs-read { text-shadow: 0 0 6px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,.9); }
+/* on a phone the readout wraps to two lines over the note's place: the note goes to the top, under the hint */
+body.phone #soi .cs-note { top: 40px; bottom: auto; left: 16px; right: 16px; max-width: none; text-align: center; color: rgba(232,236,242,.5); text-shadow: 0 0 5px rgba(0,0,0,.9); }
+/* in a short window the readout keeps clear of the note under it */
+body:not(.phone) #soi .cs-read { bottom: max(7vh, 52px); }
 
 /* a shade under the captions so they read over Earth */
 #launch .lx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.8) 0, rgba(0,0,0,.5) 24%, rgba(0,0,0,0) 50%); }
@@ -14177,7 +14184,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"ae1f651e9e72";
+  const BUILD = /*BUILD*/"95e94438a609";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -18549,29 +18556,40 @@ window.huygensModels = (() => {
   // it]; the rate is capped at 500 times real time before the burn, 550 during it and 90 after. The terms are combined
   // softly (as resistors in parallel), so the clock eases into its top speed instead of hitting it
   const softMin = (...rs) => 1 / rs.reduce((a, r) => a + 1 / r, 0);
-  const START = T_CROSS - 75, FLY = 12;   // the published crossing minute is half a minute after ours (crossing())
+  const START = T_CROSS - 69, FLY = 12;   // the published crossing minute is half a minute after ours (crossing())
   const MOMENTS = [[T_IGN, 6, 2.5], [T_OFF, 1, 1.6]];
   const rateAt = t => {
     const away = t - crossing() - 45;     // the flyby holds its pace until Cassini is well past the plane
     return softMin(t < T_IGN ? 500 : t < T_OFF ? 550 : 90, FLY + Math.max(0, away) * 0.5, ...MOMENTS.map(([m, r, k]) => r + Math.abs(t - m) * k));
   };
+  // screen seconds from the start to a mission time before the ignition, on the clock above (worked out once, in steps
+  // of two mission seconds): a camera move keyed to the mission clock can then run evenly on screen while the clock
+  // speeds up under it
+  let SCREEN = null;
+  function screenAt(t) {
+    if (!SCREEN) { SCREEN = [0]; for (let m = START, x = 0; m < T_IGN; m += 2) SCREEN.push(x += 2 / rateAt(m + 1)); }
+    const i = Math.max(0, Math.min(SCREEN.length - 1.001, (t - START) / 2)), k = Math.floor(i);
+    return SCREEN[k] + (SCREEN[k + 1] - SCREEN[k]) * (i - k);
+  }
   const hhmm = et => new Date(etToMs(et)).toISOString().slice(11, 19);
-  // the lines, at mission seconds from ignition (spaced about six screen seconds apart on the clock above), each up
-  // until the next one takes its place
+  // the lines, at mission seconds from ignition, each up until the next one takes its place. Through the burn they are
+  // five and a half to six screen seconds apart on the clock above, long enough to read each (the steering is in the
+  // header and in About's sources; as a fifth line of the burn it left each of them under four and a half seconds)
   const steer = D.steering.total_deg;
   const LINES = [
     [-Infinity, `<b>July 1, 2004 · Saturn</b>After nearly seven years in space, Cassini arrives, ${Math.round((T_IGN - T_CROSS) / 60) + 1} minutes before the burn that has to catch it.`],
     [T_CROSS - T_IGN - 15, `<b>${hhmm(T_CROSS).slice(0, 5)} UTC · The ring plane</b>It crosses through ${D.ring_crossing.where}, its dish turned forward as a shield against dust.`],
     [T_CROSS - T_IGN + 200, `Then it turns end for end, to point its main engine the way it is going.`],
     [0, `<b>${hhmm(T_IGN).slice(0, 5)} UTC · Main engine on</b>To be caught by Saturn's gravity it has to brake, for ${Math.round(D.burn_minutes.value)} minutes.`],
-    [600, `One engine, ${D.thrust_n.value} newtons (${D.thrust_n.pounds} pounds) of thrust: a gentle push, about a hundredth of Earth's gravity.`],
-    [1700, `Its signal takes ${D.light_time_min.value} minutes to reach Earth. By the time anyone hears the engine start, the burn is nearly over.`],
-    [3300, `It steers as it burns, turning its engine through ${steer} degrees to follow the curve of its path.`],
+    [1070, `One engine, ${D.thrust_n.value} newtons (${D.thrust_n.pounds} pounds) of thrust: a gentle push, about a hundredth of Earth's gravity.`],
+    [3040, `Its signal takes ${D.light_time_min.value} minutes to reach Earth. By the time anyone hears the engine start, the burn is nearly over.`],
     [T_CA - T_IGN - 60, `<b>Closest approach</b>${fmtInt(D.closest_approach.above_clouds_km)} km above Saturn's clouds, closer than it would come again until the Grand Finale.`],
     [BURN, `<b>${hhmm(T_OFF).slice(0, 5)} UTC · Engine off</b>${Math.round(D.delta_v_ms.value)} meters per second slower, and about ${fmtInt(D.propellant_kg.value)} kg of propellant lighter.`],
   ];
   const LAST = `<b>In orbit</b>Saturn has caught it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
-  const CUT = 3, LAST_AT = 3.6, LAST_FOR = 6;   // screen seconds after shutdown: the cut to Saturn, the last line, how long it stays
+  // screen seconds after shutdown: the cut to Saturn, the last line (the shutdown's own line stays up across the cut
+  // until then, long enough to read), how long the last line stays
+  const CUT = 3, LAST_AT = 4.8, LAST_FOR = 5.2;
 
   let S = null;   // the running cutscene
   const tmpA = v3(), tmpB = v3(), tmpC = v3();
@@ -18653,6 +18671,9 @@ window.huygensModels = (() => {
     if (S || CS.active || !playable()) return;
     if (!CS.begin("soi")) return;
     S = { t0: performance.now(), phase: "out", tau: null, shown: [], eng: null, real: null };
+    // the opening is one choreographed move (the flyby, the move in, the roll onto the shot list): the view holds still
+    // under a drag, the wheel or a pinch until it is over (frameStep lets go)
+    CS.look.lock = true;
     fadeTo(black, 1, 1.2);
   }
   // the end of the burn, and the mission plays on from there as it was (cutscene.html restarts playback)
@@ -18676,9 +18697,8 @@ window.huygensModels = (() => {
         ? `An interpretation. Cassini's path and its pointing are real, and the times and numbers are NASA's and ESA's; the engine's plume is drawn, not photographed.`
         : `An interpretation. Cassini's path is real and the times and numbers are NASA's and ESA's; how it points follows the burn's published steering, and the engine's plume is drawn, not photographed.`;
       setFocus("CASSINI", 4e-5); markerPts.visible = false;
-      fadeTo(black, 0, 2.5);
-      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
-      S.hintOff = T + 7;
+      fadeTo(black, 0, 2);
+      note.classList.add("on"); read.classList.add("on");
     }
     if (S.phase === "run") {
       const was = S.tau;
@@ -18687,13 +18707,20 @@ window.huygensModels = (() => {
       if (S.hold != null) S.tau = S.hold;   // a still for the bench (cassiniSOI.hold)
       if (was < T_IGN && S.tau > T_IGN) S.tau = T_IGN;   // the ignition lands on its second
       if (was < T_IGN && S.tau >= T_IGN) S.ignAt = performance.now();
-      if (T > S.hintOff) hint.classList.remove("on");
+      // the opening move is over two minutes before the ignition: looking around is on from there, and the hint says so
+      if (CS.look.lock && S.tau >= HOLD_UNTIL) { CS.look.lock = false; hint.classList.add("on"); S.hintOff = T + 7; }
+      if (S.hintOff && T > S.hintOff) hint.classList.remove("on");
       if (S.tau > T_IGN + 300) note.classList.remove("on");
       const s = S.tau - T_IGN;
       LINES.forEach(([at, html], i) => { if (!S.shown[i] && s >= at) { S.shown[i] = true; line(html); } });
+      // sound: the framework's soft bed grows through the approach and falls away under the engine over the burn's
+      // first three seconds; one soft note as Cassini goes through the ring plane
+      if (S.tau < T_IGN) sound("bed", 0.4 + 0.6 * clamp01(screenAt(S.tau) / screenAt(T_IGN)), 1.5);
+      else if (!S.bedOff) { S.bedOff = true; sound("bed", 0, 3); }
+      if (was < crossing() && S.tau >= crossing()) sound("chord", [7]);
       if (S.tau >= T_IGN && S.tau < T_OFF) sound("rumble", Math.min(1, s / 1.5));
       if (was < T_OFF && S.tau >= T_OFF) { sound("rumble", 0); sound("bell"); S.offAt = T; }
-      if (S.offAt && T > S.offAt + CUT && !S.cut) { S.cut = T; setFocus("SATURN"); markerPts.visible = true; cassini.visible = false; read.classList.remove("on"); CS.resetLook(); }
+      if (S.offAt && T > S.offAt + CUT && !S.cut) { S.cut = T; setFocus("SATURN"); markerPts.visible = true; cassini.visible = false; read.classList.remove("on"); hint.classList.remove("on"); CS.resetLook(); }
       if (S.offAt && T > S.offAt + LAST_AT && !S.last) { S.last = true; line(LAST, "big"); sound("chord", [0, 2, 4, 7]); }
       if (S.last && T > S.offAt + LAST_AT + LAST_FOR && !S.closing) { S.closing = T; line(null); fadeTo(black, 1, 0.8); }
       if (S.closing && T > S.closing + 0.85) { CS.end("soi"); return; }
@@ -18781,6 +18808,18 @@ window.huygensModels = (() => {
     const L = n.clone().negate().lerp(r.clone().negate(), g.toward ?? 0.5).normalize();
     return { X, P, L };
   }
+  // the opening move ends, and a drag starts to look around, when the camera is on the shot list
+  const HOLD_UNTIL = T_IGN - 120;
+  // one orientation part way (k, 0..1) to another along the arc between them as they are given (three.js's slerp
+  // picks the shorter of the two arcs each frame, and jumps when they swap; see camera_)
+  function arc(a, b, k) {
+    const cos = Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)), th = Math.acos(cos);
+    if (th < 1e-6) return a.clone();
+    const wa = Math.sin((1 - k) * th) / Math.sin(th), wb = Math.sin(k * th) / Math.sin(th);
+    return new THREE.Quaternion(a.x * wa + b.x * wb, a.y * wa + b.y * wb, a.z * wa + b.z * wb, a.w * wa + b.w * wb).normalize();
+  }
+  const flip = q => q.set(-q.x, -q.y, -q.z, -q.w);
+  const CAM_UP = new THREE.Vector3(0, 1, 0);   // the camera's own up, to pan about
   // a direction turned part way (k, 0..1) toward another, at an even angular pace
   const qTurn = new THREE.Quaternion(), qNone = new THREE.Quaternion();
   const look = (dir, up) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), dir, up));
@@ -18804,14 +18843,29 @@ window.huygensModels = (() => {
     // parked camera looked (Saturn's edge and the rings) with Cassini in front; then it swings onto the shot list
     // (chaseView) before the ignition
     const g = tune(), since = t - crossing() - (g.go ?? 30), over = g.over ?? 640, sm = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+    const sm5 = x => { x = clamp01(x); return x * x * x * (x * (6 * x - 15) + 10); };   // eases in and out more gently
     const x = clamp01(since / over), e = 1 - (1 - x) ** 3, f = (g.follow ?? 0.15) + (1 - (g.follow ?? 0.15)) * sm(since / (over * 0.15));
     frame(t);
     // the way it looks: the parked camera's (level with the rings), swinging and rolling onto the shot list's (level
-    // with Saturn below) from late in the move in to two minutes before the ignition. The two orientations are blended
-    // whole, so the roll between them is smooth
-    const c = sm((since - 0.6 * over) / (T_IGN - 120 - crossing() - (g.go ?? 30) - 0.6 * over));
-    const oA = CS.orbit(S.fly.L, POLE), q = look(oA.dir, oA.up);
-    if (c > 0) { const oB = CS.orbit(chaseView(t), uS); q.slerp(look(oB.dir, oB.up), c); }
+    // with Saturn below), from part way through the move in to two minutes before the ignition. The two orientations
+    // are nearly opposite (the rings' north is up in the first, and to the side and behind in the second), so:
+    //   - the roll is paced on screen seconds, not mission seconds: the clock runs up to ×200 here, and a move paced on
+    //     it bunched into three seconds
+    //   - the two are blended whole along one arc, fixed by where the shot list's orientation is at the middle of the
+    //     move; the shorter arc changes sides as Cassini goes round, which was a jump of 29 degrees in one frame
+    const tA = crossing() + (g.go ?? 30) + (g.c0 ?? 0.22) * over, sA = screenAt(tA);
+    const c = sm5((screenAt(t) - sA) / (screenAt(HOLD_UNTIL) - sA));
+    const oA = CS.orbit(S.fly.L, POLE);
+    let q = look(oA.dir, oA.up);
+    if (c > 0) {
+      if (!S.qMid) {
+        const tM = (tA + HOLD_UNTIL) / 2, oM = CS.orbit(chaseView(tM), uS); frame(t);
+        S.qMid = look(oM.dir, oM.up); if (S.qMid.dot(q) < 0) flip(S.qMid);
+      }
+      const oB = CS.orbit(chaseView(t), uS), qB = look(oB.dir, oB.up);
+      if (qB.dot(S.qMid) < 0) flip(qB);
+      q = arc(q, qB, c);
+    }
     const aim = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
     if (e >= 1) {
       camera.position.copy(cassini.position).addScaledVector(aim, -4e-5 * CS.look.zoom); camera.quaternion.copy(q);
@@ -18825,6 +18879,12 @@ window.huygensModels = (() => {
     // looking the parked way, turning onto Cassini as it goes by
     const dir = turnTo(aim, cassini.position.clone().sub(from).normalize(), f);
     camera.position.copy(from); camera.quaternion.copy(qTurn.setFromUnitVectors(aim, dir).multiply(q));
+    // in a narrow window (a phone held upright sees a third of the width) Cassini would fly out of the far side of the
+    // frame before the camera has turned to follow: past half way from the middle to that edge the camera pans with
+    // it, more and more, so it never passes three quarters. In a wide window it never gets that far, and nothing changes
+    const cv = cassini.position.clone().sub(from).applyQuaternion(camera.quaternion.clone().invert());
+    const tx = Math.tan(camera.fov * Math.PI / 360) * camera.aspect, nx = cv.x / -cv.z / tx;
+    if (cv.z < 0 && nx > 0.5) camera.quaternion.multiply(qTurn.setFromAxisAngle(CAM_UP, Math.atan((0.5 + 0.25 * (1 - Math.exp(-(nx - 0.5) / 0.25))) * tx) - Math.atan(nx * tx)));
     // drawn larger than life while the camera is far, so it reads from hundreds of km away; true size close up
     cassini.scale.setScalar(Math.max(1e-6, from.distanceTo(cassini.position) * 0.002 * (g.boost ?? 5)));
   }
