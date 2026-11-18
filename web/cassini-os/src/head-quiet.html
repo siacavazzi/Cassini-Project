@@ -3652,7 +3652,9 @@ function targetLabel(k) {
         strip(null); filmstrip(-1);
         if (lastK !== -1) {
           lastK = -1; want = null; shownKey = null; shown = null; well.classList.remove("inpass");
-          if (k < 0 && holdUp) noFrame(`<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`, holdUp);
+          // (a camera's own window can hold too, with no body: ambient mode holds every window. Before that camera's
+          // first picture it is idle like any other; naming a body that is not there threw, and stopped the page)
+          if (k < 0 && holdUp && body) noFrame(`<b>${titleCase(body)}</b>No ${cam === "N" ? "narrow" : "wide"}-angle pictures of it near this time`, holdUp);
           else { noFrame(IDLE_HTML); idleAt = 0; }
           for (const f of ["frame", "filter", "colour", "details", "range", "obs"]) field(f).textContent = "";
           orbitIcon(-1);
