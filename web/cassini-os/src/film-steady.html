@@ -104,6 +104,11 @@
     function optimal(n) {
       for (let m = Math.max(1, n); ; m++) { let q = m; for (const p of [2, 3, 5]) while (q % p === 0) q /= p; if (q === 1) return m; }
     }
+    // image_correction.even_dft: the optimal DFT size made even (OpenCV puts its peak half a pixel off at an odd one)
+    function even(n) {
+      const m = optimal(n);
+      return m % 2 === 0 ? m : optimal(m + 1);
+    }
     // a complex DFT of any length made of small factors (mixed radix, decimation in time), in place on re, im
     const plans = new Map();
     function plan(n) {
@@ -169,13 +174,13 @@
     }
 
     // cv2.phaseCorrelate(a, b, cv2.createHanningWindow, the square root of
-    // the rows' and columns' Hann curves multiplied): each picture times the window, padded with 0 to the optimal DFT
-    // size, the cross-power spectrum normalized (as divSpectrums, with FLT_EPSILON), back, its quadrants swapped as
+    // the rows' and columns' Hann curves multiplied): each picture times the window, padded with 0 to the even optimal
+    // DFT size (image_correction.phase_correlate), the cross-power spectrum normalized (as divSpectrums, with FLT_EPSILON), back, its quadrants swapped as
     // OpenCV's fftShift does (an odd size leaves its last row and column), and the peak's 5 x 5 weighted centroid
     function phaseCorrelate(a, b, w, h) {
       const wc = new Float64Array(w), c0 = 2 * Math.PI / (w - 1), c1 = 2 * Math.PI / (h - 1);
       for (let j = 0; j < w; j++) wc[j] = 0.5 * (1 - Math.cos(c0 * j));
-      const M = optimal(h), N = optimal(w), MN = M * N;
+      const M = even(h), N = even(w), MN = M * N;
       const ar = new Float64Array(MN), ai = new Float64Array(MN), br = new Float64Array(MN), bi = new Float64Array(MN);
       for (let y = 0; y < h; y++) {
         const wr = 0.5 * (1 - Math.cos(c1 * y));
@@ -210,14 +215,39 @@
 
     // image_correction.find_shift(im1, im2, max_shift): phase correlation round the reference's target (where its blur
     // is over a fifth of its brightest), or null when the peak is under min_response or past max_shift
+    // cv2.medianBlur(a, 3) of a float32 picture: the median of each pixel's 3 x 3, the edge replicated
+    function median3(a, w, h) {
+      const out = new Float32Array(w * h), v = new Float64Array(9);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let k = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const yy = Math.min(h - 1, Math.max(0, y + dy)), xx = Math.min(w - 1, Math.max(0, x + dx));
+          v[k++] = a[yy * w + xx];
+        }
+        v.sort(); out[y * w + x] = v[4];
+      }
+      return out;
+    }
+    const DARK_SHARE = 0.02, FIND_MARGIN = 100;   // image_correction's
     function findShift(g1, g2, w, h, maxShift, minResponse = 0.3) {
-      const a = Float32Array.from(g1), b = Float32Array.from(g2), bl = blur(a, w, h, 3);
-      let top = -Infinity; for (let i = 0; i < bl.length; i++) if (bl[i] > top) top = bl[i];
-      const cut = f(0.2 * top);
-      let x0 = w, x1 = -1, y0 = h, y1 = -1;
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bl[y * w + x] > cut) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      let a = Float32Array.from(g1), b = Float32Array.from(g2), bl = blur(a, w, h, 3);
+      let x0, x1, y0, y1, lit;
+      const box = () => {
+        let top = -Infinity; for (let i = 0; i < bl.length; i++) if (bl[i] > top) top = bl[i];
+        const cut = f(0.2 * top);
+        x0 = w; x1 = -1; y0 = h; y1 = -1; lit = 0;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bl[y * w + x] > cut) { lit++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      };
+      box();
       if (x1 < 0) return null;
-      const Y0 = Math.max(y0 - maxShift, 0), Y1 = Math.min(y1 + maxShift, h), X0 = Math.max(x0 - maxShift, 0), X1 = Math.min(x1 + maxShift, w);
+      if (lit < DARK_SHARE * w * h) {
+        // a black scene: hot pixels and the camera's fixed pattern taken out of both by a 3 x 3 median first
+        a = median3(a, w, h); b = median3(b, w, h); bl = blur(a, w, h, 3);
+        box();
+        if (x1 < 0) return null;
+      }
+      const reach = Math.max(Math.ceil(maxShift), FIND_MARGIN);
+      const Y0 = Math.max(y0 - reach, 0), Y1 = Math.min(y1 + reach, h), X0 = Math.max(x0 - reach, 0), X1 = Math.min(x1 + reach, w);
       const cw = X1 - X0, ch = Y1 - Y0;
       if (cw < 2 || ch < 2) return null;
       const pa = new Float32Array(cw * ch), pb = new Float32Array(cw * ch);
@@ -327,7 +357,7 @@
       return moves(pics, m, smooth);
     }
 
-    return { C, grey, valid, windowOf, auto, most, blur, optimal, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
+    return { C, grey, valid, windowOf, auto, most, blur, optimal, even, fft2, phaseCorrelate, findShift, centroidShift, shift, runs, chain, held, measure, moves, offsets, pyRoundN };
   };
   const M = MATH(), C = M.C;
 
