@@ -613,7 +613,8 @@ def composite(ids, channel=None, centre=None):
 
 
 DEPTH_MAX = 400               # frame ids one /frames/depth.json asks about (a whole-pass mosaic names a few hundred)
-_depths = {}
+DEPTH_KEEP = 20000            # answers kept (the last asked; a few MB), so a long session's never grow with the mission
+_depths = collections.OrderedDict()
 _depths_lock = threading.Lock()
 _CONVERSION = re.compile(r'^\s*DATA_CONVERSION_TYPE\s*=\s*"?([A-Z0-9]+)', re.M)
 
@@ -628,6 +629,7 @@ def bit_depth(frame_id):
     one in tens of thousands), which this can't see without reading it. [None, "unknown"] with no label."""
     with _depths_lock:
         if frame_id in _depths:
+            _depths.move_to_end(frame_id)
             return _depths[frame_id]
     try:
         m = _CONVERSION.search(data_source.read_text(f"{FOLDERS[frame_id[0]]}/{frame_id}.lbl"))
@@ -646,6 +648,8 @@ def bit_depth(frame_id):
         out = [8, "8lsb" if kind == "8LSB" else "table"]
     with _depths_lock:
         _depths[frame_id] = out
+        while len(_depths) > DEPTH_KEEP:
+            _depths.popitem(last=False)
     return out
 
 
