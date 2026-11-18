@@ -3814,12 +3814,8 @@ def _detail(gray, mask, sigma=6.0):
 
 
 def _even(a):
-    """a padded with 0 to a size cv2.phaseCorrelate measures without bias: it pads to an optimal DFT size itself, and
-    where that is odd its peak comes out half a pixel off (a strip 218 px wide shifted 0 measured +0.5)."""
-    h, w = a.shape
-    H, W = cv2.getOptimalDFTSize(h), cv2.getOptimalDFTSize(w)
-    H, W = H if H % 2 == 0 else cv2.getOptimalDFTSize(H + 1), W if W % 2 == 0 else cv2.getOptimalDFTSize(W + 1)
-    return cv2.copyMakeBorder(a, 0, H - h, 0, W - w, cv2.BORDER_CONSTANT, value=0)
+    """a padded with 0 to a size cv2.phaseCorrelate measures without bias (image_correction.even_dft)."""
+    return image_correction.even_dft(a)
 
 
 def _agree(a, b, mask):
