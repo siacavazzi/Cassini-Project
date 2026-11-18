@@ -1842,7 +1842,7 @@ body.idle .lbl.site:not(.focus) { opacity: .3; }
 .cs-root .cs-black { position: absolute; inset: 0; background: #000; opacity: 0; }
 .cs-root .cs-caps { position: absolute; left: 50%; bottom: 15vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
 .cs-root .cs-cap { grid-area: 1 / 1; align-self: end; text-align: center; color: var(--q-text); font: 300 19px/1.5 -apple-system, "Helvetica Neue", var(--ui);
-  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; }
+  letter-spacing: .01em; text-shadow: 0 1px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); opacity: 0; text-wrap: balance; }
 .cs-root .cs-cap b { display: block; margin-bottom: 8px; font-weight: normal; font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--q-dim); }
 .cs-root .cs-cap.big { font-size: 26px; }
 .cs-root .cs-cap ul { list-style: none; margin: 0; padding: 0; }
@@ -1851,6 +1851,8 @@ body.idle .lbl.site:not(.focus) { opacity: .3; }
 .cs-root .cs-skip { all: unset; position: absolute; right: 16px; bottom: 12px; padding: 4px 11px; border-radius: 11px; border: 1px solid var(--q-line);
   background: rgba(16,17,20,.5); color: rgba(232,236,242,.55); font-size: 11px; cursor: pointer; pointer-events: auto; }
 .cs-root .cs-skip:hover { color: var(--q-text); }
+.cs-root .cs-sound { position: absolute; right: 86px; bottom: 17px; font-size: 10.5px; color: rgba(232,236,242,.4); opacity: 0; transition: opacity .8s ease; }
+.cs-root .cs-sound.on { opacity: 1; }
 .cs-root .cs-hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 11px; color: rgba(232,236,242,.45); opacity: 0; transition: opacity 1.5s ease; }
 .cs-root .cs-hint.on { opacity: 1; }
 /* a quiet mono readout line low in the middle, and a small dim note bottom left; .on shows them */
@@ -1862,6 +1864,9 @@ body.idle .lbl.site:not(.focus) { opacity: .3; }
 .cs-root .cs-note.on { opacity: 1; }
 body.cutscene #gl { cursor: grab; }
 body.cutscene.cs-drag #gl { cursor: grabbing; }
+body.cutscene.cs-nolook #gl { cursor: default; }
+/* once it is over the Skip button goes at once (the cover is still fading) */
+body.cutscene-out:not(.cutscene) .cs-root .cs-skip { opacity: 0; pointer-events: none; transition: opacity .3s ease; }
 body.cutscene #app > :not(#gl):not(.cs-root) { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.2s ease !important; }
 body.cutscene-out #app * { pointer-events: none !important; }
 body.phone .cs-root .cs-read { font-size: 9.5px; bottom: 9vh; }
@@ -9007,11 +9012,32 @@ function targetLabel(k) {
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.02;
     bell(t, hz(35), 0.25, 0, 7, 1.2, 1.4); bell(t + 0.01, hz(47), 0.12, 0, 6, 0.8, 2);
+    // and the same note two octaves up, quietly: phone and laptop speakers play almost nothing of B1 and B2
+    bell(t + 0.02, hz(59), 0.05, 0, 5, 0.6, 2);
   };
   window.cassiniSound.chord = (steps = [0, 2, 4]) => {
     if (!ctx || ctx.state !== "running") return;
     const t = ctx.currentTime + 0.05;
     steps.forEach((d, i) => bell(t + i * 0.16, hz(noteOf(ROOT.W, d)), 0.085, (i / Math.max(1, steps.length - 1) - 0.5) * 0.8, 5.5, 0.45, 1));
+  };
+  // a cutscene's bed (cutscene.html takes it down when the cutscene ends): one soft held sound for the picture to sit
+  // on, so the chords under the captions do not ring out into silence. D and A only, the scale's root and fifth, so it
+  // agrees with every chord and every instrument (the minor one too); it breathes slowly. level 0..1 (0 takes it
+  // down), secs how long it takes to get there
+  let bedG = null;
+  window.cassiniSound.bed = (level, secs = 2) => {
+    if (!ctx || ctx.state !== "running" || (!bedG && !level)) return;
+    if (!bedG) {
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 460; f.Q.value = 0.5;
+      bedG = ctx.createGain(); bedG.gain.value = 0; f.connect(bedG); bedG.connect(bus);
+      [38, 45, 50, 57, 62].forEach((m, i) => {   // D2 A2 D3 A3 D4, most of it in the middle so small speakers carry it too
+        const o = ctx.createOscillator(), g = ctx.createGain(); o.type = i ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = (i % 2 ? 1 : -1) * 4;
+        g.gain.value = [0.5, 0.7, 1, 0.6, 0.35][i]; o.connect(g); g.connect(f); o.start();
+      });
+      const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.09; depth.gain.value = 140; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
+    }
+    // at level 1 it sits about 8 dB under a caption chord's peak, a little above the spacecraft tones
+    bedG.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.02, ctx.currentTime, Math.max(0.03, secs / 3));
   };
   // Saturn arrival (soi.html): the main engine as a low rumble, brown noise under a lowpass that wavers a little
   let rumbleG = null;
@@ -9024,7 +9050,12 @@ function targetLabel(k) {
       const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 170; f.Q.value = 0.7;
       const lfo = ctx.createOscillator(), depth = ctx.createGain(); lfo.frequency.value = 0.37; depth.gain.value = 40; lfo.connect(depth); depth.connect(f.frequency); lfo.start();
       rumbleG = ctx.createGain(); rumbleG.gain.value = 0;
-      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus); src.start();
+      src.connect(f); f.connect(rumbleG); rumbleG.connect(bus);
+      // a quiet layer of the same noise around 550 Hz, a quarter as loud: under 170 Hz alone the engine is silent on
+      // phone and laptop speakers
+      const mid = ctx.createBiquadFilter(), midG = ctx.createGain(); mid.type = "bandpass"; mid.frequency.value = 550; mid.Q.value = 0.8; midG.gain.value = 0.25;
+      src.connect(mid); mid.connect(midG); midG.connect(rumbleG);
+      src.start();
     }
     rumbleG.gain.setTargetAtTime(level * 0.22, ctx.currentTime, level ? 0.4 : 0.12);
   };
@@ -14146,7 +14177,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b2a29f162433";
+  const BUILD = /*BUILD*/"1f58de0f6784";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -17222,36 +17253,78 @@ function frame(now) {
     lines.set(caps, el);
     return el;
   }
-  // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up
+  // run each line of a list ([at, dur, html, cls, chord]) whose time has come, and take it down when its time is up.
+  // A line still on its way out of the box when the next one is due leaves quickly first (as line() does), so the two
+  // never sit on top of each other
   function runCaptions(caps, list, t, shown) {
     list.forEach(([at, dur, html, cls, chord], i) => {
-      if (!shown[i] && t >= at && t < at + dur) { shown[i] = caption(caps, html, cls); if (chord) sound("chord", chord); }
+      if (!shown[i] && t >= at && t < at + dur) {
+        const going = [...caps.children].filter(el => fades.has(el) && fades.get(el).to === 0);
+        if (going.length) {
+          const el = shown[i] = document.createElement("div");
+          el.className = "cs-cap" + (cls ? " " + cls : ""); el.innerHTML = html; el.style.opacity = 0; caps.appendChild(el);
+          going.forEach((g, n) => fadeTo(g, 0, 0.35, () => { g.remove(); if (!n && el.isConnected) fadeTo(el, 1, 1.2); }));
+        } else shown[i] = caption(caps, html, cls);
+        if (chord) sound("chord", chord);
+      }
       if (shown[i] && shown[i] !== true && t >= at + dur) { drop(shown[i]); shown[i] = true; }
     });
   }
   // take down every line still up
   function dropAll(shown) { shown.forEach((el, i) => { if (el && el !== true) { drop(el); shown[i] = true; } }); }
   const sound = (what, ...a) => { if (window.cassiniSound && cassiniSound[what]) cassiniSound[what](...a); };
+  // sound is on but the browser holds it until the first click or key (a cutscene opened from a link): a quiet line by
+  // the Skip button says so, and goes once the sound runs
+  const hint = document.createElement("div"); hint.className = "cs-sound"; hint.setAttribute("aria-hidden", "true");
 
-  // ---------- looking around: a drag turns the view, the wheel zooms; it eases back a few seconds after ----------
-  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0, wheel: true };
-  const resetLook = () => Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0 });
+  // ---------- looking around: a drag turns the view, the wheel or a pinch zooms; it eases back a few seconds after ----------
+  // look.lock (a cutscene sets it): no looking around for now. look.drag: where the drag is, while there is one
+  const look = { yaw: 0, pitch: 0, zoom: 1, drag: null, last: 0, wheel: true, lock: false };
+  const fingers = new Map();   // the pointers held down on the view: id -> [x, y]
+  let spread = 0;              // how far apart two fingers were at their last move
+  const letGo = () => { fingers.clear(); spread = 0; look.drag = null; document.body.classList.remove("cs-drag"); };
+  const resetLook = () => { letGo(); Object.assign(look, { yaw: 0, pitch: 0, zoom: 1, last: 0 }); };
+  // how far up the playing cutscene's black cover is, 0 to 1. More than half up, the view is hardly seen and a drag
+  // does nothing; fully up, the view goes back to the cutscene's own (what was dragged belonged to the shot before,
+  // and would show later as a picture that opens turned away and swings back)
+  const cover = () => { const b = active && scenes[active].root && scenes[active].root.querySelector(".cs-black"); return b ? +b.style.opacity || 0 : 0; };
+  const canLook = () => !!active && !look.lock && cover() <= 0.5;
+  const gap = () => { const [a, b] = [...fingers.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+  const zoomBy = k => { look.zoom = Math.max(0.35, Math.min(4, look.zoom * k)); };
   function onDown(e) {
     if (!active || e.target !== document.getElementById("gl")) return;
+    e.stopImmediatePropagation();   // the viewer's own controls never see it
+    if (!canLook() || fingers.size >= 2) return;
+    fingers.set(e.pointerId, [e.clientX, e.clientY]);
+    spread = fingers.size === 2 ? gap() : 0;
     look.drag = [e.clientX, e.clientY]; look.last = performance.now(); document.body.classList.add("cs-drag");
-    e.stopImmediatePropagation();
   }
   function onMove(e) {
-    if (!active || !look.drag) return;
-    look.yaw -= (e.clientX - look.drag[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (e.clientY - look.drag[1]) * 0.005));
-    look.drag = [e.clientX, e.clientY]; look.last = performance.now();
+    if (!active || !fingers.has(e.pointerId)) return;
     e.stopImmediatePropagation();
+    const was = fingers.get(e.pointerId), now = [e.clientX, e.clientY];
+    fingers.set(e.pointerId, now);
+    if (!canLook()) return;
+    if (fingers.size === 2) {
+      // two fingers pinch: apart comes closer, together stands back, and nothing turns (each finger on its own would
+      // drag the view its own way)
+      const g = gap();
+      if (look.wheel && spread > 8 && g > 8) zoomBy(spread / g);
+      spread = g;
+    } else {
+      look.yaw -= (now[0] - was[0]) * 0.006; look.pitch = Math.max(-1.2, Math.min(1.2, look.pitch + (now[1] - was[1]) * 0.005));
+    }
+    look.drag = now; look.last = performance.now();
   }
-  function onUp() { look.drag = null; look.last = performance.now(); document.body.classList.remove("cs-drag"); }
+  function onUp(e) {
+    fingers.delete(e.pointerId); spread = 0; look.last = performance.now();
+    if (!fingers.size) letGo();
+  }
   function onWheel(e) {
     if (!active || !look.wheel) return;
-    look.zoom = Math.max(0.35, Math.min(4, look.zoom * Math.exp(e.deltaY * 0.0012))); look.last = performance.now();
     e.preventDefault(); e.stopImmediatePropagation();
+    if (!canLook()) return;
+    zoomBy(Math.exp(e.deltaY * 0.0012)); look.last = performance.now();
   }
   function easeLook(dt) {
     if (look.drag || performance.now() - look.last < 4000) return;
@@ -17338,11 +17411,21 @@ function frame(now) {
     const s = scenes[name];
     if (active || !s) return false;
     active = name; saved = { follow: state.follow, playing: state.playing };
-    resetLook(); look.wheel = true;
+    resetLook(); look.wheel = true; look.lock = false;
+    // the faded interface is out of reach: nothing in it keeps or takes the focus (Space or Enter on a button that was
+    // clicked just before, or tabbed to, would work it unseen)
+    const had = document.activeElement;
+    if (had && had !== document.body && had.blur && !s.root.contains(had)) had.blur();
+    saved.inert = [...document.querySelectorAll("#app > :not(#gl):not(.cs-root)")].filter(el => !el.inert);
+    saved.inert.forEach(el => { el.inert = true; });
+    // letting go of the follow camera turns the view straight onto Cassini; it keeps looking where it did until the
+    // cover is up (studyCamera below), so that swing is never seen
+    saved.aim = state.follow ? camera.quaternion.clone() : null;
     if (state.follow) setFollow(false);
     setPlaying(false);
     controls.enabled = false;
     s.root.hidden = false;
+    s.root.appendChild(hint); hint.textContent = document.body.classList.contains("phone") ? "Tap for sound" : "Click for sound";
     document.body.classList.add("cutscene");
     return true;
   }
@@ -17351,18 +17434,26 @@ function frame(now) {
   function end(name) {
     if (!active || (name && name !== active)) return;
     const s = scenes[active], was = saved; active = null; saved = null;
-    // onEnd may return { follow: false } to leave follow off (an ending that leaves the view on something else)
+    letGo(); document.body.classList.remove("cs-nolook");
+    was.inert.forEach(el => { el.inert = false; });
+    sound("bed", 0, 1.5);
+    // onEnd may return { follow: false } to leave follow off (an ending that leaves the view on something else), and
+    // { seamless: true } when its camera already is where the viewer's own view takes over (nothing to hide)
     const keep = (s.onEnd && s.onEnd()) || {};
     cassini.visible = true; markerPts.visible = true; cassini.up.set(0, 1, 0);
     camera.up.set(0, 1, 0);
     controls.enabled = true;
     const black = s.root.querySelector(".cs-black");
     fades.forEach((v, el) => { if (el !== black) fades.delete(el); });
+    // the view now jumps from the cutscene's camera to the viewer's own. Ended under its cover that is never seen;
+    // ended early (Skip, Escape) the cover may be down, so it cuts to black and the interface comes up from there
+    if (black && !keep.seamless) black.style.opacity = 1;
+    hint.classList.remove("on");
     if (was.follow && keep.follow !== false) setFollow(true);
     if (was.playing && state.et < coverage[1] - 1) setPlaying(true);
     document.body.classList.add("cutscene-out");
     document.body.classList.remove("cutscene", "cs-drag");
-    const done = () => { document.body.classList.remove("cutscene-out"); if (!active) s.root.hidden = true; };
+    const done = () => { document.body.classList.remove("cutscene-out"); if (scenes[active] !== s) s.root.hidden = true; };
     if (black) fadeTo(black, 0, 1.5, done); else done();
     if (window.cassiniPerf) cassiniPerf.invalidate();
   }
@@ -17373,6 +17464,11 @@ function frame(now) {
     if (!active) return;
     if (window.cassiniPerf) cassiniPerf.invalidate();
     state.playing = false;
+    const can = canLook();
+    if (!can && fingers.size) letGo();
+    if (cover() > 0.9) Object.assign(look, { yaw: 0, pitch: 0, zoom: 1 });
+    document.body.classList.toggle("cs-nolook", !can);
+    hint.classList.toggle("on", !!(window.cassiniSound && cassiniSound.blocked));
     easeLook(dt);
     const s = scenes[active];
     if (s.frame) s.frame(dt);
@@ -17380,7 +17476,11 @@ function frame(now) {
   const hook = k => (...a) => { if (active && scenes[active][k]) scenes[active][k](...a); };
   window.studyPositions = hook("positions");
   window.studyAttitude = hook("attitude");
-  window.studyCamera = hook("camera");
+  window.studyCamera = (...a) => {
+    if (!active) return;
+    if (saved.aim) { if (cover() > 0.9) saved.aim = null; else camera.quaternion.copy(saved.aim); }
+    if (scenes[active].camera) scenes[active].camera(...a);
+  };
 
   // ---------- triggers ----------
   // playback crossing a moment going forward plays a cutscene (when(et) can say no: not this time)
@@ -17422,7 +17522,17 @@ function frame(now) {
     }, 250);
   }
 
-  window.addEventListener("keydown", e => { if (active && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); } }, true);
+  // Escape ends it. Every other key stays with the cutscene: the page's shortcuts (Space plays, M is movie mode, A is
+  // ambient mode, F is full view...) would start under it and leave the page in a state it cannot get out of. S still
+  // mutes (sound.html); the browser's own keys, and Tab, Enter and Space on the cutscene's buttons, are not prevented
+  window.addEventListener("keydown", e => {
+    if (!active) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); return; }
+    if ((e.key === "s" || e.key === "S") && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+    e.stopImmediatePropagation();
+    if (e.key === " " && !scenes[active].root.contains(e.target)) e.preventDefault();
+  }, true);
+  window.addEventListener("blur", letGo);
   window.addEventListener("pointerdown", onDown, true);
   window.addEventListener("pointermove", onMove, true);
   window.addEventListener("pointerup", onUp, true);
