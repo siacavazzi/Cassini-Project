@@ -391,13 +391,18 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
   // ambient mode, F is full view...) would start under it and leave the page in a state it cannot get out of. S still
   // mutes (sound.html); the browser's own keys are not prevented. A key pressed on the cutscene's own things (Tab, Enter
   // and Space on its buttons, the keys that scroll the credits) goes to them, and stops at its section (register)
-  window.addEventListener("keydown", e => {
+  // It has to run ahead of every other key listener on the page, some of which listen in the capture phase and were
+  // added earlier (G adds to the gallery, Cmd+comma opens Settings): the page's first script calls it first
+  // (window.cassiniKeyGate, settings.html)
+  function keyGate(e) {
     if (!active) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); return; }
     if (muteKey(e) || scenes[active].root.contains(e.target)) return;
     e.stopImmediatePropagation();
     if (e.key === " ") e.preventDefault();
-  }, true);
+  }
+  window.cassiniKeyGate = keyGate;
+  if (!window.cassiniKeyGateWired) window.addEventListener("keydown", keyGate, true);
   window.addEventListener("blur", letGo);
   window.addEventListener("pointerdown", onDown, true);
   window.addEventListener("pointermove", onMove, true);
