@@ -2996,7 +2996,8 @@ function targetLabel(k) {
         // it is, then the raw frame at 128 (the strip size the build stores for every frame; raw 256 is stored for
         // none, so it was drawn on request: zero-render check 2017, 11-17)
         if (taken && !tile.firstChild) {
-          const tries = [...new Set([shownFrameUrl(q, 256),
+          // (processed frames off in Settings: the raw frame at 512, stored for every frame, first)
+          const tries = [...new Set([processes(q) ? shownFrameUrl(q, 256) : frameUrl(catalog.id[q], 512),
             ...(processes(q) ? [`${FRAMES}/frames/processed/${catalog.id[q]}.webp?size=256${window.cassiniLook()}${window.cassiniHdr ? window.cassiniHdr(256) : ""}`] : []),
             frameUrl(catalog.id[q], 128)])];
           tile.innerHTML = `<img alt="" src="${tries[0]}" data-tries="${tries.slice(1).join(" ")}" onerror="const t = this.dataset.tries.split(' ').filter(Boolean); if (t.length) { this.dataset.tries = t.slice(1).join(' '); this.src = t[0]; } else this.style.visibility='hidden'">`;
