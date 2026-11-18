@@ -159,6 +159,7 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
   function onMove(e) {
     if (!active || !fingers.has(e.pointerId)) return;
     e.stopImmediatePropagation();
+    if (e.pointerType === "mouse" && !e.buttons) { onUp(e); return; }   // the button came up outside the window
     const was = fingers.get(e.pointerId), now = [e.clientX, e.clientY];
     fingers.set(e.pointerId, now);
     if (!canLook()) return;
