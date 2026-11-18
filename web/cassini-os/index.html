@@ -1951,6 +1951,8 @@ body.phone #launch .lx-clock { font-size: 9.5px; bottom: 9vh; }
 #hrel .cs-cap button:hover { color: var(--q-text); border-color: rgba(232,236,242,.35); }
 #hrel .cs-cap small { font-size: 10.5px; color: rgba(232,236,242,.4); }
 #hrel .cs-cap small a { color: inherit; pointer-events: auto; }
+/* leaving (the closing fade, Skip, a choice on the last card): everything on top goes with the picture */
+#hrel.hr-out > :not(.cs-black):not(.hr-shade) { opacity: 0 !important; transition: opacity var(--hr-out, .45s) ease !important; }
 body.phone #hrel .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
 body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32px); }
 
@@ -14146,7 +14148,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"b2a29f162433";
+  const BUILD = /*BUILD*/"fff922ddadff";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -18844,29 +18846,35 @@ window.huygensModels = (() => {
   const RELEASE = utcToEt(DATA.release_utc);
   const SPEED = DATA.speed_m_s, SPIN = DATA.spin_rpm * 2 * Math.PI / 60;   // m/s, rad/s
   const LEAD = 8;              // s of mission time shown before the release
-  const REAL = 16;             // screen s that run in real time
+  const REAL = 15;             // screen s that run in real time
   const WARP = 30;             // how much faster the clock runs after that
-  const RAMP = 6;              // screen s to reach it
-  const PULL = 26;             // screen s when the camera starts to pull back
-  const END = 59;              // screen s when it closes by itself
+  const RAMP = 5;              // screen s to reach it
+  const PULL = 23;             // screen s when the camera sets off for the probe
+  const MOVE = 9;              // screen s that fly-over takes
+  const END = 46;              // screen s when it closes by itself
+  const CLOSE = 1.6;           // screen s of its closing fade
+  const LEAVE = 0.45;          // screen s of the fade when it is left early (Skip, a choice on the last card)
+  const BED = 0.2;             // the quiet tone under it (cassiniSound.drone's level)
   const SPIN_MAX = 2.4;        // rad/s, the most the drawn spin turns, so the sped-up clock does not strobe it
   const FAR_M = 11;            // m from the probe the camera ends
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const SOURCES = [...new Set(DATA.facts.map(f => f.source))].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(new URL(u).hostname.replace(/^www\./, ""))}</a>`).join(" · ");
-  // the near part, in mission seconds from the release: when, how long, the line, a class, the chord under it
+  // the lines, in screen seconds: when, how long, the line, a class, the chord under it. The release is at LEAD and
+  // has its own chord; the line before it is gone by then, and each line stays long enough to read (about three words
+  // a second). The near part first
   const NEAR = [
-    [-7.8, 4.2, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
-    [-3.6, 3.8, `Ten seconds before, Cassini's thrusters are switched off, so nothing nudges the probe on its way out.`, "", null],
-    [0.2, 4.5, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", [0, 2, 4, 7]],
-    [4.8, 7, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", null],
-    [60, 999, `A minute later Cassini's thrusters wake again.`, "", null],
+    [0.2, 3.8, `<b>December 25, 2004 · 02:00 UTC</b>Seven years after leaving Earth together, Cassini lets go of Huygens.`, "", [0, 2, 4]],
+    [4.3, 2.9, `Cassini's thrusters are off, so nothing nudges the probe on its way out.`, "", null],
+    [LEAD + 0.2, 4.3, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", null],
+    [LEAD + 4.7, 5.6, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", [1, 3, 5]],
+    // what the attitude record shows next (only said when it does: recoil below)
+    [LEAD + 10.6, 999, `The push leaves Cassini turning slowly the other way, until its thrusters wake and steady it.`, "", [0, 3, 5], "recoil"],
   ];
-  // the far part, in screen seconds: when, how long, the line, a class, the chord
+  // the far part
   const FAR_CAPS = [
-    [PULL + 1, 7, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
-    [PULL + 8, 7, `Three days later Cassini fires its engine to swerve aside, so it can pass Titan 60,000 km away and listen.`, "", [0, 3, 5]],
-    [PULL + 15, 7, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
-    [PULL + 22, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
+    [PULL + 1, 6.3, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
+    [PULL + 7.6, 6.1, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
+    [PULL + 14, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
   ];
 
   let H = null;   // the running cutscene
@@ -18953,6 +18961,16 @@ window.huygensModels = (() => {
     co.axisS = co.axis.clone().applyQuaternion(t.q);
     co.axisJ = fromScene(co.axisS);
     co.p0J = fromScene(co.p0.clone().applyQuaternion(t.q)).map(x => x / 1000);
+    // the push that spins the probe up turns Cassini the other way (its attitude record has the turn: about the
+    // probe's axis, from the instant of the release). Where the record shows it, the probe is drawn spinning against
+    // it, so the two never turn the same way; recoil says the record shows it
+    co.sense = 1; co.recoil = false;
+    const later = t.real ? cassiniTurn(RELEASE + 60) : null;
+    if (later && later.real) {
+      const dq = later.q.clone().multiply(t.q.clone().invert());
+      const w = new THREE.Vector3(dq.x, dq.y, dq.z).multiplyScalar(dq.w < 0 ? -1 : 1);   // sin(half the turn) along its axis
+      if (w.length() > 0.05 && Math.abs(w.clone().normalize().dot(co.axisS)) > 0.5) { co.recoil = true; co.sense = w.dot(co.axisS) > 0 ? -1 : 1; }
+    }
   }
   // ESA's numbers: Cassini's position, plus where the probe sat on it, plus 0.35 m/s straight out
   function ownPlace(et, out) {
@@ -18991,7 +19009,7 @@ window.huygensModels = (() => {
     co.group.visible = on;
     if (!on) return;
     // spinning about its axis, which stays fixed in space; the cutscene may draw the spin slower
-    const ang = co.spin !== null ? co.spin : (et - RELEASE) * SPIN;
+    const ang = co.sense * (co.spin !== null ? co.spin : (et - RELEASE) * SPIN);
     co.group.quaternion.copy(qSpin.setFromAxisAngle(co.axisS, ang)).multiply(co.q0);
     // true size up close; far off it is enlarged like Cassini so it stays visible (the cutscene keeps it true)
     const d = camera.position.distanceTo(probeObj.position), s = H ? 1e-6 : Math.max(1e-6, d * 0.0012);
@@ -19029,21 +19047,40 @@ window.huygensModels = (() => {
   const fmtClock = s => { const a = Math.abs(Math.round(s)), m = Math.floor(a / 60), ss = String(a % 60).padStart(2, "0"); return `${s < 0 ? "T−" : "T+"}${m}:${ss}`; };
 
 
+  const gl = document.getElementById("gl"), skip = root.querySelector(".cs-skip");
   function play() {
     if (H || CS.active || !tracks.CASSINI) return;
+    // the view as it is, to hold through the fade to black (beginning lets the follow camera go, which would turn it)
+    const hold = camera.quaternion.clone();
     if (!CS.begin("huygens")) return;
+    coastSetup();
     H = { t0: performance.now(), phase: "out", T: 0, s: -LEAD, shownN: [], shownF: [], playing: state.playing, speed: state.speed,
-      spin: 0, lastFrame: performance.now(), fx: null, how: "back" };
+      spin: 0, lastFrame: performance.now(), fx: null, how: "back", hold,
+      near: NEAR.filter(l => l[5] !== "recoil" || (co && co.recoil)) };
+    root.classList.remove("hr-out"); root.style.removeProperty("--hr-out");
     fadeTo(black, 1, 1.4);
   }
   // how it ends: "stay" leaves the view on Huygens, paused, to look around it; "back" returns to Cassini and plays on
   // as before; "landing" jumps to Huygens entering Titan's air. Skip and Escape (cutscene.html) are "back"
   function finish(how) { if (H) H.how = how; CS.end("huygens"); }
+  // leaving early (Skip, a choice on the last card): a short fade to black first, everything on top going with it
+  function leave(how) {
+    if (!H || H.leaving) return;
+    if (H.phase !== "run" || H.closing) { finish(how); return; }
+    H.leaving = how; H.leaveAt = performance.now(); H.how = how;
+    root.style.setProperty("--hr-out", `${LEAVE}s`); root.classList.add("hr-out");
+    fadeTo(black, 1, LEAVE); sound("drone", 0);
+  }
   function cleanUp() {
     const h = H; H = null;
     if (!h) return;
     removeEffects(h.fx);
     if (co) co.spin = null;
+    sound("drone", 0);
+    CS.look.wheel = true; gl.style.cursor = "";
+    // ended with the picture still up (Escape, which cutscene.html ends at once): to black in one go, so the viewer's
+    // own view fades in under the cover instead of jumping in, and nothing of the cutscene's lingers on top of it
+    if (!(+black.style.opacity > 0.95)) { root.style.setProperty("--hr-out", "0s"); root.classList.add("hr-out"); black.style.opacity = 1; }
     caps.textContent = ""; [read, note, hint].forEach(e => e.classList.remove("on"));
     Object.values(tags).forEach(e => e.classList.remove("on"));
     // the mission carries on from where the cutscene left it
@@ -19053,36 +19090,60 @@ window.huygensModels = (() => {
     if (h.how === "landing" && window.cassiniHuygensLanding) setTimeout(() => cassiniHuygensLanding.play(), 0);
     else if (h.how === "landing" && entry && typeof jump === "function") jump(entry);
     else if (h.how === "stay" && studyCoast.modelShown(state.et)) {
-      // paused on the probe, once cutscene.html has put the interface back (it picks playback up again if it was on)
-      setTimeout(() => { setPlaying(false); setFocus("HUYGENS"); }, 0);
+      // paused on the probe, once cutscene.html has put the interface back (it picks playback up again if it was on),
+      // from where the cutscene's camera stood, so the view carries on from the last shot
+      const rel = h.rel && h.T > PULL + MOVE ? h.rel.clone() : null;
+      setTimeout(() => { setPlaying(false); setFocus("HUYGENS"); if (rel && state.focus === "HUYGENS") camera.position.copy(rel); }, 0);
       return { follow: false };
     } else { setFocus("CASSINI"); if (h.playing) { setSpeed(h.speed); setPlaying(true); } }
   }
   caps.addEventListener("click", e => {
     const b = e.target.closest("[data-hr]"); if (!b) return;
-    e.stopPropagation(); finish(b.dataset.hr);
+    e.stopPropagation(); leave(b.dataset.hr);
   });
+  // Skip leaves the same way (ahead of cutscene.html's own listener on the button, which ends it at once)
+  skip.addEventListener("click", e => { if (!H) return; e.stopImmediatePropagation(); leave("back"); }, true);
 
   // the cutscene's clock, before the viewer places the bodies
-  function frame() {
+  function frame(dt) {
     const now = performance.now();
+    if (H.leaving && now - H.leaveAt >= LEAVE * 1000 + 30) { finish(H.leaving); return; }
+    // looking around is for the shots that hold. Through the fades and the fly-over it is let go: a drag there would
+    // turn a view that is not drawn yet, or fight the camera's own move
+    const Tn = H.phase === "run" ? (now - H.runAt) / 1000 : -1;
+    const held = Tn < 1.5 || (Tn > PULL - 0.5 && Tn < PULL + MOVE) || H.closing || H.leaving;
+    if (held) {
+      // what the viewer had turned eases back (gone at once while nothing is drawn); anything new is not taken
+      const L = CS.look, k = Tn < 1.5 ? 0 : Math.exp(-(dt || 0.016) / 0.3), w = H.look || [L.yaw, L.pitch, L.zoom];
+      L.yaw = w[0] * k; L.pitch = w[1] * k; L.zoom = 1 + (w[2] - 1) * k; L.drag = null;
+      H.look = [L.yaw, L.pitch, L.zoom];
+    } else H.look = null;
+    CS.look.wheel = !held; gl.style.cursor = held ? "default" : "";
     if (H.phase === "out" && now - H.t0 >= 1600) {
       // behind the black: a few seconds before the release, on Cassini
       H.phase = "run"; H.runAt = now;
       setFocus("CASSINI", 4e-5); markerPts.visible = false;
       fadeTo(black, 0, 2.5);
-      note.classList.add("on"); read.classList.add("on"); hint.classList.add("on");
+      note.classList.add("on"); read.classList.add("on");
     }
     if (H.phase !== "run") return;
     const T = (now - H.runAt) / 1000;
     H.T = T; H.s = missionAt(T);
     if (!H.fx) H.fx = addEffects();
-    if (T > 7) hint.classList.remove("on");
+    hint.classList.toggle("on", T > 1.5 && T < 7);
     if (T > PULL) note.classList.remove("on");
-    runCaptions(NEAR, H.s, H.shownN);
-    if (T > PULL) { CS.dropAll(H.shownN); runCaptions(FAR_CAPS, T, H.shownF); }
+    if (T <= PULL) runCaptions(H.near, T, H.shownN);
+    else { CS.dropAll(H.shownN); runCaptions(FAR_CAPS, T, H.shownF); }
     if (H.s >= 0 && !H.chimed) { H.chimed = true; sound("chord", [0, 4, 7, 11]); }
-    if (T > END - 2 && !H.closing) { H.closing = true; fadeTo(black, 1, 2); }
+    // the quiet tone under it: in with the picture, a little fuller around the release, out with the closing fade
+    if (!H.leaving && !(now - H.bedAt < 200)) {
+      H.bedAt = now;
+      sound("drone", (BED * ease(T / 3) + 0.12 * Math.exp(-(((T - LEAD) / 3) ** 2))) * (1 - ease((T - (END - CLOSE)) / CLOSE)));
+    }
+    if (T > END - CLOSE && !H.closing && !H.leaving) {
+      H.closing = true; fadeTo(black, 1, CLOSE);
+      root.style.setProperty("--hr-out", `${CLOSE * 0.8}s`); root.classList.add("hr-out");
+    }
     if (T > END) { finish("stay"); return; }
     state.et = RELEASE + H.s;
   }
@@ -19121,47 +19182,78 @@ window.huygensModels = (() => {
       : `${fmtClock(s)} · Huygens <i>${out < 10 ? out.toFixed(1) : Math.round(out)} m</i> away · ${SPEED} m/s · Spin <i>${DATA.spin_rpm} rpm</i>${rate > 1.05 ? ` · Time <i>×${Math.round(rate)}</i>` : ""}`;
   }
   // the camera, through cutscene.html's orbit() and frameOn(), so its subject stays in the middle of the view and a drag
-  // turns round it: first the middle of the two craft, from beside Cassini with its dish up, widening as the probe
-  // drifts off; then the subject slides over to the probe and the camera swings round behind it, looking on toward
-  // Titan, and closes in
+  // turns round it. Its frame is fixed against the stars: Cassini's dish axis and the probe's way out as they were when
+  // the picture came up, a few seconds before the release (Cassini holds still until then). Cassini's own turn after
+  // the push is then Cassini turning in the view, not the sky going round.
+  // First the middle of the two craft, from beside Cassini with its dish up, widening as the probe drifts off; then one
+  // move (MOVE seconds, eased at both ends): the subject slides over to the probe while the camera comes round behind
+  // it and closes in, to look past it toward Titan, which sits off the middle of the view where the screen has room
   const vB2 = new THREE.Vector3(), pW = new THREE.Vector3();
+  const ease5 = x => { x = clamp01(x); return x * x * x * (x * (6 * x - 15) + 10); };
   function cameraAt() {
+    // through the fade to black the view stays as it was
+    if (H.phase === "out") { camera.quaternion.copy(H.hold); return; }
     if (H.phase !== "run") return;
     const T = H.T;
     probeScene(state.et, pW);
-    const up = co ? co.up : new THREE.Vector3(0, 0, 1), upW = up.clone().applyQuaternion(cassini.quaternion).normalize();
-    const axisW = co ? co.axisS.clone() : new THREE.Vector3(-1, 0, 0).applyQuaternion(cassini.quaternion);
+    const tW = relScene("TITAN", vB2).sub(cassini.position).normalize();
+    if (!H.ref) {
+      const up = (co ? co.up.clone() : new THREE.Vector3(0, 0, 1)).applyQuaternion(cassini.quaternion).normalize();
+      const axis = (co ? co.axis.clone() : new THREE.Vector3(-1, 0, 0)).applyQuaternion(cassini.quaternion).normalize();
+      // beside the probe's path, on the side away from Titan: Titan's part of the sky is then behind the two craft,
+      // and the move toward it later is a short one
+      const side = new THREE.Vector3().crossVectors(up, axis).normalize();
+      if (side.dot(tW) > 0) side.negate();
+      H.ref = { up, axis, side };
+    }
+    const upW = H.ref.up, axisW = H.ref.axis, side = H.ref.side;
     const gap = pW.distanceTo(cassini.position) / 1e-6;   // metres between the two
     // near: off to the side of the probe's path, a little ahead of it and above, drifting slowly round
-    const side = new THREE.Vector3().crossVectors(upW, axisW).normalize();
-    const yaw = -0.35 + 0.01 * T;
+    const yaw = -0.35 + 0.01 * Math.min(T, PULL);
     const fromN = side.clone().multiplyScalar(Math.cos(yaw)).addScaledVector(axisW, Math.sin(yaw) + 0.25).addScaledVector(upW, 0.28).normalize();
-    // an upright phone sees less across, so the camera stands further back
+    // an upright phone sees less across, so the camera stands further back: for Cassini itself (fit), and more for the
+    // gap between the two (wide), which has to stay inside the narrow width
     const fit = Math.max(1, 0.9 / camera.aspect);
-    const dN = (15 + 1.1 * gap) * fit;
-    const tW = relScene("TITAN", vB2).sub(cassini.position).normalize();
-    // far: behind the probe and to one side, so it is seen heading on toward Titan
-    const sideW = new THREE.Vector3().crossVectors(upW, tW).normalize();
-    const fromF = sideW.clone().multiplyScalar(0.85).addScaledVector(tW, -0.45).addScaledVector(upW, 0.25).normalize();
-    const k = ease((T - PULL) / 10);
-    const subject = cassini.position.clone().lerp(pW, 0.5 + 0.5 * ease((T - PULL) / 3));
+    const wide = Math.max(1, 0.45 / Math.tan(0.7 * Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect)));
+    const dN = 15 * fit + 1.1 * gap * wide;
+    // far: behind the probe, looking on toward Titan. Titan sits off the middle, to the side on a wide screen and above
+    // on an upright one, on whichever side asks the camera to come round less. Settled once, as the move begins
+    if (!H.fromF) {
+      const halfV = camera.fov * Math.PI / 360, halfH = Math.atan(Math.tan(halfV) * camera.aspect), across = camera.aspect >= 1;
+      const ax = Math.tan((across ? 0.42 : 0.1) * halfH), ay = Math.tan((across ? 0.38 : 0.42) * halfV);
+      const right = new THREE.Vector3().crossVectors(tW, upW).normalize(), upT = new THREE.Vector3().crossVectors(right, tW).normalize();
+      const pick = sgn => tW.clone().addScaledVector(right, -sgn * ax).addScaledVector(upT, -ay).normalize().negate();
+      const a = pick(1), b = pick(-1);
+      H.fromF = a.dot(fromN) >= b.dot(fromN) ? a : b;
+    }
+    const fromF = H.fromF;
+    const k = ease5((T - PULL) / MOVE);
+    // the subject is on the probe before the camera has closed in, so the probe never nears the edge of the view
+    const subject = cassini.position.clone().lerp(pW, 0.5 + 0.5 * ease5((T - PULL) / (MOVE * 0.55)));
     const from = fromN.clone().applyQuaternion(new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(fromN, fromF), k));
     const dist = Math.exp(Math.log(dN) * (1 - k) + Math.log(FAR_M * fit) * k) * 1e-6;
     const o = CS.orbit(from.negate(), upW);
     CS.frameOn(subject, o.dir, dist, o.up);
-    // the tags, once the view has pulled back
-    const showTags = T > PULL;
-    const place = (el, w, extra) => {
+    // where the camera stands from the probe, for the view left on it at the end
+    H.rel = camera.position.clone().sub(pW);
+    // the tags, once the two are small in the view: each clear of what it names (r: its size in metres)
+    const showTags = T > PULL - 4, perM = innerHeight / 2 / Math.tan(camera.fov * Math.PI / 360);
+    const place = (el, w, r, extra) => {
       const v = w.clone().project(camera), on = showTags && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
       el.classList.toggle("on", on);
-      if (on) el.style.transform = `translate(${(v.x + 1) / 2 * innerWidth + 8}px, ${(1 - v.y) / 2 * innerHeight - 5}px)`;
-      if (extra !== undefined) el.innerHTML = extra;
+      if (extra !== undefined && el.innerHTML !== extra) el.innerHTML = extra;
+      if (!on) return;
+      // to the right of it; under it where the right edge of the screen is too near for the words
+      const off = r ? r / Math.max(1e-9, camera.position.distanceTo(w) / 1e-6) * perM : 0;
+      const x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight, wd = el.offsetWidth;
+      el.style.transform = x + 8 + off + wd < innerWidth - 8 ? `translate(${x + 8 + off}px, ${y - 5}px)`
+        : `translate(${Math.max(8, Math.min(innerWidth - 8 - wd, x - wd / 2))}px, ${y + off + 10}px)`;
     };
     camera.updateMatrixWorld();
-    place(tags.cassini, cassini.position);
-    place(tags.probe, pW);
+    place(tags.cassini, cassini.position, 2.6);
+    place(tags.probe, pW, 1.4);
     const titanKm = len(sub(pos.TITAN, pos.CASSINI, v3()));
-    place(tags.titan, cassini.position.clone().addScaledVector(tW, 50), `Titan <small>${(titanKm / 1e6).toFixed(1)} million km</small>`);
+    place(tags.titan, cassini.position.clone().addScaledVector(tW, 50), 0, `Titan <small>${(titanKm / 1e6).toFixed(1)} million km</small>`);
   }
 
   CS.register("huygens", { root, frame, attitude, camera: cameraAt, onEnd: cleanUp });
