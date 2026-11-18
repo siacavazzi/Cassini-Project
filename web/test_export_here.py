@@ -87,7 +87,7 @@ forward = len(pics) if os.environ.get("BOOM") == "1" else 0
 if forward:
     pics = export.boomerang(pics)
 opt = {"cams": "NW", "size": SIZE, "caption": True, "fps": "auto", "movie": {}, "sound": True}
-plan = {"pictures": pics, "count": len(pics), "seconds": round(sum(e["frames"] for e in pics) / export.FPS, 2),
+plan = {"pictures": pics, "count": len(pics), "seconds": round(sum(e["frames"] for e in pics) / export.FPS, 2), "rate": export.FPS,
         "frames": sum(e["frames"] for e in pics), "width": export.width(opt), "height": export.height(opt),
         **({"boomerang": forward} if forward else {})}
 public = export.public_plan(plan)
