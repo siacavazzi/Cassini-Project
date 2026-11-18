@@ -1875,7 +1875,9 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
 
 /* the air's glow from below as it heats, and a shade under the captions so they read over Saturn's bright clouds */
 #finale .fx-air { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(255,120,40,.55), rgba(255,80,20,.18) 55%, transparent 80%); mix-blend-mode: screen; }
-#finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.55) 22%, rgba(0,0,0,0) 48%); }
+#finale .fx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.78) 0, rgba(0,0,0,.66) 12%, rgba(0,0,0,.5) 24%, rgba(0,0,0,.31) 36%, rgba(0,0,0,.15) 47%, rgba(0,0,0,.05) 57%, rgba(0,0,0,0) 66%); }
+/* the readout's fields break between, never inside */
+#finale .cs-read span { white-space: nowrap; }
 /* the real readings: a quiet strip chart, top right */
 #finale .fx-data { position: absolute; right: 16px; top: 16px; width: min(300px, calc(100vw - 32px)); box-sizing: border-box; padding: 9px 11px 8px; background: var(--q-panel); border: 1px solid var(--q-line); border-radius: 9px;
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); opacity: 0; transition: opacity 1.5s ease; }
@@ -1917,6 +1919,11 @@ body.phone #finale .fx-roll dl { grid-template-columns: 1fr; row-gap: 2px; }
 body.phone #finale .fx-roll dt, body.phone #finale .fx-roll dd { text-align: center; }
 body.phone #finale .fx-roll dd { margin-bottom: 10px; }
 body.phone #finale .fx-data { width: min(220px, calc(100vw - 32px)); top: 10px; right: 10px; }
+/* on a phone the readout takes two lines above the note (it is wider than the screen), the captions sit above both,
+   and the hint keeps to the left of the readings */
+body.phone #finale .cs-read { white-space: normal; width: calc(100vw - 32px); text-align: center; line-height: 1.6; bottom: 108px; }
+body.phone #finale .cs-caps { bottom: 152px; }
+body.phone #finale .cs-hint { left: 14px; top: 16px; transform: none; max-width: calc(100vw - 260px); line-height: 1.35; }
 
 #soi .sx-shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.72) 0, rgba(0,0,0,.45) 22%, rgba(0,0,0,0) 46%); }
 /* the burn's readout is long: on a phone it wraps */
@@ -14184,7 +14191,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"78464587f278";
+  const BUILD = /*BUILD*/"8b31ab9d0ba0";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -18015,7 +18022,7 @@ window.huygensModels = (() => {
 <script>
 // ---------- the Grand Finale: Cassini's last minute and a mission recap, at the end of the data ----------
 (function () {
-  const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air");
+  const root = document.getElementById("finale"), black = root.querySelector(".cs-black"), caps = root.querySelector(".cs-caps"), air = root.querySelector(".fx-air"), shade = root.querySelector(".fx-shade");
   const read = root.querySelector(".cs-read"), note = root.querySelector(".cs-note"), hint = root.querySelector(".cs-hint");
   // what every cutscene shares (cutscene.html)
   const CS = cassiniCutscene, { fadeTo, drop, sound, look } = CS, runCaptions = (list, t, shown) => CS.runCaptions(caps, list, t, shown);
@@ -18052,18 +18059,27 @@ window.huygensModels = (() => {
   const RECAP = images => [
     [FLARE, 6.5, `Moments later, Cassini burned up like a meteor, and became part of Saturn.`, "", null],
     [10, 7, `<b>Received on Earth</b>Its last signal crossed the solar system for 83 minutes. At 11:55:46 UTC, the antennas in Canberra, Australia, heard it fall silent.`, "", [4, 5, 7]],
-    [17.5, 7, `<b>The last data</b>Eight instruments reported to the end. Its mass spectrometer tasted Saturn's air directly, the first and only time anything has.`, "", [3, 5, 7]],
-    [25, 6, `<b>1997 &ndash; 2017</b>Twenty years in space. Thirteen at Saturn. 294 orbits.`, "big", [1, 3, 5, 6]],
-    [31.5, 6, `<b>Pictures</b>${fmtInt(NASA_IMAGES)} pictures of Saturn, its rings and its moons.${images ? `<small>${fmtInt(images)} of them play in this replay.</small>` : ""}`, "big", [0, 2, 3, 5]],
-    [38, 8.5, `<b>What it found</b><ul><li>An ocean under the ice of Enceladus, spraying into space</li><li>Seas and lakes of liquid methane on Titan, and Huygens on its surface</li><li>A six-sided jet stream circling Saturn's north pole</li><li>Moonlets stirring propellers in the rings, and new moons</li></ul>`, "", [2, 3, 5, 7]],
-    [47, 8, `Cassini turned points of light into worlds. Much of what we know about Saturn and its moons, we know because it went and looked.`, "big", [0, 3, 5, 7, 8]],
-    [55.5, 5.5, `<b>Cassini-Huygens · 1997 &ndash; 2017</b>Thank you, Cassini.`, "big", [0, 2, 3, 5, 7, 10]],
+    [17.5, 6.5, `<b>The last data</b>Eight instruments reported to the end. Its mass spectrometer tasted Saturn's air directly, the first and only time anything has.`, "", [3, 5, 7]],
+    [24.5, 7.5, `<b>1997 &ndash; 2017</b>Twenty years in space. Thirteen at Saturn. 294 orbits. ${fmtInt(NASA_IMAGES)} pictures.${images ? `<small>${fmtInt(images)} of them play in this replay.</small>` : ""}`, "big", [1, 3, 5, 6]],
+    [32.5, 8, `<b>What it found</b><ul><li>An ocean under the ice of Enceladus, spraying into space</li><li>Seas and lakes of liquid methane on Titan, and Huygens on its surface</li><li>A six-sided jet stream circling Saturn's north pole</li><li>Moonlets stirring propellers in the rings, and new moons</li></ul>`, "", [0, 2, 3, 5]],
+    [41, 7.5, `Cassini turned points of light into worlds. Much of what we know about Saturn and its moons, we know because it went and looked.`, "big", [0, 3, 5, 7, 8]],
+    [49, 5.5, `<b>Cassini-Huygens · 1997 &ndash; 2017</b>Thank you, Cassini.`, "big", [0, 2, 3, 5, 7, 10]],
   ];
-  const RECAP_END = 62;
+  const RECAP_END = 55.5;
+  // the view of Saturn in the recap: close in on the burn-up, out to the whole planet, then slowly away
+  const CLOSE = 9;             // thousand km from the burn-up at first
+  const OUT_AT = 6.5, OUT_S = 11;   // s into the recap the pull-out starts, and how long it takes
+  const RINGS = 140;           // thousand km, the rings' outer edge: at the end of the pull-out they span 4/5 of the width
+  const AWAY = 1.4;            // by the last line Saturn is this many times further still
+  const TURN = 0.008;          // rad/s the view goes on turning round Saturn's axis
   const ROLL_IN = 1.4;         // s of darkness between "Thank you, Cassini" and the credits
-  const ROLL_SPEED = 60;       // px/s the credits move up (48 on a phone)
+  const ROLL_TIME = 95;        // s the credits take to roll by, at a speed kept between ROLL_SPEED's two ends
+  const ROLL_SPEED = [60, 110];   // px/s the credits move up, at least and at most
   const ROLL_HOLD = 3.5;       // s after a hand scroll before the roll moves on its own again
-  const ROLL_REST = 9;         // s the last card stays before it all fades back to the mission
+  const ROLL_REST = 7;         // s the last card stays before it all fades back to the mission
+  const ROLL_CHORD = 10;       // s between the quiet chords under the credits
+  // the chords under the credits, a slow round on the recap's scale that keeps coming home to D major
+  const ROLL_CHORDS = [[3, 5, 7], [2, 3, 5], [4, 5, 7], [1, 3, 5], [0, 2, 3], [3, 5, 6], [2, 5, 7], [0, 3, 5]];
 
   let F = null;   // the running finale
   const tmpS = v3(), tmpC = v3(), tmpE = v3();
@@ -18297,17 +18313,25 @@ window.huygensModels = (() => {
   function buildRoll() {
     rollIn.innerHTML = `<p class="head">${esc(TEAM.intro.head)}</p><p class="lede">${esc(TEAM.intro.text)}</p>`
       + TEAM.sections.map(s => `<section>${block(s, `<h3>${esc(s.title)}</h3>`)}${(s.groups || []).map(g => block(g, `<h4>${esc(g.title)}</h4>`)).join("")}</section>`).join("")
-      + `<div class="end"><p>${esc(TEAM.closing)}</p><div class="btns">${window.cassiniAbout ? `<button type="button" data-roll="about">About Cassini OS</button>` : ""}<button type="button" data-roll="back">Back to the mission</button></div>`
+      + `<div class="end"><p>${esc(TEAM.closing)}</p><div class="btns">${window.cassiniAbout ? `<button type="button" data-roll="about">About Cassini OS</button>` : ""}<button type="button" data-roll="again">Watch again</button><button type="button" data-roll="back">Back to the mission</button></div>`
       + `<div class="src">${TEAM.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(" · ")}</div></div>`;
     roll.scrollTop = 0;
   }
   // a hand on the roll (wheel, touch, drag, keys) holds it where it is put; it moves on again a few seconds later
   const holdRoll = () => { if (F && F.phase === "credits") { F.rollHeld = performance.now(); F.rollEnd = 0; } };
   ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach(t => roll.addEventListener(t, holdRoll, { passive: true }));
-  roll.addEventListener("scroll", () => { if (F && F.phase === "credits" && performance.now() - F.rollHeld < ROLL_HOLD * 1000) F.rollY = roll.scrollTop; });
+  // a scroll the roll did not make itself is a hand too, however it was made (the arrow keys and Space, which the
+  // cutscene keeps from the page, a scroll bar, a swipe still coasting): the roll takes it from where it was put
+  roll.addEventListener("scroll", () => {
+    if (!F || F.phase !== "credits" || !F.rollOn) return;
+    if (Math.abs(roll.scrollTop - F.rollY) > 2) holdRoll();
+    if (performance.now() - F.rollHeld < ROLL_HOLD * 1000) F.rollY = roll.scrollTop;
+  });
   roll.addEventListener("click", e => {
     const b = e.target.closest("[data-roll]"); if (!b) return;
-    e.stopPropagation(); finish();
+    e.stopPropagation();
+    if (b.dataset.roll === "again") { again(); return; }
+    finish();
     if (b.dataset.roll === "about" && window.cassiniAbout) setTimeout(() => cassiniAbout.open("Mission team"), 1600);
   });
   // the same list as a tab in the About window (about.html), when it is there
@@ -18325,28 +18349,45 @@ window.huygensModels = (() => {
     if (!F.rollOn) {
       F.rollOn = true; F.rollY = 0; F.rollHeld = 0; F.rollEnd = 0;
       buildRoll(); roll.classList.add("on"); fadeTo(roll, 1, 2.5); fadeTo(black, 0.86, 4);
-      sound("chord", [0, 2, 4, 7]);
+      roll.focus({ preventScroll: true });   // so the arrow keys and Space scroll it
+      sound("chord", [0, 2, 4, 7]); F.rollChordAt = now; F.rollChords = 0;
       return;
     }
     const max = roll.scrollHeight - roll.clientHeight;
     if (now - F.rollHeld > ROLL_HOLD * 1000) {
-      F.rollY = Math.min(max, F.rollY + dt * (document.body.classList.contains("phone") ? ROLL_SPEED * 0.8 : ROLL_SPEED));
+      F.rollY = Math.min(max, F.rollY + dt * Math.max(ROLL_SPEED[0], Math.min(ROLL_SPEED[1], max / ROLL_TIME)));
       roll.scrollTop = F.rollY;
     }
+    // a quiet chord every few seconds while the names go by, one at a time so a skip leaves nothing waiting to sound
+    if (!F.rollEnd && now - F.rollChordAt > ROLL_CHORD * 1000) { F.rollChordAt = now; sound("chord", ROLL_CHORDS[F.rollChords++ % ROLL_CHORDS.length]); }
     // the last card rests a while, then the roll fades and the mission comes back
     if (F.rollY >= max - 1 && now - F.rollHeld > ROLL_HOLD * 1000) {
       if (!F.rollEnd) { F.rollEnd = now; if (!F.rollChord) { F.rollChord = true; sound("chord", [0, 2, 3, 5, 7, 10]); } }
-      if (now - F.rollEnd > ROLL_REST * 1000 && !F.rollClose) { F.rollClose = now; fadeTo(roll, 0, 2); fadeTo(black, 1, 2); }
+      if (now - F.rollEnd > ROLL_REST * 1000 && !F.rollClose) { F.rollClose = now; fadeTo(roll, 0, 2); fadeTo(black, 1, 2); sound("bed", 0, 2); }
     } else if (!F.rollClose) F.rollEnd = 0;
     if (F.rollClose && now - F.rollClose > 2100) finish();
   }
 
+  // a run from its start: black first, then the descent (cal: when and how high the signal is lost, from calibrate)
+  const fresh = cal => ({ tLos: cal.tLos, hLos: cal.hLos, span: cal.span, t0: performance.now(), phase: "out", tau: null, lost: false,
+    tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(), shownD: [], shownR: [], fx: null, recapAt: 0, lastFrame: performance.now() });
+  // from the last card: the same again from the top, without the mission coming back in between
+  function again() {
+    if (!F || F.phase !== "credits") return;
+    const f = F;
+    removeEffects(f.fx); removeFlare(f.flare);
+    roll.classList.remove("on"); fadeTo(roll, 0, 0.8, () => { if (F && F.phase !== "credits") rollIn.textContent = ""; });
+    if (root.contains(document.activeElement)) document.activeElement.blur();
+    cassini.visible = true; look.wheel = true; CS.resetLook(); sound("bed", 0, 1);
+    F = fresh(f);
+    fadeTo(black, 1, 1);
+  }
   function play() {
     if (F || CS.active || !tracks.CASSINI || !tracks.SATURN || !bodies.SATURN) return;
     const cal = calibrate();
     if (!cal) return;
-    F = Object.assign(cal, { t0: performance.now(), phase: "out", tau: null, lost: false, tumbleAxis: new THREE.Vector3(1, 0.45, 0.2).normalize(),
-      shownD: [], shownR: [], fx: null, recapAt: 0, lastFrame: performance.now() });
+    F = fresh(cal);
+    shade.style.opacity = "";
     CS.begin("finale");
     fadeTo(black, 1, 1.5);
   }
@@ -18355,7 +18396,7 @@ window.huygensModels = (() => {
   document.addEventListener("cassini:away", e => {
     if (e.detail.away || !F) return;
     const ms = e.detail.ms; F.t0 += ms; F.lastFrame += ms;
-    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose"]) if (F[k]) F[k] += ms;
+    for (const k of ["recapAt", "rollAt", "rollHeld", "rollEnd", "rollClose", "rollChordAt"]) if (F[k]) F[k] += ms;
   });
   // its own tidying when it ends (cutscene.html brings the interface back)
   function cleanUp() {
@@ -18363,6 +18404,11 @@ window.huygensModels = (() => {
     sound("carrier", 0, 0); sound("drone", 0);
     removeEffects(f.fx); removeFlare(f.flare);
     caps.textContent = ""; [read, note, hint, dataBox, roll].forEach(e => e.classList.remove("on"));
+    // ended early it cuts to black (cutscene.html) and the mission fades up from there: the shade under the captions
+    // goes with the cutscene (left on, it would darken the mission's view and then vanish in one frame), and the
+    // readouts, which sit above the black, go at once instead of fading out over it
+    shade.style.opacity = 0;
+    for (const e of [read, note, hint, dataBox]) { e.style.transition = "none"; requestAnimationFrame(() => requestAnimationFrame(() => { e.style.transition = ""; })); }
     roll.style.opacity = 0; rollIn.textContent = "";
     air.style.opacity = 0;
     setTime(coverage[1]);
@@ -18373,6 +18419,8 @@ window.huygensModels = (() => {
   // before the bodies are placed: the finale runs its own clock
   function frame(dt) {
     const T = (performance.now() - F.t0) / 1000;
+    // a drag's turn is kept within half a turn either way, so easing back never unwinds whole turns
+    if (Math.abs(look.yaw) > Math.PI) look.yaw = Math.atan2(Math.sin(look.yaw), Math.cos(look.yaw));
     if (F.phase === "out" && T >= 1.7) {
       // behind the black: back to a minute before loss of signal, on Cassini
       F.phase = "descent"; F.tau = F.tLos - LEAD; F.fx = addEffects();
@@ -18408,6 +18456,8 @@ window.huygensModels = (() => {
       F.tau += dt;   // Cassini's last seconds go on, seen from afar
       stepFlare(R);
       runCaptions(F.recap, R, F.shownR);
+      // after the silence and the bell, a soft held tone comes in under the recap and stays through the credits
+      if (R > F.recap[1][0] && !F.bed) { F.bed = true; sound("bed", 0.7, 8); }
       if (R > RECAP_END - 2.5 && !F.closing) { F.closing = true; fadeTo(black, 1, 2.5); }
       if (R > RECAP_END) {
         // after a moment of darkness, the credits roll
@@ -18492,7 +18542,7 @@ window.huygensModels = (() => {
     }
     air.style.opacity = 0.1 * Math.min(1, L) ** 2;
     if (!F.lost) { sound("carrier", signal, Math.min(1, L)); sound("drone", Math.min(1, 0.15 + L)); }
-    read.innerHTML = `Altitude ${fmtInt(h)} km · Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> · Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth · Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i>`;
+    read.innerHTML = `<span>Altitude ${fmtInt(h)} km ·</span> <span>Thrusters <i>${Math.round(Math.min(100, L * 100))}%</i> ·</span> <span>Antenna <i>${err < 10 ? err.toFixed(2) : fmtInt(err)}°</i> off Earth ·</span> <span>Signal <i>${F.lost ? "lost" : Math.round(signal * 100) + "%"}</i></span>`;
     drawData(F.tau);
   }
   // the camera: beside Cassini with Saturn's clouds below and the horizon level, drifting round toward the rings;
@@ -18525,17 +18575,36 @@ window.huygensModels = (() => {
       const R = iauMatrix(bodies.SATURN, state.et), pole = toScene(R[2], new THREE.Vector3()).normalize();
       toScene(norm(sub(pos.SUN, pos.SATURN, tmpS)), vScene).normalize();
       const side = new THREE.Vector3().crossVectors(pole, vScene).normalize();
-      const k = (performance.now() - F.recapAt) / 1000;
-      // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back
-      // starting closer, on the burn-up itself, so the flare and its trail read, then easing out to the whole planet
-      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), entry = spot.clone().normalize(), m = clamp01(k / 25);
-      const dir = entry.multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
-      dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, -0.003 * k + look.yaw);
-      // close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out to the planet
-      const out = clamp01((k - 6.5) / 10), e = out * out * (3 - 2 * out);
-      const aim = new THREE.Vector3().addScaledVector(pole, -22).lerp(spot, 1 - e), dist = 9 + 431 * e;
+      const k = (performance.now() - F.recapAt) / 1000, ease = x => x * x * (3 - 2 * x);
+      // facing the spot where Cassini went in at first, then drifting round to the sunlit side as it pulls back (eased
+      // at both ends, so the drift neither starts nor stops with a jolt), and turning slowly about the axis throughout
+      rel(F.tau, tmpC); const spot = toScene(tmpC, new THREE.Vector3()).multiplyScalar(1 / KM), up = spot.clone().normalize(), m = ease(clamp01(k / 28));
+      const dir = up.clone().multiplyScalar(0.9 * (1 - m)).addScaledVector(vScene, 0.25 + 0.5 * m).addScaledVector(side, 0.25 + 0.3 * m).normalize();
+      // (the slow turn goes the way the drift goes round the axis, so the view never slows, stops and comes back)
+      if (!F.turn) F.turn = pole.dot(new THREE.Vector3().crossVectors(up, vScene.clone().multiplyScalar(0.75).addScaledVector(side, 0.55))) < 0 ? -1 : 1;
+      dir.addScaledVector(pole, 0.3 + look.pitch).normalize().applyAxisAngle(pole, F.turn * TURN * k + look.yaw);
+      // how far: close in on the burn-up (a few thousand km), held while it flares and its trail glows, then out until
+      // the rings span 4/5 of the screen's width (and Saturn no more than half its height), so a tall phone screen
+      // stands further back than a wide one; from there slowly away to the last line. The pull-out runs at a steady
+      // rate of zoom (the distance grows by equal factors in equal times)
+      const tanV = Math.tan(camera.fov * Math.PI / 360), tanH = tanV * camera.aspect;
+      const whole = Math.max(RINGS / (0.8 * tanH), bodies.SATURN.radii[0] / KM / (0.5 * tanV));
+      const e = ease(clamp01((k - OUT_AT) / OUT_S)), away = ease(clamp01((k - OUT_AT - OUT_S * 0.6) / (RECAP_END - OUT_AT - OUT_S * 0.6)));
+      const dist = CLOSE * Math.pow(whole / CLOSE, e) * Math.pow(AWAY, away);
+      // what it looks at: the burn-up while close in, Saturn once it is out (by the share of the way out in distance,
+      // which keeps the burn-up from racing across the screen), set in the upper part of the screen so the rings'
+      // near side clears the captions
+      const w = clamp01((dist - CLOSE) / (whole - CLOSE)), lift = 0.36 * dist * tanV;
+      const aim = spot.clone().multiplyScalar(1 - w).addScaledVector(pole, -lift * w);
+      // a drag while close in keeps the camera above the horizon of the spot Cassini went in at, and the camera is
+      // never under the clouds
+      // (the hold lets go as the view pulls out, so once Saturn is whole the camera is free to go round it)
+      const low = 0.25 * (1 - w) - dir.dot(up);
+      if (low > 0 && w < 1) dir.addScaledVector(up, low * (1 - w)).normalize();
       F.flareK = Math.min(1, 0.12 + dist / 160);
       camera.position.copy(aim).addScaledVector(dir, dist * look.zoom);
+      const clouds = bodies.SATURN.radii[0] / KM * 1.04;
+      if (camera.position.lengthSq() < clouds * clouds) camera.position.setLength(clouds);
       camera.up.copy(pole);
       camera.lookAt(aim);
     }
