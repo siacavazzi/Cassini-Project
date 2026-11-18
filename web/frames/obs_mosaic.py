@@ -7353,15 +7353,9 @@ def _limb_centre(g, at, r, exclude=()):
         yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
         for ex, ey, er in exclude:
             e[(xx - ex) ** 2 + (yy - ey) ** 2 <= er * er] = 0
-    th = np.linspace(0, 2 * np.pi, max(64, int(2 * np.pi * r)), endpoint=False).astype(np.float32)
-    cx, cy = np.cos(th) * r, np.sin(th) * r
 
     def score(dx, dy):
-        mx = (at[0] - x0 + dx + cx).astype(np.float32)
-        my = (at[1] - y0 + dy + cy).astype(np.float32)
-        v = cv2.remap(e, mx[None], my[None], cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)[0]
-        v = np.sort(v)
-        return float(v[len(v) // 2:].mean())
+        return color_image.circle_edges(e, at[0] - x0 + dx, at[1] - y0 + dy, r)
     base = score(0.0, 0.0)
     best = (base, 0.0, 0.0)
     n = int(reach)
@@ -8014,7 +8008,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady5: solved over links several frames back (_chain_links), their count in the name (k4: four frames back);
     # the chain alone keeps steady4's name
     # steady6: a ring pass's frames the pictures cannot be matched on linked by their ring profiles (steady_rings)
-    STEADY_FILE = f"steady6k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady7: a moon is found in the pictures only where its outline is (color_image.FIND_OUTLINE): a backlit
+    # Enceladus' plume was taken for the moon (279EN PLUME001)
+    STEADY_FILE = f"steady7k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
