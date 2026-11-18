@@ -46,6 +46,25 @@ p = [{"id": f"N{i}", "cam": "N", "t": float(T0 + g)} for i, g in enumerate([0, 1
 export.timing(p, "auto")
 assert export.rate_of("auto") == export.FPS
 
+# ---- the plan: a movie frame that plays as the picture before it (a colour movie's other filters showing the last
+# complete set, a frame not fit to show) is not a picture of its own, and the timing closes over it ----
+import obs_mosaic  # noqa: E402
+plays = {"N1": ("set", "a"), "N2": ("set", "a"), "N3": ("set", "a"), "N4": ("frame", "N4"), "N5": None, "N6": None,
+         "W1": ("set", "a"), "N7": ("frame", "N4")}
+real = obs_mosaic.movie_shown
+obs_mosaic.movie_shown = lambda fid, *a, **k: plays[fid]
+try:
+    p = [{"id": i, "cam": i[0], "t": float(T0 + 30 * n), "try": [("movie", i), ("processed", i)]}
+         for n, i in enumerate(["N1", "N2", "W1", "N3", "N4", "N5", "N6", "N7"])]
+    opt = {"size": 1024, "movie": {}}
+    kept = [e["id"] for e in export.shown_once(p, opt, cache="cache")]
+    # N2 and N3 play N1's set (W1 between is the other camera's); N5 and N6 are not made yet, so they stay; N7 plays
+    # N4's picture but N5 and N6 came between
+    assert kept == ["N1", "W1", "N4", "N5", "N6", "N7"], kept
+    assert [e["id"] for e in export.shown_once(p, opt, cache=None)] == [e["id"] for e in p]
+finally:
+    obs_mosaic.movie_shown = real
+
 
 def picture(seed, w=SIZE, h=SIZE):
     r = np.random.default_rng(seed)
