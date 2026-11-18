@@ -109,20 +109,21 @@ class Film:
         self.grow = j("grow", "grow.json")
         self.variants = j("variants", "variants.json")
         self.calls = j("variants", "final_steps", "calls.json")
-        hero = sorted(glob.glob(os.path.join(src, "chain", "*.json")))[0]
-        self.hero = os.path.basename(hero)[:-5]
-        self.chain = json.load(open(hero))
-        self.set_ids = j("set", "set.json")["ids"]
+        self.pointing = j("pointing", "pointing.json")
+        self.hero = self.pointing["hero"]
+        self.hi = [f[0] for f in self.frames].index(self.hero)
+        self.chain = j("chain", self.hero + ".json")
+        self.left_out = [t["n"] for t in self.layout["tiles"] if "saturated" in str(t.get("why", ""))]
         self.n = len(self.frames)
         self.minutes = round((float(self.frames[-1][2]) - float(self.frames[0][2])) / 60)
         self.pointings = self._pointings()
         self.scenes = [
-            ("title", 4.0, self.title), ("raw", 7.0, self.raw_wall), ("clean", 16.0, self.clean), ("all", 4.5, self.all_clean),
-            ("place", 13.0, self.place), ("register", 8.0, self.register),
-            ("seams", 8.0, self.seams), ("colour", 15.0, self.colour), ("final", 8.0, self.final)]
-        self.steps = ["Raw", "Clean", "Place", "Register", "Blend", "Colour", "Finished"]
-        self.step_of = {"title": -1, "raw": 0, "clean": 1, "all": 1, "place": 2, "register": 3, "seams": 4,
-                        "colour": 5, "final": 6}
+            ("open", 6.0, self.opening), ("raw", 5.0, self.one_raw), ("clean", 15.0, self.clean),
+            ("colour", 14.0, self.colour_one), ("all", 7.0, self.all_clean), ("join", 11.0, self.join),
+            ("register", 8.0, self.register), ("seams", 8.0, self.seams), ("final", 8.0, self.final)]
+        self.steps = ["One raw frame", "Calibrate", "Colour", "All 60", "Mosaic", "Register", "Blend", "Finished"]
+        self.step_of = {"open": -1, "raw": 0, "clean": 1, "colour": 2, "all": 3, "join": 4, "register": 5, "seams": 6,
+                        "final": 7}
         self.crop = self._content()
 
     def _pointings(self):
@@ -198,32 +199,114 @@ class Film:
         return out, cell
 
     # ---- scenes: each draws its frame at t in 0..1 ---------------------------------------------------------------
-    def title(self, t):
-        frame, d = self.base("title")
-        a = span(t, 0.05, 0.3) * (1 - span(t, 0.88, 1.0))
-        text(d, (W // 2, 400), "How a mosaic is made", 84, INK, "medium", "ma", a)
-        text(d, (W // 2, 520), f"{self.n} raw exposures from Cassini's wide-angle camera become one picture of Saturn.", 30, DIM, anchor="ma", alpha=a)
-        text(d, (W // 2, 566), "Every image in this film is an output of the project's own pipeline.", 30, DIM, anchor="ma", alpha=a)
-        text(d, (W // 2, 660), "FAREWELL TO SATURN  ·  13 SEPTEMBER 2017  ·  TWO DAYS BEFORE THE END OF THE MISSION", 17, ACCENT, "mono", "ma", a)
+    def opening(self, t):
+        """the finished mosaic, then the one frame the film follows, outlined on it"""
+        frame, d = self.base("open")
+        im = fit(self._variant("final"), W - 60, 760, ("open",))
+        mid = 600
+        put(frame, im, W / 2, mid, span(t, 0.0, 0.15))
+        a = span(t, 0.08, 0.25) * (1 - span(t, 0.45, 0.55))
+        text(d, (96, 64), "How a mosaic is made", 56, INK, "medium", alpha=a)
+        text(d, (96, 140), "Cassini's farewell to Saturn, 13 September 2017, two days before the end of the mission.", 26, DIM, alpha=a)
+        b = span(t, 0.55, 0.7)
+        text(d, (96, 64), f"This is not one photograph. It is {self.n} of them.", 56, INK, "medium", alpha=b)
+        text(d, (96, 140), "Follow one frame from raw data to its place in the picture. Every image here is an output of the project's own pipeline.", 26, DIM, alpha=b)
+        if b > 0 and self.pointing.get("outline"):
+            x0, y0, w, h = self.layout["rect"]
+            c = self.crop
+            ox, oy = W / 2 - im.width / 2, mid - im.height / 2
+            pts = [(ox + ((px - x0) / w - c[0]) / (c[2] - c[0]) * im.width, oy + ((py - y0) / h - c[1]) / (c[3] - c[1]) * im.height)
+                   for px, py in self.pointing["outline"]]
+            d.line(pts + [pts[0]], fill=tuple(round(v * b) for v in ACCENT), width=3)
         return frame
 
-    def raw_wall(self, t):
-        frame, d = self.base("raw", "01", "Raw exposures, as received",
-                             [f"{self.n} frames in {self.minutes} minutes: {len(self.pointings)} pointings, each taken through clear, blue, green and red filters,",
-                              "with short and long exposures. Upside down, unaligned, uncalibrated."], "label_handler.export  data_source.imread")
-        cells, cell = self.wall_cells()
-        for i in range(self.n):
-            a = span(t, 0.05 + 0.6 * i / self.n, 0.05 + 0.6 * i / self.n + 0.08)
-            if a > 0:
-                cx, cy = cells[i]
-                x, y = put(frame, fit(self.raw(i), cell, cell, ("raw", i)), cx, cy, a)
-                f = self.frames[i][1]
-                d.rectangle((x, y + cell - 4, x + cell - 1, y + cell - 1), fill=tuple(round(v * a) for v in TINT.get(f, INK)))
-        for k, (f, c) in enumerate(TINT.items()):
-            if f in NAME:
-                x = W - 96 - 4 * 130 + k * 130
-                d.rectangle((x, 986 - 6, x + 14, 986 + 8), fill=c)
-                text(d, (x + 22, 976), NAME[f], 17, DIM)
+    def one_raw(self, t):
+        info = self.meta[self.hero]
+        flt = self.frames[self.hi][1]
+        frame, d = self.base("raw", "01", "One raw frame",
+                             ["What Cassini sent home: black and white, one colour filter at a time."], "label_handler.export  data_source.imread")
+        side = 760
+        im = self.raw(self.hi)
+        put(frame, fit(im, side, side, ("raw", self.hi)), 96 + side // 2, 590, span(t, 0.0, 0.15))
+        x, y = 96 + side + 90, 300
+        rows = [("frame", self.hero), ("filter", NAME.get(flt, flt)), ("exposure", f"{float(info['EXPOSURE_DURATION']):.0f} ms"),
+                ("size", f"{im.width} × {im.height} px"), ("taken", info["IMAGE_TIME"].split(".")[0] + " UTC")]
+        for i, (k, v) in enumerate(rows):
+            a = span(t, 0.15 + i * 0.06, 0.25 + i * 0.06)
+            text(d, (x, y + i * 52), k.upper(), 16, FAINT, "mono", alpha=a)
+            text(d, (x + 150, y + i * 52 - 8), v, 30, INK, alpha=a)
+        a = span(t, 0.5, 0.65)
+        for i, line in enumerate(["Upside down. Not calibrated: brightness is still camera codes.", "No colour. Not yet placed on the sky."]):
+            text(d, (x, y + 300 + i * 38), line, 26, DIM, alpha=a)
+        return frame
+
+    def colour_one(self, t):
+        """the hero's pointing as the mosaic draws it: three filters, stacked by SPICE alone, then registered"""
+        dd = os.path.join(self.src, "pointing")
+        one = load_full(os.path.join(dd, "one.png"))
+        key = ("ptbox",)
+        if key not in _cache:
+            box = one.convert("L").point(lambda v: 255 if v > 10 else 0).getbbox()
+            _cache[key] = box
+        box = _cache[key]
+        cut_ = lambda path: load_full(path).crop(box)
+        calls = json.load(open(os.path.join(dd, "one_steps", "calls.json")))
+        used = self.layout["used"]
+        planes = [os.path.join(dd, "one_steps", f"{calls.index('filter_mosaic_' + f.replace('/', '-')) + 1:02d}_filter_mosaic_{f.replace('/', '-')}.png") for f in used]
+        stages = [("Colour: two more frames", ["The same view was also taken through green and blue filters. Each is cleaned the same way, then SPICE",
+                                               "pointing draws all three north up at one scale."], "obs_mosaic.tile  obs_mosaic.filter_mosaic"),
+                  ("Colour: stack red, green, blue", ["Placed by SPICE pointing alone the three do not quite agree: the spacecraft drifted between exposures,",
+                                                     "so edges show colour fringes."], "obs_mosaic.colour_picture"),
+                  ("Colour: register the filters", ["Each filter is registered on the others to a fraction of a pixel, and the colours are balanced to what",
+                                                    "an eye would see. The fringes are gone."], "obs_mosaic._register  obs_mosaic.colour_picture")]
+        k = min(2, int(t * 3.4)) if t < 0.3 else (1 if t < 0.62 else 2)
+        bounds = [0.0, 0.3, 0.62, 1.0]
+        local = (t - bounds[k]) / (bounds[k + 1] - bounds[k])
+        frame, d = self.base("colour", "03", *stages[k])
+        side = 720
+        if k == 0:
+            w1 = 540
+            for i, pth in enumerate(planes):
+                a = span(local, 0.0 if i == 0 else 0.15 + 0.2 * i, 0.15 if i == 0 else 0.3 + 0.2 * i)
+                x = W / 2 + (i - 1) * (w1 + 50)
+                put(frame, fit(cut_(pth), w1, w1, ("pt3", pth)), x, 560, a)
+                text(d, (x, 560 + w1 / 2 + 24), NAME.get(used[i], used[i]).upper() + " FILTER", 20, TINT.get(used[i], INK), "medium", "ma", a)
+            return frame
+        a_im, b_im = cut_(os.path.join(dd, "one_spice.png")), cut_(os.path.join(dd, "one.png"))
+        zb = self._zoom_box(a_im, b_im, share=0.22)
+        zs = min(zb[2] - zb[0], zb[3] - zb[1])
+        zb = (zb[0], zb[1], zb[0] + zs, zb[1] + zs)
+        lx, rx, cy = 96 + side / 2 + 60, W - 96 - side / 2 - 60, 590
+        for im, nm, alpha in ((a_im, "spice", 1.0), (b_im, "reg", span(local, 0.0, 0.25) if k == 2 else 0.0)):
+            if alpha <= 0:
+                continue
+            x, y = put(frame, fit(im, side, side, ("pt", nm)), lx, cy, alpha)
+            put(frame, fit(im.crop(zb), side, side, ("ptz", nm)), rx, cy, alpha)
+        s_ = side / a_im.width
+        d.rectangle((x + zb[0] * s_, y + zb[1] * s_, x + zb[2] * s_, y + zb[3] * s_), outline=ACCENT, width=2)
+        d.rectangle((rx - side / 2, cy - side / 2, rx + side / 2 - 1, cy + side / 2 - 1), outline=ACCENT, width=2)
+        text(d, (rx - side / 2, cy + side / 2 + 14), "REGISTERED" if k == 2 else "SPICE POINTING ONLY", 20, ACCENT, "medium")
+        return frame
+
+    def join(self, t):
+        """the hero's pointing on the mosaic's canvas, then the other pointings joining it one by one"""
+        n = len(self.pointing["order"])
+        frame, d = self.base("join", "05", "Fit it into the mosaic",
+                             [f"SPICE says where on the sky each pointing belongs. The other {n - 1} colour pointings, made the same way, are drawn",
+                              "around the first at the same scale."], "obs_mosaic.layout  obs_mosaic.so_far")
+        cx, cy, cw, ch = self._canvas()
+        size = (round(cw), round(ch))
+        g = lambda i: fit(self.mosaic(os.path.join(self.src, "pointing", f"join_{i:02d}.png")), *size, ("join", i))
+        f = 1 + span(t, 0.12, 0.9) * (n - 1)
+        k = min(n, int(f))
+        put(frame, g(k), W / 2, cy + ch / 2)
+        if k < n:
+            put(frame, g(k + 1), W / 2, cy + ch / 2, ease(min(1.0, (f - k) * 1.6)))
+        a = 1 - span(t, 0.1, 0.3)
+        if a > 0 and self.pointing.get("outline"):
+            pts = self._outline({"outline": self.pointing["outline"]})
+            d.line(pts + [pts[0]], fill=tuple(round(v * a) for v in ACCENT), width=3)
+        text(d, (96, 978), f"POINTING {min(n, k + (1 if f - k > 0.5 else 0)):02d} / {n}", 17, INK, "mono")
         return frame
 
     def shown(self):
@@ -251,7 +334,7 @@ class Film:
 
     def clean(self, t):
         """one frame: its raw codes, then the pipeline's steps turned on one at a time"""
-        hi = [i for i, f in enumerate(self.frames) if f[0] == self.hero][0]
+        hi = self.hi
         info = self.meta[self.hero]
         shown = self.shown()
         n = len(shown)
@@ -259,7 +342,7 @@ class Film:
         k = min(n - 1, int(np.searchsorted(edges, t, side="right")) - 1) if t >= edges[0] else 0
         k = max(0, k)
         local = (t - edges[k]) / (edges[k + 1] - edges[k])
-        frame, d = self.base("clean", "02", "Clean one frame", ["Each exposure goes through the same chain. One step at a time:"],
+        frame, d = self.base("clean", "02", "Calibrate and clean it", ["Every exposure goes through the same chain. One step at a time:"],
                              "color_image.processed_frame  calibration.calibrate")
         side = 760
         pic = lambda j: fit(self.raw(hi), side, side, ("raw", hi)) if shown[j][0] is None else \
@@ -291,36 +374,32 @@ class Film:
         return frame
 
     def all_clean(self, t):
-        frame, d = self.base("all", "02", "Clean every frame", [f"The same chain runs on all {self.n} exposures."],
+        frame, d = self.base("all", "04", f"The same for all {self.n} frames",
+                             [f"{len(self.pointings)} pointings in {self.minutes} minutes, each through clear, blue, green and red, plus a long clear exposure.",
+                              "Every frame is cleaned and turned north up; each pointing's three colour frames are registered and mixed."],
                              "color_image.processed_frame")
         cells, cell = self.wall_cells()
         for i in range(self.n):
             cx, cy = cells[i]
-            put(frame, fit(self.raw(i), cell, cell, ("raw", i)), cx, cy)
-            a = span(t, 0.1 + 0.55 * i / self.n, 0.1 + 0.55 * i / self.n + 0.12)
+            a0 = span(t, 0.02 + 0.3 * i / self.n, 0.02 + 0.3 * i / self.n + 0.06)
+            x, y = put(frame, fit(self.raw(i), cell, cell, ("raw", i)), cx, cy, a0)
+            a = span(t, 0.45 + 0.3 * i / self.n, 0.45 + 0.3 * i / self.n + 0.1)
             put(frame, fit(self.clean_frame(i), cell, cell, ("clean", i)), cx, cy, a)
-        return frame
-
-    def colour_set(self, t):
-        frame, d = self.base("set", "03", "Point: line the filters up",
-                             ["Red, green and blue are taken seconds apart while the spacecraft drifts. SPICE pointing puts each on the",
-                              "sky; then the three are registered on each other so one pointing has no colour fringes."],
-                             "color_image.load_aligned")
-        side = 760
-        a = load(os.path.join(self.src, "set", "unaligned.png"))
-        b = load(os.path.join(self.src, "set", "aligned.png"))
-        # the whole pointing on the left, a close-up of its limb on the right, both switching together
-        on = span(t, 0.45, 0.6)
-        for im, key in ((a, "ua"), (b, "al")):
-            alpha = 1.0 if key == "ua" else on
-            put(frame, fit(im, side, side, ("set", key)), 96 + side // 2, 590, alpha)
-            s = im.width / 4
-            cxp, cyp = im.width * 0.30, im.height * 0.42
-            crop = im.crop((round(cxp - s / 2), round(cyp - s / 2), round(cxp + s / 2), round(cyp + s / 2)))
-            put(frame, fit(crop, side, side, ("setz", key)), W - 96 - side // 2, 590, alpha)
-        text(d, (96, 590 + side // 2 + 14), "ONE POINTING, THREE FILTERS", 15, FAINT, "mono")
-        text(d, (W - 96 - side, 590 + side // 2 + 14), "CLOSE-UP ×4", 15, FAINT, "mono")
-        text(d, (W - 96, 590 + side // 2 + 14), "REGISTERED" if on > 0.5 else "AS TAKEN", 15, ACCENT, "mono", "ra")
+            col = ACCENT if i == self.hi else TINT.get(self.frames[i][1], INK)
+            d.rectangle((x, y + cell - 4, x + cell - 1, y + cell - 1), fill=tuple(round(v * a0) for v in col))
+            if i == self.hi:
+                d.rectangle((x, y, x + cell - 1, y + cell - 1), outline=ACCENT, width=2)
+        for i in self.left_out:   # (a frame the mosaic leaves out, said so under the wall)
+            b_ = span(t, 0.3, 0.42)
+            cx, cy = cells[i]
+            bottom = max(c[1] for c in cells.values()) + cell / 2
+            d.line((cx, cy + cell / 2 + 2, cx, bottom + 22), fill=tuple(round(v * b_) for v in DIM), width=1)
+            text(d, (cx, bottom + 28), "an 82 s exposure, saturated all over: the pipeline leaves it out", 18, DIM, anchor="ma", alpha=b_)
+        for k, (f, c) in enumerate([(f, c) for f, c in TINT.items() if f in NAME]):
+            x = 96 + k * 130
+            d.rectangle((x, 980, x + 14, 994), fill=c)
+            text(d, (x + 22, 976), NAME[f], 17, DIM)
+        text(d, (96 + 4 * 130, 976), "RAW" if t < 0.5 else "CLEANED", 17, ACCENT, "mono")
         return frame
 
     def _canvas(self):
@@ -337,38 +416,6 @@ class Film:
         c = self.crop
         return [(cx + ((px - x0) / w - c[0]) / (c[2] - c[0]) * cw, cy + ((py - y0) / h - c[1]) / (c[3] - c[1]) * ch)
                 for px, py in tile["outline"]]
-
-    def place(self, t):
-        frame, d = self.base("place", "03", "Place: the mosaic grows",
-                             ["SPICE says where the camera pointed for every exposure. Each cleaned frame is drawn north up, at one scale,",
-                              "where it belongs. Clear frames lay down the brightness; colour arrives as each red, green, blue set completes."],
-                             "obs_mosaic.tile  obs_mosaic.so_far")
-        cx, cy, cw, ch = self._canvas()
-        f = span(t, 0.03, 0.9) * (self.n - 1)
-        k = int(f)
-        pics = [os.path.join(self.src, "grow", f"{i:03d}.png") for i in range(self.n)]
-        have = [i for i in range(self.n) if os.path.exists(pics[i])]
-        cur = max([i for i in have if i <= k], default=None)
-        prev = max([i for i in have if i < k], default=None)
-        size = (round(cw), round(ch))
-        g = lambda i: fit(self.mosaic(pics[i]), *size, ("grow", i))
-        if prev is not None:
-            put(frame, g(prev), W / 2, cy + ch / 2)
-        if cur is not None:
-            put(frame, g(cur), W / 2, cy + ch / 2, min(1.0, (f - k) * 2.5) if cur == k else 1.0)
-        tiles = {tl["n"]: tl for tl in self.layout["tiles"] if "outline" in tl}
-        for back in range(4):
-            i = k - back
-            if i in tiles and t < 0.93:
-                a = (1 - back / 4) * (0.9 if back else 1.0)
-                col = tuple(round(BG[c] + (TINT.get(self.frames[i][1], INK)[c] - BG[c]) * a) for c in range(3))
-                pts = self._outline(tiles[i])
-                d.line(pts + [pts[0]], fill=col, width=3 if back == 0 else 1)
-        if t < 0.93:
-            fid, flt, _ = self.frames[k]
-            text(d, (96, 978), f"FRAME {k + 1:02d} / {self.n}", 17, INK, "mono")
-            text(d, (290, 978), f"{fid}  ·  {NAME.get(flt, flt).upper()}", 17, TINT.get(flt, DIM), "mono")
-        return frame
 
     def _variant(self, name):
         return self.mosaic(os.path.join(self.src, "variants", name + ".png"))
@@ -417,64 +464,19 @@ class Film:
     def register(self, t):
         moved = self.variants["aligned"].get("moved", {})
         far = max((float(np.hypot(*v)) for v in moved.values()), default=0.0)
-        return self._compare("register", "04", "Register: fix the last few pixels",
-                             [f"Pointing from SPICE is good to a few pixels. Filters are lined up on each other, overlapping frames and the ring",
-                              f"pattern are matched, and one solve nudges {len(moved)} of the {self.n} frames into place (by up to {far:.0f} px here)."],
+        return self._compare("register", "06", "Register the pointings: the last few pixels",
+                             [f"SPICE is good to a few pixels, which still shows where pointings meet. Overlapping frames and the ring pattern",
+                              f"are matched, and one solve nudges {len(moved)} of the {self.n} frames into place (by up to {far:.0f} px here)."],
                              "obs_mosaic.ring_moves  obs_mosaic.panel_places", t,
                              ["spice_only", "aligned", "spice_only", "aligned"],
                              ["SPICE POINTING ONLY", "REGISTERED", "SPICE POINTING ONLY", "REGISTERED"], ("spice_only", "aligned"))
 
     def seams(self, t):
-        return self._compare("seams", "05", "Blend and level the seams",
+        return self._compare("seams", "07", "Blend and level the seams",
                              ["Frames taken minutes apart differ slightly in brightness. Seams are routed where neighbours agree,",
-                              "feathered, and the brightness steps between frames are levelled out."],
-                             "mosaic.composite  (blend, level)", t,
+                              "feathered, and the brightness steps levelled out. Then whites are set on the rings and fine detail brought out."],
+                             "mosaic.composite (blend, level)  obs_mosaic.ring_white  obs_mosaic.detail", t,
                              ["aligned", "blended", "final"], ["HARD EDGES", "BLENDED", "BLENDED AND LEVELLED"], ("aligned", "final"))
-
-    def colour(self, t):
-        d0 = os.path.join(self.src, "variants", "final_steps")
-        path = lambda label: os.path.join(d0, f"{self.calls.index(label) + 1:02d}_{label}.png")
-        used = self.layout["used"]
-        planes = [f"filter_mosaic_{f.replace('/', '-')}" for f in used]
-        stages = []   # (title, sentence, call, [pictures])
-        stages.append(("One mosaic per filter", "All the red frames make one mosaic, all the green another, all the blue a third.",
-                       "obs_mosaic.filter_mosaic", planes))
-        stages.append(("Mix the colour", "The three become red, green and blue of one picture, balanced to what an eye would see.",
-                       "obs_mosaic.colour_picture", ["colour_picture"]))
-        if "filter_mosaic_L" in self.calls:
-            stages.append(("Sharper brightness", "The clear-filter frames, merged from short and long exposures, make a cleaner brightness layer.",
-                           "obs_mosaic.filter_mosaic (luminance)", ["filter_mosaic_L"]))
-            stages.append(("Colour over brightness", "The colour is laid over that brightness layer: detail from clear, hue from the filters.",
-                           "obs_mosaic.over_grey", ["over_grey"]))
-        last = [c for c in ("ring_white", "detail") if c in self.calls]
-        if last:
-            stages.append(("Finish", "Whites are set on the rings and fine detail is brought out. Done.",
-                           "obs_mosaic." + "  obs_mosaic.".join(last), [last[-1]]))
-        n = len(stages)
-        k = min(n - 1, int(t * n))
-        local = t * n - k
-        title, why, call, pics = stages[k]
-        frame, d = self.base("colour", "06", "Colour: " + title[0].lower() + title[1:], [why], call)
-        cx, cy, cw, ch = self._canvas()
-
-        def draw(stage, alpha):
-            ps = stage[3]
-            if len(ps) == 1:
-                put(frame, fit(self.mosaic(path(ps[0])), round(cw), round(ch), ("col", ps[0])), W / 2, cy + ch / 2, alpha)
-            else:
-                w1 = (W - 192 - 40 * (len(ps) - 1)) / len(ps)
-                for i, pth in enumerate(ps):
-                    im = fit(self.mosaic(path(pth)), round(w1), 600, ("col3", pth))
-                    x = 96 + w1 / 2 + i * (w1 + 40)
-                    put(frame, im, x, 560, alpha)
-                    f = used[i]
-                    text(d, (x, 560 + im.height / 2 + 24), NAME.get(f, f).upper(), 20, TINT.get(f, INK), "medium", "ma", alpha)
-        if k > 0 and local < 0.3 and len(stages[k - 1][3]) == 1 and len(pics) == 1:
-            draw(stages[k - 1], 1.0)
-            draw(stages[k], span(local, 0.0, 0.3))
-        else:
-            draw(stages[k], span(local, 0.0, 0.2) if (k == 0 or len(pics) > 1 or len(stages[k - 1][3]) > 1) else 1.0)
-        return frame
 
     def final(self, t):
         frame, d = self.base("final")

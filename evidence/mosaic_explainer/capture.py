@@ -15,6 +15,9 @@ cache, through the machine's job limiter. Parts:
             (calibration.stepping), so each step's effect is a picture
   grow      obs_mosaic.so_far after each tile (the mosaic as it grows) and obs_mosaic.tile_map (the outlines)
   set       one pointing's colour frames (--set, red first) through processed_frame, with and without registration
+  pointing  the first hero frame's pointing alone as the mosaic draws it (its three filters, then in colour), with
+            SPICE's places only and registered, then the other pointings joining it one by one
+            (obs_mosaic.tuned_layout, the path Cassini Studio's hidden tiles take)
   variants  the whole mosaic with alignment / blending / levelling off (calibration.stepping), and the finished one
             with the colour steps inside so_far saved as they return
 """
@@ -178,6 +181,58 @@ def traced(d):
     return undo
 
 
+def part_pointing(u, cache, out, hero):
+    """The hero frame's pointing alone as the mosaic draws it, then the other pointings joining it one at a time:
+    the mosaic's own layout with the other pointings left out, the way Cassini Studio hides tiles
+    (obs_mosaic.tuned_layout), composed by so_far as always."""
+    d = os.path.join(out, "pointing"); os.makedirs(d, exist_ok=True)
+    n = len(u["frames"]) - 1
+    last = u["frames"][-1][1]
+    at = [f[1] for f in u["frames"]].index(hero)
+
+    def groups():
+        mapped = om.tile_map(last, cache)
+        # a colour pointing and the long clear frame taken after it go together
+        out_, cur = [], None
+        for q in mapped["pointings"]:
+            if q["set"] or cur is None:
+                cur = [q["n"]]
+                out_.append(cur)
+            else:
+                cur.append(q["n"])
+        mine = next(g for g in out_ if any(at in q["tiles"] for q in mapped["pointings"] if q["n"] in g))
+        return mapped, [mine] + [g for g in out_ if g is not mine]
+
+    def draw(shown, name, trace=None):
+        mapped, order = groups()
+        every = {q["n"] for q in mapped["pointings"]}
+        keep = {q for g in order[:shown] for q in g}
+        made = om.layout(u, n, cache)
+        made = om.tuned_layout(made, mapped, {}, every - keep)
+        om._last_canvas.made = None
+        undo = traced(trace) if trace else None
+        try:
+            im, rep = om.so_far(u, n, cache, made, out=om.CANVAS)
+        finally:
+            if undo:
+                undo()
+        im.save(f"{d}/{name}.png")
+        say("pointing", name, made[5][-24:], sorted(keep))
+        return mapped, order, made
+
+    with cal.stepping(["align", "panels", "surface", "blend", "level"]):
+        os.makedirs(f"{d}/one_spice_steps", exist_ok=True)
+        draw(1, "one_spice", f"{d}/one_spice_steps")
+    os.makedirs(f"{d}/one_steps", exist_ok=True)
+    mapped, order, made = draw(1, "one", f"{d}/one_steps")
+    for k in range(1, len(order) + 1):
+        draw(k, f"join_{k:02d}")
+    tiles = {t["n"]: t for t in made[1]}
+    json.dump({"hero": hero, "order": order, "pointings": mapped["pointings"],
+               "outline": tiles[at].get("outline") if at in tiles else None},
+              open(f"{d}/pointing.json", "w"), indent=1, default=str)
+
+
 def part_variants(u, cache, out):
     d = os.path.join(out, "variants"); os.makedirs(d, exist_ok=True)
     n = len(u["frames"]) - 1
@@ -206,7 +261,7 @@ def part_variants(u, cache, out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("frame"); ap.add_argument("out"); ap.add_argument("--cache", required=True)
-    ap.add_argument("--part", default="raw,frames,chain,grow,variants"); ap.add_argument("--hero", nargs="*", default=[])
+    ap.add_argument("--part", default="raw,frames,chain,set,pointing,grow,variants"); ap.add_argument("--hero", nargs="*", default=[])
     ap.add_argument("--set", nargs="*", default=[], help="one pointing's colour frames, red first")
     a = ap.parse_args()
     out, cache = (os.path.join(ARGV_CWD, os.path.expanduser(v)) for v in (a.out, a.cache))
@@ -223,6 +278,8 @@ def main():
             part_grow(u, cache, out)
         if "variants" in parts:
             part_variants(u, cache, out)
+        if "pointing" in parts and a.hero:
+            part_pointing(u, cache, out, a.hero[0])
         if "chain" in parts:
             part_chain(a.hero or [u["frames"][len(u["frames"]) // 2][1]], out)
         if "set" in parts and a.set:
