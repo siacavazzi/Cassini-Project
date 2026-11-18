@@ -2092,7 +2092,10 @@ def make_handler(site, cache, flags=None):
                     if reel._index is not None:
                         in_background(obs_mosaic.warm_frame, m.group(1), cache)
                         try:
-                            kind = obs_mosaic.kind_of(m.group(1), cache)
+                            # (laps, fade: the window's mosaic movie style, which its pictures' runs depend on)
+                            laps = max(1, min(obs_mosaic.TRAIL, int(query.get("laps", ["1"])[0] or 1)))
+                            fade = (int(query.get("fade", ["0"])[0] or 0), int(query.get("persist", [str(obs_mosaic.FADE_PERSIST)])[0] or 0))
+                            kind = obs_mosaic.kind_of(m.group(1), cache, laps, fade)
                         except Exception:
                             pass
                     return self.send_json(kind)

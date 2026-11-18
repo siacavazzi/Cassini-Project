@@ -1459,7 +1459,7 @@ def mosaic_steps(u, p=None):
     return [j for j in range(len(frames)) if names[j] is None or j in step]
 
 
-def kind_of(frame_id, cache=None):
+def kind_of(frame_id, cache=None, laps=1, fade=(0, 0)):
     """What the camera windows do with the frames of frame_id's observation (one camera): {"mosaic": its pass is
     a mosaic, "movie": every pass of the observation with the camera moving is a movie or a stare, so its frames
     never make a mosaic of any kind and the window need not ask, "kind": its pass's kind (mosaic, movie,
@@ -1468,7 +1468,8 @@ def kind_of(frame_id, cache=None):
     movies, when it has any, "mosaic_steps": the ids of the frames of its mosaic passes movie mode stops on
     (mosaic_steps; by the pass's plan when cache holds it), when it has any, "movie_same": {"1": {id: run}, "0": ...}
     the runs of frames in a row of its movie passes that play as one picture in colour and in grey (movie_runs: each
-    frame of a run to the run's first frame), of which movie mode shows one, when it has any}."""
+    frame of a run to the run's first frame), of which movie mode shows one, when it has any, "rolling_same": {id: run}
+    the same for its mosaic movies' pictures at laps and fade (rolling_runs), when it has any}."""
     found = unit_of(frame_id)
     if not found:
         return {"mosaic": False, "movie": False, "kind": None}
@@ -1481,9 +1482,13 @@ def kind_of(frame_id, cache=None):
     # movie_same: the runs of frames in a row of its movie passes that play as one picture, with colour (1) and
     # without (0), of which movie mode shows one (movie_runs)
     same = {c: {i: r for v in us for i, r in movie_runs(v, cache, c == "1").items()} for c in "01"}
+    # rolling_same: the runs of frames in a row of its mosaic movies whose picture is one (rolling_runs), at the
+    # window's laps and fade (the time-lapse's by default), of which movie mode shows one
+    rolling = {i: r for v in us for i, r in rolling_runs(v, cache, laps, fade).items()}
     return {"mosaic": bool(found[0]["mosaic"]), "movie": bool(judged) and all(v["movie"] for v in judged),
             "kind": found[0]["kind"], "repeats": found[0]["repeats"], "tossup": bool(found[0].get("tossup")), **({"lap_ends": ends} if ends else {}),
-            **({"mosaic_steps": steps} if steps else {}), **({"movie_same": same} if any(same.values()) else {})}
+            **({"mosaic_steps": steps} if steps else {}), **({"movie_same": same} if any(same.values()) else {}),
+            **({"rolling_same": rolling} if rolling else {})}
 
 
 def _plan_if_made(u, cache):
@@ -10371,6 +10376,35 @@ def _shown_key(u, rep, frame_id):
     shown = rep.get("held") or rep.get("id") or frame_id
     ids = tuple(rep.get("ids") or ())
     return (tuple(u["key"]), "set", ids) if ids and not rep.get("tint") else (tuple(u["key"]), shown, ids)
+
+
+def rolling_runs(u, cache, laps=1, fade=(0, 0)):
+    """{frame id: the first frame id of its run} for mosaic movie u's runs of frames in a row whose picture is one:
+    the same layout (rolling_layout's name: the same tiles drawn at the same gains, so the same picture, kept under
+    the same name). A tile that changes nothing on screen (a colour filter's copy before its place's set is whole, a
+    polarizer, a filter the picture does not draw) is such a frame; movie mode and an export show one frame of a run
+    (kind_of "rolling_same", export.shown_once). Laid out from the tiles the cache keeps, as a window's cached
+    picture is: a frame whose own tile is not made, or whose picture would need a tile not made, is a picture of its
+    own (nothing is drawn or made here)."""
+    if cache is None or u.get("kind") != "mosaic_movie" or not u["frames"]:
+        return {}
+    if _plan_if_made(u, cache) is None:
+        return {}
+    there = _tiles(u, cache, plan(u, cache)["display_scale"])   # (the plan is made: only read)
+    fade = fade_style(*fade)
+    out, last, first = {}, None, None
+    for n, fr in enumerate(u["frames"]):
+        key = None
+        if os.path.exists(os.path.join(there, f"{n}.json")):
+            skipped = []
+            made = rolling_layout(u, n, cache, laps, made_only=True, skipped=skipped, fade=fade)
+            key = made[5] if made and not skipped else None
+        if key is not None and key == last:
+            out[first] = out[fr[1]] = first
+        else:
+            first = fr[1]
+        last = key
+    return out
 
 
 def movie_runs(u, cache, colour):

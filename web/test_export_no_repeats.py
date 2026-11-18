@@ -86,6 +86,32 @@ try:
 finally:
     obs_mosaic.folder, obs_mosaic._plan_if_made = saved
 
+# ---- a mosaic movie: frames whose tile changes nothing on screen (rolling_layout lays out the same tiles at the
+# same gains: the same name, so the same picture) are one run; a frame whose tile is not made is its own ----
+names = {0: "lap-1-a", 1: "lap-1-a", 2: "lap-1-a", 3: "lap-1-b", 4: None, 5: "lap-1-b", 6: "lap-1-c", 7: "lap-1-c"}
+um = {"kind": "mosaic_movie", "key": ("SATURN", "ISS_257SA_NPOLMAP001_VIMS", "W", 0),
+      "frames": [[0, f"W{n}_1", "F", 0.0] for n in range(8)]}
+tiles_dir = tempfile.mkdtemp()
+for n in names:
+    if names[n] is not None:
+        open(os.path.join(tiles_dir, f"{n}.json"), "w").write("{}")
+saved = obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles, obs_mosaic.rolling_layout, obs_mosaic.unit_of
+obs_mosaic._plan_if_made = lambda v, cache: {}
+obs_mosaic.plan = lambda v, cache: {"display_scale": {}}
+obs_mosaic._tiles = lambda v, cache, scale: tiles_dir
+obs_mosaic.rolling_layout = lambda v, n, cache, laps=1, made_only=False, skipped=None, fade=(0, 0): (None,) * 5 + (names[n],)
+try:
+    runs = obs_mosaic.rolling_runs(um, "cache")
+    assert runs == {"W0_1": "W0_1", "W1_1": "W0_1", "W2_1": "W0_1", "W6_1": "W6_1", "W7_1": "W6_1"}, runs
+    # the export's plan keeps one frame of each run (and every frame of no run)
+    obs_mosaic.unit_of = lambda fid: (um, int(fid[1:-2]))
+    p = [{"id": f"W{n}_1", "cam": "W", "t": float(T0 + 30 * n), "try": [("rolling", f"W{n}_1"), ("processed", f"W{n}_1")]}
+         for n in range(8)]
+    kept = [e["id"] for e in export.shown_once(p, {"size": 1024, "movie": {}}, cache="cache")]
+    assert kept == ["W0_1", "W3_1", "W4_1", "W5_1", "W6_1"], kept
+finally:
+    obs_mosaic._plan_if_made, obs_mosaic.plan, obs_mosaic._tiles, obs_mosaic.rolling_layout, obs_mosaic.unit_of = saved
+
 
 def picture(seed, w=SIZE, h=SIZE):
     r = np.random.default_rng(seed)

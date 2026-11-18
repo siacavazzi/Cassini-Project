@@ -547,7 +547,8 @@ def shown_once(pics, opt, cache):
     (Sam, 2026-11-17: "We should never, ever, ever, ever, ever be repeating frames like that"). Known from the reports
     the cache keeps beside the movie pictures (obs_mosaic.movie_shown); a frame whose picture is not made yet stays,
     and render shows a picture its pane already shows by holding it, never again. The Movie Editor's list keeps every
-    frame. A mosaic pass played tile by tile steps as movie mode does (obs_mosaic.mosaic_steps)."""
+    frame. A mosaic pass played tile by tile steps as movie mode does (obs_mosaic.mosaic_steps), and a mosaic movie
+    passes over a frame whose tile changes nothing on screen (obs_mosaic.rolling_runs)."""
     if cache is None:
         return pics
     import obs_mosaic
@@ -577,6 +578,22 @@ def shown_once(pics, opt, cache):
                         continue
             except Exception as err:   # a pass the cache cannot answer for: the frame stays
                 print(f"export: mosaic steps of {arg}: {type(err).__name__}: {err}", flush=True)
+        elif kind == "rolling":
+            # a mosaic movie's frame whose tile changes nothing on screen (obs_mosaic.rolling_runs: the same layout,
+            # so the same picture, as the frame before)
+            try:
+                found = obs_mosaic.unit_of(arg)
+                if found and found[1] >= 0:
+                    k = ("rolling", tuple(found[0]["key"]))
+                    if k not in steps_of:
+                        steps_of[k] = obs_mosaic.rolling_runs(found[0], cache, m["laps"], (m.get("fade", 0), m.get("persist", 0)))
+                    run = steps_of[k].get(arg)
+                    if run is not None:
+                        shown = (k, run)
+                        if last.get(e["cam"]) == shown:
+                            continue
+            except Exception as err:   # a pass the cache cannot answer for: the frame stays
+                print(f"export: rolling runs of {arg}: {type(err).__name__}: {err}", flush=True)
         elif kind == "movie":
             try:
                 shown = obs_mosaic.movie_shown(arg, size, cache, m["trail"], centre=m["center"], steady=m.get("steady", 0),
