@@ -10392,6 +10392,29 @@ def rolling_runs(u, cache, laps=1, fade=(0, 0)):
         return {}
     there = _tiles(u, cache, plan(u, cache)["display_scale"])   # (the plan is made: only read)
     fade = fade_style(*fade)
+    # worked out once while the pass's tiles are the same (seconds for a long movie: every frame laid out)
+    try:
+        made = sum(1 for f in os.listdir(there) if f.endswith(".json"))
+    except OSError:
+        made = 0
+    memo = (there, laps, fade, made)
+    with _lock:
+        if memo in _rolling_runs:
+            _rolling_runs.move_to_end(memo)
+            return dict(_rolling_runs[memo])
+    out = _rolling_runs_of(u, cache, laps, fade, there)
+    with _lock:
+        _rolling_runs[memo] = out
+        while len(_rolling_runs) > ROLLING_RUNS_KEEP:
+            _rolling_runs.popitem(last=False)
+    return dict(out)
+
+
+_rolling_runs = collections.OrderedDict()   # (tiles folder, laps, fade, tiles made) -> rolling_runs' answer
+ROLLING_RUNS_KEEP = 64
+
+
+def _rolling_runs_of(u, cache, laps, fade, there):
     out, last, first = {}, None, None
     for n, fr in enumerate(u["frames"]):
         key = None
