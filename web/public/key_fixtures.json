@@ -172,6 +172,20 @@
   },
   {
    "method": "GET",
+   "url": "/frames/depth.json",
+   "note": "8/12-bit tag data: refused until published (PR 578 open item)",
+   "expect": {
+    "route": "depth",
+    "store": "refused",
+    "refused": "route: open item (PR 578): which frames are 12-bit is not published yet; the page's 8/12-bit tag hides itself when the server refuses",
+    "key": null,
+    "fallback": [],
+    "params": {},
+    "download": false
+   }
+  },
+  {
+   "method": "GET",
    "url": "/debug/samples",
    "note": "debug",
    "expect": {

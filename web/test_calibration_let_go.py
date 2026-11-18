@@ -63,7 +63,8 @@ calibration.let_go, let_go = (lambda: did.append("let go")), calibration.let_go
 
 
 def unit(kind):
-    return {"kind": kind, "mosaic": kind in ("mosaic", "mosaic_movie"), "tossup": False,
+    # (a key: make_pass looks for the pass's kept rolling runs, keep_rolling_runs, which names its folder)
+    return {"key": ("MIMAS", "ISS_TEST_LETGO", "N", 0), "kind": kind, "mosaic": kind in ("mosaic", "mosaic_movie"), "tossup": False,
             "frames": [(None, f"F{j}", "CL1", 100.0 + j) for j in range(3)]}
 
 

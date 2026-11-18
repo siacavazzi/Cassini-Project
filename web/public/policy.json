@@ -31,6 +31,7 @@
     {"id": "health", "method": "GET", "pattern": "^/health$", "store": "worker", "why": "the page asks it when a picture fails, to tell 'no picture' from 'no server'; answers 200 'ok public'"},
     {"id": "debug_samples", "method": "GET", "pattern": "^/debug/samples$", "store": "refused", "why": "server debugging"},
     {"id": "slices", "method": "GET", "pattern": "^/frames/slices\\.json$", "store": "manifest", "field": "slices", "why": "which stretches are published"},
+    {"id": "depth", "method": "GET", "pattern": "^/frames/depth\\.json$", "store": "refused", "why": "open item (PR 578): which frames are 12-bit is not published yet; the page's 8/12-bit tag hides itself when the server refuses"},
 
     {"id": "color", "method": "GET", "pattern": "^/frames/color\\.webp$", "store": "r2", "family": "composite", "header": "X-Composite", "markers": true,
      "params": {
