@@ -25,13 +25,13 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
     for (const lv of ["raw", "processed", "color", "full"]) {
       await page.click(`#${cam} .levels button[data-v="${lv}"]`);
       try { await page.waitForFunction(([c, lv]) => { const w = document.getElementById(c), s = w.querySelector(".shot"), src = s.dataset.src || "";
-        const okSrc = lv === "raw" ? /\/frames\/[NW]\d+_\d+\.webp/.test(src) : lv === "processed" ? src.includes("/frames/processed/") : true;
+        const okSrc = lv === "raw" ? (/\/frames\/[NW]\d+_\d+\.webp/.test(src) || /off=all/.test(src)) : lv === "processed" ? src.includes("/frames/processed/") : true;
         return okSrc && s.complete && s.naturalWidth > 0 && !w.querySelector(".well").classList.contains("loading"); }, [cam, lv], { timeout: 90000 }); } catch (e) {}
       await page.waitForTimeout(2500);
       const r = await page.evaluate(c => { const w = document.getElementById(c); return { src: (w.querySelector(".shot").dataset.src || "").replace(/^https?:\/\/[^/]+/, ""), tag: w.querySelector(".kindtag").textContent, checked: w.querySelector('.levels [aria-checked="true"]').dataset.v, mosaic: w.querySelector(".well").classList.contains("mosaic") }; }, cam);
       console.log(cam, lv, JSON.stringify(r));
       check(r.checked === lv, `${cam} ${lv}: bar shows ${r.checked}`);
-      if (lv === "raw") check(/^\/frames\/[NW]\d+_\d+\.webp/.test(r.src) && !r.mosaic, `${cam} raw: archive frame`);
+      if (lv === "raw") check((/^\/frames\/[NW]\d+_\d+\.webp/.test(r.src) || (/^\/frames\/processed\/.*off=all.*center=1/.test(r.src))) && !r.mosaic, `${cam} raw: archive frame, as taken or placed by SPICE (off=all)`);
       if (lv === "processed") check(r.src.startsWith("/frames/processed/") && !r.mosaic, `${cam} processed: pipeline frame`);
       if (lv === "color") check((r.src.startsWith("/frames/color.webp") || r.src.startsWith("/frames/processed/")) && !r.mosaic, `${cam} color: color set or processed frame, no mosaic/movie`);
       const box = await page.locator(`#${cam}`).boundingBox();
@@ -44,7 +44,7 @@ const check = (ok, what) => { console.log(ok ? "ok" : "FAIL", what); if (!ok) pr
   await page.waitForTimeout(4000);
   const g = await page.evaluate(() => ["imgcard", "wacard"].map(c => { const w = document.getElementById(c); return [w.querySelector('.levels [aria-checked="true"]').dataset.v, (w.querySelector(".shot").dataset.src || "").replace(/^https?:\/\/[^/]+/, "")]; }));
   console.log("settings raw", JSON.stringify(g));
-  check(g.every(([v, src]) => v === "raw" && (!src || /^\/frames\/[NW]\d+_\d+\.webp/.test(src))), "Settings level Raw: every window raw");
+  check(g.every(([v, src]) => v === "raw" && (!src || /^\/frames\/[NW]\d+_\d+\.webp/.test(src) || /off=all/.test(src))), "Settings level Raw: every window raw");
   await page.evaluate(() => cassiniSettings.set("cameras.level", "full"));
   await page.screenshot({ path: `${out}/page.png` });
   await ctx.close(); await br.close();

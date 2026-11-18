@@ -362,8 +362,8 @@ class label:
     
     def resize_image(self):
         img = ds.imread(self.info["path"].split('.')[0] + ".png")
-        if ds.lut8():
-            # the lean archive stores camera codes; stretch them like the old PNGs
+        if ds.lut8() and cal.step("stretch"):
+            # the lean archive stores camera codes; stretch them like the old PNGs (off: the codes as sent)
             img = cal.display_stretch(img, self.info)
         # (and a picture stored smaller than its label says: the one such frame in the archive, N1855753770_1, a
         # 1024 line label over a 256 px PNG, stopped its processed picture and composite at 256 px against the
