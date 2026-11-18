@@ -2129,7 +2129,7 @@ def make_handler(site, cache, flags=None):
             m = re.match(r"^/frames/mosaic/([^/]+)\.webp$", url.path)
             if m:
                 # the camera windows ask this for each frame: the mosaic when the frame is a new tile of a
-                # real mosaic (reel.mosaic_of, mosaic.panels), otherwise 404 at once and the window keeps its frame
+                # real mosaic (obs_mosaic), otherwise 404 at once and the window keeps its frame
                 if not FRAME_ID.match(m.group(1)):
                     return self.send_error(400, "Not a frame id")
                 query = parse_qs(url.query)
@@ -2183,17 +2183,11 @@ def make_handler(site, cache, flags=None):
                     # keeps its frame (obs_mosaic.blank)
                     if found and found[0]["mosaic"] and found[1] >= 0:
                         return self.send_error(404, "Nothing in this pass's mosaic yet")
-                found = reel.mosaic_of(m.group(1), wait=False)
-                if not found:
-                    return self.send_error(404, "Not a mosaic tile")
-                try:
-                    # a rolling mosaic is drawn at reel.OUT, its full resolution here
-                    data, report = reel.shot_webp(*found, reel.OUT if size == FULL else size, cache, True, _mosaic_slots)
-                    if fmt == "png":
-                        data = encode(Image.open(io.BytesIO(data)), FULL, "png")
-                    return self.send_picture(data, fmt, query, name, {"X-Reel": json.dumps(report, default=str)})
-                except FileNotFoundError:
-                    return self.send_error(404, "Frame not in the archive")
+                # no other picture stands in for a frame obs_mosaic puts in no mosaic: the body reel's panel shot
+                # (reel.mosaic_of) was drawn here on request, never stored by the build and refused on the public
+                # site, so the private site drew 435 Saturn shots for 2017 that no cache holds (zero-render check,
+                # 11-18); the window keeps its frame, as on the public site
+                return self.send_error(404, "Not a mosaic tile")
             m = re.match(r"^/frames/([^/]+)\.(webp|png|tif|lbl)$", url.path)
             if m:
                 frame_id, kind = m.groups()
