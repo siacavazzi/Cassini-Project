@@ -253,7 +253,7 @@ def only(phase, todo, path):
     with open(path) as fh:
         # one frame id a line, maybe followed by more columns (lost_lines_frames.txt: "id,own|repeat")
         ids = {line.replace(",", " ").split()[0] for line in fh if line.strip() and not line.startswith("#")}
-    if phase in ("frames", "processed"):
+    if phase in ("frames", "processed", "rawplaced"):
         return [t for t in todo if t[0] in ids]
     if phase == "composites":
         def set_ids(name):   # N1352055787_2_N1352055720_2 -> its frame ids (each one underscore)
@@ -327,7 +327,7 @@ def within(phase, todo, spans):
         return any(a <= t < b for a, b in cuts)
     idx, _ = reel.load_index()
     time_of = dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
-    if phase in ("frames", "processed"):
+    if phase in ("frames", "processed", "rawplaced"):
         return [t for t in todo if hit(time_of.get(t[0], float("nan")))]
     if phase == "composites":
         def set_ids(name):
