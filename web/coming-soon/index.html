@@ -1,0 +1,275 @@
+<!doctype html>
+<!-- The coming-soon page for Cassini OS (web/coming-soon/): one static page, no scripts from anywhere else, every
+     picture and film in media/ made by the repo's own pipeline (see media/SOURCES.md). Safe to serve from any static
+     host; nothing here talks to a frame server. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cassini OS: coming soon</title>
+<meta name="description" content="Cassini OS is coming soon: the whole Cassini mission to Saturn, replayed in 3D in your browser, with the pictures the spacecraft took shown at the moment it took them.">
+<meta name="author" content="Sam Iacavazzi">
+<meta name="theme-color" content="#000000">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Cassini OS">
+<meta property="og:title" content="Cassini OS: coming soon">
+<meta property="og:description" content="The whole Cassini mission to Saturn, replayed in 3D in your browser, with every picture shown at the moment it was taken.">
+<meta property="og:image" content="media/share.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Cassini OS: Cassini over Saturn's north pole on its first Grand Finale dive, the wide-angle camera window showing the clouds below">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  color-scheme: dark;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Lucida Grande", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg: #000;
+  --panel: rgba(255, 255, 255, .035);
+  --line: rgba(255, 255, 255, .10);
+  --text: rgba(232, 236, 242, .86);
+  --dim: rgba(232, 236, 242, .55);
+  --white: #fff;
+  --accent: #8ab6ff;
+  --warm: #ffcf8a;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 var(--ui); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+img, video { display: block; max-width: 100%; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+.narrow { max-width: 720px; }
+
+/* hero: Saturn on approach, February to March 2004, beside the name (the film's own sky is black, like the page) */
+.hero { background: radial-gradient(1100px 620px at 72% 12%, rgba(255, 196, 120, .08), transparent 62%); }
+.hero .inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 24px;
+  min-height: min(92vh, 820px); padding-top: 64px; padding-bottom: 64px; }
+.hero video { width: 100%; max-width: 620px; height: auto; aspect-ratio: 1; justify-self: end; pointer-events: none; mix-blend-mode: lighten; }
+.kicker { font: 12px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--warm); }
+h1 { margin: 14px 0 14px; font-size: clamp(44px, 8vw, 88px); line-height: 1; font-weight: 300; letter-spacing: -.02em; color: var(--white); }
+.lede { max-width: 560px; margin: 0; font-size: clamp(18px, 2.2vw, 22px); line-height: 1.5; color: var(--text); }
+.soon { display: inline-flex; align-items: center; gap: 10px; margin-top: 28px; padding: 9px 16px; border: 1px solid var(--line);
+  border-radius: 999px; font-size: 14px; color: var(--text); background: rgba(0, 0, 0, .45); backdrop-filter: blur(6px); }
+.soon i { width: 8px; height: 8px; border-radius: 50%; background: var(--warm); box-shadow: 0 0 10px var(--warm); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 16px 36px; margin-top: 40px; font: 13px/1.4 var(--mono); color: var(--dim); }
+.facts b { display: block; font: 300 26px/1.2 var(--ui); color: var(--white); }
+
+section { padding: 72px 0; border-top: 1px solid var(--line); }
+h2 { margin: 0 0 6px; font: 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+h3 { margin: 0 0 16px; font-size: clamp(26px, 3.6vw, 38px); line-height: 1.15; font-weight: 300; color: var(--white); letter-spacing: -.01em; }
+p { margin: 10px 0; }
+
+/* the app, full width */
+.shot { margin: 32px 0 0; }
+.shot img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: #050505; box-shadow: 0 30px 80px rgba(0, 0, 0, .6); }
+figcaption { margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--dim); }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 28px; margin: 24px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.legend b { color: var(--white); font-weight: 500; }
+
+/* what you can do */
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-top: 28px; }
+.feature { padding: 20px 20px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.feature b { display: block; margin-bottom: 6px; color: var(--white); font-weight: 500; font-size: 16px; }
+.feature p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text); }
+
+/* sample outputs */
+.samples { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; margin-top: 32px; }
+.sample { grid-column: span 4; margin: 0; }
+.sample.wide { grid-column: span 8; }
+.sample .frame { position: relative; overflow: hidden; border-radius: 10px; border: 1px solid var(--line); background: #000; }
+.sample video, .sample img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
+.sample.wide img { aspect-ratio: auto; object-fit: contain; }
+.sample .tag { position: absolute; left: 10px; top: 10px; padding: 3px 8px; border-radius: 5px; font: 11px/1.4 var(--mono);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--white); background: rgba(0, 0, 0, .6); border: 1px solid var(--line); }
+.sample figcaption b { display: block; color: var(--white); font-weight: 500; font-size: 15px; }
+.sample figcaption .meta { display: block; margin-top: 3px; font: 12px/1.5 var(--mono); color: var(--dim); }
+
+/* how the pictures are made */
+.steps { counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 28px; margin: 28px 0 0; padding: 0; list-style: none; }
+.steps li { counter-increment: s; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
+.steps li::before { content: "0" counter(s); display: block; margin-bottom: 6px; font: 12px/1 var(--mono); color: var(--warm); }
+.steps b { display: block; color: var(--white); font-weight: 500; font-size: 16px; margin-bottom: 4px; }
+
+.closing { text-align: center; padding: 96px 0; }
+.closing h3 { margin-bottom: 8px; }
+.closing .soon { margin-top: 18px; }
+footer { padding: 28px 0 48px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.6; color: var(--dim); }
+footer p { margin: 4px 0; }
+
+@media (max-width: 860px) {
+  .hero .inner { grid-template-columns: 1fr; min-height: auto; gap: 0; }
+  .hero video { order: -1; justify-self: center; max-width: 520px; margin-bottom: -24px; }
+  .sample, .sample.wide { grid-column: span 6; }
+}
+@media (max-width: 600px) {
+  .hero .inner { padding-top: 16px; padding-bottom: 48px; }
+  section { padding: 56px 0; }
+  .sample, .sample.wide { grid-column: span 12; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .soon i { box-shadow: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap inner">
+    <div>
+    <div class="kicker">Cassini-Huygens · 1997–2017</div>
+    <h1>Cassini OS</h1>
+    <p class="lede">The whole Cassini mission to Saturn, replayed in 3D in your browser, with every picture the spacecraft took shown at the moment it took it.</p>
+    <div class="soon"><i></i>Coming soon</div>
+    <div class="facts" aria-label="Cassini OS in numbers">
+      <span><b>20 years</b>launch to the final plunge</span>
+      <span><b>443,177</b>pictures from both cameras</span>
+      <span><b>2</b>camera windows, NAC and WAC</span>
+      <span><b>13 years</b>in orbit around Saturn</span>
+    </div>
+    </div>
+    <video src="media/saturn.mp4" poster="media/saturn.jpg" muted loop playsinline autoplay preload="metadata" aria-hidden="true" data-loop></video>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="wrap">
+      <div class="narrow">
+        <h2>What it is</h2>
+        <h3>Ride along with Cassini, and see what it saw</h3>
+        <p>Cassini OS follows NASA and ESA's Cassini-Huygens spacecraft from launch in October 1997, past Venus, Earth and Jupiter, through thirteen years in orbit around Saturn, to the Grand Finale plunge into Saturn's atmosphere on September 15, 2017. The spacecraft flies its real path and turns the way it really turned, from the mission's own navigation and pointing records.</p>
+        <p>It looks like a small desktop. The narrow-angle and wide-angle camera windows show the picture Cassini was taking at that moment, calibrated and cleaned up from the original frames. Pictures taken through red, green and blue filters become true color, tiles across a moon or the planet become mosaics, and runs of frames become movies.</p>
+      </div>
+      <figure class="shot">
+        <img src="media/app-dive.webp" width="1600" height="960" loading="lazy" decoding="async"
+          alt="Cassini OS on April 26, 2017: the spacecraft over Saturn's north pole on its first dive between the planet and the rings, the wide-angle camera window playing the clouds below, the Moments list on the right, the timeline and dock at the bottom">
+        <figcaption>April 26, 2017, the first Grand Finale dive between Saturn and its rings. Cassini skims 3,000 km above the clouds while the wide-angle camera window plays the pictures it took on the way in.</figcaption>
+      </figure>
+      <ul class="legend">
+        <li><b>Camera windows.</b> One for each camera, showing the real frame, its filters, and the color channels or movie frames around it.</li>
+        <li><b>Moments.</b> Hand-picked milestones, flybys, plumes, finds and transits, sorted by date, body or photo score.</li>
+        <li><b>Timeline.</b> Every picture of the mission on one strip, by camera, with a time warp from real time to a month a second.</li>
+        <li><b>Dock.</b> Saturn and every moon Cassini photographed, plus the gallery, studio and settings.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Sample outputs</h2>
+      <h3>Straight from the app</h3>
+      <p class="narrow">Every picture and film below came out of Cassini OS itself, from the same pipeline that draws the camera windows. Nothing was retouched afterward; a few bad frames were left out, as the app's Movie Editor does.</p>
+      <div class="samples">
+        <figure class="sample">
+          <div class="frame"><span class="tag">Movie</span>
+            <video src="media/plume.mp4" poster="media/plume.jpg" muted loop playsinline preload="none" data-loop aria-label="Enceladus going from full to crescent over fourteen hours, its south-pole plume lit throughout"></video></div>
+          <figcaption><b>The plume of Enceladus</b><span class="meta">June 18, 2017 · NAC · 286 frames</span>Fourteen hours as Enceladus goes from full to a thin crescent, the jets of ice from its south pole lit the whole time.</figcaption>
+        </figure>
+        <figure class="sample">
+          <div class="frame"><span class="tag">Movie</span>
+            <video src="media/dive.mp4" poster="media/dive.jpg" muted loop playsinline preload="none" data-loop aria-label="Saturn's clouds passing below on the first Grand Finale dive"></video></div>
+          <figcaption><b>Inside the gap</b><span class="meta">April 26, 2017 · WAC · 214 frames</span>An hour of the closest pictures of Saturn's clouds ever taken, starting at the north polar vortex.</figcaption>
+        </figure>
+        <figure class="sample">
+          <div class="frame"><span class="tag">Movie</span>
+            <video src="media/rhea.mp4" poster="media/rhea.jpg" muted loop playsinline preload="none" data-loop aria-label="A thin crescent of Rhea, a smaller moon passing in the distance"></video></div>
+          <figcaption><b>Crescent Rhea</b><span class="meta">January 27, 2006 · NAC · 56 frames</span>Saturn's second-largest moon as a sliver of sunlit ice, with a smaller moon drifting past in the distance.</figcaption>
+        </figure>
+        <figure class="sample wide">
+          <div class="frame"><span class="tag">Color mosaic</span>
+            <img src="media/farewell.webp" width="1024" height="416" loading="lazy" decoding="async"
+              alt="Saturn and its rings in natural color, Cassini's last wide-angle mosaic"></div>
+          <figcaption><b>Farewell mosaic</b><span class="meta">September 13, 2017 · WAC · 80 frames through clear and color filters</span>Cassini's last full portrait of Saturn and its rings, two days before the plunge, stitched and colored from the raw tiles.</figcaption>
+        </figure>
+        <figure class="sample">
+          <div class="frame"><span class="tag">True color</span>
+            <video src="media/saturn.mp4" poster="media/saturn.jpg" muted loop playsinline preload="none" data-loop aria-label="Saturn in true color, growing in the frame as Cassini approaches"></video></div>
+          <figcaption><b>Saturn on approach</b><span class="meta">February to March 2004 · NAC · true color</span>Seven weeks of the approach, months before arrival, Saturn growing in the frame. Each frame is combined from color filters.</figcaption>
+        </figure>
+        <figure class="sample">
+          <div class="frame"><span class="tag">Close-up</span>
+            <img src="media/daphnis.webp" width="1024" height="1024" loading="lazy" decoding="async"
+              alt="The Keeler gap in Saturn's A ring, with waves raised along its edge by the moon Daphnis"></div>
+          <figcaption><b>Waves in the Keeler gap</b><span class="meta">January 16, 2017 · NAC · ring-grazing orbit</span>The tiny moon Daphnis raising waves in the edge of the gap it clears through the A ring.</figcaption>
+        </figure>
+        <figure class="sample wide">
+          <div class="frame">
+            <img src="media/app-daphnis.webp" width="1600" height="960" loading="lazy" decoding="async"
+              alt="Cassini OS on January 16, 2017: both camera windows open, the narrow-angle camera on the Keeler gap with its color channels and filmstrip, the wide-angle camera on Saturn's limb, Titan in the 3D view behind them"></div>
+          <figcaption><b>Both cameras at once</b><span class="meta">January 16, 2017 · the app</span>The narrow-angle window on Daphnis's gap with its color channels and filmstrip, the wide-angle window on Saturn's limb, and the Moments of 2017 on the right.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>What you can do</h2>
+      <h3>Twenty years, at whatever speed you like</h3>
+      <div class="features">
+        <div class="feature"><b>Time warp</b><p>Play the mission in real time, or warp up to a month a second. The arrows step the speed, and the timeline jumps anywhere in twenty years.</p></div>
+        <div class="feature"><b>Movie mode</b><p>Play the camera frames one after another as a film, at 2 to 24 frames a second, while the 3D view keeps up with the spacecraft.</p></div>
+        <div class="feature"><b>Moments and Highlights</b><p>Start from the milestones, the flybys, the plumes of Enceladus, the transits and the finds, each one a click away.</p></div>
+        <div class="feature"><b>A view for every body</b><p>Pick Titan, Enceladus or any other moon in the dock to see only its pictures, across its whole history with Cassini.</p></div>
+        <div class="feature"><b>Color and mosaics</b><p>Filter sets become true color pictures with their channels shown, and tiles are drawn into mosaics as Cassini takes them.</p></div>
+        <div class="feature"><b>Zoom lens</b><p>Hover over any picture to look closer, at the camera's full resolution.</p></div>
+        <div class="feature"><b>Make your own films</b><p>Mark a stretch of the mission and export it as a video. Choose the frames in the Movie Editor and touch it up in the Studio.</p></div>
+        <div class="feature"><b>The Huygens landing</b><p>Ride the probe down through Titan's haze on January 14, 2005, from entry glow to touchdown.</p></div>
+        <div class="feature"><b>Ambient mode</b><p>Leave it running on a spare screen: the camera drifts with Cassini and turns to whatever is most interesting nearby.</p></div>
+        <div class="feature"><b>Links to any moment</b><p>The address bar always holds the moment on screen, so a link opens on the same picture, from the same angle.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>How the pictures are made</h2>
+      <h3>From raw frames, with nothing invented</h3>
+      <ol class="steps">
+        <li><b>Raw frames</b>Every picture starts as an original frame from NASA's Planetary Data System, the archive the mission team delivered.</li>
+        <li><b>Calibration</b>Each frame is corrected for the camera's dark current, its flat field and its electronics, so brightness means what it should.</li>
+        <li><b>Navigation</b>The spacecraft's position and pointing come from the mission's SPICE records, so each picture sits where the camera was really looking.</li>
+        <li><b>Color, stacks and mosaics</b>Filter sets are aligned and combined into true color, repeat exposures are stacked, and tiles are stitched into mosaics.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="closing">
+    <div class="wrap narrow">
+      <h3>Almost ready for launch</h3>
+      <p>Cassini OS is free and runs in the browser. It isn't open yet: the last of the mission's pictures are still being processed.</p>
+      <div class="soon"><i></i>Coming soon</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Made by Sam Iacavazzi. Pictures NASA/JPL-Caltech/Space Science Institute; Huygens pictures ESA/NASA/JPL/University of Arizona; flight data NASA/JPL's SPICE archive.</p>
+    <p>An independent project, not affiliated with NASA, JPL, ESA or the Space Science Institute.</p>
+  </div>
+</footer>
+
+<script>
+// Films play only while on screen (and not at all for people who ask for less motion), so the page stays light:
+// the films after the first one load nothing until they are scrolled to.
+(() => {
+  const vids = [...document.querySelectorAll("video[data-loop]")];
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const fit = v => { if (still.matches) { v.pause(); v.removeAttribute("autoplay"); v.controls = !v.closest(".hero"); } };
+  vids.forEach(fit);
+  if (!("IntersectionObserver" in window)) return;
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    const v = e.target;
+    if (still.matches) return;
+    if (e.isIntersecting) { if (v.preload === "none") v.preload = "auto"; v.play().catch(() => {}); } else v.pause();
+  }), { rootMargin: "200px 0px" });
+  vids.forEach(v => io.observe(v));
+})();
+</script>
+</body>
+</html>
