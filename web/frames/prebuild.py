@@ -98,8 +98,9 @@ import slices  # noqa: E402
 import stacking  # noqa: E402
 import tables  # noqa: E402
 
-PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened", "rawplaced")
-ADDED = ("tables", "fullview", "evened", "rawplaced")   # phases run on a finished cache, not recorded in slices.json
+PHASES = ("frames", "composites", "mosaics", "movies", "processed", "strips", "chains", "tables", "fullview", "evened", "rawplaced",
+          "site")
+ADDED = ("tables", "fullview", "evened", "rawplaced", "site")   # phases run on a finished cache, not recorded in slices.json
 
 
 @functools.lru_cache(None)
@@ -245,7 +246,37 @@ def items(phase):
         movies = {tuple(u["key"]) for u in movie_passes()}
         return [("_".join(map(str, u["key"])), lambda c, u=u: make_evened(u, c, every=True)
                  + (make_grey(u, c) if tuple(u["key"]) in movies else 0)) for u in evened_passes()]
+    if phase == "site":
+        return site_items(_site[0])
     raise ValueError(phase)
+
+
+_site = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cassini-os")]   # --site
+
+
+def site_items(site):
+    """The pictures the frame server otherwise makes as it starts (frame_server.warm_site): every Highlights
+    thumbnail (data/highlights.json, in the default look, as warm_thumbs makes them) and every body's folder
+    picture (data/targets.json "best", at ICON_SIZE, as warm_icons makes them). Whole-mission items, made by every
+    run whatever its stretch (found, not made, once there), so a cache-only server (--public) has them and no
+    server draws them (zero-render check 2017, 11-17). They come from the page's replay data at the build's commit
+    (web/replay/build_data.py): a site without it stops the phase."""
+    try:
+        with open(os.path.join(site, "data", "highlights.json")) as fh:
+            hints = [e["thumb"] for e in json.load(fh) if e.get("kind") != "milestone" and e.get("thumb")]
+        with open(os.path.join(site, "data", "targets.json")) as fh:
+            best = [b["best"] for b in json.load(fh)["bodies"].values() if b.get("best")]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise SystemExit(f"site: no replay data in {site}/data ({e}); make it at this commit first")
+    out = []
+    for hint in hints:
+        hint = {k: hint[k] for k in ("mosaic", "color", "frame") if hint.get(k)}
+        out.append(("thumb_" + frame_server.thumb_key(hint, frame_server.THUMB_SIZE),
+                    lambda c, h=hint: frame_server.thumb_webp(h, frame_server.THUMB_SIZE, c)))
+    for frame_id in dict.fromkeys(best):
+        if frame_server.FRAME_ID.match(frame_id):
+            out.append(("icon_" + frame_id, lambda c, i=frame_id: frame_server.webp(i, frame_server.ICON_SIZE, c)))
+    return out
 
 
 def only(phase, todo, path):
@@ -328,6 +359,8 @@ def within(phase, todo, spans):
     cuts = [(slices.seconds(a) if a else -float("inf"), slices.seconds(b) if b else float("inf")) for a, b in spans]
     def hit(t):
         return any(a <= t < b for a, b in cuts)
+    if phase == "site":   # whole-mission pictures: every run makes them (site_items)
+        return todo
     idx, _ = reel.load_index()
     time_of = dict(zip(idx["id"].tolist(), idx["seconds_1970"].astype(float).tolist()))
     if phase in ("frames", "processed", "rawplaced"):
@@ -1292,6 +1325,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("phase", choices=PHASES + ("count",))
     ap.add_argument("--cache", required=True, help="the frame server's --cache folder to fill")
+    ap.add_argument("--site", default=_site[0], help="site: the page folder whose replay data (data/highlights.json, "
+                    "data/targets.json) names the Highlights thumbnails and body pictures")
     ap.add_argument("--status", help="folder for status.json and the progress page (e.g. web/cassini-os/prebuild)")
     ap.add_argument("--threads", type=int, default=3)
     ap.add_argument("--first", type=int, default=0, help="skip this many items (they are made)")
@@ -1328,6 +1363,7 @@ def main():
     # refresh_stale; the processes procs starts find nothing left), before any pass is grouped or planned
     import bootleg_autonav
     bootleg_autonav.refresh_stale()
+    _site[0] = args.site
     if args.phase == "count":
         ids, sets, passes, movies = frame_ids(), page_sets(), mosaic_passes(), movie_passes()
         spans = spans_of(args)
