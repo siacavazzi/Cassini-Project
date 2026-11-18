@@ -82,7 +82,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   const END = 46;              // screen s when it closes by itself
   const CLOSE = 1.6;           // screen s of its closing fade
   const LEAVE = 0.45;          // screen s of the fade when it is left early (Skip, a choice on the last card)
-  const BED = 0.2;             // the quiet tone under it (cassiniSound.drone's level)
+  const BED = 0.8;             // the quiet held sound under it (cassiniSound.bed's level)
   const SPIN_MAX = 2.4;        // rad/s, the most the drawn spin turns, so the sped-up clock does not strobe it
   const FAR_M = 11;            // m from the probe the camera ends
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -275,7 +275,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
   const fmtClock = s => { const a = Math.abs(Math.round(s)), m = Math.floor(a / 60), ss = String(a % 60).padStart(2, "0"); return `${s < 0 ? "T−" : "T+"}${m}:${ss}`; };
 
 
-  const gl = document.getElementById("gl"), skip = root.querySelector(".cs-skip");
+  const skip = root.querySelector(".cs-skip");
   function play() {
     if (H || CS.active || !tracks.CASSINI) return;
     // the view as it is, to hold through the fade to black (beginning lets the follow camera go, which would turn it)
@@ -297,15 +297,14 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     if (H.phase !== "run" || H.closing) { finish(how); return; }
     H.leaving = how; H.leaveAt = performance.now(); H.how = how;
     root.style.setProperty("--hr-out", `${LEAVE}s`); root.classList.add("hr-out");
-    fadeTo(black, 1, LEAVE); sound("drone", 0);
+    fadeTo(black, 1, LEAVE); sound("bed", 0, LEAVE);
   }
   function cleanUp() {
     const h = H; H = null;
     if (!h) return;
     removeEffects(h.fx);
     if (co) co.spin = null;
-    sound("drone", 0);
-    CS.look.wheel = true; gl.style.cursor = "";
+    CS.look.lock = false;
     // ended with the picture still up (Escape, which cutscene.html ends at once): to black in one go, so the viewer's
     // own view fades in under the cover instead of jumping in, and nothing of the cutscene's lingers on top of it
     if (!(+black.style.opacity > 0.95)) { root.style.setProperty("--hr-out", "0s"); root.classList.add("hr-out"); black.style.opacity = 1; }
@@ -343,10 +342,10 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     if (held) {
       // what the viewer had turned eases back (gone at once while nothing is drawn); anything new is not taken
       const L = CS.look, k = Tn < 1.5 ? 0 : Math.exp(-(dt || 0.016) / 0.3), w = H.look || [L.yaw, L.pitch, L.zoom];
-      L.yaw = w[0] * k; L.pitch = w[1] * k; L.zoom = 1 + (w[2] - 1) * k; L.drag = null;
+      L.yaw = w[0] * k; L.pitch = w[1] * k; L.zoom = 1 + (w[2] - 1) * k;
       H.look = [L.yaw, L.pitch, L.zoom];
     } else H.look = null;
-    CS.look.wheel = !held; gl.style.cursor = held ? "default" : "";
+    CS.look.lock = !!held;
     if (H.phase === "out" && now - H.t0 >= 1600) {
       // behind the black: a few seconds before the release, on Cassini
       H.phase = "run"; H.runAt = now;
@@ -366,7 +365,7 @@ body.phone #hrel .cs-note { bottom: auto; top: 40px; max-width: calc(100vw - 32p
     // the quiet tone under it: in with the picture, a little fuller around the release, out with the closing fade
     if (!H.leaving && !(now - H.bedAt < 200)) {
       H.bedAt = now;
-      sound("drone", (BED * ease(T / 3) + 0.12 * Math.exp(-(((T - LEAD) / 3) ** 2))) * (1 - ease((T - (END - CLOSE)) / CLOSE)));
+      sound("bed", (BED * ease(T / 3) + 0.2 * Math.exp(-(((T - LEAD) / 3) ** 2))) * (1 - ease((T - (END - CLOSE)) / CLOSE)), 0.6);
     }
     if (T > END - CLOSE && !H.closing && !H.leaving) {
       H.closing = true; fadeTo(black, 1, CLOSE);
