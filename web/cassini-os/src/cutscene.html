@@ -8,8 +8,8 @@
        - begin and end: the interface fades away (body.cutscene), playback stops, the orbit controls let go, and Escape
          or the section's .cs-skip button ends it; at the end everything comes back as it was. While one plays the rest
          of the page is out of reach: its keys do nothing (play, movie mode, ambient mode and the rest would start under
-         the cutscene; S still mutes, and Tab, Enter and Space still work the cutscene's own buttons) and the faded
-         interface cannot take the focus (inert)
+         the cutscene; S still mutes, and Tab, Enter, Space, the arrows and the paging keys still work the cutscene's
+         own buttons and its credits roll) and the faded interface cannot take the focus (inert)
        - fades and captions on the viewer's frame clock (performance.now), so a recording keeps their pace
        - looking around: a drag turns the view and the wheel or a two-finger pinch zooms (cassiniCutscene.look, for the
          cutscene's camera to use); it eases back a few seconds after. orbit() and frameOn() apply it with the subject
@@ -389,18 +389,24 @@ body.phone .cs-root .cs-cap { font-size: 16px; } body.phone .cs-root .cs-cap.big
 
   // Escape ends it. Every other key stays with the cutscene: the page's shortcuts (Space plays, M is movie mode, A is
   // ambient mode, F is full view...) would start under it and leave the page in a state it cannot get out of. S still
-  // mutes (sound.html); the browser's own keys are not prevented. A key pressed on the cutscene's own things (Tab, Enter
-  // and Space on its buttons, the keys that scroll the credits) goes to them, and stops at its section (register)
+  // mutes (sound.html); the browser's own keys are not prevented. The plain keys that work the cutscene's own things
+  // (Tab, Enter and Space on its buttons, the arrows and paging keys that scroll the credits) go to them when the focus
+  // is there, and stop at its section (register)
   // It has to run ahead of every other key listener on the page, some of which listen in the capture phase and were
   // added earlier (G adds to the gallery, Cmd+comma opens Settings): the page's first script calls it first
   // (window.cassiniKeyGate, settings.html)
   function keyGate(e) {
     if (!active) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); return; }
-    if (muteKey(e) || scenes[active].root.contains(e.target)) return;
+    if (muteKey(e)) return;
+    // on the cutscene's own things (one Tab puts the focus on Skip) only the plain keys that work them go on: every
+    // other key would still reach the page's capture-phase shortcuts (Settings, the gallery, the Studio), which run
+    // before the section can stop it
+    if (scenes[active].root.contains(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey && OWN_KEYS.test(e.key)) return;
     e.stopImmediatePropagation();
     if (e.key === " ") e.preventDefault();
   }
+  const OWN_KEYS = /^(Tab|Enter| |Arrow(Up|Down|Left|Right)|Page(Up|Down)|Home|End)$/;
   window.cassiniKeyGate = keyGate;
   if (!window.cassiniKeyGateWired) window.addEventListener("keydown", keyGate, true);
   window.addEventListener("blur", letGo);

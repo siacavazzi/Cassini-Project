@@ -14191,7 +14191,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"0539155cb808";
+  const BUILD = /*BUILD*/"bd9949de7549";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -17546,18 +17546,24 @@ function frame(now) {
 
   // Escape ends it. Every other key stays with the cutscene: the page's shortcuts (Space plays, M is movie mode, A is
   // ambient mode, F is full view...) would start under it and leave the page in a state it cannot get out of. S still
-  // mutes (sound.html); the browser's own keys are not prevented. A key pressed on the cutscene's own things (Tab, Enter
-  // and Space on its buttons, the keys that scroll the credits) goes to them, and stops at its section (register)
+  // mutes (sound.html); the browser's own keys are not prevented. The plain keys that work the cutscene's own things
+  // (Tab, Enter and Space on its buttons, the arrows and paging keys that scroll the credits) go to them when the focus
+  // is there, and stop at its section (register)
   // It has to run ahead of every other key listener on the page, some of which listen in the capture phase and were
   // added earlier (G adds to the gallery, Cmd+comma opens Settings): the page's first script calls it first
   // (window.cassiniKeyGate, settings.html)
   function keyGate(e) {
     if (!active) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); end(); return; }
-    if (muteKey(e) || scenes[active].root.contains(e.target)) return;
+    if (muteKey(e)) return;
+    // on the cutscene's own things (one Tab puts the focus on Skip) only the plain keys that work them go on: every
+    // other key would still reach the page's capture-phase shortcuts (Settings, the gallery, the Studio), which run
+    // before the section can stop it
+    if (scenes[active].root.contains(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey && OWN_KEYS.test(e.key)) return;
     e.stopImmediatePropagation();
     if (e.key === " ") e.preventDefault();
   }
+  const OWN_KEYS = /^(Tab|Enter| |Arrow(Up|Down|Left|Right)|Page(Up|Down)|Home|End)$/;
   window.cassiniKeyGate = keyGate;
   if (!window.cassiniKeyGateWired) window.addEventListener("keydown", keyGate, true);
   window.addEventListener("blur", letGo);
