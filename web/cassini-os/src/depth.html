@@ -8,8 +8,8 @@
      8-bit codes). Nothing is decoded and nothing new is cached: a label read per frame, kept by the server.
 
      Where: every picture window's well (camera windows, body windows, reels: any .well with a .shottag) gets a tag in
-     its top left corner for the frames its caption names (one frame, a composite's channels, a mosaic's tiles, the
-     movie frame on screen): 12-BIT, 8-BIT, or 8+12-BIT when they differ, the counts and reasons on hover. A color
+     its top left corner for the frames its caption names (one frame, a composite's channels, the movie frame on
+     screen) and, for a mosaic, every frame of it (its tile map): 12-BIT, 8-BIT, or 8+12-BIT when they differ, the counts and reasons on hover. A color
      set's channel tiles each get 12 or 8; the filmstrip's thumbnails a thin line under them (blue 12-bit, amber
      8-bit) and the same on hover; the Movie Editor's strip tiles 12 or 8 beside their camera; Cassini Studio the
      picture's tag in its top right corner.
@@ -96,13 +96,26 @@ body.idle .depthtag { opacity: .7; }
     el.title = s ? s.title : "";
     el.className = `${cls}${s ? " d" + s.kind : ""}`;
   };
+  const mosaics = new Map();
+  function mosaicIds(id) {
+    if (mosaics.has(id)) return mosaics.get(id);
+    mosaics.set(id, undefined);
+    fetch(`${FRAMES}/frames/mosaic/${id}.json`, { priority: "low" }).then(r => r.ok ? r.json() : null)
+      .then(j => { mosaics.set(id, j ? JSON.stringify(j.pointings || j.layers || []).match(ID) || [] : null); later(); })
+      .catch(() => { mosaics.set(id, null); later(); });
+    return undefined;
+  }
   // a picture window's tag: the frames its caption (shottag) names
   function well(w) {
     const tag = w.querySelector(":scope > .shottag");
     if (!tag) return;
     let el = w.querySelector(":scope > .depthtag");
     if (!el) { el = document.createElement("span"); el.className = "depthtag"; w.appendChild(el); }
-    const ids = tag.textContent.match(ID) || [], key = ids.join(",");
+    // a mosaic: every frame of it (its tile map, /frames/mosaic/<ID>.json), not just the newest tiles the caption names
+    const shot = w.querySelector(":scope > .shot"), mos = w.classList.contains("mosaic") && shot && (shot.src.match(/\/frames\/mosaic\/([NW]\d{10}_\d+)[./]/) || [])[1];
+    const tiles = mos ? mosaicIds(mos) : null;
+    if (tiles === undefined) return;      // (asked for: looked at again when it comes)
+    const ids = [...new Set([...(tag.textContent.match(ID) || []), ...(tiles || [])])], key = ids.join(",");
     if (el.dataset.key === key) return;
     el.dataset.key = key;
     if (!ids.length) return show(el, null, "depthtag");
