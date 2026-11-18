@@ -89,7 +89,9 @@ import label_handler  # noqa: E402
 # obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
 # obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
-VERSIONS = {"balanced": "obs-v140", "raw": "obs-v123", "eye": "obs-v140-eye", "false": "obs-v140-false", "classic": "obs-v109-classic"}
+# obs-v141/v124/v110: image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
+# and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
+VERSIONS = {"balanced": "obs-v141", "raw": "obs-v124", "eye": "obs-v141-eye", "false": "obs-v141-false", "classic": "obs-v110-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
