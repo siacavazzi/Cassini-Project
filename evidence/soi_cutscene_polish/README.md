@@ -12,7 +12,7 @@ Videos with sound are in the project folder, not in the repo: `soi-arrival-befor
 |---|---|---|
 | Length, first frame to the cover coming down | 56.1 s | 55.9 s |
 | Largest camera step in one frame with the picture showing (cuts aside) | 28.8 degrees at 17.8 s | 0.25 degrees |
-| Fastest the view turns during the roll onto the shot list | 26 degrees/s, bunched in 3.5 s | 12 degrees/s, over 6 s |
+| Fastest the view turns during the roll onto the shot list | 20 degrees/s, bunched in 3.5 s | 12.5 degrees/s, over 6 s |
 | Drag during the fade to black, the flyby or the move in | turns the view up to 155 degrees, Cassini leaves the shot | held still (look.lock) until two minutes before ignition |
 | Wheel during the first 17 s | nothing, then a jump from 40 m to 130 m | nothing, and no jump |
 | Phone: Cassini on screen during the flyby | off the right edge from 8 to 11 s | always in frame (never past 75% of the way to the edge) |
