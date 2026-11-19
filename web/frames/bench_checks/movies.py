@@ -62,11 +62,14 @@ def _small(rgba, side=256):
     return cv2.resize(lum, (side, side), interpolation=cv2.INTER_AREA)
 
 
-def _onto(a, b):
-    """b moved onto a by phase correlation (so a steady drift or a pointing jitter is not counted here)."""
+def _onto(a, b, sure=0.25):
+    """b moved onto a by phase correlation (so a steady drift or a pointing jitter is not counted here); left where
+    it is when the correlation is not sure of the move (two different pictures)."""
     import cv2
     import numpy as np
-    (dx, dy), _ = cv2.phaseCorrelate(a, b)
+    (dx, dy), resp = cv2.phaseCorrelate(a, b)
+    if resp < sure:
+        return b
     m = np.float32([[1, 0, -dx], [0, 1, -dy]])
     return cv2.warpAffine(b, m, (a.shape[1], a.shape[0]))
 
