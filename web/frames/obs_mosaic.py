@@ -1747,7 +1747,10 @@ def _filters(u):
     aside = _aside(frames, u)
     count = {f: c for f, c in count.items() if f not in aside} or count
     colour = colour_of(count, nms)
-    u["set_colour"] = u["played_pair"] = u["one_pair"] = False
+    # worked out on a copy and set on u once, set_colour last: folder() reads these flags (_set_coloured works them
+    # out when set_colour is missing), and while another thread was half way through this a pass's folder came out
+    # without its _c1 suffix, so a movie's plan was written to a folder of its own (zero-render check 2017, 11-18)
+    w = dict(u, set_colour=False, played_pair=False, one_pair=False)
     # a movie plays only a colour set holding every colour filter (set_of): colours that no set of its holds together
     # never play, and it stayed grey. Janus ISS_059JA_GEOLOG001_PRIME takes RED and BL1 once each, side by side, and
     # GRN only in its two UV3, GRN, IR1, IR3 sets: its counts made it true colour, and none of its 49 frames was in
@@ -1756,15 +1759,15 @@ def _filters(u):
         mine = _set_colour(frames, count, nms)
         if mine is not None or colour is None:
             colour = mine
-            u["set_colour"] = colour is not None
+            w["set_colour"] = colour is not None
     if colour is None:
         # a pass its counts make grey whose sets are a pair with an approximate color (calibration.approximate_pair):
         # Titan's cloud watches and maps take CB3 three times a set and MT1 once (133TI_CLOUD002: 120 CB3, 40 MT1),
         # so MT1 never reached half of CB3's count and the pass played and mosaicked grey (Sam 11-08)
-        pair = _pair_colour(u, count, nms)
+        pair = _pair_colour(w, count, nms)
         if pair is not None:
             colour = pair
-            u["set_colour"] = u.get("kind") == "movie"
+            w["set_colour"] = u.get("kind") == "movie"
     elif u.get("kind") == "movie" and not plays_colour(u, colour, max(count, key=count.get)):
         # a movie whose colours above do not play (plays_colour: a set of three filters taken once among many frames
         # of its grey filter) plays in its pair's color (_pair_colour), when that pair's sets do play. Titan's
@@ -1774,11 +1777,13 @@ def _filters(u):
         # lines in downlink is held (unfit), so a pass whose pair frames all lost that much never shows a set, and
         # played grey at the pair's scale, far darker than its grey plan: 046TI NIGHTWAC001's twelve CB3 frames lost
         # 264 of 1024 lines each, 158TI FIRNADCMP501's 295 to 312 (Sam 11-15)
-        pair = _pair_colour(u, count, nms)
-        if pair is not None and plays_colour(u, pair, max(count, key=count.get),
+        pair = _pair_colour(w, count, nms)
+        if pair is not None and plays_colour(w, pair, max(count, key=count.get),
                                              lambda j: lost_share(frames[j][1]) <= MOVIE_HOLD_LOST):
             colour = pair
-            u["set_colour"] = u["played_pair"] = True
+            w["set_colour"] = w["played_pair"] = True
+    u["played_pair"], u["one_pair"] = w["played_pair"], w["one_pair"]
+    u["set_colour"] = w["set_colour"]
     return count, nms, aside, colour
 
 
