@@ -7833,6 +7833,9 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 #                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
 
 
+STEADY_SPIKE = 8.0       # px: a tile the pictures put this much off the line between its neighbours (past what SPICE
+                         # has it off by) while SPICE has it on that line within half this, and the neighbours agree with
+                         # SPICE's step between them within half this, is a false match (_chain_links)
 STEADY_BREAK = 0.05      # of a frame: a step of SPICE's places bigger than this between two frames is the camera
                          # moving on (a retarget, the next pointing of a scan), not its pointing scatter (3 to 26 px):
                          # the smoothed path is not smoothed across it (_smoothed_path)
@@ -7950,6 +7953,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     # two sources of pointing in one movie (Sam 2026-11-18). It goes on from the tile before it by SPICE's smoothed
     # step instead (steady_smooth_steps), the movie's own motion without SPICE's frame-to-frame pointing scatter)
     lone = set()   # of those, the tiles with no match left at all (the rest went past the reach)
+    false_ = set()   # ... and the tiles whose matches were false (STEADY_SPIKE)
     xs = _smoothed_path(x0)
     px, py = x0[:, 0].copy(), x0[:, 1].copy()
     for rnd in range(len(got) + 10):
@@ -8010,13 +8014,34 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             lone |= set(lone_now)
             continue
         if not changed:
+            # (a tile the pictures put off both its neighbours while they agree, where SPICE, which follows the
+            # spacecraft's own attitude shake, does not: a false match on a scene that repeats, F ring strands or a
+            # ring's ringlets, not the camera moving (274RF FMOVIE002 frame 55, 18 px up and back; the 2004 ring movie's
+            # pairs 15 px apart). Its links out, on the smoothed path from its neighbour (STEADY_SPIKE))
+            odd = []
+            pl = np.stack([px, py], axis=1)
+            for i in range(1, N - 1):
+                n = order[i]
+                if n in held or order[i - 1] in held or order[i + 1] in held:
+                    continue
+                spike = pl[i] - (pl[i - 1] + pl[i + 1]) / 2
+                raw = x0[i] - (x0[i - 1] + x0[i + 1]) / 2
+                apart = pl[i + 1] - pl[i - 1] - (x0[i + 1] - x0[i - 1])
+                if math.hypot(*(spike - raw)) > STEADY_SPIKE and math.hypot(*raw) < STEADY_SPIKE / 2 \
+                        and math.hypot(*apart) < STEADY_SPIKE / 2:
+                    odd.append(n)
+            if odd:
+                held |= set(odd)
+                false_ |= set(odd)
+                keep = [k for k in keep if got[k][0][0] not in held and got[k][0][1] not in held]
+                continue
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
     linked = {}
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
-    hows = {n: ("held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
+    hows = {n: ("held from the tile before (false match)" if n in false_ else "held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
                 else f"linked to {sorted(linked[n])}" if n in linked else "first" if n == order[0] else "linked from later tiles")
             for n in order}
     return places, hows
