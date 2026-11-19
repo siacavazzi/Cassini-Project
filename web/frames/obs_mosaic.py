@@ -7875,6 +7875,18 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     at = {n: i for i, n in enumerate(order)}
     by = {t["n"]: t for t in tiles}
     spice = {n: list(by[n]["offset"]) for n in order}
+    # (SPICE's smoothed path, _smoothed_path: where the pictures place a tile only across the rings, a ring profile
+    # match, it goes along them by this path's step, not SPICE's raw step and its scatter)
+    path = dict(zip(order, _smoothed_path([spice[n] for n in order])))
+
+    def along_path(d, rel, j, n, rhow):
+        nx, ny = (rhow or {}).get("normal") or (0.0, 0.0)
+        if not (nx or ny):
+            return d
+        ax, ay = -ny, nx
+        sx, sy = path[n][0] - path[j][0] - rel[0], path[n][1] - path[j][1] - rel[1]
+        k = ax * sx + ay * sy
+        return (d[0] + k * ax, d[1] + k * ay)
     pairs = []
     newest = {}
     for i, n in enumerate(order):
@@ -7897,7 +7909,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             # (a pass of the rings themselves: their profiles first, the picture match sliding along the ringlets)
             move, rhow = ring(by[j], own[j], t, own[n])
             if move is not None and math.hypot(*move) <= believed:
-                d = (rel[0] + move[0], rel[1] + move[1])
+                d = along_path((rel[0] + move[0], rel[1] + move[1]), rel, j, n, rhow)
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
@@ -7912,7 +7924,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             move, rhow = ring(by[j], own[j], t, own[n])
             if move is None or math.hypot(*move) > believed:
                 return pr, None, f"{how}; rings: {rhow}"
-            d, how = (rel[0] + move[0], rel[1] + move[1]), f"rings {rhow['lag_km']:+.0f} km"
+            d, how = along_path((rel[0] + move[0], rel[1] + move[1]), rel, j, n, rhow), f"rings {rhow['lag_km']:+.0f} km"
         else:
             return pr, None, how
         if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
