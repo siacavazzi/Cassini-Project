@@ -7836,7 +7836,7 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 
 STEADY_SPIKE = 8.0       # px: a tile the pictures put this much off the line between its neighbours (past what SPICE
                          # has it off by) while SPICE has it on that line within half this, and the neighbours agree with
-                         # SPICE's step between them within half this, is a false match (_chain_links)
+                         # SPICE's step between them within this, is a false match (_chain_links)
 STEADY_BREAK = 0.05      # of a frame: a step of SPICE's places further than this from the pass's own step there (the
                          # median of the steps round it) is the camera moving on (a retarget, the next pointing of a
                          # scan), not its pointing scatter (3 to 26 px): the smoothed path is not smoothed across it
@@ -8037,7 +8037,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 raw = x0[i] - (x0[i - 1] + x0[i + 1]) / 2
                 apart = pl[i + 1] - pl[i - 1] - (x0[i + 1] - x0[i - 1])
                 if math.hypot(*(spike - raw)) > STEADY_SPIKE and math.hypot(*raw) < STEADY_SPIKE / 2 \
-                        and math.hypot(*apart) < STEADY_SPIKE / 2:
+                        and math.hypot(*apart) < STEADY_SPIKE:
                     odd.append(n)
             if odd:
                 held |= set(odd)
