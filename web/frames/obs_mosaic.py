@@ -7833,6 +7833,28 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 #                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
 
 
+STEADY_BREAK = 0.05      # of a frame: a step of SPICE's places bigger than this between two frames is the camera
+                         # moving on (a retarget, the next pointing of a scan), not its pointing scatter (3 to 26 px):
+                         # the smoothed path is not smoothed across it (_smoothed_path)
+
+
+def _smoothed_path(x0):
+    """SPICE's places of a pass's tiles (rows, in order) smoothed over STEADY_SMOOTH frames (_gaussian_line), each run of
+    frames between two steps of more than STEADY_BREAK of a frame on its own: the pass's own motion without SPICE's
+    frame-to-frame pointing scatter. Smoothed across a retarget, the path cut the corner by thousands of px (287RI
+    PROPRETRG001's retargets of 20,000 px between propellers)."""
+    x0 = np.asarray(x0, float)
+    if len(x0) < 3:
+        return x0.copy()
+    jumps = np.hypot(*np.diff(x0, axis=0).T) > STEADY_BREAK * FRAME
+    out, start = x0.copy(), 0
+    for end in list(np.nonzero(jumps)[0] + 1) + [len(x0)]:
+        if end - start >= 3:
+            out[start:end] = _gaussian_line(x0[start:end], STEADY_SMOOTH)
+        start = end
+    return out
+
+
 def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
@@ -7916,7 +7938,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     # two sources of pointing in one movie (Sam 2026-11-18). It goes on from the tile before it by SPICE's smoothed
     # step instead (steady_smooth_steps), the movie's own motion without SPICE's frame-to-frame pointing scatter)
     lone = set()   # of those, the tiles with no match left at all (the rest went past the reach)
-    xs = _gaussian_line(x0, STEADY_SMOOTH) if N > 2 else x0
+    xs = _smoothed_path(x0)
     px, py = x0[:, 0].copy(), x0[:, 1].copy()
     for rnd in range(len(got) + 10):
         rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []

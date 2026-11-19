@@ -72,4 +72,12 @@ s, how = om._shift_onto(made[0], a, (0.0, 0.0), made[0], a, (0.0, 0.0), around=(
                         holes=holes, kept=(moon_at[0], moon_at[1], R + 1))
 assert s is None and how == "other body", (s, how)
 print("another body under the square but not the moon is left out; over the moon, no match: ok")
+
+
+# a retarget (the camera moving on 20,000 px between two propellers, 287RI PROPRETRG001) is not smoothed across: the
+# smoothed path keeps the jump where SPICE has it and smooths each run on its own
+path = np.array([[0.0, 0.0]] * 10 + [[20000.0, 300.0]] * 10) + rng.normal(0, 5, (20, 2))
+sm = om._smoothed_path(path)
+assert np.abs(sm[:10] - path[:10].mean(axis=0)).max() < 12 and np.abs(sm[10:] - path[10:].mean(axis=0)).max() < 12, sm
+print("a retarget is not smoothed across: ok")
 print("ok")
