@@ -60,6 +60,37 @@ python web/frames/image_bench.py run --base origin/main --candidate HEAD --targe
   numbers and its sheet), `report.md` (the table for the PR body), `summary.json`, and `sheets/<item>.jpg`. Each
   sheet shows base, candidate and the difference x4, with 1:1 crops where the picture changed most.
 
+## Defect checks
+
+The comparison says what changed between two commits. It cannot see a defect present on both sides, and most of what
+Sam found by eye in cache builds was exactly that: a movie repeating frames, a Titan sequence in black and white, a
+colour composite drawn gray in every build. So each item's pictures are also judged on their own by cheap, objective
+checks (`web/frames/bench_checks/`), on the base and on the candidate:
+
+| check | runs on | catches | proof (fails on, passes on) |
+|---|---|---|---|
+| `repeat_frames` | every movie | a played frame identical to the one before (Sam 11-17, #577); "played" is the commit's own `obs_mosaic.movie_shown` | daphnis17-movie: 19 repeats on 02598865, 0 on main |
+| `odd_frame` | every movie | a frame unlike both neighbours while they agree, after moving them onto it (a doubled limb, a flash, a jump to another place) | saturn05-movie frame014 doubled Saturn: 5.6 on 5d600b52, 1.7 after #525 (limit 3) |
+| `gray_colour` | every composite; passes that name it | a colour picture or sequence drawn gray | titan127-movie gray on f9ab1b49, colour after #475; june2004-mosaic gray on 5d600b52, colour after #483 |
+| `body_tint` | items that name it | a colour cast on a near-neutral body | enceladus-eye-composite orange before #570, near gray after |
+| `clipped_white` | items that name it, with their own limit | white blown out | ringmosaic04 13% at white on 1dcd9027, 0.08% after |
+| `limb_halo` | items that name it | a black gap then a glow past a lit limb on black sky | saturn-limb-still 0.19 on e755fd89, about 0 after #574 (limit 0.04) |
+
+Each check gives a number (higher is worse), its limit and a line saying what it measured. Against the base it is:
+**pass**; **fixed** (the base failed); **known** (both fail, the candidate no worse: a defect already on `main`,
+listed in the report but not a failure by itself); **REGRESSION** (the candidate fails where the base passed, or fails
+clearly worse), which makes the verdict `FAIL` unless the item is a target or `--notes` explains it; **error** (the
+check broke on these pictures).
+
+`python web/frames/image_bench.py check RESULTS_FOLDER [--items a,b]` judges one commit's results alone, with no base.
+That is how a new check is proven: it must fail on a result of the old, bad commit and pass on a good one.
+
+Adding a check: one module of your own in `web/frames/bench_checks/` (no shared file to edit, so threads never
+collide); the module's notes give the whole interface: `@check(name, kinds, default)`, a function of the item's
+pictures returning `Result(value, limit, ok, detail)`, an optional `collect` hook that runs inside the build with the
+commit's own code (its data is kept in the item's `meta.json`), and optional `ITEMS` (the module's own targets).
+Changing a collect hook rebuilds every base once; changing how a check judges does not.
+
 ## What the report says about each item
 
 - **identical**: the same bytes. **same**: pixels differ by at most 2 levels (encoder rounding), counted as identical.
@@ -124,10 +155,14 @@ review approves only after looking, and says which sheets it looked at.
 
 ## Keeping the set useful
 
-- **A new defect becomes an item.** When a PR fixes a defect that is not in the set, it adds the frame to
-  `image_bench_items.json` (group `hard`, `watch` saying what to look at), so later PRs guard it.
-- **Every item stays.** The list is the memory of what broke before. An item is removed only when its frame leaves
-  the archive.
+- **A new defect becomes an item and, where it can be measured, a check.** When a PR fixes a defect that is not in
+  the set, it adds a small frame that shows it to `image_bench_items.json` (group `hard`, `watch` saying what to look
+  at, `checks` naming the check that catches it), so later PRs guard it.
+- **An item earns its time.** The list is the memory of what broke before, but a slow item that never caught
+  anything, or that another item covers, goes (11-19, on Sam's ask for a fast run: the 290-tile Grand Finale FB
+  mosaic, covered by FA, Earth Smiled and the 2004 ring mosaic; the Helene and 088EN toss-up movies, which never
+  changed in 39 reports; the Phoebe movie, which is not deterministic). Prefer a small pass or a still that shows the
+  defect to a long one.
 - **The list's hash names the cached results.** Editing the list means every base is built again on its next run,
   which is automatic.
 - **The noise floor is zero.** Building the same commit twice on the MacBook (12 items) and once on the Mini

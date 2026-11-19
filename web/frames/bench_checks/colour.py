@@ -43,7 +43,7 @@ def gray_colour(p, max_gray=0.0, expect="colour"):
 
 @check("body_tint", kinds=("still", "composite", "movie", "mosaic"), default=False,
        about="a colour cast on a body that should be near neutral (orange icy moons)")
-def body_tint(p, limit=0.12, rgb=(1.0, 1.0, 1.0)):
+def body_tint(p, limit=0.06, rgb=(1.0, 1.0, 1.0)):
     """On the body's lit disk (the lit pixels from its 30th to its 95th brightness percentile, away from the dark limb
     and terminator and from white): the largest |ln| of red over green and blue over green, against the expected
     ratios rgb. Enceladus drawn [1.12, 1.01, 0.77] (the orange cast, #570) scores 0.27; near gray scores under 0.05."""

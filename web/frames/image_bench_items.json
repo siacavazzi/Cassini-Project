@@ -54,6 +54,6 @@
   {"name": "titan127-movie", "kind": "pass", "frame": "N1646512613_1", "group": "hard", "watch": "Titan cloud watch 127TI CLOUD001 (2010-03-05) plays in colour, not black and white (#475 pair colour)", "checks": {"gray_colour": {"max_gray": 0.2}}},
   {"name": "june2004-mosaic", "kind": "pass", "frame": "N1466207340_1", "group": "hard", "watch": "Saturn 2004-06-17 2X2PLRNC015 (polarized BL2/GRN/CB1) in colour, not gray (#483)", "checks": {"gray_colour": {}}},
   {"name": "saturn-limb-still", "kind": "still", "frame": "N1469611288_1", "group": "hard", "watch": "Saturn's limb on black sky: no black gap and grainy halo past it (#574 sky smoothing lift)", "checks": {"limb_halo": {}}},
-  {"name": "enceladus-eye-still", "kind": "still", "frame": "N1602286256_1", "colors": "eye", "group": "hard", "watch": "Enceladus in Natural color (emulated): near gray, not orange (#570)", "checks": {"body_tint": {}}}
+  {"name": "enceladus-eye-composite", "kind": "composite", "frame": "N1602286223_2", "colors": "eye", "group": "hard", "watch": "Enceladus IR3/GRN/UV3 in Natural color (emulated): near gray, not orange (#570 eye colours)", "checks": {"body_tint": {}}}
  ]
 }
