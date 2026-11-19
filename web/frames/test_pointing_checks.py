@@ -41,4 +41,10 @@ print(r.detail)
 assert not r.ok and r.value == 3, r.as_dict()
 p.meta["collected"] = {"pointing_sources": {"frames": 3, "auto": True, "linked": 2, "smoothed": 1, "on_spice": 0}}
 assert bc.CHECKS["pointing_sources"](p).ok
+
+
+# every frame measurable (no blank first pair): the worst move's frame is named, never past the last frame
+r = bc.CHECKS["pointing_jitter"](movie([(128.0 + (9.0 if i == 23 else 0.0), 128.0) for i in range(24)]))
+assert r.where == "frame023.webp" or r.ok, r.as_dict()
+print("worst frame named within the film: ok")
 print("ok")

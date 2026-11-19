@@ -64,11 +64,11 @@ def pointing_jitter(p, limit=3.0):
     p90 = float(np.percentile(dev, 90))
     k = int(np.argmax(dev))
     frames = p.frames()
-    where = frames[idx[k] + 1] if idx[k] + 1 < len(frames) else None
+    where = frames[idx[k]]   # (moves()[i] is the move from frame i - 1 to frame i)
     return Result(p90, limit, p90 <= limit,
                   f"frame-to-frame jump past the movie's own motion: p90 {p90:.1f} px, largest {dev.max():.1f} px "
                   f"({len(idx)} pairs)", where=where,
-                  values={frames[i + 1]: round(float(d), 1) for i, d in zip(idx, dev) if d > limit})
+                  values={frames[i]: round(float(d), 1) for i, d in zip(idx, dev) if d > limit})
 
 
 @check("pointing_sources", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.0,
