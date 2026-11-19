@@ -409,11 +409,13 @@ def _match(im1, im2, g, mask1, mask2, within=None, filled=False, placed_flat=Fal
         here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
         if here >= AS_TAKEN_SURE:
             shift, how = (0.0, 0.0), f"as taken (edges agree {here:.2f})"
-    if shift is None and (_flat(im1, im2, mask1, mask2, filled) or _flat_alone(im2, mask2, filled)):
+    if shift is None and (_flat(im1, im2, mask1, mask2, filled) or (filled and _flat_alone(im2, mask2, filled))):
         # nothing to match, and nothing a few pixels' error would show as a fringe: SPICE's place (or as taken)
-        # rather than a gray picture. The channel being placed flat is enough: moved off by the error, it gives every
-        # pixel the same color it gives it in place, whatever detail the reference has (2012 north polar vortex,
-        # 175SA NPOLVORT001: its UV3 haze featureless, its RED the vortex, drawn gray in every build)
+        # rather than a gray picture. Where SPICE puts both frames wholly on their target's disk (filled), the channel
+        # being placed flat is enough: moved off by the error, it gives every pixel the same color it gives it in place,
+        # whatever detail the reference has (2012 north polar vortex, 175SA NPOLVORT001: its UV3 haze featureless, its
+        # RED the vortex, drawn gray in every build). Off the disk a flat channel may be blank sky, whose colour says
+        # nothing, and the set stays gray as before
         # (SPICE's offset only within FIT_REACH: a larger move only cuts the picture down to where the channels
         # overlap, colored strips along its edges, N1787002873_1 at 117 px, where it can show no better colour)
         if g is not None and np.hypot(g[0], g[1]) <= FIT_REACH:
