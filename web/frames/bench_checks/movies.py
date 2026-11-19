@@ -76,7 +76,7 @@ def _onto(a, b, sure=0.25):
 
 @check("odd_frame", kinds=("movie",), default=True,
        about="a frame unlike both neighbours while they agree: a doubled limb, a flash, a jump to another place")
-def odd_frame(p, limit=3.0):
+def odd_frame(p, limit=4.0):
     """For each played frame between two others: its difference from the mean of its neighbours (each moved onto it),
     over half their difference from each other plus one level. A frame in a smooth movie scores about 1; a frame
     that is neither neighbour scores far more."""

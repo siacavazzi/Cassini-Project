@@ -21,7 +21,6 @@
   {"name": "venus99-still", "kind": "still", "frame": "N1308947228_1", "group": "plain", "watch": "Venus flyby flat field frame"},
   {"name": "masursky-still", "kind": "still", "frame": "N1327293041_1", "group": "plain", "watch": "asteroid Masursky, a few pixels"},
   {"name": "jupiter-portrait-composite", "kind": "composite", "frame": "N1356755399_1", "group": "plain", "watch": "Jupiter in natural colour"},
-  {"name": "jupiter-rmov-movie", "kind": "pass", "frame": "W1355234327_1", "group": "plain", "watch": "tinted Jupiter movie, WAC", "checks": {"gray_colour": {}}},
   {"name": "approach-composite", "kind": "composite", "frame": "N1455630732_1", "group": "plain", "watch": "Saturn on approach in colour"},
   {"name": "phoebe-mosaic", "kind": "pass", "frame": "N1465677502_2", "group": "plain", "watch": "Phoebe close pass, no green or purple fringes (#396-#403)"},
   {"name": "titan04-composite", "kind": "composite", "frame": "W1481651010_2", "group": "plain", "watch": "Titan's haze limb in colour"},

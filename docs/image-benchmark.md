@@ -70,11 +70,11 @@ checks (`web/frames/bench_checks/`), on the base and on the candidate:
 | check | runs on | catches | proof (fails on, passes on) |
 |---|---|---|---|
 | `repeat_frames` | every movie | a played frame identical to the one before (Sam 11-17, #577); "played" is the commit's own `obs_mosaic.movie_shown` | daphnis17-movie: 19 repeats on 02598865, 0 on main |
-| `odd_frame` | every movie | a frame unlike both neighbours while they agree, after moving them onto it (a doubled limb, a flash, a jump to another place) | saturn05-movie frame014 doubled Saturn: 5.6 on 5d600b52, 1.7 after #525 (limit 3) |
-| `gray_colour` | every composite; passes that name it | a colour picture or sequence drawn gray | titan127-movie gray on f9ab1b49, colour after #475; june2004-mosaic gray on 5d600b52, colour after #483 |
-| `body_tint` | items that name it | a colour cast on a near-neutral body | enceladus-eye-composite orange before #570, near gray after |
+| `odd_frame` | every movie | a frame unlike both neighbours while they agree, after moving them onto it (a doubled limb, a flash, a jump to another place) | saturn05-movie frame014 doubled Saturn: 5.6 on 5d600b52, 1.7 after #525 (limit 4: a panning 3x3 movie scores up to 3.3) |
+| `gray_colour` | every composite; passes that name it | a colour picture or sequence drawn gray | titan127-movie: 54 of 54 frames gray on f9ab1b49, 5 of 42 on main (limit 20%); june2004-mosaic gray on 5d600b52, chroma 0.46 on main |
+| `body_tint` | items that name it | a colour cast on a near-neutral body | enceladus-eye-composite: R:G:B 1.04:1:0.89 (0.122) on 02598865, 1.01:1:0.99 (0.009) on main (limit 0.06) |
 | `clipped_white` | items that name it, with their own limit | white blown out | ringmosaic04 13% at white on 1dcd9027, 0.08% after |
-| `limb_halo` | items that name it | a black gap then a glow past a lit limb on black sky | saturn-limb-still 0.19 on e755fd89, about 0 after #574 (limit 0.04) |
+| `limb_halo` | items that name it | a black gap then a glow past a lit limb on black sky | saturn-limb-still: 0.185 on e755fd89, 0.031 on main (limit 0.08) |
 
 Each check gives a number (higher is worse), its limit and a line saying what it measured. Against the base it is:
 **pass**; **fixed** (the base failed); **known** (both fail, the candidate no worse: a defect already on `main`,
@@ -161,7 +161,8 @@ review approves only after looking, and says which sheets it looked at.
 - **An item earns its time.** The list is the memory of what broke before, but a slow item that never caught
   anything, or that another item covers, goes (11-19, on Sam's ask for a fast run: the 290-tile Grand Finale FB
   mosaic, covered by FA, Earth Smiled and the 2004 ring mosaic; the Helene and 088EN toss-up movies, which never
-  changed in 39 reports; the Phoebe movie, which is not deterministic). Prefer a small pass or a still that shows the
+  changed in 39 reports; the Phoebe movie, which is not deterministic; the 71-frame Jupiter WAC movie, whose evened
+  frames approach-movie also covers). Prefer a small pass or a still that shows the
   defect to a long one.
 - **The list's hash names the cached results.** Editing the list means every base is built again on its next run,
   which is automatic.
