@@ -9909,7 +9909,9 @@ def shown_of(u, p, n, not_shown, tile_of):
     filter. In a pass playing in colour, a frame drawn in its set's colour that has no frame of the pass's gray filter
     near it to draw its moment through (lum_of: none within HOLD_AGE) shows what the frame before its run of such
     frames shows (the one after, at the pass's start), never its own look: 127TI CLOUD001's P60 frame, 8 minutes from
-    any CB3, flashed gray, and its lone GRN frame flashed the haze between CB3 surface frames. A run of more than
+    any CB3, flashed gray, and its lone GRN frame flashed the haze between CB3 surface frames (another filter than the
+    gray one counts only where the gray filter is the body's surface window: elsewhere it is its own moment, and plays;
+    a held band's frame counts everywhere: Methone's polarized MT2, Enceladus' UV1). A run of more than
     STEP_RUN such frames plays on its own (a pass that takes its pictures that way)."""
     got = _shown_of(u, p, n, not_shown, tile_of)
     if not got[3]:
@@ -9963,10 +9965,13 @@ def _shown_of(u, p, n, not_shown, tile_of):
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
             if j is not None:
-                # (a frame of another filter than the pass's gray one with none of the gray filter near: its own picture
-                # would be another look in the run of the gray filter's, 127TI CLOUD001's lone GRN haze between CB3
-                # surface frames; shown_of shows a neighbour's picture)
-                lone = j == s and frames[s][2] != p["grey"] and any(fr[2] == p["grey"] for fr in frames)
+                # (a frame of another filter than the pass's gray one with none of the gray filter near, in a pass whose
+                # gray filter is the body's surface window (calibration.SURFACE_WINDOW, Titan's CB3): any other filter
+                # sees another layer, the haze, so its own picture is another look, not another moment: 127TI
+                # CLOUD001's lone GRN between CB3 surface frames; shown_of shows a neighbour's picture. On any other
+                # body such a frame is its own moment and plays (Telesto's GRN and IR3, 2015 PIE movie))
+                window = calibration.SURFACE_WINDOW.get(str(u["key"][0]).upper()) == p["grey"]
+                lone = window and j == s and frames[s][2] != p["grey"] and any(fr[2] == p["grey"] for fr in frames)
                 return j, got, True, lone
             # (a held band with no other filter near: on its own, in gray, below; shown_of shows a neighbour's picture)
             return s, None, False, held_band(frames[s][2])

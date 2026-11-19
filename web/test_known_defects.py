@@ -64,6 +64,10 @@ def test_lone_frame_holds_the_picture_before():
             assert om.shown_of(u, p, n, not_shown, tile_of) == om.shown_of(u, p, 3, not_shown, tile_of)[:3], n
         assert om.held_back(u, p, 4, not_shown, tile_of)
         assert not om.held_back(u, p, 2, not_shown, tile_of)
+        # another body (no surface window): the lone GRN is its own moment and plays; the P60 still holds
+        u2 = {**u, "key": ("TELESTO", "OBS", "N", 0), "_sets": sets}
+        assert not om._shown_of(u2, p, 6, not_shown, tile_of)[3]
+        assert om._shown_of(u2, p, 4, not_shown, tile_of)[3]
     finally:
         om.over_exposed, om.unit_of = orig
 
