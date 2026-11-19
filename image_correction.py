@@ -409,9 +409,13 @@ def _match(im1, im2, g, mask1, mask2, within=None, filled=False, placed_flat=Fal
         here = _agreement(im1, im2, mask1, mask2, (0.0, 0.0))
         if here >= AS_TAKEN_SURE:
             shift, how = (0.0, 0.0), f"as taken (edges agree {here:.2f})"
-    if shift is None and _flat(im1, im2, mask1, mask2, filled):
+    if shift is None and (_flat(im1, im2, mask1, mask2, filled) or (filled and _flat_alone(im2, mask2, filled))):
         # nothing to match, and nothing a few pixels' error would show as a fringe: SPICE's place (or as taken)
-        # rather than a gray picture
+        # rather than a gray picture. Where SPICE puts both frames wholly on their target's disk (filled), the channel
+        # being placed flat is enough: moved off by the error, it gives every pixel the same color it gives it in place,
+        # whatever detail the reference has (2012 north polar vortex, 175SA NPOLVORT001: its UV3 haze featureless, its
+        # RED the vortex, drawn gray in every build). Off the disk a flat channel may be blank sky, whose colour says
+        # nothing, and the set stays gray as before
         # (SPICE's offset only within FIT_REACH: a larger move only cuts the picture down to where the channels
         # overlap, colored strips along its edges, N1787002873_1 at 117 px, where it can show no better colour)
         if g is not None and np.hypot(g[0], g[1]) <= FIT_REACH:
@@ -675,6 +679,20 @@ def _edge_surface(im1, im2, mask1, mask2, c, reach):
     x0, y0 = m - cx - reach, m - cy - reach
     S = cv2.matchTemplate(e1[y0:y0 + t.shape[0] + 2 * reach, x0:x0 + t.shape[1] + 2 * reach], t, cv2.TM_CCOEFF_NORMED)
     return S[::-1, ::-1], (cx - reach, cy - reach)
+
+
+def _flat_alone(im, mask, filled=False):
+    """Whether the channel being placed is flat by itself (_match's nothing to fringe): over its lit pixels it changes by
+    no more than _flat allows when moved FLAT_PROBE px either way diagonally (_flat_along), and it is not a blank frame
+    (FLAT_LEAST_DN, unless SPICE puts it wholly on its target's disk, filled). Measured on the lit part only, so a thin
+    crescent or a ring arc on black sky, which a placement error does fringe, is never flat (Titan's crescent, 00ATI)."""
+    gray = (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im).astype(np.float32)
+    if mask.sum() < 1000:
+        return False
+    lo, hi = np.percentile(gray[mask], (1, 99))
+    if hi - lo < FLAT_LEAST_DN and not filled:
+        return False
+    return _flat_along(im, mask, (1, 1)) and _flat_along(im, mask, (1, -1))
 
 
 def _flat_along(im, mask, v):

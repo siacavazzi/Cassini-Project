@@ -91,7 +91,7 @@ import label_handler  # noqa: E402
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
-VERSIONS = {"balanced": "obs-v142", "raw": "obs-v125", "eye": "obs-v142-eye", "false": "obs-v142-false", "classic": "obs-v111-classic"}
+VERSIONS = {"balanced": "obs-v143", "raw": "obs-v126", "eye": "obs-v143-eye", "false": "obs-v143-false", "classic": "obs-v112-classic"}# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -8557,7 +8557,9 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     others = other_bodies(u, names=True) if colour and p.get("colour") else {}
     for m in ns if colour else ():
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
-        if tinted:
+        if held_back(u, p, m, not_shown, tile_of):
+            server.append(m)   # (a held band's frame showing a neighbour's picture, shown_of: the server's picture)
+        elif tinted:
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
             server.append(m)
@@ -9909,7 +9911,50 @@ def shown_of(u, p, n, not_shown, tile_of):
     """(the frame whose picture frame n of a movie shows, the colour set it shows or None, True when the set is drawn
     as the colour of that frame's picture), as movie_frame draws it with colour on: the set (set_shown) when the pass
     plays in colour (plays_colour); else the frame held_of holds, put through step_frame when the pass plays its grey
-    filter."""
+    filter. In a pass playing in colour, a frame drawn in its set's colour that has no frame of the pass's gray filter
+    near it to draw its moment through (lum_of: none within HOLD_AGE) shows what the frame before its run of such
+    frames shows (the one after, at the pass's start; either only when taken within HOLD_REACH of it), never its own
+    look: 127TI CLOUD001's P60 frame, 8 minutes from
+    any CB3, flashed gray, and its lone GRN frame flashed the haze between CB3 surface frames (another filter than the
+    gray one counts only where the gray filter is the body's surface window: elsewhere it is its own moment, and plays;
+    a held band's frame counts everywhere: Methone's polarized MT2, Enceladus' UV1). A run of more than
+    STEP_RUN such frames plays on its own (a pass that takes its pictures that way)."""
+    got = _shown_of(u, p, n, not_shown, tile_of)
+    if not got[3]:
+        return got[:3]
+    # the run of such frames n is in: the frame before it shows for all of them (the one after it at the pass's
+    # start); a run longer than STEP_RUN is the pass's own way of taking pictures and plays on its own
+    a, b = n, n
+    while a > 0 and n - a <= STEP_RUN and _shown_of(u, p, a - 1, not_shown, tile_of)[3]:
+        a -= 1
+    while b + 1 < len(u["frames"]) and b - a < STEP_RUN and _shown_of(u, p, b + 1, not_shown, tile_of)[3]:
+        b += 1
+    if b - a + 1 > STEP_RUN:
+        return got[:3]
+    frames = u["frames"]
+    for m in (a - 1, b + 1):
+        # (and only from a frame taken within HOLD_REACH of n: an older picture is not n's moment, n plays on its own)
+        if 0 <= m < len(frames) and abs(frames[m][3] - frames[n][3]) <= HOLD_REACH:
+            return _shown_of(u, p, m, not_shown, tile_of)[:3]
+    return got[:3]
+
+
+HOLD_REACH = 3600    # s: the furthest from a lone frame (shown_of) the picture it shows instead may have been taken: 127TI
+#                      CLOUD001's P60 and GRN frames are 32 and 36 minutes from the CB3 frame before them
+
+
+def held_back(u, p, n, not_shown, tile_of):
+    """True when frame n of a pass playing in colour shows another frame's picture because its own band has nothing
+    near to draw it through (shown_of): the page leaves such a frame to the server (the steady table's "server")."""
+    if not p.get("colour"):
+        return False
+    own = _shown_of(u, p, n, not_shown, tile_of)
+    return own[3] and shown_of(u, p, n, not_shown, tile_of) != own[:3]
+
+
+def _shown_of(u, p, n, not_shown, tile_of):
+    """shown_of's answer for frame n alone, and True when it is a frame with no gray-filter frame near to draw it
+    through in a pass playing in colour (shown_of then shows a neighbour's picture instead)."""
     frames, want = u["frames"], p.get("colour")
     placed = lambda j: "offset" in tile_of(j)
     colours = bool(want) and plays_colour(u, want, p["grey"])
@@ -9929,20 +9974,28 @@ def shown_of(u, p, n, not_shown, tile_of):
             # Not from a gray frame over-exposed in part (TINT_SATURATED: the transit's clear frames on Saturn)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, LUM_REACH)
             if j is not None and frames[j][2] == p["grey"] and tile_of(j).get("saturated", 0.0) < TINT_SATURATED:
-                return j, got, "near"   # (the set's own moment: its brightness taken whole, tinted_frame's near)
+                return j, got, "near", False   # (the set's own moment: its brightness taken whole, tinted_frame's near)
         if got and tint:
             # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
             if j is not None:
-                return j, got, True
-            got = None   # (a held band with no other filter near: on its own, in gray, below)
+                # (a frame of another filter than the pass's gray one with none of the gray filter near, in a pass whose
+                # gray filter is the body's surface window (calibration.SURFACE_WINDOW, Titan's CB3): any other filter
+                # sees another layer, the haze, so its own picture is another look, not another moment: 127TI
+                # CLOUD001's lone GRN between CB3 surface frames; shown_of shows a neighbour's picture. On any other
+                # body such a frame is its own moment and plays (Telesto's GRN and IR3, 2015 PIE movie))
+                window = calibration.SURFACE_WINDOW.get(str(u["key"][0]).upper()) == p["grey"]
+                lone = window and j == s and frames[s][2] != p["grey"] and any(fr[2] == p["grey"] for fr in frames)
+                return j, got, True, lone
+            # (a held band with no other filter near: on its own, in gray, below; shown_of shows a neighbour's picture)
+            return s, None, False, held_band(frames[s][2])
         if got:
-            return s, got, False
+            return s, got, False, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
                        lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
-    return s, None, False
+    return s, None, False, False
 
 
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True):
