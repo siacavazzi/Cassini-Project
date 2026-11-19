@@ -9906,16 +9906,26 @@ def shown_of(u, p, n, not_shown, tile_of):
     """(the frame whose picture frame n of a movie shows, the colour set it shows or None, True when the set is drawn
     as the colour of that frame's picture), as movie_frame draws it with colour on: the set (set_shown) when the pass
     plays in colour (plays_colour); else the frame held_of holds, put through step_frame when the pass plays its grey
-    filter. In a pass playing in colour, a frame of held_band's bands with no frame near it to draw its moment through
-    (lum_of: none within HOLD_AGE) shows what the frame before it shows (else, first in the pass, the frame after it),
-    never its own gray: 127TI CLOUD001's P60 frame, 8 minutes from any CB3, flashed gray in a colour Titan movie."""
+    filter. In a pass playing in colour, a frame drawn in its set's colour that has no frame of the pass's gray filter
+    near it to draw its moment through (lum_of: none within HOLD_AGE) shows what the frame before its run of such
+    frames shows (the one after, at the pass's start), never its own look: 127TI CLOUD001's P60 frame, 8 minutes from
+    any CB3, flashed gray, and its lone GRN frame flashed the haze between CB3 surface frames. A run of more than
+    STEP_RUN such frames plays on its own (a pass that takes its pictures that way)."""
     got = _shown_of(u, p, n, not_shown, tile_of)
     if not got[3]:
         return got[:3]
-    for m in list(range(n - 1, -1, -1)) + list(range(n + 1, len(u["frames"]))):
-        other = _shown_of(u, p, m, not_shown, tile_of)
-        if not other[3]:
-            return other[:3]
+    # the run of such frames n is in: the frame before it shows for all of them (the one after it at the pass's
+    # start); a run longer than STEP_RUN is the pass's own way of taking pictures and plays on its own
+    a, b = n, n
+    while a > 0 and n - a <= STEP_RUN and _shown_of(u, p, a - 1, not_shown, tile_of)[3]:
+        a -= 1
+    while b + 1 < len(u["frames"]) and b - a < STEP_RUN and _shown_of(u, p, b + 1, not_shown, tile_of)[3]:
+        b += 1
+    if b - a + 1 > STEP_RUN:
+        return got[:3]
+    for m in (a - 1, b + 1):
+        if 0 <= m < len(u["frames"]):
+            return _shown_of(u, p, m, not_shown, tile_of)[:3]
     return got[:3]
 
 
@@ -9926,8 +9936,8 @@ def held_back(u, p, n, not_shown, tile_of):
 
 
 def _shown_of(u, p, n, not_shown, tile_of):
-    """shown_of's answer for frame n alone, and True when it is a held band's frame drawn on its own in gray in a pass
-    playing in colour (shown_of then shows a neighbour's picture instead)."""
+    """shown_of's answer for frame n alone, and True when it is a frame with no gray-filter frame near to draw it
+    through in a pass playing in colour (shown_of then shows a neighbour's picture instead)."""
     frames, want = u["frames"], p.get("colour")
     placed = lambda j: "offset" in tile_of(j)
     colours = bool(want) and plays_colour(u, want, p["grey"])
@@ -9953,7 +9963,11 @@ def _shown_of(u, p, n, not_shown, tile_of):
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
             if j is not None:
-                return j, got, True, False
+                # (a frame of another filter than the pass's gray one with none of the gray filter near: its own picture
+                # would be another look in the run of the gray filter's, 127TI CLOUD001's lone GRN haze between CB3
+                # surface frames; shown_of shows a neighbour's picture)
+                lone = j == s and frames[s][2] != p["grey"] and any(fr[2] == p["grey"] for fr in frames)
+                return j, got, True, lone
             # (a held band with no other filter near: on its own, in gray, below; shown_of shows a neighbour's picture)
             return s, None, False, held_band(frames[s][2])
         if got:
