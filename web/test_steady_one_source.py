@@ -89,4 +89,31 @@ for speed in (20.0, 45.0, 60.0):
     err = np.hypot(*np.diff(om._smoothed_path(raw) - true, axis=0).T)
     assert np.percentile(err, 90) < 3.0, (speed, np.percentile(err, 90))
 print("a fast drift stays one smoothed run: ok")
+
+# a false match (a repeating scene: F ring strands) puts one tile 15 px off both neighbours where SPICE has it on the
+# line between them: its links go and it rides the smoothed path; a real shake that SPICE shows too is kept
+truth2 = np.cumsum(rng.normal(0, 0.3, (N, 2)), axis=0)
+spice2 = truth2 + rng.normal(0, 1.0, (N, 2))
+spice2[20] += (0.0, 12.0)                         # a real shake: SPICE has it, and so do the pictures
+truth2[20] += (0.0, 12.0)
+fake = {10: (0.0, -15.0)}                         # the pictures alone put tile 10 15 px up
+
+
+def picture2(n):
+    dx, dy = fake.get(n, (0.0, 0.0))
+    cx, cy = HALF + truth2[n][0] + dx, HALF + truth2[n][1] + dy
+    r = np.hypot(xx - cx, yy - cy)
+    g = np.clip(200 * (r < R) * (0.8 + 0.2 * np.sin(xx / 3.0 + yy / 5.0)) + rng.normal(0, 1.5, r.shape), 0, 255)
+    a = np.zeros((2 * HALF, 2 * HALF, 4), np.uint8)
+    a[..., :3] = g.astype(np.uint8)[..., None]
+    a[..., 3] = 255
+    return a
+
+
+pics2 = {n: picture2(n) for n in range(N)}
+made2 = [dict(m, offset=[float(-spice2[n][0]), float(-spice2[n][1])]) for n, m in enumerate(made)]
+places2, hows2 = om._chain_links(made2, lambda n: pics2[n], there, 0.5 * 2 * HALF)
+print("false match tile:", hows2[10], "| real shake tile:", hows2[20])
+assert "false match" in hows2[10], hows2[10]
+assert str(hows2[20]).startswith("linked"), hows2[20]
 print("ok")
