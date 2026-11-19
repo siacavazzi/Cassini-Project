@@ -91,7 +91,8 @@ import label_handler  # noqa: E402
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
-VERSIONS = {"balanced": "obs-v142", "raw": "obs-v125", "eye": "obs-v142-eye", "false": "obs-v142-false", "classic": "obs-v111-classic"}
+# obs-v143/v126/v112: every movie stabilized by default, one pointing source per sequence (#602)
+VERSIONS = {"balanced": "obs-v143", "raw": "obs-v126", "eye": "obs-v143-eye", "false": "obs-v143-false", "classic": "obs-v112-classic"}
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -7836,20 +7837,28 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 STEADY_SPIKE = 8.0       # px: a tile the pictures put this much off the line between its neighbours (past what SPICE
                          # has it off by) while SPICE has it on that line within half this, and the neighbours agree with
                          # SPICE's step between them within half this, is a false match (_chain_links)
-STEADY_BREAK = 0.05      # of a frame: a step of SPICE's places bigger than this between two frames is the camera
-                         # moving on (a retarget, the next pointing of a scan), not its pointing scatter (3 to 26 px):
-                         # the smoothed path is not smoothed across it (_smoothed_path)
+STEADY_BREAK = 0.05      # of a frame: a step of SPICE's places further than this from the pass's own step there (the
+                         # median of the steps round it) is the camera moving on (a retarget, the next pointing of a
+                         # scan), not its pointing scatter (3 to 26 px): the smoothed path is not smoothed across it
+STEADY_BREAK_AROUND = 3  # steps each side the pass's own step is the median of (_smoothed_path)
 
 
 def _smoothed_path(x0):
     """SPICE's places of a pass's tiles (rows, in order) smoothed over STEADY_SMOOTH frames (_gaussian_line), each run of
-    frames between two steps of more than STEADY_BREAK of a frame on its own: the pass's own motion without SPICE's
-    frame-to-frame pointing scatter. Smoothed across a retarget, the path cut the corner by thousands of px (287RI
-    PROPRETRG001's retargets of 20,000 px between propellers)."""
+    frames between two re-aims on its own: the pass's own motion without SPICE's frame-to-frame pointing scatter. A
+    re-aim is a step further than STEADY_BREAK of a frame from the median of the steps round it, so a fast steady drift
+    (45 px a frame with 8 px of scatter) is one run, while 287RI PROPRETRG001's 20,000 px retargets between propellers
+    split it (smoothed across them, the path cut the corner by thousands of px)."""
     x0 = np.asarray(x0, float)
     if len(x0) < 3:
         return x0.copy()
-    jumps = np.hypot(*np.diff(x0, axis=0).T) > STEADY_BREAK * FRAME
+    steps = np.diff(x0, axis=0)
+    jumps = np.zeros(len(steps), bool)
+    for i in range(len(steps)):
+        lo, hi = max(0, i - STEADY_BREAK_AROUND), min(len(steps), i + STEADY_BREAK_AROUND + 1)
+        others = np.delete(steps[lo:hi], i - lo, axis=0)
+        if len(others):
+            jumps[i] = float(np.hypot(*(steps[i] - np.median(others, axis=0)))) > STEADY_BREAK * FRAME
     out, start = x0.copy(), 0
     for end in list(np.nonzero(jumps)[0] + 1) + [len(x0)]:
         if end - start >= 3:

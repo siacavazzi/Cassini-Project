@@ -80,4 +80,13 @@ path = np.array([[0.0, 0.0]] * 10 + [[20000.0, 300.0]] * 10) + rng.normal(0, 5, 
 sm = om._smoothed_path(path)
 assert np.abs(sm[:10] - path[:10].mean(axis=0)).max() < 12 and np.abs(sm[10:] - path[10:].mean(axis=0)).max() < 12, sm
 print("a retarget is not smoothed across: ok")
+
+# a fast steady drift with SPICE's scatter is one run, not broken into one-frame pieces (each of which would keep
+# SPICE's raw step): its smoothed path is within a few px of the true motion
+for speed in (20.0, 45.0, 60.0):
+    true = np.stack([np.arange(40) * speed, np.arange(40) * speed * 0.3], axis=1)
+    raw = true + rng.normal(0, 8.0, true.shape)
+    err = np.hypot(*np.diff(om._smoothed_path(raw) - true, axis=0).T)
+    assert np.percentile(err, 90) < 3.0, (speed, np.percentile(err, 90))
+print("a fast drift stays one smoothed run: ok")
 print("ok")

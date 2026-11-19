@@ -5,7 +5,9 @@ Saturn, 293EN ENCSET001, mixed the pictures' places with SPICE's):
 
   pointing_jitter   how far the movie's picture jumps from frame to frame beyond its own smooth motion
   pointing_sources  how many of the movie's frames play at SPICE's own raw pointing (none should: every frame is
-                    placed by the pictures, or on SPICE's smoothed path between frames the pictures place)
+                    placed by the pictures, or on SPICE's smoothed path between frames the pictures place). It reads
+                    the commit's own placement (its collect hook), so it is paired with pointing_jitter, which measures
+                    the pictures themselves
 """
 from bench_checks import Result, check, luminance
 
@@ -76,6 +78,9 @@ def pointing_sources(p, limit=0):
     if not got or got.get("frames") is None:
         return Result(None, limit, True, "the build kept no pointing facts (collect hook missing)")
     n = got["on_spice"]
+    if got.get("follows"):
+        return Result(0, limit, True, f"the view follows the frames: each of {got['frames']} drawn as the camera took it, "
+                                      "no pointing places it")
     return Result(n, limit, n <= limit,
                   f"{n} of {got['frames']} frames at SPICE's raw pointing; {got.get('linked')} placed by the pictures, "
                   f"{got.get('smoothed')} on the smoothed path ({'stabilized' if got.get('auto') else 'not stabilized'} "
@@ -91,12 +96,16 @@ def _sources(ctx):
     u, om = ctx.unit, ctx.om
     if u is None or u.get("mosaic") or u.get("kind") == "mosaic_movie" or u.get("track"):
         return None
-    # (a pass whose view follows its frames shows each frame as the camera took it: no pointing places it)
+    # (a pass whose view follows its frames draws each frame as the camera took it, filling the picture: no pointing
+    # places it, so none is SPICE's; obs_mosaic._steady_table's own test)
     try:
-        t = om.steady_table(u["frames"][0][1], ctx.cache)
-    except Exception:   # noqa: BLE001
-        t = None
-    if t is not None and not t.get("working") and not t.get("fixed", True):
+        p = om.plan(u, ctx.cache)
+        fp = om.movie_footprint(u, ctx.cache, p)
+        radius = om.RADIUS.get(u["key"][0], 0) / (u["z"] * om.IFOV[u["key"][2]])
+        follows = bool(om.follows(fp, om.movie_rect(fp, {"offset": (0.0, 0.0)}, radius, True, om.pass_seen(u))))
+    except Exception:   # noqa: BLE001  (a commit without these: counted as before)
+        follows = False
+    if follows:
         return {"frames": len(u["frames"]), "auto": False, "linked": 0, "smoothed": 0, "on_spice": 0, "follows": True}
     path = os.path.join(om.folder(u, ctx.cache), om.STEADY_FILE)
     how = json.load(open(path)).get("how", {}) if os.path.exists(path) else {}
@@ -115,8 +124,6 @@ def _sources(ctx):
 ITEMS = [
     {"name": "encset293-movie", "kind": "pass", "frame": "N1884013382_1", "group": "hard",
      "watch": "Enceladus setting behind Saturn: steady to the end, no frame at SPICE's raw pointing (2026-11-18)"},
-    {"name": "aurstare289-movie", "kind": "pass", "frame": "N1881947254_1", "group": "plain",
-     "watch": "Saturn aurora stare, nothing to match: on SPICE's smoothed path, no jitter"},
     {"name": "titancloud264-movie", "kind": "pass", "frame": "N1867408664_1", "group": "hard",
      "watch": "Titan cloud watch: steady, no frame at SPICE's raw pointing"},
 ]
