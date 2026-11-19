@@ -88,8 +88,10 @@ def limb_halo(p, limit=0.08, share=0.75):
         return Result(None, limit, True, "no lit body with a limb in the picture", where=f, judged=0)
     rises, n, lit_sky = got
     if not n:
-        return Result(None, limit, True, f"no ray past the limb reaches black sky ({lit_sky} rays lit out there)",
-                      where=f, judged=0)
+        # (every ray out of the body meets lit sky: a glow round the whole limb, or the item's sky is not black; on an
+        # item that asks for this check, either is a failure to look at, never a pass)
+        return Result(None, limit, False, f"no ray past the limb reaches black sky ({lit_sky} rays lit out there): "
+                      "a glow all round the limb?", where=f, judged=0)
     v = float(np.quantile(rises, share))
     return Result(v, limit, v <= limit,
                   f"{share:.0%} of {n} rays past the limb rise at most {v:.3f} of the body's level outward "

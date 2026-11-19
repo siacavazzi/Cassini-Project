@@ -141,8 +141,10 @@ def test_limb_halo_wide_glow(tmp_path):
     clean = judge(str(tmp_path / "c"), item, {"still.webp": glow_disk(amp=0)})["limb_halo"]
     assert clean["ok"] and clean["judged"] > 300, clean
     for amp in (40, 80):
-        r = judge(str(tmp_path / f"g{amp}"), item, {"still.webp": glow_disk(amp=amp)})["limb_halo"]
-        assert bc.verdict("limb_halo", clean, r) == "REGRESSION", (amp, r)
+        for width in (40, 120):   # (120 px: the glow reaches past the rays' far sky, so no ray is judged)
+            r = judge(str(tmp_path / f"g{amp}{width}"), item, {"still.webp": glow_disk(amp=amp, width=width)})["limb_halo"]
+            assert not r["ok"], (amp, width, r)
+            assert bc.verdict("limb_halo", clean, r) == "REGRESSION", (amp, width, r)
 
 
 def test_verdicts():
