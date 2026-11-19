@@ -1,7 +1,7 @@
-"""A movie pass whose SPICE places jump frame to frame against what its pictures show (its stabilization chain) is
-stabilized with stabilization off (obs_mosaic.auto_steady, steady_of): 133TI CLOUD002's SPICE places jumped 24 to 54
-px between frames 40 s apart while Titan held still (Sam 11-16). A pass whose SPICE places follow the chain, one
-with no chain kept yet, and a feature track are drawn as before.
+"""Every movie pass with a stabilization chain kept is stabilized with stabilization off (obs_mosaic.auto_steady,
+steady_of): one source of pointing for a whole sequence (Sam 2026-11-18; until then only passes whose SPICE places
+jumped, 133TI CLOUD002, or raw-attitude ones were, and 293EN ENCSET001 played SPICE's 3 to 26 px scatter). A pass with
+no chain kept yet and a feature track are drawn as before.
 Run: python web/test_steady_auto.py"""
 import json
 import os
@@ -43,22 +43,17 @@ def run(spice, chain, track=False, keep_chain=True, raw=False, linked=1.0):
 
 still = [[0.0, 40.0 + 0.3 * n] for n in range(20)]
 jumpy = [[0.0, 40.0 + 0.3 * n + (14 if n % 3 else -14)] for n in range(20)]
-assert run(jumpy, still) == (om.STEADY_SMOOTH, 4, 0), run(jumpy, still)   # jumps: steady by default; a setting stands
-assert run(still, still) == (0, 4, 0)                                      # SPICE follows the pictures: as before
-drift = [[0.0, 40.0 + 3.0 * n] for n in range(20)]
-assert run(drift, still) == (0, 4, 0)                                      # a slow drift is no jump
-assert run(jumpy, still, keep_chain=False) == (0, 4, 0)                    # no chain kept: SPICE's places
-assert run(jumpy, still, track=True) == (0, 0, 0)                          # a feature track: as before
-print("auto stabilization of passes SPICE places jump in: ok")
-
-# a pass holding a frame on the reconstructed attitude shakes ~5 px a frame (audit finding 4), under the jump: it is
-# stabilized whenever its chain follows the pictures; a pass on its own measured pointing alone is not
 shake = [[0.0, 40.0 + 0.3 * n + (2.5 if n % 2 else -2.5)] for n in range(20)]
-assert run(shake, still) == (0, 4, 0)                                      # own pointing throughout: as before
-assert run(shake, still, raw=True) == (om.STEADY_SMOOTH, 4, 0)             # one raw frame: steady by default
-assert run(shake, still, raw=True, linked=0.5) == (0, 4, 0)                # a chain mostly unlinked is not trusted
-assert run(shake, still, raw=True, track=True) == (0, 0, 0)                # a feature track: as before
-print("auto stabilization of passes on the reconstructed attitude: ok")
+# one source of pointing for a whole sequence (Sam 2026-11-18): every movie pass whose chain is kept plays steadied by
+# default, whether SPICE jumps 14 px, shakes 2.5 px or follows the pictures, on its own pointing or not, and however few
+# of its frames the pictures could place (the rest go on along SPICE's smoothed path, _chain_links); a setting stands
+for spice in (jumpy, still, shake):
+    for raw in (False, True):
+        for linked in (1.0, 0.5, 0.0):
+            assert run(spice, still, raw=raw, linked=linked) == (om.STEADY_SMOOTH, 4, 0), (raw, linked)
+assert run(jumpy, still, keep_chain=False) == (0, 4, 0)                    # no chain kept yet: SPICE's places
+assert run(jumpy, still, track=True) == (0, 0, 0)                          # a feature track: as before
+print("every movie pass with a chain plays steadied: ok")
 
 # prebuild.make_pass works out a movie's chain before its first frame, so auto_steady is decided for every frame
 import prebuild  # noqa: E402
