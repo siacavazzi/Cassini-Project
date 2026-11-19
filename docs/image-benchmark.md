@@ -104,14 +104,13 @@ Changing a collect hook rebuilds every base once; changing how a check judges do
 
 ## Known defects on main the benchmark sees
 
-Listed so a fix can turn them from known to fixed (main 701fd40f, 2026-11-19):
-- titan127-movie: a gray P60 polarizer frame (frame 6) and a lone GRN haze frame (frame 46) flash in a colour Titan
-  movie (odd_frame).
+Listed so a fix can turn them from known to fixed (main 701fd40f, 2026-11-19; the titan127 gray flashes and the gray
+storm, hexagon and moon99 composites were fixed by the known-defects PR):
 - daphnis17-movie (257DA): the movie jumps back and forth between two views (odd_frame 118; the pointing thread's).
-- plume279-movie: frame 250 and others drawn with another sky and footprint (odd_frame 12).
-- storm-composite and hexagon-composite: drawn gray, their channels never aligned; moon99-composite (HAL/GRN/BL1)
-  drawn exactly gray (gray_colour).
-- june2004-mosaic: a green square background round Saturn (by eye; no check yet).
+- plume279-movie: frame 250 and others drawn with another sky (odd_frame 12): the glow rule's own black flips on and off
+  frame to frame (the blacks thread's).
+- june2004-mosaic: a green square background round Saturn (by eye; no check yet): GRN's pass black pulled negative by
+  one tile's lost-line junk (the blacks thread's).
 - phoebe-movie (out of the set): not deterministic, two builds of one commit differ, against the zero noise floor
   this benchmark relies on. A pipeline defect, not fixed.
 
