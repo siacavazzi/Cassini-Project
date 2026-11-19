@@ -33,11 +33,13 @@ commits, the base (usually `origin/main`) and the candidate (the PR's head). The
   - `plain` holds pictures across 1999 to 2017 that must not change unless a change means to: the Moon, Venus,
     Masursky and Jupiter from cruise, then Saturn, its rings and the big and small moons. They come as stills, colour
     composites, movies and mosaics, including NAC and WAC, filled Titan passes, specks and dots.
-- **Cost**, measured 2026-11-13 while other threads shared both Macs:
-  - one commit takes 17.8 minutes on 12 MacBook processes, or 24.5 minutes on 8 of the Mini's;
-  - the long pole is the 290-tile Grand Finale mosaic (about 10 minutes even with its tiles spread over the cores);
+- **Cost**, measured 2026-11-19 on main 701fd40f with 3 MacBook slots (a thread's cap under `~/agents/bin/heavy`),
+  another thread's 3-slot job running beside it both times:
+  - one commit takes 26.1 minutes for today's 53 items, against 33.8 minutes for the 54 items before (23% less);
+  - the largest items are Earth Smiled, the backlit plume movie, Jupiter ATMOS and Grand Finale FA (7 to 10 minutes
+    of one process each);
   - with `--hosts local,mini` the Mini takes a third of the items;
-  - comparing two commits takes about 30 seconds. The base is built once per commit and kept (`~/cassini-build/image-bench/results`),
+  - comparing two commits takes about 30 seconds, and the checks add about 15 seconds. The base is built once per commit and kept (`~/cassini-build/image-bench/results`),
   so a PR usually waits only for its own build. The scratch cache is removed once the pictures are taken out. The commit's
   worktree and the tool copy go too when a build ends (`--keep-worktree` keeps the worktree), so only results and
   reports stay on disk, and a build will not start with less than 60 GB free on its drive (`CASSINI_BENCH_MIN_FREE_GB`):
