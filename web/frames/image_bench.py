@@ -71,7 +71,7 @@ SHARD_FROM = 40     # tiles: a pass with more is tiled by several processes firs
 SHARD_MIN = 12      # tiles: the least a process is given
 SIZE = 1024
 MIN_FREE_GB = float(os.environ.get("CASSINI_BENCH_MIN_FREE_GB", "60"))   # a build will not start under this much free disk
-TOOL_VERSION = "bench-v2"   # bump when what a result holds or how it is built changes (older results are rebuilt); v2: a private geometry cache per build
+TOOL_VERSION = "bench-v3"   # bump when what a result holds or how it is built changes (older results are rebuilt); v2: a private geometry cache per build; v3: checks' collected data, items' "colors"
 
 # What counts as a picture changed, and as worse by measure (docs/image-benchmark.md). A picture whose bytes are the
 # same is identical; one whose pixels differ by at most PIXEL_NOISE levels nowhere is "same" (an encoder's rounding).
@@ -89,9 +89,35 @@ GUARDS = {           # measure: (how much worse is flagged, what worse means)
 
 # ---------------------------------------------------------------- shared helpers
 
+def checks_module():
+    """This tool's own bench_checks package (beside this file), loaded by path so a commit's copy of it (on the
+    worker's sys.path) never stands in for it."""
+    m = sys.modules.get("bench_checks")
+    want = os.path.join(HERE, "bench_checks")
+    if m is not None and os.path.dirname(os.path.abspath(m.__file__)) == want:
+        return m
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bench_checks", os.path.join(want, "__init__.py"),
+                                                  submodule_search_locations=[want])
+    m = importlib.util.module_from_spec(spec)
+    sys.modules["bench_checks"] = m
+    spec.loader.exec_module(m)
+    m.load()
+    return m
+
+
 def load_items(path=ITEMS):
+    """The item list: image_bench_items.json's, then the items check modules add (bench_checks/*.py ITEMS)."""
     with open(path) as fh:
-        return json.load(fh)["items"]
+        items = json.load(fh)["items"]
+    if path == ITEMS:
+        have = {it["name"] for it in items}
+        for it in checks_module().EXTRA_ITEMS:
+            if it["name"] in have:
+                raise SystemExit(f"bench_checks/{it['_from']}.py adds item {it['name']}, already in the list")
+            have.add(it["name"])
+            items.append({k: v for k, v in it.items() if k != "_from"})
+    return items
 
 
 def git(*args, cwd=None):
@@ -150,6 +176,8 @@ def set_key(items, env):
     # result built on other places (a refilled frame, a stored failure) is another set's
     h.update(f"geometry={geometry_fingerprint(env.get('CASSINI_GEOMETRY_CACHE'))}".encode())
     h.update(TOOL_VERSION.encode())
+    # (the checks' collect hooks run inside the build: other hooks, other results)
+    h.update(f"collect={checks_module().collect_key()}".encode())
     return h.hexdigest()[:10]
 
 
@@ -303,7 +331,23 @@ def work_item(args):
     prebuild, om, fs = _setup(args.code)
     it = json.loads(args.item)
     os.makedirs(args.out, exist_ok=True)
-    reports, meta = {}, {"name": it["name"], "kind": it["kind"]}
+    meta = {"name": it["name"], "kind": it["kind"]}
+    if it.get("colors"):
+        # (an item drawn in another colour style, as the page's Colors menu asks: "eye" is Natural color (emulated))
+        import calibration
+        if not hasattr(calibration, "coloring"):
+            raise RuntimeError(f"this commit has no colour styles (colors={it['colors']})")
+        with calibration.coloring(it["colors"]):
+            _item_pictures(prebuild, om, fs, it, args, meta)
+    else:
+        _item_pictures(prebuild, om, fs, it, args, meta)
+    meta["seconds"] = round(time.time() - t0, 1)
+    with open(os.path.join(args.out, "meta.json"), "w") as fh:
+        json.dump(meta, fh, indent=1, default=str)
+
+
+def _item_pictures(prebuild, om, fs, it, args, meta):
+    reports, u = {}, None
     if it["kind"] == "still":
         _write(args.out, "still.webp", fs.processed_webp(it["frame"], SIZE, args.cache, centre=prebuild.centred(it["frame"])), reports)
     elif it["kind"] == "composite":
@@ -357,9 +401,11 @@ def work_item(args):
                 except Exception as e:   # noqa: BLE001  (reported: the item's other pictures stand)
                     reports[f"mosaic_at{v:03d}.webp"] = {"error": f"{type(e).__name__}: {e}"[:300]}
     meta["reports"] = reports
-    meta["seconds"] = round(time.time() - t0, 1)
-    with open(os.path.join(args.out, "meta.json"), "w") as fh:
-        json.dump(meta, fh, indent=1, default=str)
+    # what the item's checks need from this commit's code, while its cache is here (bench_checks collect hooks)
+    bc = checks_module()
+    got = bc.collect_all(bc.Ctx(prebuild, om, fs, it, u, args.cache, SIZE, args.out), meta)
+    if got:
+        meta["collected"] = got
 
 
 # ---------------------------------------------------------------- building one commit
@@ -399,8 +445,10 @@ class Builder:
         """A copy of this tool (and seam_bench, which it loads beside it) for the workers to run, so an edit to the
         checkout during a build cannot reach a build half way."""
         there = tempfile.mkdtemp(prefix="image-bench-tool-")
-        for f in ("image_bench.py", "seam_bench.py"):
+        for f in ("image_bench.py", "seam_bench.py", "image_bench_items.json"):
             shutil.copy2(os.path.join(HERE, f), there)
+        shutil.copytree(os.path.join(HERE, "bench_checks"), os.path.join(there, "bench_checks"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
         self.tool = os.path.join(there, "image_bench.py")
         return self.tool
 
@@ -632,7 +680,8 @@ def remote_build(host, sha, names, log=print):
     ssh, root, repo, py = cfg["ssh"], cfg["root"], cfg["repo"], cfg["python"]
     tool = f"{root}/tool"
     subprocess.run(["ssh", ssh, f"mkdir -p {shlex.quote(tool)}"], check=True)
-    subprocess.run(["rsync", "-a", __file__, ITEMS, os.path.join(HERE, "seam_bench.py"), f"{ssh}:{tool}/"], check=True)
+    subprocess.run(["rsync", "-a", "--delete", "--exclude", "__pycache__", __file__, ITEMS, os.path.join(HERE, "seam_bench.py"),
+                    os.path.join(HERE, "bench_checks"), f"{ssh}:{tool}/"], check=True)
     subprocess.run(["ssh", ssh, f"git -C {shlex.quote(repo)} cat-file -e {sha}^{{commit}} 2>/dev/null || "
                                 f"git -C {shlex.quote(repo)} fetch -q origin {sha}"], check=True)
     env = " ".join(f"{k}={shlex.quote(v)}" for k, v in cfg.get("env", {}).items())
@@ -944,7 +993,20 @@ def compare_item(task):
     row["of"] = len(names)
     row["worse"] = flagged
     row["status"] = "changed" if changed else "identical"
+    row["checks"] = check_row(it, bd, cd, bm, cm)
     return row
+
+
+def check_row(it, bd, cd, bm=None, cm=None):
+    """{check: {"base", "cand", "verdict"}} for one item built on both sides (bench_checks): each check judged on
+    each side's pictures, then pass / fixed / known / REGRESSION / error."""
+    bc = checks_module()
+    out = {}
+    b = bc.judge(bd, it, bm) if bd else {}
+    c = bc.judge(cd, it, cm)
+    for name in sorted(set(b) | set(c)):
+        out[name] = {"base": b.get(name), "cand": c.get(name), "verdict": bc.verdict(name, b.get(name), c.get(name))}
+    return out
 
 
 def compare(base_dir, cand_dir, out, targets=(), notes=None, log=print, procs=None):
@@ -983,6 +1045,21 @@ def verdict(rows):
     the target worse by measure unless explained; every change outside the target explained. What it cannot judge
     (does the target look better, does a change look worse) is left to eyes: "needs eyes" lists those items."""
     unbuilt = [r["name"] for r in rows if r["status"] == "not built"]
+    # the checks (bench_checks): a check the candidate fails where the base passed (or fails clearly worse) is a
+    # regression, unless the item is a target or --notes explains it
+    regress, known, fixed, broke = [], [], [], []
+    for r in rows:
+        for name, v in (r.get("checks") or {}).items():
+            tag = f"{r['name']}: {name}"
+            if v["verdict"] == "REGRESSION":
+                regress.append((r, tag))
+            elif v["verdict"] == "known":
+                known.append(tag)
+            elif v["verdict"] == "fixed":
+                fixed.append(tag)
+            elif v["verdict"] == "error":
+                broke.append(tag)
+    check_fails = [t for r, t in regress if not r["note"] and not r["target"]]
     changed = [r for r in rows if r["status"] == "changed"]
     collateral = [r for r in changed if not r["target"]]
     unexplained = [r["name"] for r in collateral if not r["note"]]
@@ -999,10 +1076,13 @@ def verdict(rows):
         fails.append(f"worse by measure outside the target, unexplained: {', '.join(worse_out)}")
     if unexplained:
         fails.append(f"changed outside the target, unexplained: {', '.join(unexplained)}")
+    if check_fails:
+        fails.append(f"checks the candidate now fails (base passed): {', '.join(check_fails)}")
     v = "FAIL" if fails else ("NEEDS EYES" if changed else "PASS (nothing changed)")
     return {"verdict": v, "fails": fails, "identical": sum(r["status"] == "identical" for r in rows),
             "changed": [r["name"] for r in changed], "collateral": [r["name"] for r in collateral],
-            "worse_target": worse_target, "unbuilt": unbuilt, "items": len(rows), "no_seams": no_seams}
+            "worse_target": worse_target, "unbuilt": unbuilt, "items": len(rows), "no_seams": no_seams,
+            "checks": {"regressions": [t for _, t in regress], "known": known, "fixed": fixed, "errors": broke}}
 
 
 def _fmt_measures(m):
@@ -1031,7 +1111,26 @@ def report_md(s):
         L.append(f"| {r['name']} | {tag} | {st} | {len(r.get('changed', []))}/{r.get('of', 0)} | "
                  f"{moved:.2%} | {top or ''} | {'; '.join(r.get('worse', {}).values()) or ''} | {r['note']} |")
     L += ["", "Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of the place that changed most).", ""]
+    L += checks_md(s)
     return "\n".join(L)
+
+
+def checks_md(s):
+    """The checks' part of report.md: the counts, then every check that is not a plain pass."""
+    ck = s.get("checks") or {}
+    L = ["## Checks", "",
+         f"{len(ck.get('regressions', []))} regressions, {len(ck.get('fixed', []))} fixed, {len(ck.get('known', []))} known "
+         f"(failing on the base too), {len(ck.get('errors', []))} errors. A known failure is a defect already on the base; "
+         "it does not fail this run, and a fix should turn it into fixed.", "",
+         "| item | check | verdict | base | candidate | what |", "|---|---|---|---|---|---|"]
+    for r in s["rows"]:
+        for name, v in sorted((r.get("checks") or {}).items()):
+            if v["verdict"] == "pass":
+                continue
+            b, c = v.get("base") or {}, v.get("cand") or {}
+            L.append(f"| {r['name']} | {name} | {v['verdict']} | {b.get('value', '')} | {c.get('value', '')} (limit {c.get('limit', '')}) "
+                     f"| {(c.get('error') or c.get('detail') or '')[:160]} |")
+    return L + [""]
 
 
 def report_html(s):
@@ -1049,6 +1148,11 @@ def report_html(s):
                             (f"max {d.get('max')} moved {d.get('moved', 0):.2%} mean {d.get('mean')}" if 'max' in d else e(json.dumps(d))) +
                             (f"<br>base: {e(_fmt_measures(p['base']))}<br>cand: {e(_fmt_measures(p['cand']))}" if 'base' in p else "") +
                             ("".join(f"<br><span class=w>worse: {e(v)}</span>" for v in p.get('worse', {}).values())) + "</div>")
+        for name, v in sorted((r.get("checks") or {}).items()):
+            if v["verdict"] != "pass":
+                c = v.get("cand") or {}
+                pics.append(f"<div class=p><span class={'w' if v['verdict'] in ('REGRESSION', 'error') else 'k'}>check {e(name)}: "
+                            f"{e(v['verdict'])}</span> {e((c.get('error') or c.get('detail') or '')[:200])}</div>")
         link = f"http://192.168.68.52:8765/?t={e(r['time'] or '')}&view=saturn&play=0" if r.get("time") else ""
         rows.append(f"<tr class={cls}><td><b>{e(r['name'])}</b><br><small>{e(r['frame'])} {e(r['time'] or '')}"
                     f"{' <a href=' + link + '>open</a>' if link else ''}</small></td>"
@@ -1062,12 +1166,33 @@ def report_html(s):
 <style>body{{font:14px system-ui;background:#111;color:#ddd;margin:16px}}table{{border-collapse:collapse;width:100%}}
 td{{border-top:1px solid #333;padding:6px;vertical-align:top}}img{{max-width:640px;width:100%}}tr.same td:first-child{{border-left:4px solid #2a6}}
 tr.chg td:first-child{{border-left:4px solid #db3}}tr.bad td:first-child{{border-left:4px solid #e44}}.w{{color:#f77}}.p{{margin-top:4px;font-size:12px}}
-.n{{color:#9cf}}a{{color:#8bf}}</style>
+.n{{color:#9cf}}.k{{color:#db3}}a{{color:#8bf}}</style>
 <h1>Image benchmark: {e(s['candidate'][:12])} against {e(s['base'][:12])}</h1>
 <p><b>{e(s['verdict'])}</b>. {s['items']} items: {s['identical']} identical, {len(s['changed'])} changed ({len(s['collateral'])} outside the
 target), {len(s['unbuilt'])} not built. Targets: {e(', '.join(s['targets']) or 'none named')}.</p><ul>{fails}</ul>
 {('<p class=w>No seam numbers (the seam guard is off) for: ' + e(', '.join(s['no_seams'])) + '</p>') if s.get('no_seams') else ''}
 <table>{''.join(rows)}</table>"""
+
+
+def check_result(folder, names=None, out=None):
+    """Judge one commit's results with the checks (bench_checks) and print a line per item and check; 1 when any
+    check fails."""
+    bc = checks_module()
+    built = json.load(open(os.path.join(folder, "build.json")))["built"]
+    res, bad = {}, 0
+    for it in load_items():
+        if (names and it["name"] not in names) or it["name"] not in built:
+            continue
+        res[it["name"]] = got = bc.judge(os.path.join(folder, it["name"]), it)
+        for name, r in sorted(got.items()):
+            ok = r.get("ok") and not r.get("error")
+            bad += not ok
+            print(f"{'ok  ' if ok else 'FAIL'} {it['name']:28s} {name:16s} {r.get('value')!s:>8} / {r.get('limit')!s:<6} "
+                  f"{(r.get('error') or r.get('detail') or '')[:150]}")
+    if out:
+        with open(out, "w") as fh:
+            json.dump(res, fh, indent=1)
+    return 1 if bad else 0
 
 
 # ---------------------------------------------------------------- command line
@@ -1104,6 +1229,10 @@ def main():
     c.add_argument("--out", required=True)
     c.add_argument("--target", default="")
     c.add_argument("--notes")
+    k = sub.add_parser("check", help="judge one results folder with the checks (no base): every item's check results")
+    k.add_argument("result")
+    k.add_argument("--items", help="only these items (comma separated)")
+    k.add_argument("--json", help="also write the results here")
     i = sub.add_parser("items")
     i.add_argument("--rev", default="HEAD")
     args = ap.parse_args()
@@ -1118,6 +1247,8 @@ def main():
         notes = json.load(open(args.notes)) if args.notes else {}
         s = compare(args.base, args.candidate, args.out, set(filter(None, args.target.split(","))), notes)
         sys.exit(1 if s["verdict"] == "FAIL" else 0)
+    if args.cmd == "check":
+        sys.exit(check_result(args.result, set(args.items.split(",")) if args.items else None, args.json))
     if args.cmd == "items":
         b = Builder(args.rev, machine_config("local"))
         b.worktree()

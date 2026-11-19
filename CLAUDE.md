@@ -84,3 +84,9 @@ must be explained in `--notes`, and the report must show no new over-processing.
 `NEEDS EYES` means the reviewer looks at every changed sheet before approving. A defect a PR fixes that is not in the
 set goes into `web/frames/image_bench_items.json` in the same PR. The full rule and how the measures work are in
 `docs/image-benchmark.md`.
+
+The benchmark also runs defect checks (`web/frames/bench_checks/`) on both commits' pictures: repeated or odd movie
+frames, colour drawn gray, a colour cast, blown white, a halo past a limb, and the checks other threads add. A check
+the candidate fails where the base passed fails the run. A check that fails on both sides is a known defect, listed in
+the report. A new kind of defect gets a check (its own module there) with a small item that shows it, and proof that
+it fails on the old bad output and passes on good output.
