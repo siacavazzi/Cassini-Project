@@ -23,13 +23,13 @@ def _pic(sky, stripes=0.0, seed=0):
 
 def test_black_and_banding():
     proc, full = levels.measure(_pic(2)), levels.measure(_pic(150, stripes=4.0))
-    assert full["floor"] - proc["floor"] > levels.full_black.fn.__defaults__[0]
+    assert 100 * (proc["dark"] - full["dark"]) > levels.full_black.fn.__defaults__[0]
     assert full["band"] - proc["band"] > levels.full_banding.fn.__defaults__[0]
 
 
 def test_same_picture_passes():
     a, b = levels.measure(_pic(3, seed=1)), levels.measure(_pic(3, seed=2))
-    assert abs(a["floor"] - b["floor"]) < 2 and abs(a["band"] - b["band"]) < 0.5
+    assert abs(a["dark"] - b["dark"]) < 0.02 and abs(a["band"] - b["band"]) < 0.5
 
 
 def test_too_little_covered():
