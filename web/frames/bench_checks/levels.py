@@ -9,7 +9,7 @@ different, with another black level and vertical banding seen nowhere else. Wher
 own sky, the sky comes up gray and its fixed column pattern shows as stripes (tile_scale's "veil").
 
   full_black   how much of the picture that is black sky at Processed is no longer black at Full (points of 100)
-  full_banding how much more column banding the Full frame's sky has than the Processed frame's (levels of 255)
+  full_banding column banding in the Full frame's sky where the Processed frame's sky is black (levels of 255)
 
 Both compare each played movie frame (frameNNN.webp) with the commit's own Processed picture of the frame it shows
 (its report's "held", else itself), measured at build time by the collect hook (the Processed picture itself is not
@@ -25,8 +25,9 @@ DARK = 8             # a pixel this dark or darker (of 255) is black sky
 
 
 def measure(rgba):
-    """{dark, floor, band, n} of one picture (RGBA uint8): dark the share of the covered pixels at black (DARK or
-    under), floor the 10th percentile of their brightness, band the spread (std) of the sky's column means about
+    """{dark, sky, floor, band, n} of one picture (RGBA uint8): dark the share of the covered pixels at black (DARK
+    or under), sky the median of its sky (its darkest SKY_SHARE per cent), floor the 10th percentile of the covered
+    pixels' brightness, band the spread (std) of the sky's column means about
     their running mean; None when too little is covered."""
     import numpy as np
     from scipy.ndimage import uniform_filter1d
@@ -48,7 +49,7 @@ def measure(rgba):
     if keep.sum() > 2 * BAND_SMOOTH:
         col = (lum * sky).sum(axis=0)[keep] / cnt[keep]
         band = float(np.std(col - uniform_filter1d(col, BAND_SMOOTH)))
-    return {"dark": round(float((v <= DARK).mean()), 4), "floor": round(floor, 2), "band": None if band is None else round(band, 3), "n": int(cover.sum())}
+    return {"dark": round(float((v <= DARK).mean()), 4), "sky": round(float(np.median(lum[sky])), 2), "floor": round(floor, 2), "band": None if band is None else round(band, 3), "n": int(cover.sum())}
 
 
 def _decode(data):
@@ -98,18 +99,20 @@ def full_black(p, limit=20.0):
 
 
 @check("full_banding", kinds=("movie",), default=True, owner="processing-level thread",
-       about="vertical banding in the Full level's movie frame that the Processed frame does not show")
+       about="vertical banding in the Full level's movie frame where the Processed frame's sky is black")
 def full_banding(p, limit=1.0):
-    """The worst played frame's sky column banding at Full over its banding at Processed, in levels of 255."""
+    """The worst column banding of the Full frame's sky, in levels of 255, on the played frames whose Processed sky is
+    black (its median DARK or under): stripes there are the sky's fixed pattern lifted out of black. Frames whose
+    Processed sky is not black (rings filling the frame, their radial structure in every column) are not judged."""
     pairs, got = _pairs(p)
-    pairs = [(n, f, q) for n, f, q in pairs if f["band"] is not None and q.get("band") is not None]
+    pairs = [(n, f, q) for n, f, q in pairs if f["band"] is not None and q.get("sky") is not None and q["sky"] <= DARK]
     if not pairs:
-        return _no_data(got, limit)
-    more = [(full["band"] - proc["band"], name) for name, full, proc in pairs]
+        return _no_data(got, limit) if not got or got.get("error") else Result(0, limit, True, "no frame with black sky at Processed")
+    more = [(full["band"], name) for name, full, proc in pairs]
     worst, where = max(more)
     bad = sum(1 for m, _ in more if m > limit)
     return Result(worst, limit, worst <= limit,
-                  f"Full sky banding over Processed by up to {worst:.2f} levels ({bad} of {len(more)} frames over {limit})",
+                  f"Full sky banding up to {worst:.2f} levels where Processed has black sky ({bad} of {len(more)} frames over {limit})",
                   where=where, values={n: round(m, 3) for m, n in more}, judged=len(more))
 
 
@@ -117,7 +120,7 @@ def full_banding(p, limit=1.0):
 def _processed_levels(ctx):
     """The commit's own Processed picture (frame_server.processed_webp, as the level bar asks for it: centred where
     the pre-build centres) of the frame each sampled movie frame shows, measured; the picture is not kept.
-    (measure v2: dark share; a change to measure() changes this line, so results are collected again)"""
+    (measure v3: dark share, sky median; a change to measure() changes this line, so results are collected again)"""
     u = ctx.unit
     if u is None or u.get("mosaic") or u.get("kind") == "mosaic_movie":
         return None

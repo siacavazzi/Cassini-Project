@@ -24,7 +24,7 @@ def _pic(sky, stripes=0.0, seed=0):
 def test_black_and_banding():
     proc, full = levels.measure(_pic(2)), levels.measure(_pic(150, stripes=4.0))
     assert 100 * (proc["dark"] - full["dark"]) > levels.full_black.fn.__defaults__[0]
-    assert full["band"] - proc["band"] > levels.full_banding.fn.__defaults__[0]
+    assert proc["sky"] <= levels.DARK and full["band"] > levels.full_banding.fn.__defaults__[0]
 
 
 def test_same_picture_passes():
