@@ -8552,7 +8552,9 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     others = other_bodies(u, names=True) if colour and p.get("colour") else {}
     for m in ns if colour else ():
         s, got, tinted = shown_of(u, p, m, not_shown, tile_of)
-        if tinted:
+        if held_back(u, p, m, not_shown, tile_of):
+            server.append(m)   # (a held band's frame showing a neighbour's picture, shown_of: the server's picture)
+        elif tinted:
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
             server.append(m)
@@ -9904,7 +9906,28 @@ def shown_of(u, p, n, not_shown, tile_of):
     """(the frame whose picture frame n of a movie shows, the colour set it shows or None, True when the set is drawn
     as the colour of that frame's picture), as movie_frame draws it with colour on: the set (set_shown) when the pass
     plays in colour (plays_colour); else the frame held_of holds, put through step_frame when the pass plays its grey
-    filter."""
+    filter. In a pass playing in colour, a frame of held_band's bands with no frame near it to draw its moment through
+    (lum_of: none within HOLD_AGE) shows what the frame before it shows (else, first in the pass, the frame after it),
+    never its own gray: 127TI CLOUD001's P60 frame, 8 minutes from any CB3, flashed gray in a colour Titan movie."""
+    got = _shown_of(u, p, n, not_shown, tile_of)
+    if not got[3]:
+        return got[:3]
+    for m in list(range(n - 1, -1, -1)) + list(range(n + 1, len(u["frames"]))):
+        other = _shown_of(u, p, m, not_shown, tile_of)
+        if not other[3]:
+            return other[:3]
+    return got[:3]
+
+
+def held_back(u, p, n, not_shown, tile_of):
+    """True when frame n of a pass playing in colour shows another frame's picture because its own band has nothing
+    near to draw it through (shown_of): the page leaves such a frame to the server (the steady table's "server")."""
+    return bool(p.get("colour")) and _shown_of(u, p, n, not_shown, tile_of)[3]
+
+
+def _shown_of(u, p, n, not_shown, tile_of):
+    """shown_of's answer for frame n alone, and True when it is a held band's frame drawn on its own in gray in a pass
+    playing in colour (shown_of then shows a neighbour's picture instead)."""
     frames, want = u["frames"], p.get("colour")
     placed = lambda j: "offset" in tile_of(j)
     colours = bool(want) and plays_colour(u, want, p["grey"])
@@ -9924,20 +9947,21 @@ def shown_of(u, p, n, not_shown, tile_of):
             # Not from a gray frame over-exposed in part (TINT_SATURATED: the transit's clear frames on Saturn)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, LUM_REACH)
             if j is not None and frames[j][2] == p["grey"] and tile_of(j).get("saturated", 0.0) < TINT_SATURATED:
-                return j, got, "near"   # (the set's own moment: its brightness taken whole, tinted_frame's near)
+                return j, got, "near", False   # (the set's own moment: its brightness taken whole, tinted_frame's near)
         if got and tint:
             # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER)
             if j is not None:
-                return j, got, True
-            got = None   # (a held band with no other filter near: on its own, in gray, below)
+                return j, got, True, False
+            # (a held band with no other filter near: on its own, in gray, below; shown_of shows a neighbour's picture)
+            return s, None, False, held_band(frames[s][2])
         if got:
-            return s, got, False
+            return s, got, False, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
                        lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
-    return s, None, False
+    return s, None, False, False
 
 
 def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=0, exposure=0, sharpen=True, per_body=True):
