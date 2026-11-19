@@ -153,4 +153,9 @@ def _processed_levels(ctx):
 # Full (sky level 5 at Processed, 151 at Full); five frames, so it costs little
 ITEMS = [{"name": "platdark270-movie", "kind": "pass", "frame": "N1871348495_1", "group": "hard",
           "watch": "rings' dark side, 2017: the Full level's movie frames on black sky like the Processed frames, no gray "
-                   "veil, no vertical stripes (full_black, full_banding)"}]
+                   "veil, no vertical stripes (full_black, full_banding)"},
+         # the moment Sam saw it at (2017-05-14 07:16): the F ring movie, its sky black at Processed and gray with
+         # streaks of faint ring light at Full
+         {"name": "fring274-movie", "kind": "pass", "frame": "N1873441317_1", "group": "hard",
+          "watch": "F ring movie, 2017-05-14 (Sam's level-bar report): the Full level keeps the black sky the Processed "
+                   "level has (full_black)"}]
