@@ -45,7 +45,7 @@ def test_flat_channel_placed_by_spice():
 def test_lone_frame_holds_the_picture_before():
     import obs_mosaic as om
     # a pass playing in colour (CB3 its gray filter, CB3+MT1 sets), frames 4 (P60) and 6 (GRN) over HOLD_AGE from any CB3
-    t = [0, 60, 120, 180, 2100, 2160, 4300, 4700, 4760]
+    t = [0, 60, 120, 180, 2100, 2160, 3000, 4700, 4760]
     f = ["CB3", "MT1", "CB3", "MT1", "P60", "MT1", "GRN", "CB3", "MT1"]
     u = {"key": ("TITAN", "OBS", "N", 0), "frames": [("p", f"N{i}_1", f[i], t[i]) for i in range(len(t))]}
     p = {"colour": ["CB3", "MT1"], "grey": "CB3"}
@@ -65,6 +65,14 @@ def test_lone_frame_holds_the_picture_before():
             assert om.shown_of(u, p, n, not_shown, tile_of) == om.shown_of(u, p, 3, not_shown, tile_of)[:3], n
         assert om.held_back(u, p, 4, not_shown, tile_of)
         assert not om.held_back(u, p, 2, not_shown, tile_of)
+        # over HOLD_REACH from the frame before its run: never that older picture (here the one after it, near)
+        far = {**u, "frames": [fr if j < 4 else (fr[0], fr[1], fr[2], fr[3] + 9000) for j, fr in enumerate(u["frames"])], "_sets": sets}
+        assert om.shown_of(far, p, 4, not_shown, tile_of) != om.shown_of(far, p, 3, not_shown, tile_of)[:3]
+        # and with nothing near either side it plays on its own (held_back False: the page draws it)
+        alone = {**u, "frames": [fr if j < 4 else (fr[0], fr[1], fr[2], fr[3] + 9000 * (j - 3)) for j, fr in enumerate(u["frames"])], "_sets": sets}
+        if om._shown_of(alone, p, 4, not_shown, tile_of)[3]:
+            assert om.shown_of(alone, p, 4, not_shown, tile_of) == om._shown_of(alone, p, 4, not_shown, tile_of)[:3]
+            assert not om.held_back(alone, p, 4, not_shown, tile_of)
         # another body (no surface window): the lone GRN is its own moment and plays; the P60 still holds
         u2 = {**u, "key": ("TELESTO", "OBS", "N", 0), "_sets": sets}
         assert not om._shown_of(u2, p, 6, not_shown, tile_of)[3]

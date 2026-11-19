@@ -9908,7 +9908,8 @@ def shown_of(u, p, n, not_shown, tile_of):
     plays in colour (plays_colour); else the frame held_of holds, put through step_frame when the pass plays its grey
     filter. In a pass playing in colour, a frame drawn in its set's colour that has no frame of the pass's gray filter
     near it to draw its moment through (lum_of: none within HOLD_AGE) shows what the frame before its run of such
-    frames shows (the one after, at the pass's start), never its own look: 127TI CLOUD001's P60 frame, 8 minutes from
+    frames shows (the one after, at the pass's start; either only when taken within HOLD_REACH of it), never its own
+    look: 127TI CLOUD001's P60 frame, 8 minutes from
     any CB3, flashed gray, and its lone GRN frame flashed the haze between CB3 surface frames (another filter than the
     gray one counts only where the gray filter is the body's surface window: elsewhere it is its own moment, and plays;
     a held band's frame counts everywhere: Methone's polarized MT2, Enceladus' UV1). A run of more than
@@ -9925,16 +9926,25 @@ def shown_of(u, p, n, not_shown, tile_of):
         b += 1
     if b - a + 1 > STEP_RUN:
         return got[:3]
+    frames = u["frames"]
     for m in (a - 1, b + 1):
-        if 0 <= m < len(u["frames"]):
+        # (and only from a frame taken within HOLD_REACH of n: an older picture is not n's moment, n plays on its own)
+        if 0 <= m < len(frames) and abs(frames[m][3] - frames[n][3]) <= HOLD_REACH:
             return _shown_of(u, p, m, not_shown, tile_of)[:3]
     return got[:3]
+
+
+HOLD_REACH = 3600    # s: the furthest from a lone frame (shown_of) the picture it shows instead may have been taken: 127TI
+#                      CLOUD001's P60 and GRN frames are 32 and 36 minutes from the CB3 frame before them
 
 
 def held_back(u, p, n, not_shown, tile_of):
     """True when frame n of a pass playing in colour shows another frame's picture because its own band has nothing
     near to draw it through (shown_of): the page leaves such a frame to the server (the steady table's "server")."""
-    return bool(p.get("colour")) and _shown_of(u, p, n, not_shown, tile_of)[3]
+    if not p.get("colour"):
+        return False
+    own = _shown_of(u, p, n, not_shown, tile_of)
+    return own[3] and shown_of(u, p, n, not_shown, tile_of) != own[:3]
 
 
 def _shown_of(u, p, n, not_shown, tile_of):
