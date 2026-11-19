@@ -127,7 +127,8 @@ def _processed_levels(ctx):
     import os
     frames = u["frames"]
     n = len(frames)
-    picks = sorted({round(i * (n - 1) / max(1, SAMPLE - 1)) for i in range(min(n, SAMPLE))})
+    k = min(n, SAMPLE)
+    picks = sorted({round(i * (n - 1) / max(1, k - 1)) for i in range(k)})
     out, centred = {}, getattr(ctx.prebuild, "centred", lambda _id: None)
     for j in picks:
         name = f"frame{j:03d}.webp"
@@ -152,13 +153,10 @@ def _processed_levels(ctx):
     return {"processed": out, **({"errors": errors} if errors else {})}
 
 
-# the 2017 ring movie Sam saw it on: the rings' dark side, IR3's pass black under zero, its frames gray and striped at
-# Full (sky level 5 at Processed, 151 at Full); five frames, so it costs little
-ITEMS = [{"name": "platdark270-movie", "kind": "pass", "frame": "N1871348495_1", "group": "hard",
-          "watch": "rings' dark side, 2017: the Full level's movie frames on black sky like the Processed frames, no gray "
-                   "veil, no vertical stripes (full_black, full_banding)"},
-         # the moment Sam saw it at (2017-05-14 07:16): the F ring movie, its sky black at Processed and gray with
-         # streaks of faint ring light at Full
-         {"name": "fring274-movie", "kind": "pass", "frame": "N1873441317_1", "group": "hard",
+# the moment Sam saw it at (2017-05-14 07:16): the F ring movie, its sky black at Processed and gray with streaks of
+# faint ring light at Full. (The rings' dark side, 270RC PLATDARK001, shows it too on the 12-bit originals the viewer
+# uses, gray and striped at Full; on the benchmark's 8-bit archive its Processed frame is gray as well, so it is not an
+# item here.)
+ITEMS = [{"name": "fring274-movie", "kind": "pass", "frame": "N1873441317_1", "group": "hard",
           "watch": "F ring movie, 2017-05-14 (Sam's level-bar report): the Full level keeps the black sky the Processed "
                    "level has (full_black)"}]
