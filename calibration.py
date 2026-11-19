@@ -1487,14 +1487,17 @@ True color sets (RED, GRN and BL1, BL2 or VIO): the fitted filter-to-sRGB matrix
 (color_matrices.json), which turns what the three filters saw into the color an eye would see; a gray body
 stays gray. None for other sets, and for a NAC set with VIO (no fit).
 """
-RED_STANDINS = ("HAL",)   # natural_mix: a narrow band inside RED's passband (H-alpha, 656 nm) stands in for RED in a
-#                          set that has no RED, so a HAL / GRN / BL1 set is true color: the 1999 Moon flyby's
-#                          (W1313634468_1) was balanced as false color, which drew the gray Moon exactly gray
+RED_STANDINS = ("HAL",)   # natural_mix: on the wide-angle camera, a narrow band inside RED's passband (H-alpha, 656 nm)
+#                          stands in for RED in a set that has no RED, so a HAL / GRN / BL1 set of a sunlit body is true
+#                          color: the 1999 Moon flyby's (W1313634468_1) was balanced as false color, which drew the gray
+#                          Moon exactly gray. Not on the narrow-angle camera, whose HAL / GRN / BL1 sets are night-side
+#                          lightning and emission searches (146SA NALGTNG001, C24JU 1X2NITE022): emission, not a colour
 
 
 def natural_mix(camera, bands):
     global _matrices
-    if len(bands) != 3 or (bands[0] != "RED" and bands[0] not in RED_STANDINS) or bands[1] != "GRN" \
+    wac = not (camera.startswith("N") or camera == "ISSNA")
+    if len(bands) != 3 or (bands[0] != "RED" and not (wac and bands[0] in RED_STANDINS)) or bands[1] != "GRN" \
             or bands[2] not in ("BL1", "BL2", "VIO"):
         return None
     if _matrices is None:

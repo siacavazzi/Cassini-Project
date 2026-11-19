@@ -23,6 +23,7 @@ def test_hal_stands_in_for_red():
     assert np.allclose(calibration.natural_mix("W", ["HAL", "GRN", "BL1"]), calibration.natural_mix("W", ["RED", "GRN", "BL1"]))
     assert calibration.natural_mix("W", ["HAL", "RED", "GRN"]) is None   # (a set with RED keeps it)
     assert calibration.natural_mix("N", ["MT2", "GRN", "BL1"]) is None
+    assert calibration.natural_mix("N", ["HAL", "GRN", "BL1"]) is None   # (the NAC's are night-side lightning searches)
 
 
 def test_flat_channel_placed_by_spice():
