@@ -91,6 +91,13 @@ def _sources(ctx):
     u, om = ctx.unit, ctx.om
     if u is None or u.get("mosaic") or u.get("kind") == "mosaic_movie" or u.get("track"):
         return None
+    # (a pass whose view follows its frames shows each frame as the camera took it: no pointing places it)
+    try:
+        t = om.steady_table(u["frames"][0][1], ctx.cache)
+    except Exception:   # noqa: BLE001
+        t = None
+    if t is not None and not t.get("working") and not t.get("fixed", True):
+        return {"frames": len(u["frames"]), "auto": False, "linked": 0, "smoothed": 0, "on_spice": 0, "follows": True}
     path = os.path.join(om.folder(u, ctx.cache), om.STEADY_FILE)
     how = json.load(open(path)).get("how", {}) if os.path.exists(path) else {}
     auto = bool(om.auto_steady(u, ctx.cache))
@@ -108,10 +115,8 @@ def _sources(ctx):
 ITEMS = [
     {"name": "encset293-movie", "kind": "pass", "frame": "N1884013382_1", "group": "hard",
      "watch": "Enceladus setting behind Saturn: steady to the end, no frame at SPICE's raw pointing (2026-11-18)"},
-    {"name": "aurstare289-movie", "kind": "pass", "frame": "N1881947254_1", "group": "hard",
+    {"name": "aurstare289-movie", "kind": "pass", "frame": "N1881947254_1", "group": "plain",
      "watch": "Saturn aurora stare, nothing to match: on SPICE's smoothed path, no jitter"},
     {"name": "titancloud264-movie", "kind": "pass", "frame": "N1867408664_1", "group": "hard",
      "watch": "Titan cloud watch: steady, no frame at SPICE's raw pointing"},
-    {"name": "fring277-movie", "kind": "pass", "frame": "N1875199754_1", "group": "hard",
-     "watch": "F ring strand stare: steady across the ring"},
 ]
