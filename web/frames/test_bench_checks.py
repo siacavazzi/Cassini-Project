@@ -122,6 +122,29 @@ def test_limb_halo(tmp_path):
     assert r["ok"], r
 
 
+def glow_disk(size=512, r=100, gap=6, width=40, amp=40, body=150):
+    """A disk with a black gap past its limb, then a wide glow ring (the review's probe of limb_halo)."""
+    a = np.zeros((size, size, 4), np.uint8)
+    a[..., 3] = 255
+    yy, xx = np.mgrid[:size, :size]
+    d = np.hypot(yy - size / 2, xx - size / 2)
+    v = np.where(d < r, body * (0.8 + 0.2 * np.cos(xx / 7.0)), 0.0)
+    v = v + np.where((d > r + gap) & (d < r + gap + width), amp, 0.0)
+    a[..., :3] = np.clip(v, 0, 255)[..., None]
+    return a
+
+
+def test_limb_halo_wide_glow(tmp_path):
+    """A wide glow ring past the limb (40 px, faint or bright) fails or, lighting the sky so few rays are judged,
+    is a regression against a clean base; it never passes."""
+    item = {"name": "l", "kind": "still", "frame": "N1", "group": "plain", "watch": "", "checks": {"limb_halo": {}}}
+    clean = judge(str(tmp_path / "c"), item, {"still.webp": glow_disk(amp=0)})["limb_halo"]
+    assert clean["ok"] and clean["judged"] > 300, clean
+    for amp in (40, 80):
+        r = judge(str(tmp_path / f"g{amp}"), item, {"still.webp": glow_disk(amp=amp)})["limb_halo"]
+        assert bc.verdict("limb_halo", clean, r) == "REGRESSION", (amp, r)
+
+
 def test_verdicts():
     ok, bad, worse = {"ok": True, "value": 0, "limit": 1}, {"ok": False, "value": 2, "limit": 1}, {"ok": False, "value": 9, "limit": 1}
     assert bc.verdict("odd_frame", ok, ok) == "pass"
@@ -129,7 +152,12 @@ def test_verdicts():
     assert bc.verdict("odd_frame", ok, bad) == "REGRESSION"
     assert bc.verdict("odd_frame", bad, bad) == "known"
     assert bc.verdict("odd_frame", bad, worse) == "REGRESSION"
-    assert bc.verdict("odd_frame", ok, {"ok": False, "error": "x"}) == "error"
+    # broken, or nothing to judge, or far less judged on the candidate where the base was judged: a regression
+    assert bc.verdict("odd_frame", ok, {"ok": False, "error": "x"}) == "REGRESSION"
+    assert bc.verdict("odd_frame", {"ok": False, "error": "x"}, {"ok": False, "error": "x"}) == "error"
+    assert bc.verdict("odd_frame", ok, {"ok": True, "value": None, "limit": 1}) == "REGRESSION"
+    assert bc.verdict("odd_frame", {**ok, "judged": 400}, {**ok, "judged": 100}) == "REGRESSION"
+    assert bc.verdict("odd_frame", {**ok, "judged": 400}, {**ok, "judged": 380}) == "pass"
 
 
 def test_compare_fails_on_a_check_regression(tmp_path, monkeypatch=None):

@@ -10,7 +10,8 @@ pictures, so a defect present on both sides is seen too. Each check runs on the 
   known       both fail, the candidate no worse (a defect already on main: listed, never a FAIL by itself)
   REGRESSION  the candidate fails where the base passed, or fails clearly worse: the benchmark's verdict is FAIL
               unless --notes explains the item
-  error       the check itself broke on these pictures (reported, never a pass)
+  error       the check itself broke on these pictures, on both sides (reported, never a pass); broken, or nothing
+              to judge, or far less judged (Result.judged) on the candidate only is a REGRESSION
 
 Adding a check (other threads: one module of your own in this folder, so nothing collides):
 
@@ -48,6 +49,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHECKS = {}          # name: Check
+LOST_SHARE = 0.5     # a candidate judged on under this share of what the base was judged on is a regression (verdict)
 EXTRA_ITEMS = []     # items modules add (ITEMS)
 _LOADED = False
 
@@ -56,13 +58,14 @@ class Result:
     """One check's answer on one item: a number (higher = worse), the limit it is held to, pass or not, a line saying
     what was measured, and where (a picture's name, a place)."""
 
-    def __init__(self, value, limit, ok, detail="", where=None, values=None):
+    def __init__(self, value, limit, ok, detail="", where=None, values=None, judged=None):
         self.value = None if value is None else round(float(value), 4)
         self.limit = limit
         self.ok = bool(ok)
         self.detail = detail
         self.where = where
         self.values = values   # optional: per picture numbers, for the report
+        self.judged = judged   # optional: how much the check could judge (rays, frames): far fewer than the base's fails
 
     def as_dict(self):
         d = {"value": self.value, "limit": self.limit, "ok": self.ok, "detail": self.detail}
@@ -70,6 +73,8 @@ class Result:
             d["where"] = self.where
         if self.values is not None:
             d["values"] = self.values
+        if self.judged is not None:
+            d["judged"] = self.judged
         return d
 
 
@@ -248,11 +253,20 @@ def judge(folder, item, meta=None):
 
 def verdict(name, base, cand):
     """pass / fixed / known / REGRESSION / error for one check, from its result on the base and on the candidate
-    (either may be None: the item not built or the check new on that side)."""
+    (either may be None: the item not built or the check new on that side). A candidate the check breaks on, finds
+    nothing to judge in, or judges on far less of the picture than the base (Result.judged under LOST_SHARE of the
+    base's), where the base was judged, is a REGRESSION: a blank picture or a glow that hides the limb must never
+    read as a pass."""
     if cand is None:
         return "not run"
+    judged_base = bool(base) and not base.get("error") and base.get("value") is not None
     if cand.get("error"):
-        return "error"
+        return "REGRESSION" if judged_base else "error"
+    if cand.get("value") is None and judged_base:
+        return "REGRESSION"
+    jb, jc = (base or {}).get("judged"), cand.get("judged")
+    if judged_base and jb and jc is not None and jc < LOST_SHARE * jb:
+        return "REGRESSION"
     if cand["ok"]:
         return "fixed" if base and not base.get("ok", True) and not base.get("error") else "pass"
     if not base or base.get("error"):

@@ -26,9 +26,10 @@ def clipped_white(p, max=0.01):
 
 
 def limb_rises(a, reach=48, rays=720):
-    """For each ray from the lit body's centre that leaves the body into black sky: the largest rise of brightness
+    """For each ray from the lit body's centre that leaves the body inside the picture: the largest rise of brightness
     going outward over the reach px past the body's edge (each point against the darkest one nearer the limb), over
-    the body's lit level. (array of rises, how many rays) or None when no edge faces black sky."""
+    the body's lit level, on rays whose sky further out (reach to 2 reach px) is black. (array of rises, rays judged,
+    rays skipped because the sky out there is lit) or None when the picture has no lit body or no ray leaves it."""
     import cv2
     import numpy as np
     from scipy.ndimage import map_coordinates
@@ -38,13 +39,16 @@ def limb_rises(a, reach=48, rays=720):
     if lit.sum() < 500:
         return None
     n, lab, st, _ = cv2.connectedComponentsWithStats(lit.astype(np.uint8))
-    k = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+    # the body: the brightest lit area of any size (a wide glow ring round it can be larger, and must not be taken
+    # for it), its edge closed over a few px
+    big = [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= 200] or [1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))]
+    k = max(big, key=lambda i: float(np.percentile(lum[lab == i], 90)))
     body = cv2.morphologyEx((lab == k).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8)) > 0
     level = max(float(np.percentile(lum[body], 60)), 1.0)
     cy, cx = np.argwhere(body).mean(axis=0)
     H, W = lum.shape
     r = np.arange(0, 2 * max(H, W), 1.0)
-    out = []
+    out, lit_sky = [], 0
     for t in np.linspace(0, 2 * np.pi, rays, endpoint=False):
         ys, xs = cy + r * np.sin(t), cx + r * np.cos(t)
         inside = (ys >= 0) & (ys < H - 1) & (xs >= 0) & (xs < W - 1)
@@ -60,10 +64,13 @@ def limb_rises(a, reach=48, rays=720):
             continue
         prof = map_coordinates(lum, [yy, xx], order=1) / level
         if prof[reach:].mean() > 0.04:                 # not black sky out there (rings, a glow, another body)
+            lit_sky += 1
             continue
         prof = prof[:reach]
         out.append(float((prof - np.minimum.accumulate(prof)).max()))
-    return (np.array(out), len(out)) if len(out) >= 20 else None
+    if not out and not lit_sky:
+        return None
+    return np.array(out), len(out), lit_sky
 
 
 @check("limb_halo", kinds=("still", "composite"), default=False,
@@ -71,14 +78,20 @@ def limb_rises(a, reach=48, rays=720):
 def limb_halo(p, limit=0.08, share=0.75):
     """Past the body's lit edge the sky should fall to black and stay there. Per ray out of the body into black sky,
     the largest rise of brightness going outward (a glow ring past a black gap), over the body's lit level; the value
-    is the rise that share of the rays stay under (a halo along a stretch of the limb, not one star)."""
+    is the rise that share of the rays stay under (a halo along a stretch of the limb, not one star). A ray whose sky
+    further out is lit is not judged: they are counted (judged = rays judged), so a wide glow that lights the sky past
+    the limb, leaving few rays or none to judge, fails against a base judged on many (bench_checks.verdict)."""
     import numpy as np
     f = p.main()
     got = limb_rises(p.load(f))
     if got is None:
-        return Result(None, limit, True, "no lit limb on black sky to judge", where=f)
-    rises, n = got
+        return Result(None, limit, True, "no lit body with a limb in the picture", where=f, judged=0)
+    rises, n, lit_sky = got
+    if not n:
+        return Result(None, limit, True, f"no ray past the limb reaches black sky ({lit_sky} rays lit out there)",
+                      where=f, judged=0)
     v = float(np.quantile(rises, share))
     return Result(v, limit, v <= limit,
                   f"{share:.0%} of {n} rays past the limb rise at most {v:.3f} of the body's level outward "
-                  f"({(rises > limit).mean():.0%} over {limit})", where=f)
+                  f"({(rises > limit).mean():.0%} over {limit}; {lit_sky} rays not judged, sky lit out there)",
+                  where=f, judged=n)

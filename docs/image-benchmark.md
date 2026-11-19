@@ -72,17 +72,26 @@ checks (`web/frames/bench_checks/`), on the base and on the candidate:
 | check | runs on | catches | proof (fails on, passes on) |
 |---|---|---|---|
 | `repeat_frames` | every movie | a played frame identical to the one before (Sam 11-17, #577); "played" is the commit's own `obs_mosaic.movie_shown` | daphnis17-movie: 19 repeats on 02598865, 0 on main |
-| `odd_frame` | every movie | a frame unlike both neighbours while they agree, after moving them onto it (a doubled limb, a flash, a jump to another place) | saturn05-movie frame014 doubled Saturn: 5.6 on 5d600b52, 1.7 after #525 (limit 4: a panning 3x3 movie scores up to 3.3) |
+| `odd_frame` | every movie | a frame unlike both neighbours while they agree, after moving them onto it (a doubled limb, a flash, a jump to another place) | saturn05-movie frame014 doubled Saturn: 5.6 on 5d600b52, 1.7 after #525 (limit 4) |
 | `gray_colour` | every composite; passes that name it | a colour picture or sequence drawn gray | titan127-movie: 54 of 54 frames gray on f9ab1b49, 5 of 42 on main (limit 20%); june2004-mosaic gray on 5d600b52, chroma 0.46 on main |
 | `body_tint` | items that name it | a colour cast on a near-neutral body | enceladus-eye-composite: R:G:B 1.04:1:0.89 (0.122) on 02598865, 1.01:1:0.99 (0.009) on main (limit 0.06) |
 | `clipped_white` | items that name it, with their own limit | white blown out | ringmosaic04 13% at white on 1dcd9027, 0.08% after |
 | `limb_halo` | items that name it | a black gap then a glow past a lit limb on black sky | saturn-limb-still: 0.185 on e755fd89, 0.031 on main (limit 0.08) |
+
+`odd_frame`'s limit is the tight one: a good movie that pans (saturn05, a 3x3 movie whose played frames are each
+a different crop) scores up to 3.3 on today's main, the doubled frame 5.6, the gray flash and the jump between views
+40 and over. A fainter ghost scoring between 3.3 and 4 would pass; lower the limit only with every movie item's score
+on main checked against it (`image_bench.py check`).
 
 Each check gives a number (higher is worse), its limit and a line saying what it measured. Against the base it is:
 **pass**; **fixed** (the base failed); **known** (both fail, the candidate no worse: a defect already on `main`,
 listed in the report but not a failure by itself); **REGRESSION** (the candidate fails where the base passed, or fails
 clearly worse), which makes the verdict `FAIL` unless the item is a target or `--notes` explains it; **error** (the
 check broke on these pictures).
+
+A check that breaks on the candidate, finds nothing to judge there, or judges far less of it (`Result.judged`, under
+half the base's: a glow that lights the sky past a limb leaves few rays to judge), where the base was judged, is a
+**REGRESSION** too: a blank or hidden picture never reads as a pass.
 
 `python web/frames/image_bench.py check RESULTS_FOLDER [--items a,b]` judges one commit's results alone, with no base.
 That is how a new check is proven: it must fail on a result of the old, bad commit and pass on a good one.
@@ -92,6 +101,19 @@ collide); the module's notes give the whole interface: `@check(name, kinds, defa
 pictures returning `Result(value, limit, ok, detail)`, an optional `collect` hook that runs inside the build with the
 commit's own code (its data is kept in the item's `meta.json`), and optional `ITEMS` (the module's own targets).
 Changing a collect hook rebuilds every base once; changing how a check judges does not.
+
+## Known defects on main the benchmark sees
+
+Listed so a fix can turn them from known to fixed (main 701fd40f, 2026-11-19):
+- titan127-movie: a gray P60 polarizer frame (frame 6) and a lone GRN haze frame (frame 46) flash in a colour Titan
+  movie (odd_frame).
+- daphnis17-movie (257DA): the movie jumps back and forth between two views (odd_frame 118; the pointing thread's).
+- plume279-movie: frame 250 and others drawn with another sky and footprint (odd_frame 12).
+- storm-composite and hexagon-composite: drawn gray, their channels never aligned; moon99-composite (HAL/GRN/BL1)
+  drawn exactly gray (gray_colour).
+- june2004-mosaic: a green square background round Saturn (by eye; no check yet).
+- phoebe-movie (out of the set): not deterministic, two builds of one commit differ, against the zero noise floor
+  this benchmark relies on. A pipeline defect, not fixed.
 
 ## What the report says about each item
 
@@ -165,7 +187,10 @@ review approves only after looking, and says which sheets it looked at.
   mosaic, covered by FA, Earth Smiled and the 2004 ring mosaic; the Helene and 088EN toss-up movies, which never
   changed in 39 reports; the Phoebe movie, which is not deterministic; the 71-frame Jupiter WAC movie, whose evened
   frames approach-movie also covers). Prefer a small pass or a still that shows the
-  defect to a long one.
+  defect to a long one. What the removed items watched: FB's cyan blob under Saturn (#456) is the saturated-glow
+  rule (calibration.saturated_code) that FA's green and pink tiles still guard; tinted movie frames are now guarded
+  on the NAC by titan127-movie (every frame drawn in its set's colour), and there is no tinted WAC movie in the set
+  since jupiter-rmov-movie left (a gap, accepted for its 6 minutes).
 - **The list's hash names the cached results.** Editing the list means every base is built again on its next run,
   which is automatic.
 - **The noise floor is zero.** Building the same commit twice on the MacBook (12 items) and once on the Mini
