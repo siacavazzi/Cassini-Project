@@ -55,6 +55,11 @@
   {"name": "saturn-limb-still", "kind": "still", "frame": "N1469611288_1", "group": "hard", "watch": "Saturn's limb on black sky: no black gap and grainy halo past it (#574 sky smoothing lift)", "checks": {"limb_halo": {}}},
   {"name": "enceladus-eye-composite", "kind": "composite", "frame": "N1602286223_2", "colors": "eye", "group": "hard", "watch": "Enceladus IR3/GRN/UV3 in Natural color (emulated): near gray, not orange (#570 eye colours)", "checks": {"body_tint": {}}},
   {"name": "impact293-movie", "kind": "pass", "frame": "N1884113057_1", "group": "hard", "watch": "293SA IMPACTOBS001 (2017) colour movie: its MT3 frame (7) drawn gray between colour frames, no set drawn for it (odd_frame 18.4 on main 16b3f6c4; known defect, 11-19 spot check)"},
-  {"name": "mimas167-mosaic", "kind": "pass", "frame": "N1717571087_1", "group": "hard", "watch": "colour fringes on every crater: the GRN and UV3 frames of a pointing drawn 1.4 to 3.7 degrees turned from the clear frame (SPICE's twist the wrong way round), which colour registration only moved"}
+  {"name": "mimas167-mosaic", "kind": "pass", "frame": "N1717571087_1", "group": "hard", "watch": "colour fringes on every crater: the GRN and UV3 frames of a pointing drawn 1.4 to 3.7 degrees turned from the clear frame (SPICE's twist the wrong way round), which colour registration only moved"},
+  {"name": "titanwac17-haze", "kind": "still", "frame": "W1878376655_1", "group": "hard", "watch": "Titan's haze and its scattered-light halo fade into the sky, no hard rim on black (gentler blacks, Sam 11-19)"},
+  {"name": "saturn07-deck", "kind": "composite", "frame": "N1565100696_1", "group": "hard", "watch": "low-contrast cloud deck close-up shows its cloud structure, not a plain peach square (regression 11-20)"},
+  {"name": "saturn07-deck2", "kind": "composite", "frame": "N1565242114_1", "group": "hard", "watch": "low-contrast cloud deck close-up shows its cloud structure, not a plain peach square (regression 11-20)"},
+  {"name": "titan08-mt1", "kind": "still", "frame": "N1578275934_1", "group": "hard", "watch": "Titan MT1 close-up shows its haze and clouds, not a white square; compression blocks not pushed (regression 11-20)"},
+  {"name": "rings08-bright", "kind": "still", "frame": "N1585900002_1", "group": "hard", "watch": "B ring close-up not washed out to white; Cassini division strip keeps its ringlets (regression 11-20)"}
  ]
 }
