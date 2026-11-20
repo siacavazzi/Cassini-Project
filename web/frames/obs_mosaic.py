@@ -10746,7 +10746,7 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False)
 def slots(u):
     """The place of each frame of pass u (places), with the camera's drift over a long mosaic movie taken out:
     places closer than half the pass's step (the median jump from one place to the next in one filter) are one
-    slot, unless the camera ever goes straight from one to the other (two tiles of the raster, not a drift). The Jupiter approach's 2x2s drift over nine laps by more than mosaic.min_step, so the classifier gives
+    slot, unless the camera steps straight from one to the other lap after lap (two tiles of the raster, not a drift). The Jupiter approach's 2x2s drift over nine laps by more than mosaic.min_step, so the classifier gives
     their last laps places of their own (8 for 4 tiles), and without this a lap over the drifted places would run
     on into the next (lap_of) and a drifted tile would stay up beside its own older copy (rolling_layout). None
     for a frame with no place."""
@@ -10772,19 +10772,21 @@ def _slot_of(u, where):
     centre = {i: np.mean(v, 0) for i, v in at.items()}
     parent = {i: i for i in centre}
 
-    # places the camera goes straight from one to the other (one frame at one, the next placed frame at the other)
-    # are two tiles of the raster, however near: a drifted place is taken instead of its own, never next to it. A
-    # raster whose steps differ by axis (the 2017-09-08 north pole map's columns half a frame apart, its rows a whole
-    # frame) has a column step under half the median step, and its columns were one slot: each lap's second column
-    # took the first one's place, and the movie showed one tile fewer than the lap took (a panel missing most of
-    # the time)
-    beside, prev = set(), None
+    # places the camera goes straight between more than once (one frame at one, the next placed frame at the other,
+    # lap after lap), a tile's step or more apart (mosaic.min_step), are two tiles of the raster, however near: the
+    # camera drifts onto a drifted place once and stays, it does not step to it and back every lap. A raster whose
+    # steps differ by axis (the 2017-09-08 north pole map's columns half a frame apart, its rows a whole frame) has
+    # a column step under half the median step, and its columns were one slot: each lap's second column took the
+    # first one's place, and the movie showed one tile fewer than the lap took (a panel missing most of the time)
+    stepped, prev = collections.Counter(), None
     for i in where:
         if i is None:
             continue
         if prev is not None and i != prev:
-            beside.add((min(i, prev), max(i, prev)))
+            stepped[(min(i, prev), max(i, prev))] += 1
         prev = i
+    beside = {(a, b) for (a, b), k in stepped.items() if k > 1 and a in centre and b in centre
+              and np.abs(centre[a] - centre[b]).max() >= mosaic.min_step * FRAME}
     members = {i: {i} for i in centre}
 
     def root(i):
