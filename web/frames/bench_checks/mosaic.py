@@ -1,0 +1,88 @@
+"""
+Mosaic checks: a mosaic movie that lacks a panel most of the time (missing_panel: two tiles of its raster drawn in
+one slot, so each lap's second one takes the first one's place), and a pass that is not built as the kind of pass it
+should be (not_mosaic: a mosaic drawn as a movie or a stare).
+"""
+from bench_checks import Result, check
+
+TWICE = 2   # a pair of pointings the camera steps straight between this often is two tiles of the raster, not a drift
+
+
+@check("missing_panel", kinds=("mosaic_movie",), default=True, owner="mosaic thread", worse_by=0.0,
+       about="a mosaic movie with a panel missing most of the time: two tiles of the raster share one slot "
+             "(Sam 11-18, 2017-09-08 north pole map)")
+def missing_panel(p, limit=0):
+    """The pairs of pointings, a tile's step or more apart, that the camera steps straight between lap after lap
+    (two tiles) but that the commit's slots draw as one (the newer wipes the older out). Kept at build time from the
+    pass's pointings by the collect hook."""
+    got = p.collected("missing_panel")
+    if not got or got.get("pairs") is None:
+        return Result(None, limit, False, "no slots kept for this pass (the collect hook found no mosaic movie)")
+    pairs = got["pairs"]
+    n = len(pairs)
+    return Result(n, limit, n <= limit,
+                  f"{n} pairs of tiles the camera steps between {TWICE}+ times drawn in one slot "
+                  f"({got['slots']} slots for {got['pointings']} pointings)",
+                  where=", ".join(f"{a}/{b}" for a, b in pairs[:4]) or None, judged=got.get("steps"))
+
+
+@missing_panel.collect
+def _slots(ctx):
+    """With the commit's own code: the pass's pointings (frames a tile's step apart, mosaic.min_step, from the geometry
+    the pass holds), the steps between them in time order, and which of those pairs the commit's slots merge."""
+    u = ctx.unit
+    if u is None or u.get("kind") != "mosaic_movie" or not u.get("z"):
+        return None
+    import collections
+    import mosaic
+    step = mosaic.min_step * ctx.om.FRAME
+    slots = ctx.om.slots(u)
+    seen, pointing = [], []
+    for fr in u["frames"]:
+        x, y, z = fr[5:8]
+        if not z:
+            pointing.append(None)
+            continue
+        pt = (-x * z / u["z"], -y * z / u["z"])
+        # the nearest pointing seen so far within a tile's step, else a new one (the newest copy: a drift is followed)
+        best = None
+        for i, q in enumerate(seen):
+            d = max(abs(pt[0] - q[0]), abs(pt[1] - q[1]))
+            if d < step and (best is None or d < best[0]):
+                best = (d, i)
+        if best is None:
+            seen.append(pt)
+            pointing.append(len(seen) - 1)
+        else:
+            seen[best[1]] = pt
+            pointing.append(best[1])
+    stepped, wiped, prev = collections.Counter(), collections.Counter(), None
+    for j, i in enumerate(pointing):
+        if i is None:
+            continue
+        if prev is not None and i != prev[0]:
+            pair = (min(i, prev[0]), max(i, prev[0]))
+            stepped[pair] += 1
+            # the step lands in the slot the frame before it is in: the newer tile takes the older one's place
+            if slots[j] is not None and slots[j] == prev[1]:
+                wiped[pair] += 1
+        prev = (i, slots[j])
+    pairs = sorted(q for q, k in stepped.items() if k >= TWICE and wiped[q] >= TWICE)
+    return {"pairs": [list(q) for q in pairs], "pointings": len(seen),
+            "slots": len({s for s in slots if s is not None}), "steps": sum(stepped.values())}
+
+
+@check("not_mosaic", kinds=("movie", "mosaic", "mosaic_movie"), default=False, owner="mosaic thread", worse_by=0.0,
+       about="a pass that should build as a mosaic (or mosaic movie) built as a movie or a stare")
+def not_mosaic(p, expect=("mosaic", "mosaic_movie"), limit=0):
+    """1 when the commit built the item's pass as another kind than the item expects (meta pass_kind), else 0."""
+    kind = (p.meta or {}).get("pass_kind")
+    bad = int(kind not in tuple(expect))
+    return Result(bad, limit, bad <= limit, f"built as {kind!r}, expected one of {list(expect)}")
+
+
+ITEMS = [
+    {"name": "npole0908-mosaicmovie", "kind": "pass", "frame": "W1883571253_1", "group": "hard",
+     "watch": "a panel missing most of the time: the 2x2's columns are half a frame apart and were drawn as one slot",
+     "checks": {"missing_panel": {}, "not_mosaic": {"expect": ["mosaic_movie"]}}},
+]
