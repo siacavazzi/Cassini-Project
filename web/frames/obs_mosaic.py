@@ -10186,8 +10186,6 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return q
     spice, raw = t["offset"], t
     t = at(t)
-    # (how far the stabilization moves the shown frame: its colour set's channels move with it, below)
-    shift = (t["offset"][0] - spice[0], t["offset"][1] - spice[1])
     if track:
         rep["steady"] = "track"
     elif places:
@@ -10221,6 +10219,16 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         own_gain = {}
         bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
         to_white = one_white(list(bases.values()), p["display_scale"])
+        # (the set's one move: the median of its channels' own stabilization moves, so one channel the pictures could
+        # not match, or matched along the ring, moves none of them on its own)
+        # (from each channel's place as steady_places holds it: SPICE's, or the pictures' where seen_places took
+        # them; the page's table has those as its "spice")
+        sheld = steady_held(u, cache, p) if places and not track else {}
+        anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
+        moves = [(places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
+                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})]
+        set_shift = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) \
+            if places and not track and len(bases) > 1 and moves else None
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
             base = bases[f]
@@ -10228,13 +10236,13 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 base = dict(base, gain=round((base.get("gain") or 1.0) * to_white[id(base)], 4),
                             gamma=base.get("gamma", gamma))
             newest[f] = at(base)
-            if places and not track and "offset" in base:
-                # (a colour set's channels moved together, by the shown frame's own stabilization: each keeps its place
-                # against the others as SPICE has it (the channels' registration). Each at its own stabilized place, a
+            if set_shift is not None and "offset" in base:
+                # (a colour set's channels moved together, by the median of their own stabilization moves: each keeps its
+                # place against the others as SPICE has it (the channels' registration). Each at its own stabilized place, a
                 # channel the pictures could not match went on along the smoothed path while the others followed
                 # their matches, and the channels came apart: 257DA DAPHNIS001's blue-violet fringe along the
                 # Keeler gap's edge, #602)
-                newest[f] = dict(newest[f], offset=[base["offset"][0] + shift[0], base["offset"][1] + shift[1]])
+                newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
             own_gain[f] = base.get("gain")
         used = want
     if used:

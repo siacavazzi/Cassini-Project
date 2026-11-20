@@ -3456,11 +3456,17 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
     // how far frame a's tile moves from where the served frame has it to its stabilized place, canvas pixels: from
     // SPICE's place, or, for a pass the server stabilizes by default (the table's "auto", obs_mosaic.auto_steady: its
     // pre-built frames are drawn at that smoothing), from its places at that smoothing (base)
-    // (sh: a colour set's shown frame: every channel moved by its stabilization, each keeping its place against the
-    // others as SPICE has it, as movie_frame moves a set's channels together)
-    function shift(t, pl, a, base, sh) {
+    // numpy.median of a list of numbers
+    const npMedian = v => { const s = [...v].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+    // (set: a colour set's channels (tile indices): every channel moved by the median of their own stabilization moves,
+    // each keeping its place against the others as SPICE has it, as movie_frame moves a set's channels together)
+    function shift(t, pl, a, base, set) {
       if (!pl) return [0, 0];
-      const to = sh == null || sh < 0 ? pl[a] : [t.spice[a][0] + pl[sh][0] - t.spice[sh][0], t.spice[a][1] + pl[sh][1] - t.spice[sh][1]];
+      let to = pl[a];
+      if (set && set.length > 1) {
+        const mx = npMedian(set.map(b => pl[b][0] - t.spice[b][0])), my = npMedian(set.map(b => pl[b][1] - t.spice[b][1]));
+        to = [t.spice[a][0] + mx, t.spice[a][1] + my];
+      }
       const s = corner(t, a, base ? base[a] : t.spice[a]), p = corner(t, a, to);
       return [p[0] - s[0], p[1] - s[1]];
     }
@@ -4147,7 +4153,7 @@ onmessage = async e => {
   const late = mixing && !m.trail && gain < 1.0;
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
   const planes = m.planes.map(p => {
-    const [dx, dy] = M.shift(t, placed.get(pk), p.i, base, m.planes.length > 1 && !m.trail ? m.shown : null), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i, base, m.planes.length > 1 && !m.trail ? m.planes.map(q => q.i) : null), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);
@@ -4279,7 +4285,7 @@ onmessage = async e => {
       const older = !set && o.trail ? M.trailOf(T, shown, o.trail) : [];
       const tiles = set || [...older, shown], bitmaps = await Promise.all(tiles.map(load)), mid = ++seq;
       const planes = tiles.map((j, q) => ({ i: T.n.indexOf(j), bitmap: bitmaps[q] }));
-      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, shown: T.n.indexOf(shown), steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
+      const r = await new Promise(res => { waiting.set(mid, res); work().postMessage({ id: mid, key: e.key, n: e.n, steady: o.steady || 0, exposure: o.exposure || 0, trail: older.length > 0, detail: !!o.raw, eye: !!o.eye, planes }, bitmaps); });
       stats.frames++; stats.placeMs += r.ms[0]; stats.drawMs += r.ms[1]; stats.last = { id, moves: r.moves, gain: r.gain, set: tiles.map(j => T.ids[j]) };
       const url = URL.createObjectURL(r.blob), out = new Image();
       urls.push(url);
@@ -14632,7 +14638,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"07dd08d47836";
+  const BUILD = /*BUILD*/"db337b762e8c";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");

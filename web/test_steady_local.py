@@ -143,9 +143,9 @@ def in_node(table):
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), t = " + json.dumps(table) + ";\n"
           "const out = {}, base = t.auto ? M.places(t, t.auto) : null;\nfor (const s of " + json.dumps(SMOOTHS) + ") { const p = M.places(t, s); "
           "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a, base)), sets: {} };\n"
-          # (a colour set's channels moved together, by the shown frame's stabilization: movie_frame's rule since #602's fringe)
-          "if (t.sets) for (const [nn, js] of Object.entries(t.sets.by)) { const sh = t.n.indexOf(M.shownOf(t, +nn, true)); "
-          "out[s].sets[nn] = js.map(j => M.shift(t, p, t.n.indexOf(j), base, js.length > 1 ? sh : null)); } }\n"
+          # (a colour set's channels moved together, by the median of their stabilization moves: movie_frame's rule since #602's fringe)
+          "if (t.sets) for (const [nn, js] of Object.entries(t.sets.by)) { const ix = js.map(j => t.n.indexOf(j)); "
+          "out[s].sets[nn] = ix.map(a => M.shift(t, p, a, base, ix.length > 1 ? ix : null)); } }\n"
           "const r = []; for (const x of [0.125, -0.125, 2.5, -2.5, 1.5, -1.5, 0.375, 1.005, 2.675, -3.14159]) r.push([x, M.pyRound(x), M.pyRound2(x)]);\n"
           "out.gains = {}; for (const x of " + json.dumps(EXPOSURES) + ") out.gains[x] = t.exposure ? M.gains(t.exposure, x) : null;\n"
           "out.chains = " + json.dumps(CHAINS) + ".map(c => " + json.dumps(EXPOSURES) + ".map(x => M.gains(c, x)));\n"
