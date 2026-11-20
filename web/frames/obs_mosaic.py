@@ -3508,14 +3508,16 @@ def _filter_turn(u, n, out, crop, cache, scale):
     """How far tile n (its report out, picture crop, at SPICE's place) is turned against the tile of its pointing it is
     registered to (_register_to, its colour's reference), measured on their pictures (filter_turn_of), when that is
     FILTER_TURN_LEAST or more: {"to": that frame, "turn": degrees its +x side is turned down, "blocks": matched}, else
-    None. Only an airless body's pass: a clouded body's filters show other clouds (its colours are held on the limb,
-    _limb_register) and a ring pass's rings move between frames, which a turn fitted to them would take for one.
+    None. Only an airless body's mosaic: a clouded body's filters show other clouds (its colours are held on the limb,
+    _limb_register), a ring pass's rings move between frames, which a turn fitted to them would take for one, and a
+    movie's frames follow a moving view (Pan's 2017 flyby movie, frames centred on Pan with the rings sliding past
+    behind: turns of 1 to 3.7 degrees fitted on the ringlets, where the raw frames and SPICE agree within 0.2).
     Each frame is drawn north up by SPICE's twist of the camera, and where JPL's corrected pointing gets the twist wrong
     the filters of one pointing were drawn turned apart: Mimas 167MI_MIMAS001_CIRS (2012-06-05) has its GRN and UV3
     frames turned 0.6 and 1.4 degrees clockwise against its clear frame, where SPICE says 0.7 and 1.6 the other way,
     so they were drawn 1.4 and 3.0 degrees apart, and C8 (translation only) left red, green and blue rims 5 to 10 px
     wide on every crater. Turned back onto the reference before C8 moves it there."""
-    if not calibration.step("align") or clouded(u) or _ring(u):
+    if not calibration.step("align") or clouded(u) or _ring(u) or u.get("kind") not in ("mosaic", "mosaic_movie"):
         return None
     for lead in (True, False):
         # (onto the frame C8 registers it to, else the frame it lands on without JPL's frames leading: Mimas 167MI's
@@ -3569,6 +3571,24 @@ FILTER_TURN_BLOCK = 128    # reference px: the blocks the two frames' overlap is
 FILTER_TURN_FIT = 1.5      # px: a block further than this from the fitted turn and shift is left out of the fit
 
 
+FILTER_TURN_TWO_WAY = 0.2   # (_two_way) a block's detail across its weakest direction, of its strongest, at least
+
+
+def _two_way(part):
+    """True when the picture part (RGBA) has detail both ways (its gradients' structure tensor: the smaller eigenvalue
+    at least FILTER_TURN_TWO_WAY of the larger): a block of ringlets or of a limb's arc matches anywhere along them,
+    and its shift says nothing about a turn."""
+    g = cv2.GaussianBlur(part[..., :3].astype(np.float32).mean(axis=2), (0, 0), 1.5)
+    gx, gy = cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1)
+    on = part[..., 3] > 0
+    if on.sum() < part.shape[0] * part.shape[1] // 2:
+        return False
+    a, b, c = float((gx[on] ** 2).sum()), float((gx[on] * gy[on]).sum()), float((gy[on] ** 2).sum())
+    root = math.sqrt(max(((a - c) / 2) ** 2 + b * b, 0.0))
+    big, small = (a + c) / 2 + root, (a + c) / 2 - root
+    return big > 0 and small >= FILTER_TURN_TWO_WAY * big
+
+
 def filter_turn_of(s, ref, t, mine):
     """How far tile t is turned against tile s, two frames of one pointing that cover nearly the same view (each at
     its place): their overlap cut in FILTER_TURN_BLOCK blocks on a grid, each block matched as panel_shift matches an
@@ -3595,7 +3615,7 @@ def filter_turn_of(s, ref, t, mine):
                 if x0 < 0 or y0 < 0 or x0 + w_ > im.shape[1] or y0 + w_ > im.shape[0]:
                     break
                 subs.append((dict(q, box=[x0 * k + q["box"][0], y0 * k + q["box"][1], B, B]), im[y0:y0 + w_, x0:x0 + w_]))
-            if len(subs) < 2:
+            if len(subs) < 2 or not _two_way(subs[0][1]):
                 continue
             sh, _ = panel_shift(subs[0][0], subs[0][1], s["offset"], subs[1][0], subs[1][1], t["offset"],
                                 REGISTER_BODY_MAX * FRAME, least=B ** 2 // 6)

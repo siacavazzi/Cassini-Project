@@ -1,7 +1,8 @@
 """Synthetic check of a filter's turn against its pointing's reference (obs_mosaic.filter_turn_of, used by _filter_turn
 before C8): a cratered moon drawn twice, the second turned by a degree or two and moved a few px, as Mimas 167MI's GRN
 and UV3 frames are against its clear frame. The turn is found with its sign (+x side down), and turning the second
-back by it (_subpixel, as _tile does) leaves no turn; a frame that is not turned gives none. Run:
+back by it (_subpixel, as _tile does) leaves no turn; a frame that is not turned gives none, nor do sky or ringlets
+(detail one way only). Run:
 python web/test_filter_turn.py"""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
@@ -47,5 +48,10 @@ for theta, dx, dy in ((1.4, 6.0, -3.0), (-2.2, -4.0, 9.0), (0.0, 5.0, 2.0)):
 # two frames of featureless sky (their own noise each) give no turn
 got, why = om.filter_turn_of(s, rgba(rng.normal(20, 2, (S, S)).astype(np.float32)), dict(s),
                              rgba(rng.normal(20, 2, (S, S)).astype(np.float32)))
+assert got is None, (got, why)
+# ringlets (detail one way only) turned against each other give no turn: a block of them matches anywhere along them
+rings = (120 + 60 * np.sin(np.hypot(xx + 3000, yy - 500) / 3.0) + rng.normal(0, 2, (S, S))).astype(np.float32)
+m = cv2.getRotationMatrix2D(((S - 1) / 2, (S - 1) / 2), -2.0, 1.0)
+got, why = om.filter_turn_of(s, rgba(rings), dict(s), rgba(cv2.warpAffine(rings, m, (S, S), borderMode=cv2.BORDER_REFLECT)))
 assert got is None, (got, why)
 print("ok")
