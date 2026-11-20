@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v149", "raw": "obs-v132", "eye": "obs-v149-eye", "false": "obs-v149-false", "classic": "obs-v118-classic"}  # v149/v132/v118 (numbered past the blacks fix): a small target's square matched only where both pictures show it (Albiorix 129OT's star hops); a tinted movie frame's brightness matched over what is lit, not the sky (Jupiter C23JU W_10's white, gray and yellow flips); a frame unfit or of a held band with no set over it shows what the frame before shows (170SA WIND5HR005's 85 px hop back and near-black MT3); a movie's lone first or last frames at another pointing are passes of their own (289SA AURSTARE001's white flash); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -708,6 +708,7 @@ def _retargets(u):
         lo, hi = np.minimum.accumulate(xy), np.maximum.accumulate(xy)   # the frames up to each one
         rlo, rhi = np.minimum.accumulate(xy[::-1])[::-1], np.maximum.accumulate(xy[::-1])[::-1]   # ... and from it on
         cuts = [i + 1 for i in range(len(pts) - 1) if ((rlo[i + 1] - hi[i] >= FRAME) | (lo[i] - rhi[i + 1] >= FRAME)).any()]
+        cuts = sorted(set(cuts) | set(_lone_ends(xy)))
     else:
         # a mosaic, frame by frame (the frames before and after a cut each round the other's boxes, 282RI's third
         # strip between the first two): the latest frame each frame's footprint comes within ISLAND_GAP of
@@ -744,6 +745,36 @@ def _retargets(u):
         if any(v["kind"] not in ("mosaic", "mosaic_movie") for v in pieces):
             return [u]
     return pieces
+
+
+LONE_END = 2     # frames: (_lone_ends) at most this many at a movie's start or end, at another pointing, are cut off it
+LONE_LOOK = 8    # ... when they touch none of this many frames on the movie's side of the jump
+
+
+def _lone_ends(xy):
+    """(_retargets) Where to cut a movie (indexes into xy, as _retargets' cuts) so that its first or last frames, at
+    most LONE_END of them, taken at another pointing than the frames beside them (the jump between them a frame or
+    more, their footprints apart) and touching none of the LONE_LOOK frames on the other side, are a pass of their own.
+    units cuts a long stare where Cassini's distance changed by ZOOM, wherever that falls, so a pass can open on the last
+    frame of the stare before it: 289SA AURSTARE001 N_3 opened on a 68 s frame of the lit limb 6,500 px from its aurora
+    stare, a white flash, and ended on one 2,700 px off. A movie that goes back and forth between two places touches its
+    first place again within a few frames and is not cut."""
+    n = len(xy)
+    if n < 2 * LONE_END + 2:
+        return []
+    apart = lambda a, b: bool((np.abs(xy[a] - xy[b]) >= FRAME).any())
+    cuts = []
+    for i in range(LONE_END):
+        if apart(i, i + 1):
+            if all(apart(a, b) for a in range(i + 1) for b in range(i + 1, min(n, i + 1 + LONE_LOOK))):
+                cuts.append(i + 1)
+            break
+    for i in range(n - 1, n - 1 - LONE_END, -1):
+        if apart(i - 1, i):
+            if all(apart(a, b) for a in range(i, n) for b in range(max(0, i - LONE_LOOK), i)):
+                cuts.append(i)
+            break
+    return cuts
 
 
 def _island(xy, pics):
@@ -3991,6 +4022,20 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None, around=None
             masks = [m & ~out for m in masks]
             if min(int(m.sum()) for m in masks) < 32 * 32:
                 return None, "other body"
+    if kept is not None and where.get("cut"):
+        # the square round a small target is matched only where both pictures show the target: something lit
+        # (STEADY_SEEN_LEVEL) within STEADY_SEEN_PAD of its disk. A moon the frames never show (Albiorix in 129OT
+        # OUTERSATS002, a fraction of a pixel and under the sky's noise) left a square of sky and noise, which the
+        # alignment matched anyway, moving the frames 15 to 25 px from one another; without a match each goes on along
+        # SPICE's smoothed path (_chain_links), one source for the whole movie
+        h, w = masks[0].shape
+        yy, xx = np.mgrid[0:h, 0:w]
+        cx, cy, r = kept
+        near = (xx + 0.5 + where["x0"] - cx) ** 2 + (yy + 0.5 + where["y0"] - cy) ** 2 <= (r + STEADY_SEEN_PAD) ** 2
+        for i, m in zip(imgs, masks):
+            v = i.max(axis=2) if i.ndim == 3 else i
+            if not (v[near & m] >= STEADY_SEEN_LEVEL).any():
+                return None, "target not seen"
     if within is not None:
         # only where both tiles have picture, well inside each: the same ground in both
         k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
@@ -7231,6 +7276,9 @@ CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a 
 
 
 TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
+TINT_LIT_LEVEL = 16  # display levels (LIT_LEVEL): the bright end above is measured over pixels this bright in the frame or
+#                      the set, not over the overlap's sky
+TINT_HUE_LEAST = 16  # lit pixels: fewer than LUM_MATCH_MIN give no brightness match; this many still give the set's hue
 TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame eases over to the set's own picture (the
 #                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
 TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per channel: a set's colour fringes (a body
@@ -7359,15 +7407,24 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     # (C23RI RMOV001 frame 59, 2026-11-16))
     clipped = near >= 1
     both = (ca > 0.99) & (ga > 0.99) & ~clipped
-    top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
-    top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
-    lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g)
+    # the bright end of what is lit in either picture (TINT_LIT_LEVEL and up), not of the whole overlap: where the body
+    # is under 1% of the picture (Jupiter 80 px across a cruise WAC movie, a moon a few px across) the overlap's 99th
+    # percentile is sky, 0 once black is taken off, so every pixel over 0 counted as lit and the brightness match was
+    # the sky's noise against the set's, at LUM_MATCH's end: C23JU 6ATM2X2B037 W_10 went blown white, gray and yellow
+    # from frame to frame on the same set and the same gray frame
+    up = both & ((grey[..., 0] >= TINT_LIT_LEVEL) | (colour[..., :3].max(axis=2) >= TINT_LIT_LEVEL))
+    top_y = float(np.percentile(y[up], 99)) if up.any() else 0.0
+    top_g = float(np.percentile(g[up], 99)) if up.any() else 0.0
+    lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g) if top_y > 0 and top_g > 0 else np.zeros_like(both)
     if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
     else:
-        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
-        hue = np.ones(3, np.float32)
+        # (too little lit to measure a match on, a speck: the frame's own brightness on the pass's one scale, in the
+        # set's hue where it has a few lit pixels; never a match of the two pictures' sky)
+        match = 1.0
+        hue = (np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0) if lit.sum() >= TINT_HUE_LEAST
+               else np.ones(3, np.float32))
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within TINT_MATCH)
     match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
@@ -8349,6 +8406,8 @@ STEADY_REACH = image_correction.FIT_REACH   # px: the furthest a stabilized tile
                       # is 3 to 5 px off, 27 to 30 at worst between a set's filters); a match further off followed
                       # something else that moves, another moon crossing the frame (Sam 2026-11-04)
 STEADY_PAD = 4        # px round another body's disk left out of a stabilization match (steady_chain)
+STEADY_SEEN_PAD = 8   # px round a small target's disk where a stabilization match looks for it in both pictures (_shift_onto)
+STEADY_SEEN_LEVEL = 16   # display levels (LIT_LEVEL): ... and what is lit there; a square with none is sky, never matched
 STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STEADY_PAD round it) and a small target's
                       # stabilization match is not made (_shift_onto); less, and only that body is left out of the match
 STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
@@ -8368,7 +8427,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady8: another body's disk drawn by its shape toward the target (other_bodies, _limb_toward), and one only
     # over the square's sky round a small target left out of the match, not the match (STEADY_HIDDEN): Enceladus
     # setting behind Saturn (293EN ENCSET001) kept SPICE's jumps on 34 of its 48 frames
-    STEADY_FILE = f"steady8k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady9: a small target's square matched only where both pictures show the target (_shift_onto): Albiorix 129OT
+    # OUTERSATS002, never seen in its frames, was matched on its square's noise
+    STEADY_FILE = f"steady9k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -10380,8 +10441,17 @@ def _shown_of(u, p, n, not_shown, tile_of):
         if got:
             return s, got, False, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
+        held = s != n
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
                        lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
+        if colours and (held or (s == n and held_band(frames[n][2]))):
+            # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
+            # last whole frame is a cycle or more back (and step_frame's gray frame beside that one older still), and a
+            # held band's frame with no gray frame near, whose own gray is not the body's look, show what the frame
+            # before them shows (shown_of's run rule), never a picture from cycles back. 170SA WIND5HR005 N_1's last
+            # cycle: its MT2 frame came down with 254 lines lost and jumped back two cycles, 85 px, to that cycle's
+            # BL1, and its MT3 frame after it played its own methane gray, near black
+            return s, None, False, True
     return s, None, False, False
 
 

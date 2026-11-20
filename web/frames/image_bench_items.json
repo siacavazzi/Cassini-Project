@@ -61,6 +61,10 @@
   {"name": "saturn07-deck2", "kind": "composite", "frame": "N1565242114_1", "group": "hard", "watch": "low-contrast cloud deck close-up shows its cloud structure, not a plain peach square (regression 11-20)"},
   {"name": "titan08-mt1", "kind": "still", "frame": "N1578275934_1", "group": "hard", "watch": "Titan MT1 close-up shows its haze and clouds, not a white square; compression blocks not pushed (regression 11-20)"},
   {"name": "rings08-bright", "kind": "still", "frame": "N1585900002_1", "group": "hard", "watch": "B ring close-up not washed out to white; Cassini division strip keeps its ringlets (regression 11-20)"},
-  {"name": "mimas04-movie", "kind": "pass", "frame": "N1466584338_1", "group": "hard", "watch": "Mimas 2004 (000OT TIMIIA001) colour movie: its glare-lit sky not magenta, the set's channels raised by one share of their sky"}
+  {"name": "mimas04-movie", "kind": "pass", "frame": "N1466584338_1", "group": "hard", "watch": "Mimas 2004 (000OT TIMIIA001) colour movie: its glare-lit sky not magenta, the set's channels raised by one share of their sky"},
+  {"name": "aurstare289-movie", "kind": "pass", "frame": "N1881961534_1", "group": "hard", "watch": "289SA AURSTARE001 N (2017) aurora stare: opened on a white frame of the lit limb 6,500 px away (the stare before it, cut by ZOOM) and ended on one 2,700 px off; no white flash (_lone_ends)"},
+  {"name": "jupiter-tint-movie", "kind": "pass", "frame": "W1353347546_1", "group": "hard", "watch": "C23JU 6ATM2X2B037 W_10 (2000) Jupiter 80 px across a WAC movie, every frame tinted from its colour set: blown white, gray and yellow frame to frame (the tint's brightness matched on the sky's noise); one steady colour (tinted_frame)"},
+  {"name": "wind170-movie", "kind": "pass", "frame": "N1724399336_1", "group": "hard", "watch": "170SA WIND5HR005 N_1 (2012): last cycle's MT2 lost 254 lines and jumped back two cycles (85 px), then its MT3 played near black; no hop, no dark last frame (_shown_of)"},
+  {"name": "albiorix129-movie", "kind": "pass", "frame": "N1650145965_1", "group": "hard", "watch": "129OT OUTERSATS002 Albiorix (2010), a moon its frames never show: stabilization matched its square's noise and the stars hopped 15 to 45 px frame to frame; stars steady (_shift_onto, steady9)"}
  ]
 }
