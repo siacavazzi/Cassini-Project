@@ -88,7 +88,9 @@ with calibration.looking(calibration.LOOKS[0]), calibration.coloring(calibration
     asked = files() - built
     assert not asked, sorted(asked)
     # the filled pass's _d0 frames are its own and differ from the sharpened ones; the other pass has none
-    assert len(d0) == N and all(n.endswith("_0_0_c2_d0.webp") for n in d0), d0
+    # (at the smoothing the movie plays at by default: every pass with a chain is stabilized by default, #602)
+    assert len(d0) == N and all(n.endswith(f"_0_0_c2_s{om.STEADY_SMOOTH}_d0.webp") or n.endswith("_0_0_c2_d0.webp")
+                                for n in d0), d0
     u = passes[0][0]
     a, b = route(u["frames"][2][1], PAGE)[0], route(u["frames"][2][1], PAGE + "&detail=0")[0]
     assert a != b
