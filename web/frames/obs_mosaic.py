@@ -708,7 +708,9 @@ def _retargets(u):
         lo, hi = np.minimum.accumulate(xy), np.maximum.accumulate(xy)   # the frames up to each one
         rlo, rhi = np.minimum.accumulate(xy[::-1])[::-1], np.maximum.accumulate(xy[::-1])[::-1]   # ... and from it on
         cuts = [i + 1 for i in range(len(pts) - 1) if ((rlo[i + 1] - hi[i] >= FRAME) | (lo[i] - rhi[i + 1] >= FRAME)).any()]
-        cuts = sorted(set(cuts) | set(_lone_ends(xy)))
+        # (and each piece's own lone ends: a piece the cut above ends can end on a frame at another pointing too)
+        bounds = [0] + cuts + [len(pts)]
+        cuts = sorted(set(cuts) | {a + c for a, b in zip(bounds, bounds[1:]) for c in _lone_ends(xy[a:b])})
     else:
         # a mosaic, frame by frame (the frames before and after a cut each round the other's boxes, 282RI's third
         # strip between the first two): the latest frame each frame's footprint comes within ISLAND_GAP of
@@ -4023,19 +4025,21 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None, around=None
             if min(int(m.sum()) for m in masks) < 32 * 32:
                 return None, "other body"
     if kept is not None and where.get("cut"):
-        # the square round a small target is matched only where both pictures show the target: something lit
-        # (STEADY_SEEN_LEVEL) within STEADY_SEEN_PAD of its disk. A moon the frames never show (Albiorix in 129OT
+        # the square round a small target is matched only where both pictures show the target: STEADY_SEEN_LEAST pixels
+        # lit (STEADY_SEEN_LEVEL) within STEADY_SEEN_PAD of its disk. A moon the frames never show (Albiorix in 129OT
         # OUTERSATS002, a fraction of a pixel and under the sky's noise) left a square of sky and noise, which the
-        # alignment matched anyway, moving the frames 15 to 25 px from one another; without a match each goes on along
-        # SPICE's smoothed path (_chain_links), one source for the whole movie
+        # alignment matched anyway, and the stars round it hopped 10 to 40 px from frame to frame. Where it is not seen
+        # the two are matched over the whole of what they share instead (other bodies still left out), the stars that
+        # pointing is reckoned from
         h, w = masks[0].shape
         yy, xx = np.mgrid[0:h, 0:w]
         cx, cy, r = kept
         near = (xx + 0.5 + where["x0"] - cx) ** 2 + (yy + 0.5 + where["y0"] - cy) ** 2 <= (r + STEADY_SEEN_PAD) ** 2
-        for i, m in zip(imgs, masks):
-            v = i.max(axis=2) if i.ndim == 3 else i
-            if not (v[near & m] >= STEADY_SEEN_LEVEL).any():
-                return None, "target not seen"
+        seen = all(int(((i.max(axis=2) if i.ndim == 3 else i)[near & m] >= STEADY_SEEN_LEVEL).sum()) >= STEADY_SEEN_LEAST
+                   for i, m in zip(imgs, masks))
+        if not seen:
+            shift, how = _shift_onto(q, ref, at_q, t, crop, at_t, within, sure, None, holes, None)
+            return shift, (f"target not seen; whole: {how}" if how else how)
     if within is not None:
         # only where both tiles have picture, well inside each: the same ground in both
         k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
@@ -8407,7 +8411,8 @@ STEADY_REACH = image_correction.FIT_REACH   # px: the furthest a stabilized tile
                       # something else that moves, another moon crossing the frame (Sam 2026-11-04)
 STEADY_PAD = 4        # px round another body's disk left out of a stabilization match (steady_chain)
 STEADY_SEEN_PAD = 8   # px round a small target's disk where a stabilization match looks for it in both pictures (_shift_onto)
-STEADY_SEEN_LEVEL = 16   # display levels (LIT_LEVEL): ... and what is lit there; a square with none is sky, never matched
+STEADY_SEEN_LEVEL = 16   # display levels (LIT_LEVEL): ... and what is lit there
+STEADY_SEEN_LEAST = 3    # px: ... this many of them (a hot pixel is one); fewer in either picture, the whole of both is matched
 STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STEADY_PAD round it) and a small target's
                       # stabilization match is not made (_shift_onto); less, and only that body is left out of the match
 STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
@@ -8427,8 +8432,8 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady8: another body's disk drawn by its shape toward the target (other_bodies, _limb_toward), and one only
     # over the square's sky round a small target left out of the match, not the match (STEADY_HIDDEN): Enceladus
     # setting behind Saturn (293EN ENCSET001) kept SPICE's jumps on 34 of its 48 frames
-    # steady9: a small target's square matched only where both pictures show the target (_shift_onto): Albiorix 129OT
-    # OUTERSATS002, never seen in its frames, was matched on its square's noise
+    # steady9: a small target's square matched only where both pictures show the target, else the whole of both, its
+    # stars (_shift_onto): Albiorix 129OT OUTERSATS002, never seen in its frames, was matched on its square's noise
     STEADY_FILE = f"steady9k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then

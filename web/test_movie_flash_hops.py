@@ -5,8 +5,8 @@
   noise the sky holds, and close to the frame's own.
 - _lone_ends: a movie that opens on one frame of the stare before it (289SA AURSTARE001 N_3) is cut after that frame,
   one that goes back and forth between two places is not.
-- _shift_onto: the square round a small target is not matched when either picture shows nothing there (Albiorix,
-  never seen in its frames), and is when both show the target.
+- _shift_onto: the square round a small target is matched only when both pictures show the target there; otherwise
+  the whole of both is matched (Albiorix, never seen in its frames: its stars).
 Run: python web/test_movie_flash_hops.py"""
 import os
 import sys
@@ -74,11 +74,11 @@ def test_square_needs_the_target():
     q = {"n": 0, "offset": [0.0, 0.0], "box": [-S / 2, -S / 2, S, S]}
     kw = dict(around=(0.0, 0.0, om.STEADY_AROUND), kept=(0.0, 0.0, 2.0))
     _, how = om._shift_onto(q, tile(False), (0.0, 0.0), t, tile(False), (0.0, 0.0), **kw)
-    assert how == "target not seen", how
+    assert str(how).startswith("target not seen"), how
     _, how = om._shift_onto(q, tile(True), (0.0, 0.0), t, tile(False), (0.0, 0.0), **kw)
-    assert how == "target not seen", how
+    assert str(how).startswith("target not seen"), how
     _, how = om._shift_onto(q, tile(True), (0.0, 0.0), t, tile(True), (0.0, 0.0), **kw)
-    assert how != "target not seen", how
+    assert not str(how).startswith("target not seen"), how
 
 
 if __name__ == "__main__":
