@@ -93,7 +93,8 @@ import label_handler  # noqa: E402
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
 # obs-v145/v128/v114: a mosaic movie's tiles the camera steps between lap after lap are two slots, not one (#604, numbered past #602)
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
-VERSIONS = {"balanced": "obs-v146", "raw": "obs-v129", "eye": "obs-v146-eye", "false": "obs-v146-false", "classic": "obs-v115-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
+VERSIONS = {"balanced": "obs-v147", "raw": "obs-v130", "eye": "obs-v147-eye", "false": "obs-v147-false", "classic": "obs-v116-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -10406,6 +10407,16 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         own_gain = {}
         bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
         to_white = one_white(list(bases.values()), p["display_scale"])
+        # (the set's one move: the median of its channels' own stabilization moves, so one channel the pictures could
+        # not match, or matched along the ring, moves none of them on its own)
+        # (from each channel's place as steady_places holds it: SPICE's, or the pictures' where seen_places took
+        # them; the page's table has those as its "spice")
+        sheld = steady_held(u, cache, p) if places and not track else {}
+        anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
+        moves = [(places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
+                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})]
+        set_shift = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) \
+            if places and not track and len(bases) > 1 and moves else None
         for f, j in got.items():
             # (frame n's own tile as made: at() is applied once, below, so its gain is not taken twice)
             base = bases[f]
@@ -10413,6 +10424,13 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 base = dict(base, gain=round((base.get("gain") or 1.0) * to_white[id(base)], 4),
                             gamma=base.get("gamma", gamma))
             newest[f] = at(base)
+            if set_shift is not None and "offset" in base:
+                # (a colour set's channels moved together, by the median of their own stabilization moves: each keeps its
+                # place against the others as SPICE has it (the channels' registration). Each at its own stabilized place, a
+                # channel the pictures could not match went on along the smoothed path while the others followed
+                # their matches, and the channels came apart: 257DA DAPHNIS001's blue-violet fringe along the
+                # Keeler gap's edge, #602)
+                newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
             own_gain[f] = base.get("gain")
         used = want
     if used:

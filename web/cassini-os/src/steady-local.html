@@ -40,9 +40,18 @@
     // how far frame a's tile moves from where the served frame has it to its stabilized place, canvas pixels: from
     // SPICE's place, or, for a pass the server stabilizes by default (the table's "auto", obs_mosaic.auto_steady: its
     // pre-built frames are drawn at that smoothing), from its places at that smoothing (base)
-    function shift(t, pl, a, base) {
+    // numpy.median of a list of numbers
+    const npMedian = v => { const s = [...v].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+    // (set: a colour set's channels (tile indices): every channel moved by the median of their own stabilization moves,
+    // each keeping its place against the others as SPICE has it, as movie_frame moves a set's channels together)
+    function shift(t, pl, a, base, set) {
       if (!pl) return [0, 0];
-      const s = corner(t, a, base ? base[a] : t.spice[a]), p = corner(t, a, pl[a]);
+      let to = pl[a];
+      if (set && set.length > 1) {
+        const mx = npMedian(set.map(b => pl[b][0] - t.spice[b][0])), my = npMedian(set.map(b => pl[b][1] - t.spice[b][1]));
+        to = [t.spice[a][0] + mx, t.spice[a][1] + my];
+      }
+      const s = corner(t, a, base ? base[a] : t.spice[a]), p = corner(t, a, to);
       return [p[0] - s[0], p[1] - s[1]];
     }
     // obs_mosaic.evened_gains for one stretch's log brightnesses in order: a running median over FLASH frames, a
@@ -728,7 +737,7 @@ onmessage = async e => {
   const late = mixing && !m.trail && gain < 1.0;
   // each tile's picture (the movie frame drawn at SPICE's places) moved to its stabilized place, its gain on it
   const planes = m.planes.map(p => {
-    const [dx, dy] = M.shift(t, placed.get(pk), p.i, base), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
+    const [dx, dy] = M.shift(t, placed.get(pk), p.i, base, m.planes.length > 1 && !m.trail ? m.planes.map(q => q.i) : null), c = new OffscreenCanvas(W, H), g = c.getContext("2d", { willReadFrequently: !!(L || mixing || m.detail) });
     g.drawImage(p.bitmap, dx, dy);
     p.bitmap.close();
     moves.push([dx, dy]);

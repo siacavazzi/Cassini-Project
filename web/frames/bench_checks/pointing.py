@@ -9,10 +9,15 @@ Saturn, 293EN ENCSET001, mixed the pictures' places with SPICE's):
                     the commit's own placement (its collect hook), so it is paired with pointing_jitter, which measures
                     the pictures themselves
 """
+import math
+
 from bench_checks import Result, check, luminance
 
 SMOOTH = 3.0      # frames: the movie's own motion, a Gaussian of this many frames over its frame-to-frame moves
-SURE = 0.05       # phase correlation peak under which a pair says nothing (a blank frame, a hidden target)
+SURE = 0.15       # phase correlation peak under which a pair says nothing (a blank frame, a hidden target, a ring
+#                   scan whose ringlets repeat: such pairs read as moves of hundreds of px between frames 1 to 3 px apart)
+FARTHEST = 0.25   # of the picture's side: a move further than this between two frames is not measured as one (a scan's
+#                   frames sharing too little to match), left out like an unsure pair
 
 
 def _grey(rgba):
@@ -38,7 +43,7 @@ def moves(p):
             h, w = g.shape
             pad = lambda x: cv2.copyMakeBorder(x, 0, _even(h) - h, 0, _even(w) - w, cv2.BORDER_CONSTANT, value=0)
             (dx, dy), resp = cv2.phaseCorrelate(pad(prev), pad(g), pad(cv2.createHanningWindow((w, h), cv2.CV_32F)))
-            out.append((float(dx), float(dy)) if resp >= SURE else None)
+            out.append((float(dx), float(dy)) if resp >= SURE and math.hypot(dx, dy) <= FARTHEST * min(h, w) else None)
         else:
             out.append(None)
         prev = g
@@ -124,6 +129,58 @@ def _sources(ctx):
 ITEMS = [
     {"name": "encset293-movie", "kind": "pass", "frame": "N1884013382_1", "group": "hard",
      "watch": "Enceladus setting behind Saturn: steady to the end, no frame at SPICE's raw pointing (2026-11-18)"},
+    {"name": "daphnis257n1-movie", "kind": "pass", "frame": "N1863264697_1", "group": "hard",
+     "watch": "Daphnis colour movie: channels line up along the Keeler gap edge, no blue-violet fringe (#602 regression)"},
+    {"name": "fring039-movie", "kind": "pass", "frame": "N1551253524_1", "group": "hard",
+     "watch": "2007 F ring movie (039RF FMOVIE001): no jitter (#602 regression, p90 16.5 to 31 px)"},
+    {"name": "fring183-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard",
+     "watch": "2013 F ring movie (183RF FMOVIE001): no jitter (#602 regression, p90 19.5 to 28.8 px)"},
     {"name": "titancloud264-movie", "kind": "pass", "frame": "N1867408664_1", "group": "hard",
      "watch": "Titan cloud watch: steady, no frame at SPICE's raw pointing"},
 ]
+
+
+def _fringe(rgba):
+    """How much more colourful a colour picture is along its sharpest edges than over its picture: the mean chroma
+    (max channel less min, levels) within 2 px of its top 3 % of brightness edges, less its median chroma, inside its
+    lit picture (none for a grey picture or too little lit). Channels that do not line up put colour along every edge
+    (257DA DAPHNIS001 after #602: -0.1 before, 6.0 with its blue channel 10 px off along the Keeler gap)."""
+    import cv2
+    import numpy as np
+    a = rgba.astype(np.float32)
+    rgb = a[..., :3]
+    if float(np.abs(rgb[..., 0] - rgb[..., 1]).max()) < 1 and float(np.abs(rgb[..., 2] - rgb[..., 1]).max()) < 1:
+        return None
+    lit = a[..., 3] > 0
+    lum = rgb.mean(axis=2)
+    g = cv2.GaussianBlur(lum, (0, 0), 1.0)
+    G = np.hypot(cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1))
+    m = (cv2.erode(lit.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0) & (lum > 20)
+    if m.sum() < 1000:
+        return None
+    edge = m & (G >= np.percentile(G[m], 97))
+    near = (cv2.dilate(edge.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0) & m
+    chroma = rgb.max(axis=2) - rgb.min(axis=2)
+    return float(chroma[near].mean() - np.median(chroma[m]))
+
+
+@check("channel_registration", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.25,
+       about="a colour movie's channels do not line up: a coloured fringe along edges (257DA DAPHNIS001, #602)")
+def channel_registration(p, limit=4.0):
+    """The 90th percentile, over a colour movie's frames, of how much more colourful each is along its sharpest edges
+    than over its picture (_fringe, levels). A body's own colour along a limb scores high on both sides (a known
+    failure); a set whose channels come apart scores higher than before (a regression)."""
+    import numpy as np
+    vals = {}
+    for f in p.frames():
+        m = _fringe(p.load(f))
+        if m is not None:
+            vals[f] = round(m, 2)
+    if len(vals) < 2:
+        return Result(0, limit, True, "no colour frames to judge")
+    v = np.array(list(vals.values()))
+    p90 = float(np.percentile(v, 90))
+    worst = max(vals, key=vals.get)
+    return Result(p90, limit, p90 <= limit, f"colour along edges past the picture's own: p90 {p90:.2f} levels, largest "
+                                            f"{vals[worst]:.2f} ({len(vals)} colour frames)", where=worst,
+                  values={k: x for k, x in vals.items() if x > limit})
