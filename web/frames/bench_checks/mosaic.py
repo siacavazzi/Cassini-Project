@@ -8,7 +8,7 @@ from bench_checks import Result, check
 TWICE = 2   # a pair of pointings the camera steps straight between this often is two tiles of the raster, not a drift
 
 
-@check("missing_panel", kinds=("mosaic_movie",), default=True, owner="mosaic thread", worse_by=0.0,
+@check("missing_panel", kinds=("mosaic", "mosaic_movie"), default=True, owner="mosaic thread", worse_by=0.0,
        about="a mosaic movie with a panel missing most of the time: two tiles of the raster share one slot "
              "(Sam 11-18, 2017-09-08 north pole map)")
 def missing_panel(p, limit=0):
@@ -16,6 +16,8 @@ def missing_panel(p, limit=0):
     (two tiles) but that the commit's slots draw as one (the newer wipes the older out). Kept at build time from the
     pass's pointings by the collect hook."""
     got = p.collected("missing_panel")
+    if got and got.get("kind") is not None and got["kind"] != "mosaic_movie":
+        return Result(0, limit, True, f"a {got['kind']}, not a mosaic movie: one slot a tile")
     if not got or got.get("pairs") is None:
         return Result(None, limit, False, "no slots kept for this pass (the collect hook found no mosaic movie)")
     pairs = got["pairs"]
@@ -31,8 +33,10 @@ def _slots(ctx):
     """With the commit's own code: the pass's pointings (frames a tile's step apart, mosaic.min_step, from the geometry
     the pass holds), the steps between them in time order, and which of those pairs the commit's slots merge."""
     u = ctx.unit
-    if u is None or u.get("kind") != "mosaic_movie" or not u.get("z"):
+    if u is None:
         return None
+    if u.get("kind") != "mosaic_movie" or not u.get("z"):
+        return {"kind": u.get("kind"), "pairs": None}
     import collections
     import mosaic
     step = mosaic.min_step * ctx.om.FRAME
@@ -68,7 +72,7 @@ def _slots(ctx):
                 wiped[pair] += 1
         prev = (i, slots[j])
     pairs = sorted(q for q, k in stepped.items() if k >= TWICE and wiped[q] >= TWICE)
-    return {"pairs": [list(q) for q in pairs], "pointings": len(seen),
+    return {"kind": "mosaic_movie", "pairs": [list(q) for q in pairs], "pointings": len(seen),
             "slots": len({s for s in slots if s is not None}), "steps": sum(stepped.values())}
 
 
