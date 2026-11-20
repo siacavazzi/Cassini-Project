@@ -1,8 +1,7 @@
-# Image benchmark: 5bd70f658118 against ac8de8de2c64
+# Image benchmark: 6d87cc93f9b3 against ac8de8de2c64
 
-**FAIL**. 58 items: 56 identical, 2 changed (1 outside the target), 0 not built.
+**NEEDS EYES**. 58 items: 56 identical, 2 changed (1 outside the target), 0 not built.
 
-- changed outside the target, unexplained: enceladus-spol-mosaic
 - target items with a measure worse (look at them): mimas167-mosaic
 
 Built in 10 min (base) and 32 min (candidate). Targets: mimas167-mosaic.
@@ -15,7 +14,7 @@ Built in 10 min (base) and 32 min (candidate). Targets: mimas167-mosaic.
 | shadow-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | photlit039-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | jupiter-atmos-mosaic | hard | identical | 0/1 | 0.00% |  |  |  |
-| enceladus-spol-mosaic | hard | changed | 2/2 | 2.27% | 85 |  |  |
+| enceladus-spol-mosaic | hard | changed | 2/2 | 2.27% | 85 |  | one clear frame (N1858933356_1) turned 0.26 degrees back onto its pointing's frame (44 blocks agree): only that faint sky tile's outline moves, 1-2 px at its edge in black sky; the crescent and plume are unchanged |
 | satellorb-centre | hard | identical | 0/1 | 0.00% |  |  |  |
 | daphnis09-movie | hard | identical | 0/70 | 0.00% |  |  |  |
 | ringclose124-movie | hard | identical | 0/10 | 0.00% |  |  |  |
@@ -63,7 +62,7 @@ Built in 10 min (base) and 32 min (candidate). Targets: mimas167-mosaic.
 | saturn-limb-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | enceladus-eye-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | impact293-movie | hard | identical | 0/24 | 0.00% |  |  |  |
-| mimas167-mosaic | target | changed | 2/2 | 21.42% | 255 | mosaic.webp: clipped 0.92% -> 1.82%; mosaic.webp: 1.55% of the base's light now black; mosaic.webp: detail 0.7967 -> 0.9762 (+23%) |  |
+| mimas167-mosaic | target | changed | 2/2 | 21.42% | 255 | mosaic.webp: clipped 0.92% -> 1.82%; mosaic.webp: 1.55% of the base's light now black; mosaic.webp: detail 0.7967 -> 0.9762 (+23%) | the target: its GRN and UV3 frames are turned back onto the clear frame (1.4 to 3.7 degrees), so the three channels now peak together. Clipped 0.92% -> 1.8%: the limb's white, which the fringes spread over three offset channels, is now in one place; the base's light now black is the removed coloured rims (the violet band outside the right limb, the green one on the left), not lost ground; detail +23% is the craters no longer smeared |
 | fring274-movie | hard | identical | 0/172 | 0.00% |  |  |  |
 | encset293-movie | hard | identical | 0/48 | 0.00% |  |  |  |
 | titancloud264-movie | hard | identical | 0/104 | 0.00% |  |  |  |
