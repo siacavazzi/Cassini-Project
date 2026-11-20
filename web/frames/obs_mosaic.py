@@ -3531,13 +3531,38 @@ def _filter_turn(u, n, out, crop, cache, scale):
             ref = _made_pictures.get(path)
         if ref is None:
             ref = np.asarray(Image.open(path).convert("RGBA"))
-        theta, blocks = filter_turn_of(q, ref, out, crop)
+        theta, blocks = filter_turn(q, ref, out, crop)
         if theta is None:
             continue
         if abs(theta) < FILTER_TURN_LEAST:
             return None
         return {"to": q["id"], "turn": round(float(theta), 3), "blocks": blocks}
     return None
+
+
+FILTER_TURN_TRIES = (0.0, 2.0, -2.0, 3.5, -3.5)   # degrees: the turns a frame is first turned back by to measure it
+
+
+def filter_turn(s, ref, t, mine):
+    """filter_turn_of, with t's picture first turned back by each of FILTER_TURN_TRIES until a turn is found (each
+    block of a frame turned 3 degrees is itself turned, and smeared that way its match is off the fit), then measured
+    again turned back by what was found: (degrees, blocks) or (None, why)."""
+    centre = (-t["box"][0] / (t["box"][2] / mine.shape[1]) - 0.5, -t["box"][1] / (t["box"][3] / mine.shape[0]) - 0.5)
+    why = None
+    for first in FILTER_TURN_TRIES:
+        im = _subpixel(mine, 0.0, 0.0, first, centre) if first else mine
+        got, blocks = filter_turn_of(s, ref, t, im)
+        if got is None:
+            why = why or blocks
+            continue
+        total = first + got
+        if abs(total) > FILTER_TURN_MOST:
+            return None, f"turn too large ({total:+.2f} deg)"
+        again, blocks2 = filter_turn_of(s, ref, t, _subpixel(mine, 0.0, 0.0, total, centre))
+        if again is not None:
+            total, blocks = total + again, blocks2
+        return round(total, 4), blocks
+    return None, why
 
 
 FILTER_TURN_BLOCK = 128    # reference px: the blocks the two frames' overlap is cut in (filter_turn_of)
