@@ -109,6 +109,28 @@ def test_tile_scale_uses_the_track_both_ways():
     assert obs_mosaic.tile_scale(scale, "CL1", own_sky=False, t=5.0)["blacks"][0] == 0.005   # mosaics keep the pass's
 
 
+
+def test_set_share_is_one_share_for_the_colour_filters():
+    share = obs_mosaic.set_share(["RED", "GRN", "BL1"], {"RED": 1e-4, "GRN": 4e-5, "BL1": 6e-5, "CL1": 1e-4},
+                                 {"RED": 0.64e-4, "GRN": 4.6e-5, "BL1": 2.6e-5, "CL1": 1e-5})
+    assert share["filters"] == ["BL1", "GRN", "RED"]
+    assert abs(share["share"] - 0.64) < 1e-9          # the median of 0.433, 0.64 and 1.15
+    assert obs_mosaic.set_share(["CL1"], {"CL1": 1e-4}, {"CL1": 1e-5}) is None
+
+
+def test_colour_movie_channels_raised_by_one_share():
+    rng = np.random.default_rng(3)
+    scale = {"blacks": {"RED": 0.0, "GRN": 0.0}, "white": 0.3, "gamma": 3.0, "sky_tops": {"RED": 0.0006, "GRN": 0.0006},
+             "set_share": {"filters": ["GRN", "RED"], "share": 0.3}}
+    got = {}
+    for f, sky in (("RED", 0.004), ("GRN", 0.002)):
+        iof = (sky + rng.normal(0, 0.00002, (512, 512))).astype(np.float32)
+        iof[200:300, 200:300] = 0.3
+        b = obs_mosaic.tile_scale(scale, f, own_sky=True, t=0.0, codes=False)["black_of"](iof)
+        got[f] = b["black"] / sky
+    assert abs(got["RED"] - got["GRN"]) < 0.02, got     # the same share of each one's sky
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
