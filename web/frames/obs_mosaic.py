@@ -10756,6 +10756,13 @@ def slots(u):
     return u["slots"]
 
 
+# two places a mosaic movie steps between lap after lap are two tiles (not a drifted copy) when at least this far apart,
+# of a frame: a storm movie's places drifting 0.13-0.19 of a frame a lap (052SA STRMOVIA003) waver across the
+# classifier's line lap after lap too, and kept apart they left gaps between its tiles; a raster's tiles overlap by
+# three quarters at most (the 2017-09-08 north pole map's columns are 0.3 and 0.43 of a frame apart)
+RASTER_STEP = 0.25
+
+
 def _slot_of(u, where):
     """(slots) the slot of each frame of pass u, its places being where."""
     at, last, steps = {}, {}, []
@@ -10773,7 +10780,7 @@ def _slot_of(u, where):
     parent = {i: i for i in centre}
 
     # places the camera goes straight between lap after lap (one frame at one, the next placed frame at the other,
-    # and again after it has been somewhere else), a tile's step or more apart (mosaic.min_step), are two tiles of the
+    # and again after it has been somewhere else), RASTER_STEP of a frame or more apart, are two tiles of the
     # raster, however near: the camera drifts onto a drifted place once and stays, or wavers between the two in a row
     # where the drift crosses the classifier's line, but does not step to it and back every lap. A raster whose steps
     # differ by axis (the 2017-09-08 north pole map's columns half a frame apart, its rows a whole frame) has a column
@@ -10786,7 +10793,7 @@ def _slot_of(u, where):
         steps_at.setdefault((min(visits[k - 1], visits[k]), max(visits[k - 1], visits[k])), []).append(k)
     beside = set()
     for (a, b), ks in steps_at.items():
-        if len(ks) < 2 or a not in centre or b not in centre or np.abs(centre[a] - centre[b]).max() < mosaic.min_step * FRAME:
+        if len(ks) < 2 or a not in centre or b not in centre or np.abs(centre[a] - centre[b]).max() < RASTER_STEP * FRAME:
             continue
         # two of its steps with a third place taken between them: a lap went round in between
         if any(v not in (a, b) for v in visits[ks[0]:ks[-1]]):
