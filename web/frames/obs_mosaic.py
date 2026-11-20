@@ -92,7 +92,8 @@ import label_handler  # noqa: E402
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
-VERSIONS = {"balanced": "obs-v144", "raw": "obs-v127", "eye": "obs-v144-eye", "false": "obs-v144-false", "classic": "obs-v113-classic"}# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# obs-v145/v128/v114: a movie following its frames holds still what the camera followed (followed_point, taste call 30 C)
+VERSIONS = {"balanced": "obs-v145", "raw": "obs-v128", "eye": "obs-v145-eye", "false": "obs-v145-false", "classic": "obs-v114-classic"}# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -8989,11 +8990,114 @@ def follows(fp, rect):
     return max(x1 - x0, y1 - y0) > MOVIE_FIT * FRAME and not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
 
 
+# a movie that follows its frames (follows) where the camera followed something that moves: a moon's shadow crossing the
+# rings (108RI MNRNGSHAD005: Mimas' shadow, the camera 400 px a frame along it), a moon. Shown as taken, the frames
+# carry the camera's own tracking error, the shadow wandering 10 to 60 px between frames and jumping where the camera
+# re-aimed. The view instead holds still what the camera followed, as SPICE places it (followed_point); the frames are
+# drawn where they sit (taste call 30, C)
+FOLLOW_SHADOWS = ("MIMAS", "ENCELADUS", "TETHYS", "DIONE", "RHEA", "TITAN", "JANUS", "EPIMETHEUS", "PROMETHEUS",
+                  "PANDORA", "PAN", "DAPHNIS", "ATLAS")   # moons whose shadow on Saturn's rings a camera follows
+FOLLOW_HELD = 0.25   # a point is what the camera followed when its place in the frames (frame middle less the point)
+#                      moves by under this share of how far the frames move, frame to frame (medians)
+FOLLOW_INSET_MOST = 0.08   # of a frame: the most the held view is drawn inside the frames, so their wander shows less black
+_followed = {}   # (pass folder) -> followed_point's answer
+
+
+def _shadow_points(u, frames, ets):
+    """{moon: {frame id: (x, y)}}: where each FOLLOW_SHADOWS moon's shadow centre falls on Saturn's ring plane (the
+    sun's line through the moon met with Saturn's equator plane), on the pass's axes in reference px from its target
+    (as other_bodies puts a body), for a pass of Saturn. {} for any other pass or without SPICE."""
+    if u["key"][0] != "SATURN" or not u.get("z"):
+        return {}
+    import reproject as rp
+    import spiceypy as sp
+    km_px = IFOV[u["key"][2]] * u["z"]
+    a = math.radians(view_turn(u))
+    c, sn = math.cos(a), math.sin(a)
+    out = {}
+    with _spice_lock:
+        for fr in frames:
+            et = ets.get(fr[1])
+            if et is None or not _with_kernels(fr[3]):
+                continue
+            try:
+                v = rp.sky_view("SATURN", et)
+                z = np.array(sp.pxform("IAU_SATURN", "J2000", et))[:, 2]
+                sun = np.array(sp.spkpos("SUN", et, "J2000", "LT+S", "SATURN")[0])
+            except Exception:   # noqa: BLE001  (no geometry for this frame)
+                continue
+            for m in FOLLOW_SHADOWS:
+                try:
+                    mp = np.array(sp.spkpos(m, et, "J2000", "LT+S", "SATURN")[0])
+                except Exception:   # noqa: BLE001
+                    continue
+                d = mp - sun
+                if abs(d @ z) < 1e-9:
+                    continue
+                t = -(mp @ z) / (d @ z)
+                if t <= 0:
+                    continue
+                los = v["c"] + mp + t * d
+                k = np.linalg.norm(v["c"]) / max(los @ v["ch"], 1e-9)
+                X, Y = -(los @ v["east"]) * k / km_px, -(los @ v["north"]) * k / km_px
+                out.setdefault(m, {})[fr[1]] = (float(c * X - sn * Y), float(sn * X + c * Y))
+    return out
+
+
+def followed_point(u, cache, p):
+    """({tile n: (x, y)}, inset) for a movie that follows its frames: the view's middle for each frame, holding still
+    the point the camera followed, and how far (reference px) the view is drawn inside the frames; ({}, 0.0) when no
+    point was followed. Candidates: the target's centre, every other body SPICE puts near the frames (other_bodies),
+    and on a pass of Saturn each moon's shadow on the rings (_shadow_points). For each, the frame middles less the
+    point (where the point sits in the frames); the point followed is the one that moves least in the frames, if that
+    is under FOLLOW_HELD of how far the frames move. The view's middle is the point plus its place in the frames
+    smoothed over STEADY_SMOOTH frames (the camera's own framing of it, without its frame-to-frame tracking error)."""
+    key = folder(u, cache)
+    with _lock:
+        if key in _followed:
+            return _followed[key]
+    frames = u["frames"]
+    tiles = {n: tile(u, n, cache, p["display_scale"]) for n in range(len(frames))}
+    placed = [n for n in range(len(frames)) if "offset" in tiles[n]]
+    got = ({}, 0.0)
+    if len(placed) >= 4:
+        mids = np.array([tiles[n]["offset"] for n in placed], float)
+        motion = float(np.median(np.hypot(*np.diff(mids, axis=0).T)))
+        cands = {"target": {n: (0.0, 0.0) for n in placed}}
+        for n, bodies in other_bodies(u, names=True).items():
+            for name, x, y, _r, _behind in bodies:
+                cands.setdefault(name, {})[n] = (x, y)
+        ets = _ets([frames[n][1] for n in placed])
+        for m, pts in _shadow_points(u, [frames[n] for n in placed], ets).items():
+            cands["shadow of " + m] = {n: pts[frames[n][1]] for n in placed if frames[n][1] in pts}
+        best = None
+        for name, pts in cands.items():
+            if len(pts) < len(placed):
+                continue
+            dev = mids - np.array([pts[n] for n in placed], float)
+            # (how fast the point moves in the frames: a point the camera followed hardly moves there, while the frames
+            # move far past everything else; 108RI: Mimas' shadow 26 px a frame, the frames 600)
+            speed = float(np.median(np.hypot(*np.diff(dev, axis=0).T)))
+            if best is None or speed < best[0]:
+                best = (speed, name, pts, dev)
+        if best is not None and motion > 0 and best[0] < FOLLOW_HELD * motion:
+            speed, name, pts, dev = best
+            # (the camera's own framing of the point, smoothed over STEADY_SMOOTH frames: its slow drift kept, its
+            # frame-to-frame tracking error and its corrections taken out)
+            frame_it = _gaussian_line(dev, STEADY_SMOOTH)
+            inset = float(min(np.percentile(np.hypot(*(dev - frame_it).T), 90), FOLLOW_INSET_MOST * FRAME))
+            got = ({n: (pts[n][0] + frame_it[i][0], pts[n][1] + frame_it[i][1]) for i, n in enumerate(placed)}, inset)
+            got[0]["_name"] = name
+    with _lock:
+        _followed[key] = got
+    return got
+
+
 FOLLOW_SLACK = 2   # px: a following frame is drawn this much bigger than the picture and its middle cut out, so its
 #                    edges (placed to the nearest pixel, then turned) never show a part-transparent row (_unturn)
 
 
-def follow_view(u, s, t, out, pic=None):
+def follow_view(u, s, t, out, pic=None, middle=None, inset=0.0):
     """How a movie that follows the frame (follows: a creeping ring or limb movie, a close-up sweeping across a
     planet) draws frame s (its tile t, at its place) out px across: the frame as Cassini took it, filling the picture
     (Sam 2026-11-08: a 271SA close-up sweep was drawn in a window two frames across, the frame a quarter of it and
@@ -9013,8 +9117,11 @@ def follow_view(u, s, t, out, pic=None):
     axes = view_axes(u) if own is not None else None
     turn = 0.0 if own is None else wrapped(square_turn(own, quarter_of(vt, own if axes is None else axes)) - vt)
     a = math.radians(turn)
+    # (holding a followed point still, followed_point: the view's middle there, drawn inset inside the frames)
+    scale = fz / u["z"] if fz and u.get("z") else 1.0
+    side = max(side - 2 * inset * scale, side * (1 - 2 * FOLLOW_INSET_MOST))
     big = side * (abs(math.cos(a)) + abs(math.sin(a)))
-    cx, cy = t["offset"]
+    cx, cy = middle if middle is not None else t["offset"]
     return (cx - big / 2, cy - big / 2, big, big), (out + FOLLOW_SLACK) / side, turn
 
 
@@ -10204,9 +10311,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # rolling trail asked for, the window MOVIE_FIT frames across as before, so the frames before it show round it
     unturn = None
     if not track and not trail and follows(fp, rect):
-        rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
-        unturn = (turn, follow_middle(t, rect, k), out, out)
+        held, inset = followed_point(u, cache, p)
+        mid = held.get(s)
+        rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t), mid, inset if mid else 0.0)
+        # (turned back about the view's middle: the frame's own, or the held point's place)
+        unturn = (turn, follow_middle(t, rect, k) if mid is None else
+                  ((mid[0] - rect[0]) * k - 0.5, (mid[1] - rect[1]) * k - 0.5), out, out)
         rep["follow"] = {"turn": round(turn, 2)}
+        if mid is not None:
+            rep["follow"]["held"] = held.get("_name")
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the colour set's, the trail
     used, newest = None, {}
