@@ -91,7 +91,9 @@ import label_handler  # noqa: E402
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
-VERSIONS = {"balanced": "obs-v145", "raw": "obs-v128", "eye": "obs-v145-eye", "false": "obs-v145-false", "classic": "obs-v114-classic"}# v145/128/114: a mosaic movie's tiles the camera steps between lap after lap are two slots, not one (#604, numbered past #602); v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# obs-v145/v128/v114: a mosaic movie's tiles the camera steps between lap after lap are two slots, not one (#604, numbered past #602)
+# obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
+VERSIONS = {"balanced": "obs-v145", "raw": "obs-v128", "eye": "obs-v145-eye", "false": "obs-v145-false", "classic": "obs-v114-classic"}# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3711,9 +3713,13 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None, around=None
                 out |= disc(hx, hy, r)
         out |= behind & ~disc(*kept) if kept is not None else behind
         if out.any() and where["cut"]:
-            # another body over the square round a small target: what is left is too little of it to match on its own
-            # (on a square mostly sky the alignment takes a star fit), so SPICE alone places the frame
-            return None, "other body"
+            # another body over the target itself on the square round a small target: what is left of it is too little
+            # to match on its own (on a square mostly sky the alignment takes a star fit), so SPICE alone places the
+            # frame. Another body only over the square's sky (Saturn's limb coming up under Enceladus as it sets,
+            # 293EN ENCSET001) is left out and the moon matched as before (STEADY_HIDDEN)
+            own = disc(*kept) if kept is not None else np.zeros((h, w), bool)
+            if not own.any() or (out & own).sum() > STEADY_HIDDEN * own.sum():
+                return None, "other body"
         if out.any():
             imgs = [np.where(out[..., None], 0, i).astype(np.uint8) for i in imgs]
             masks = [m & ~out for m in masks]
@@ -7829,6 +7835,36 @@ STEADY_LINK_PRIOR = 30.0  # px: a weak pull of each frame to where it starts (SP
 #                           slow hold to SPICE is steady_places' (held_to_spice), as for the chain
 
 
+STEADY_BREAK = 0.05      # of a frame: a step of SPICE's places further than this from the pass's own step there (the
+                         # median of the steps round it) is the camera moving on (a retarget, the next pointing of a
+                         # scan), not its pointing scatter (3 to 26 px): the smoothed path is not smoothed across it
+STEADY_BREAK_AROUND = 3  # steps each side the pass's own step is the median of (_smoothed_path)
+
+
+def _smoothed_path(x0):
+    """SPICE's places of a pass's tiles (rows, in order) smoothed over STEADY_SMOOTH frames (_gaussian_line), each run of
+    frames between two re-aims on its own: the pass's own motion without SPICE's frame-to-frame pointing scatter. A
+    re-aim is a step further than STEADY_BREAK of a frame from the median of the steps round it, so a fast steady drift
+    (45 px a frame with 8 px of scatter) is one run, while 287RI PROPRETRG001's 20,000 px retargets between propellers
+    split it (smoothed across them, the path cut the corner by thousands of px)."""
+    x0 = np.asarray(x0, float)
+    if len(x0) < 3:
+        return x0.copy()
+    steps = np.diff(x0, axis=0)
+    jumps = np.zeros(len(steps), bool)
+    for i in range(len(steps)):
+        lo, hi = max(0, i - STEADY_BREAK_AROUND), min(len(steps), i + STEADY_BREAK_AROUND + 1)
+        others = np.delete(steps[lo:hi], i - lo, axis=0)
+        if len(others):
+            jumps[i] = float(np.hypot(*(steps[i] - np.median(others, axis=0)))) > STEADY_BREAK * FRAME
+    out, start = x0.copy(), 0
+    for end in list(np.nonzero(jumps)[0] + 1) + [len(x0)]:
+        if end - start >= 3:
+            out[start:end] = _gaussian_line(x0[start:end], STEADY_SMOOTH)
+        start = end
+    return out
+
+
 def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
@@ -7849,6 +7885,18 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     at = {n: i for i, n in enumerate(order)}
     by = {t["n"]: t for t in tiles}
     spice = {n: list(by[n]["offset"]) for n in order}
+    # (SPICE's smoothed path, _smoothed_path: where the pictures place a tile only across the rings, a ring profile
+    # match, it goes along them by this path's step, not SPICE's raw step and its scatter)
+    path = dict(zip(order, _smoothed_path([spice[n] for n in order])))
+
+    def along_path(d, rel, j, n, rhow):
+        nx, ny = (rhow or {}).get("normal") or (0.0, 0.0)
+        if not (nx or ny):
+            return d
+        ax, ay = -ny, nx
+        sx, sy = path[n][0] - path[j][0] - rel[0], path[n][1] - path[j][1] - rel[1]
+        k = ax * sx + ay * sy
+        return (d[0] + k * ax, d[1] + k * ay)
     pairs = []
     newest = {}
     for i, n in enumerate(order):
@@ -7871,7 +7919,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             # (a pass of the rings themselves: their profiles first, the picture match sliding along the ringlets)
             move, rhow = ring(by[j], own[j], t, own[n])
             if move is not None and math.hypot(*move) <= believed:
-                d = (rel[0] + move[0], rel[1] + move[1])
+                d = along_path((rel[0] + move[0], rel[1] + move[1]), rel, j, n, rhow)
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
@@ -7886,7 +7934,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             move, rhow = ring(by[j], own[j], t, own[n])
             if move is None or math.hypot(*move) > believed:
                 return pr, None, f"{how}; rings: {rhow}"
-            d, how = (rel[0] + move[0], rel[1] + move[1]), f"rings {rhow['lag_km']:+.0f} km"
+            d, how = along_path((rel[0] + move[0], rel[1] + move[1]), rel, j, n, rhow), f"rings {rhow['lag_km']:+.0f} km"
         else:
             return pr, None, how
         if g.get("reach") is not None and math.hypot(d[0] - rel[0], d[1] - rel[1]) > g["reach"]:
@@ -7907,6 +7955,12 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     robust = np.ones(len(got))
     x0 = np.array([spice[n] for n in order], float)
     held = set()   # tiles past the reach: placed by SPICE's step from the tile before them, as _chain holds one
+    # (and a tile with no match at all, its target hidden behind another body or the frame blank: SPICE's place on its
+    # own would put it where SPICE's pointing puts it, 10 to 26 px from the frames either side that the pictures place,
+    # two sources of pointing in one movie (Sam 2026-11-18). It goes on from the tile before it by SPICE's smoothed
+    # step instead (steady_smooth_steps), the movie's own motion without SPICE's frame-to-frame pointing scatter)
+    lone = set()   # of those, the tiles with no match left at all (the rest went past the reach)
+    xs = _smoothed_path(x0)
     px, py = x0[:, 0].copy(), x0[:, 1].copy()
     for rnd in range(len(got) + 10):
         rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []
@@ -7921,12 +7975,12 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         # where held at SPICE's own place it jumped there and back on a badly placed body: Hyperion 153HY)
         for n in held:
             i = at[n]
-            if i == 0:
+            if N < 2:
                 continue
-            j = order[i - 1]
+            o = i - 1 if i > 0 else 1   # (the first tile: by its step to the second)
             w = 1.0 / STEADY_LINK_NOISE
-            rows += [r, r]; cols += [i, i - 1]; vals += [w, -w]
-            rhs_x.append(w * (x0[i, 0] - x0[i - 1, 0])); rhs_y.append(w * (x0[i, 1] - x0[i - 1, 1]))
+            rows += [r, r]; cols += [i, o]; vals += [w, -w]
+            rhs_x.append(w * (xs[i, 0] - xs[o, 0])); rhs_y.append(w * (xs[i, 1] - xs[o, 1]))
             r += 1
         pw = [1.0 / STEADY_LINK_PRIOR] * N
         rows += list(range(r, r + N)); cols += list(range(N)); vals += pw
@@ -7957,6 +8011,14 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 held |= set(far)
                 keep = [k for k in keep if got[k][0][0] not in held and got[k][0][1] not in held]
                 continue
+        # (a tile left with no match, from the start or once its links were left out: on the smoothed path from its
+        # neighbour, never at SPICE's own place, which only the solve's weak prior holds it to)
+        tied = {m for k in keep for m in got[k][0]} | held
+        lone_now = [n for n in order if n not in tied] if N > 1 else []
+        if lone_now:
+            held |= set(lone_now)
+            lone |= set(lone_now)
+            continue
         if not changed:
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
@@ -7964,8 +8026,9 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
-    hows = {n: ("held from the tile before (past reach)" if n in held else f"linked to {sorted(linked[n])}" if n in linked
-                else "first" if n == order[0] else "SPICE (no link)") for n in order}
+    hows = {n: ("held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
+                else f"linked to {sorted(linked[n])}" if n in linked else "first" if n == order[0] else "linked from later tiles")
+            for n in order}
     return places, hows
 
 
@@ -8020,6 +8083,8 @@ STEADY_REACH = image_correction.FIT_REACH   # px: the furthest a stabilized tile
                       # is 3 to 5 px off, 27 to 30 at worst between a set's filters); a match further off followed
                       # something else that moves, another moon crossing the frame (Sam 2026-11-04)
 STEADY_PAD = 4        # px round another body's disk left out of a stabilization match (steady_chain)
+STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STEADY_PAD round it) and a small target's
+                      # stabilization match is not made (_shift_onto); less, and only that body is left out of the match
 STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
                       # is added round its disk (CENTRE_MARGIN): SPICE's few px off, the disk most of the square, so the
                       # match is the disk's own (on a square mostly sky the alignment takes it for a star field)
@@ -8034,7 +8099,10 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady6: a ring pass's frames the pictures cannot be matched on linked by their ring profiles (steady_rings)
     # steady7: a moon is found in the pictures only where its outline is (color_image.FIND_OUTLINE): a backlit
     # Enceladus' plume was taken for the moon (279EN PLUME001)
-    STEADY_FILE = f"steady7k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady8: another body's disk drawn by its shape toward the target (other_bodies, _limb_toward), and one only
+    # over the square's sky round a small target left out of the match, not the match (STEADY_HIDDEN): Enceladus
+    # setting behind Saturn (293EN ENCSET001) kept SPICE's jumps on 34 of its 48 frames
+    STEADY_FILE = f"steady8k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -8192,6 +8260,42 @@ def seen_places(u, made, pic, there):
             for i, n in enumerate(order)}, why
 
 
+SHAPE_LEAST = 20   # px: another body this big or bigger on a tile is drawn by its triaxial shape toward the target
+                   # (other_bodies, _limb_toward); smaller, its oblateness is under a pixel
+_limb_ratios = {}   # (frame id, body, target) -> _limb_toward's answer
+
+
+def _limb_toward(body, target, et):
+    """How far body's limb is from its centre toward target, as seen from Cassini at et, over the radius bodies_of draws
+    its disk with (bootleg_autonav.bodies_in_frame: its mean radius): SPICE's triaxial shape (reproject.sky_view, sky_to_surface), its edge
+    found by halving along the line from its centre to the target on the sky. Saturn's disk drawn as a circle of its
+    equatorial radius covers 8 % more than Saturn toward its poles: as Enceladus set behind it (293EN ENCSET001) the
+    circle covered the moon 500 px before the limb did, and the movie's stabilization left out every frame from there.
+    None when SPICE cannot say (call it under _spice_lock with the frame's kernels loaded)."""
+    import reproject as rp
+    import spiceypy as sp
+    import bootleg_autonav as ba
+    try:
+        km = ba._mean_radius(sp.bodn2c(body))
+        v = rp.sky_view(body, et)
+        d = np.array(sp.spkpos(target, et, "J2000", "LT+S", "CASSINI")[0]) - v["c"]
+    except Exception:   # noqa: BLE001  (no shape or position for it: drawn as before)
+        return None
+    if not km:
+        return None
+    e, n = float(d @ v["east"]), float(d @ v["north"])
+    far = math.hypot(e, n)
+    if far <= 0:
+        return None
+    e, n = e / far, n / far
+    lo, hi = 0.0, 1.5 * float(max(v["radii"]))
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        _, hit = rp.sky_to_surface(v, np.array([-mid * e]), np.array([-mid * n]), 1.0)
+        lo, hi = (mid, hi) if hit[0] else (lo, mid)
+    return lo / km
+
+
 def other_bodies(u, names=False):
     """{tile n: [(x, y, r, behind)]} ([(name, x, y, r, behind)] with names): every body but its target that SPICE puts on tile n of pass u
     (bootleg_autonav.bodies_of, the geometry cache's bodies table), its centre from the target's centre and its radius,
@@ -8205,6 +8309,8 @@ def other_bodies(u, names=False):
         return {}
     angles = reel.north_angles([fr[1] for fr in frames if fr[1] in got])
     turn = view_turn(u)
+    big = [fr[1] for fr in frames if fr[7] and any(r >= SHAPE_LEAST for _, _, _, r, _ in got.get(fr[1], ()))]
+    ets = _ets(big) if big else {}
     out = {}
     for n, fr in enumerate(frames):
         if not got.get(fr[1]) or not fr[7]:
@@ -8212,9 +8318,24 @@ def other_bodies(u, names=False):
         x, y, fz = fr[5], fr[6], fr[7]
         a = math.radians(angles.get(fr[1], 0.0) - turn)
         c, sn, k = math.cos(a), math.sin(a), fz / u["z"]
+
+        def shaped(name, r):
+            # (a big body's disk drawn by its shape toward the target, _limb_toward, not as a circle of its radius)
+            if r < SHAPE_LEAST or fr[1] not in ets:
+                return r
+            key = (fr[1], name, u["key"][0])
+            with _lock:
+                ratio = _limb_ratios.get(key, False)
+            if ratio is False:
+                with _spice_lock:
+                    ratio = _limb_toward(name, u["key"][0], ets[fr[1]]) if _with_kernels(fr[3]) else None
+                with _lock:
+                    _limb_ratios[key] = ratio
+            return r * ratio if ratio else r
         # (the body from the target on the camera's axes: the target is at -x, -y from the frame's middle)
         out[n] = [((name,) if names else ()) +
-                  ((c * (bx + x) + sn * (by + y)) * k, (c * (by + y) - sn * (bx + x)) * k, r * k, bool(km and km > fz))
+                  ((c * (bx + x) + sn * (by + y)) * k, (c * (by + y) - sn * (bx + x)) * k, shaped(name, r) * k,
+                   bool(km and km > fz))
                   for name, bx, by, r, km in got[fr[1]]]
     return out
 
@@ -10279,10 +10400,17 @@ def _raw_pointing(u):
 
 
 def auto_steady(u, cache):
-    """True when pass u's SPICE places jump against its stabilization chain by more than STEADY_AUTO_JUMP (median, frame
-    to frame), or when it holds a frame on the reconstructed attitude (_raw_pointing) and its chain follows the
-    pictures (STEADY_AUTO_LINKED); measured on the chain kept in the cache (never worked out here: a pass whose chain is
-    not made yet is drawn at SPICE's places, as before). Feature tracks are steady anyway."""
+    """True when pass u's movie is drawn stabilized even with stabilization off (steady_of): every movie pass whose
+    stabilization chain is kept (never worked out here: a pass whose chain is not made yet is drawn at SPICE's places,
+    as before). Feature tracks are steady anyway.
+
+    Until 2026-11-18 only a pass whose SPICE places jumped by more than STEADY_AUTO_JUMP against its chain, or one on the
+    reconstructed attitude whose chain followed the pictures (STEADY_AUTO_LINKED), was: every other movie played at
+    SPICE's places, with SPICE's frame-to-frame pointing scatter (3 to 26 px on 293EN ENCSET001, Enceladus setting
+    behind Saturn), and a pass auto_steady took played some frames at the pictures' places and others at SPICE's. Sam:
+    one source of pointing for a whole sequence. Every frame the pictures can place is placed by them; a frame they
+    cannot goes on from its neighbours along SPICE's smoothed path (_chain_links), so nothing plays at SPICE's raw
+    place but a pass with no chain."""
     if cache is None or u.get("track") or not calibration.step("align"):
         return False
     key = folder(u, cache)
@@ -10294,17 +10422,7 @@ def auto_steady(u, cache):
         return False
     with open(path) as fh:
         kept = json.load(fh)
-    chain = {int(n): xy for n, xy in (kept.get("places") or {}).items()}
-    d = {}
-    for n in sorted(chain):
-        place = tile(u, n, cache, p["display_scale"]).get("offset")
-        if place:
-            d[n] = (place[0] - chain[n][0], place[1] - chain[n][1])
-    jumps = [max(abs(d[n][0] - d[n - 1][0]), abs(d[n][1] - d[n - 1][1])) for n in d if n - 1 in d]
-    hows = [str(h) for h in (kept.get("how") or {}).values() if h != "first"]
-    linked = sum(h.startswith("linked") for h in hows) / len(hows) if hows else 0.0
-    got = len(jumps) >= 5 and (float(np.median(jumps)) > STEADY_AUTO_JUMP or
-                               (linked >= STEADY_AUTO_LINKED and _raw_pointing(u)))
+    got = len(kept.get("places") or {}) >= 2
     _auto_steady[key] = got
     return got
 

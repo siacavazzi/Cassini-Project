@@ -165,6 +165,10 @@ def moved(a, dx, dy):
     return out
 
 
+# (first a pass played at SPICE's places by default, as every pass with no chain kept is, so the served frames are
+# steady 0; since 2026-11-18 a pass with a chain is stabilized by default, the case after this one)
+_auto = om.auto_steady
+om.auto_steady = lambda u, cache: False
 with calibration.looking("balanced"):
     om.steady_chain(u, cache)
     for centre in (True, False):
@@ -234,7 +238,8 @@ with calibration.looking("balanced"):
               f"moved picture is {min(worst['psnr']):.1f} dB (worst) / {np.median(worst['psnr']):.1f} dB (median) from the server's")
 
 
-# a pass stabilized by default (obs_mosaic.auto_steady: a frame without measured pointing, its chain linked): the server
+om.auto_steady = _auto
+# a pass stabilized by default (obs_mosaic.auto_steady: every pass whose chain is kept, since 2026-11-18): the server
 # serves and pre-builds its frames at STEADY_SMOOTH, and the page moves those for any other smoothing, never asking the
 # server to draw one (Sam: the server does no hard processing at view time)
 om._raw_pointing = lambda u: True
@@ -283,6 +288,7 @@ def node_mix(cases, sets, gains=None, gamma=2.2):
     return [np.fromfile(f"{tmp}/{c}.out", np.uint8).reshape(cases[c][0].shape) for c in range(len(cases))]
 
 
+om.auto_steady = lambda u, cache: False   # (served at steady 0, as above, to the end; restored then)
 with calibration.looking("balanced"):
     # colour: each frame's set of tiles, each moved and gained as above, mixed by the page's port of colour_picture
     om.steady_chain(u2, cache)
@@ -593,4 +599,5 @@ with calibration.looking("balanced"):
     print(f"partial frames: {held_count} frames held (grey and colour passes, stabilized, exposure-normalized, trailed): "
           "the page's hold, trail and colour sets give the server's pictures")
 
+om.auto_steady = _auto
 print("ok")
