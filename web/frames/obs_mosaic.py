@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v150", "raw": "obs-v133", "eye": "obs-v150-eye", "false": "obs-v150-false", "classic": "obs-v119-classic"}  # v150/v133/v119: a still mosaic's sky tile off an airless body's disk takes its own sky's black, at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2603,7 +2603,7 @@ def _sky_fine(iofs, masks):
 
 
 def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True,
-               speck=False, clean_lost=False):
+               speck=False, clean_lost=False, most=None):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2619,7 +2619,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
     the shadow (032RI's silhouette) are in the sky the rule would take under black. clean_lost: the frame's own black is measured without the pixels it lost in downlink (black_of: a narrow-angle
     frame's, for now). speck: the body is one of SPECKS
-    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
+    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil. most: the furthest
+    the frame's own black may rise over the pass's (I/F), or None for no limit (a mosaic's sky tile: mosaic_sky_most)."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     out.pop("sky_track", None)
     out.pop("set_share", None)
@@ -2777,6 +2778,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
                 seen.pop("whole_codes", None)
         if raised <= black:
             return None
+        if most is not None and raised - black > most:
+            return None   # (a mosaic's tile: more than an offset in its sky, so its own black would show as a step)
         if not (veiled or glow) and lit.size and raised >= float(np.median(lit)):
             return None
         if seen is not None:
@@ -2900,6 +2903,29 @@ def small_body(u, frame):
         return None   # (a target with no disk of its own, rings or sky, is not one)
     radius = km / (z * IFOV[u["key"][2]])
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
+
+
+MOSAIC_SKY_MOST = 0.01   # mosaic_sky_most: a mosaic's sky tile's own black at most this share of the pass's white over its black
+
+
+def mosaic_sky_tile(u, scale, body, disk):
+    """True when a still mosaic's tile takes its own sky's black (tile_scale's own_sky): a frame of an airless body's
+    mosaic (no rings, no clouds) whose middle is off the body's disk (body: on_disk), in a pass with dark sky (its
+    "sky_tops"). Such a frame is sky with at most a limb in it, and what the calibration leaves in a sky differs from
+    frame to frame by more than the sky's own light: Enceladus' plume map ISS_144EN_PLMHPHR002_PIE, its 24 frames of
+    0.0015 to 0.22 s over 75 minutes, has its clear frames' sky at -0.0003 I/F (1.5 s, on the disk) to +0.0004 (the
+    sky frames below it), the pass's black at 0.00011; with white at 0.055 the sky frames drew at 20 to 40 of 255 on
+    black, gray squares with a step wherever one ended. Each such tile's black goes to its own sky (as a movie frame's,
+    or a small body's), at most mosaic_sky_most over the pass's, so the limb or plume in it moves by under that."""
+    return bool(u.get("mosaic") and not u.get("movie") and not disk and not body and not _ring(u) and not clouded(u)
+                and (scale or {}).get("sky_tops"))
+
+
+def mosaic_sky_most(scale):
+    """How far a mosaic's sky tile's own black may rise over the pass's black (I/F): MOSAIC_SKY_MOST of the pass's
+    white, an offset in the sky, never the light of what it shows (one level of 255 on a gamma 3 scale is 6e-8 of white,
+    so a rise of 1% of white takes the first 55 levels: only sky sits there)."""
+    return MOSAIC_SKY_MOST * float((scale or {}).get("white") or 0.0)
 
 
 def on_disk(u, frame):
@@ -3347,9 +3373,12 @@ def _tile_made(u, n, cache, scale, base):
     exposure = _exposure(label_handler.label(path, as_png=True)) if (scale or {}).get("long") else None
     try:
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
-            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
-                                                                                           on_disk(u, u["frames"][n]), exposure, t,
-                                                                                           not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N"),
+            body = on_disk(u, u["frames"][n])
+            sky_tile = mosaic_sky_tile(u, scale, body, disk)
+            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk or sky_tile), seen, disk,
+                                                                                           body, exposure, t,
+                                                                                           not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N",
+                                                                                           mosaic_sky_most(scale) if sky_tile else None),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
                                                         turn=view_turn(u))

@@ -61,6 +61,7 @@
   {"name": "saturn07-deck2", "kind": "composite", "frame": "N1565242114_1", "group": "hard", "watch": "low-contrast cloud deck close-up shows its cloud structure, not a plain peach square (regression 11-20)"},
   {"name": "titan08-mt1", "kind": "still", "frame": "N1578275934_1", "group": "hard", "watch": "Titan MT1 close-up shows its haze and clouds, not a white square; compression blocks not pushed (regression 11-20)"},
   {"name": "rings08-bright", "kind": "still", "frame": "N1585900002_1", "group": "hard", "watch": "B ring close-up not washed out to white; Cassini division strip keeps its ringlets (regression 11-20)"},
-  {"name": "mimas04-movie", "kind": "pass", "frame": "N1466584338_1", "group": "hard", "watch": "Mimas 2004 (000OT TIMIIA001) colour movie: its glare-lit sky not magenta, the set's channels raised by one share of their sky"}
+  {"name": "mimas04-movie", "kind": "pass", "frame": "N1466584338_1", "group": "hard", "watch": "Mimas 2004 (000OT TIMIIA001) colour movie: its glare-lit sky not magenta, the set's channels raised by one share of their sky"},
+  {"name": "enceladus144-mosaic", "kind": "pass", "frame": "N1675140861_1", "group": "hard", "watch": "Enceladus 2011 plume map (144EN PLMHPHR002): no gray squares under the plume, the jets over black sky"}
  ]
 }
