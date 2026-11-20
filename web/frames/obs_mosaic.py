@@ -3321,15 +3321,18 @@ def _tile_made(u, n, cache, scale, base):
                         "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
             turn = None if rep.get("blown") else _filter_turn(u, n, out, crop, cache, scale)
             if turn is not None:
-                # (turned back about the frame's middle, the canvas's, and cut again: its recovery map with it)
-                # (its +x side turned down by the turn: turned back up, counter-clockwise as cv2 turns)
-                image = _subpixel(image, 0.0, 0.0, turn["turn"], ((image.shape[1] - 1) / 2, (image.shape[0] - 1) / 2))
-                if sink and sink[-1] is not None and sink[-1].shape == image.shape[:2]:
-                    m = cv2.getRotationMatrix2D(((image.shape[1] - 1) / 2, (image.shape[0] - 1) / 2), turn["turn"], 1.0)
-                    sink[-1] = cv2.warpAffine(sink[-1], m, (image.shape[1], image.shape[0]), flags=cv2.INTER_LINEAR,
-                                              borderMode=cv2.BORDER_REPLICATE)
-                lit = _lit_crop(image, side)
+                # (turned back about the frame's middle, the canvas's, and cut again: its recovery map with it; its +x
+                # side turned down by the turn, so turned back up, counter-clockwise as cv2 turns. Kept as it was when
+                # the turned picture has nothing lit)
+                mid = ((image.shape[1] - 1) / 2, (image.shape[0] - 1) / 2)
+                turned = _subpixel(image, 0.0, 0.0, turn["turn"], mid)
+                lit = _lit_crop(turned, side)
                 if lit is not None:
+                    image = turned
+                    if sink and sink[-1] is not None and sink[-1].shape == image.shape[:2]:
+                        m = cv2.getRotationMatrix2D(mid, turn["turn"], 1.0)
+                        sink[-1] = cv2.warpAffine(sink[-1], m, (image.shape[1], image.shape[0]), flags=cv2.INTER_LINEAR,
+                                                  borderMode=cv2.BORDER_REPLICATE)
                     crop, a, c = lit
                     b, d = a + crop.shape[0], c + crop.shape[1]
                     out["box"] = [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]
