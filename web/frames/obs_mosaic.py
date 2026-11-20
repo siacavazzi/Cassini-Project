@@ -92,7 +92,7 @@ import label_handler  # noqa: E402
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
-VERSIONS = {"balanced": "obs-v144", "raw": "obs-v127", "eye": "obs-v144-eye", "false": "obs-v144-false", "classic": "obs-v113-classic"}# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v146", "raw": "obs-v129", "eye": "obs-v146-eye", "false": "obs-v146-false", "classic": "obs-v115-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3317,11 +3317,26 @@ def _tile_made(u, n, cache, scale, base):
         if lit is not None:
             crop, a, c = lit
             b, d = a + crop.shape[0], c + crop.shape[1]
+            out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
+                        "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
+            turn = None if rep.get("blown") else _filter_turn(u, n, out, crop, cache, scale)
+            if turn is not None:
+                # (turned back about the frame's middle, the canvas's, and cut again: its recovery map with it)
+                # (its +x side turned down by the turn: turned back up, counter-clockwise as cv2 turns)
+                image = _subpixel(image, 0.0, 0.0, turn["turn"], ((image.shape[1] - 1) / 2, (image.shape[0] - 1) / 2))
+                if sink and sink[-1] is not None and sink[-1].shape == image.shape[:2]:
+                    m = cv2.getRotationMatrix2D(((image.shape[1] - 1) / 2, (image.shape[0] - 1) / 2), turn["turn"], 1.0)
+                    sink[-1] = cv2.warpAffine(sink[-1], m, (image.shape[1], image.shape[0]), flags=cv2.INTER_LINEAR,
+                                              borderMode=cv2.BORDER_REPLICATE)
+                lit = _lit_crop(image, side)
+                if lit is not None:
+                    crop, a, c = lit
+                    b, d = a + crop.shape[0], c + crop.shape[1]
+                    out["box"] = [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]
+                    out["filter_turn"] = turn
             Image.fromarray(crop).save(base + ".png", compress_level=1)
             _keep_made(base + ".png", crop)
             _keep_tile_map(sink, image, side, crop, base)
-            out.update({"native_offset": rep["frame_offset"], "offset": [v * k for v in rep["frame_offset"]],
-                        "box": [int(c) - side / 2, int(a) - side / 2, int(d - c), int(b - a)]})
             if not rep.get("blown"):
                 _register(u, n, out, crop, cache, scale)
             out["outline"] = _corners(out, crop[..., 3])
@@ -3482,6 +3497,129 @@ def _colour_filters(u):
 # drew doubled crater rims (the image benchmark, #506)
 LIMB_REGISTER = 2.0      # px
 LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
+
+
+FILTER_TURN_LEAST = 0.15   # degrees: a filter's frame turned this much or more against its pointing's frame it is
+# registered to (C8, _register_to) is turned back onto it (_filter_turn); under it, half a frame out moves under a pixel
+FILTER_TURN_MOST = 4.0     # degrees: the most believed (Mimas 167MI: UV3 3.3 degrees against the clear frame 73 s before)
+
+
+def _filter_turn(u, n, out, crop, cache, scale):
+    """How far tile n (its report out, picture crop, at SPICE's place) is turned against the tile of its pointing it is
+    registered to (_register_to, its colour's reference), measured on their pictures (filter_turn_of), when that is
+    FILTER_TURN_LEAST or more: {"to": that frame, "turn": degrees its +x side is turned down, "blocks": matched}, else
+    None. Only an airless body's pass: a clouded body's filters show other clouds (its colours are held on the limb,
+    _limb_register) and a ring pass's rings move between frames, which a turn fitted to them would take for one.
+    Each frame is drawn north up by SPICE's twist of the camera, and where JPL's corrected pointing gets the twist wrong
+    the filters of one pointing were drawn turned apart: Mimas 167MI_MIMAS001_CIRS (2012-06-05) has its GRN and UV3
+    frames turned 0.6 and 1.4 degrees clockwise against its clear frame, where SPICE says 0.7 and 1.6 the other way,
+    so they were drawn 1.4 and 3.0 degrees apart, and C8 (translation only) left red, green and blue rims 5 to 10 px
+    wide on every crater. Turned back onto the reference before C8 moves it there."""
+    if not calibration.step("align") or clouded(u) or _ring(u):
+        return None
+    for lead in (True, False):
+        # (onto the frame C8 registers it to, else the frame it lands on without JPL's frames leading: Mimas 167MI's
+        # UV3 is led onto its clear frame, mostly sky where they overlap, and its turn is measured on its GRN)
+        j = _register_to(u, n, lead)
+        if j is None or (not lead and j == _register_to(u, n)):
+            continue
+        q = tile(u, j, cache, scale)
+        path = os.path.join(_tiles(u, cache, scale), f"{j}.png")
+        if "offset" not in q or "box" not in q or not os.path.exists(path):
+            continue
+        with _lock:
+            ref = _made_pictures.get(path)
+        if ref is None:
+            ref = np.asarray(Image.open(path).convert("RGBA"))
+        theta, blocks = filter_turn_of(q, ref, out, crop)
+        if theta is None:
+            continue
+        if abs(theta) < FILTER_TURN_LEAST:
+            return None
+        return {"to": q["id"], "turn": round(float(theta), 3), "blocks": blocks}
+    return None
+
+
+FILTER_TURN_BLOCK = 128    # reference px: the blocks the two frames' overlap is cut in (filter_turn_of)
+FILTER_TURN_FIT = 1.5      # px: a block further than this from the fitted turn and shift is left out of the fit
+
+
+def filter_turn_of(s, ref, t, mine):
+    """How far tile t is turned against tile s, two frames of one pointing that cover nearly the same view (each at
+    its place): their overlap cut in FILTER_TURN_BLOCK blocks on a grid, each block matched as panel_shift matches an
+    overlap, and a shift and a turn fitted to the blocks' matches (those off it by more than FILTER_TURN_FIT left out,
+    again). pair_turn measures along one strip of a narrow overlap between pointings; two filters of one pointing
+    overlap whole, and on a moon that half fills the frame a strip through the middle is half sky. (degrees, as
+    pair_turn: t's content turned against s's, positive when its +x side moves down; blocks) or (None, why)."""
+    ax0 = max(s["offset"][0] + s["box"][0], t["offset"][0] + t["box"][0])
+    ax1 = min(s["offset"][0] + s["box"][0] + s["box"][2], t["offset"][0] + t["box"][0] + t["box"][2])
+    ay0 = max(s["offset"][1] + s["box"][1], t["offset"][1] + t["box"][1])
+    ay1 = min(s["offset"][1] + s["box"][1] + s["box"][3], t["offset"][1] + t["box"][1] + t["box"][3])
+    B = FILTER_TURN_BLOCK
+    if ax1 - ax0 < 3 * B or ay1 - ay0 < 3 * B:
+        return None, "overlap too small for a turn"
+    pts = []
+    for cy in np.arange(ay0 + B / 2, ay1 - B / 2 + 1, B * 3 / 4):
+        for cx in np.arange(ax0 + B / 2, ax1 - B / 2 + 1, B * 3 / 4):
+            subs = []
+            for q, im in ((s, ref), (t, mine)):
+                k = q["box"][2] / im.shape[1]
+                x0 = int(round((cx - B / 2 - q["offset"][0] - q["box"][0]) / k))
+                y0 = int(round((cy - B / 2 - q["offset"][1] - q["box"][1]) / k))
+                w_ = int(round(B / k))
+                if x0 < 0 or y0 < 0 or x0 + w_ > im.shape[1] or y0 + w_ > im.shape[0]:
+                    break
+                subs.append((dict(q, box=[x0 * k + q["box"][0], y0 * k + q["box"][1], B, B]), im[y0:y0 + w_, x0:x0 + w_]))
+            if len(subs) < 2:
+                continue
+            sh, _ = panel_shift(subs[0][0], subs[0][1], s["offset"], subs[1][0], subs[1][1], t["offset"],
+                                REGISTER_BODY_MAX * FRAME, least=B ** 2 // 6)
+            if sh is not None:
+                # (about t's middle, where it is turned back)
+                pts.append((cx - t["offset"][0], cy - t["offset"][1], sh[0], sh[1]))
+    if len(pts) < 6:
+        return None, f"{len(pts)} blocks matched"
+    P = np.array(pts, float)
+
+    def fit_of(rows):
+        # (content turned by a, +x side down, about t's middle, moved as a whole by T: block (x, y) matches
+        # shift = T + a (-y, x), panel_shift's shift being how far t's content sits from s's)
+        x, y, dx, dy = P[rows].T
+        A = np.zeros((2 * len(x), 3))
+        A[0::2, 0], A[0::2, 2] = 1, -y
+        A[1::2, 1], A[1::2, 2] = 1, x
+        b = np.empty(2 * len(x))
+        b[0::2], b[1::2] = dx, dy
+        f = np.linalg.lstsq(A, b, rcond=None)[0]
+        return f, np.hypot(P[:, 2] - f[0] + f[2] * P[:, 1], P[:, 3] - f[1] - f[2] * P[:, 0])
+
+    # (the fit most blocks agree with, from pairs of blocks: a block on what the two frames do not share, a cosmic ray,
+    # the limb or the sky's noise, matches tens of px off, and a fit through all of them is off for every block)
+    rng = np.random.default_rng(0)
+    best = None
+    for _ in range(300):
+        pick = rng.choice(len(P), 2, replace=False)
+        if math.hypot(*(P[pick[0], :2] - P[pick[1], :2])) < B:
+            continue
+        f, res = fit_of(pick)
+        use = res <= FILTER_TURN_FIT
+        if best is None or use.sum() > best.sum():
+            best = use
+    if best is None or best.sum() < 6:
+        return None, f"{0 if best is None else int(best.sum())} blocks agree"
+    use = best
+    for _ in range(3):
+        fit, res = fit_of(use)
+        use = res <= FILTER_TURN_FIT
+        if use.sum() < 6:
+            return None, f"{int(use.sum())} blocks agree"
+    x, y = P[use, 0], P[use, 1]
+    if min(np.ptp(x), np.ptp(y)) < 2 * B:
+        return None, f"{int(use.sum())} blocks agree, too close together for a turn"
+    theta = math.degrees(math.atan(fit[2]))
+    if abs(theta) > FILTER_TURN_MOST:
+        return None, f"turn too large ({theta:+.2f} deg)"
+    return round(theta, 4), int(use.sum())
 
 
 def _register(u, n, out, crop, cache, scale):
