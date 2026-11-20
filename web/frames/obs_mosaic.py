@@ -91,7 +91,7 @@ import label_handler  # noqa: E402
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
-VERSIONS = {"balanced": "obs-v143", "raw": "obs-v126", "eye": "obs-v143-eye", "false": "obs-v143-false", "classic": "obs-v112-classic"}# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v145", "raw": "obs-v128", "eye": "obs-v145-eye", "false": "obs-v145-false", "classic": "obs-v114-classic"}# v145/128/114: a mosaic movie's tiles the camera steps between lap after lap are two slots, not one (#604, numbered past #602); v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
