@@ -1132,6 +1132,10 @@ FLOOR_BODY = 2e-4    # ... and a lit thing of at least this share of the picture
                      # drawn black (Mimas under the A ring, spot check round 3)
 FLOOR_BORDER = 4     # ... and none of it within this many px (of 1024) of the frame's edge: the CCD's last columns read dark
                      # on many frames (N1492367324_1, Titan's even haze: columns 1022-1023), and the 3x3 median keeps them
+FLAT_EVEN = (0.5, 0.7)   # _flat_black: a picture with no sky whose floor is over FLAT_EVEN[0] of its top is low-contrast,
+FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its grain (the
+FLAT_GRAIN = 24          # FLAT_GRAIN_PCT percentile over the median) spans no more than 1 / FLAT_GRAIN of the range
+FLAT_GRAIN_PCT = 99
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
@@ -2793,7 +2797,7 @@ def _floor(iofs, levels, sky=None, glow=1.0):
         lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & _inner(lum.shape)
         lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
         floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
-        black = min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top))
+        black = _flat_black(lum, lit, floor, top, min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top)))
         dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
         bright = max(bright - black, 0.0)
         if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
@@ -2822,6 +2826,31 @@ def _floor(iofs, levels, sky=None, glow=1.0):
     if floor <= 0 or top <= 0:
         return 0.0
     return min(FLOOR_SHARE * _even(floor, top) * floor, _floor_cap(top))
+
+
+"""
+The floor black of a low-contrast picture with no sky (FLAT_EVEN): a close-up a cloud deck, Titan's haze or the rings
+fill, whose darkest real feature (floor, its FLOOR_PCT percentile) is most of the way to its top (its WHITE_PCT
+percentile). FLOOR_SHARE of the floor, capped at FLOOR_GAIN, left such a picture in the top third of the range and the
+gamma drew it as one plain square (2007 Saturn cloud decks N1565100696_1 and N1565242114_1 peach, 2008 Titan MT1
+N1578275934_1 white, their raw codes full of structure; regression 11-20). From FLAT_EVEN[0] to FLAT_EVEN[1] of
+evenness the black goes up to FLAT_SHARE of the floor, but never so high that the picture's own grain (sky_grain on the
+lit part: noise, compression blocks, 8-bit steps, never its slow light) spans more than 1 / FLAT_GRAIN of the range
+from black to top: a clean picture spreads, a blocky or noisy one stretches only as far as its blocks allow (the "pushed
+too far" of 11-08). lum, lit = _floor's brightness and lit pixels; black = the floor black as it was
+"""
+def _flat_black(lum, lit, floor, top, black):
+    if floor <= 0 or top <= 0:
+        return black
+    flat = min(max((floor / top - FLAT_EVEN[0]) / (FLAT_EVEN[1] - FLAT_EVEN[0]), 0.0), 1.0)
+    if flat <= 0:
+        return black
+    grain = sky_grain([lum], [lit])
+    if grain.size < GRAIN_LEAST:
+        return black
+    spread = float(np.percentile(grain, FLAT_GRAIN_PCT) - np.median(grain))
+    want = min(FLAT_SHARE * floor, top - FLAT_GRAIN * max(spread, 0.0))
+    return black + flat * max(want - black, 0.0)
 
 
 """The highest floor black (FLOOR_GAIN) for a lit part whose WHITE_PCT percentile above the sky levels is top"""
@@ -2872,11 +2901,42 @@ def sky_levels(images, masks, floor_pct=None):
         levels.append(min(float(median), float(pcts[0]) + 0.84 * noise))
         noises.append(noise)
         if floor_pct is not None:
-            floors.append(float(pcts[1] - median))
+            # the floor on the sky's grain only (sky_grain): its spread less its slow light
+            grain = sky_grain(ims, ms)
+            floors.append(float(np.percentile(grain, floor_pct) - np.median(grain)) if grain.size >= GRAIN_LEAST
+                          else float(pcts[1] - median))
     margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
     if floor_pct is not None:
         margin = max(margin, max(floors))
     return levels, margin
+
+
+GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
+GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
+
+
+"""
+A sky's grain: each picture's sky pixels (ims, masks: as sky_levels has one channel's) less the mean of the sky round
+them over GRAIN_SMOOTH pixels (scaled from 1024, the sky alone: the body is left out of the mean), as one array. Noise,
+scan lines, compression blocks, 8-bit steps and hot pixels are in it; slow light is not: the glow of scattered light
+round a bright body, Titan's haze reaching out past its limb, the E ring's or a night side's faint light. A balanced
+black sat on the sky's 98th percentile over its median as the sky was, so all of that slow light went under black with
+the grain, and Titan's haze ended at a hard rim on black (W1878376655_1: margin 0.0021 I/F, the grain's 0.0004; Sam,
+11-19: "blacks too crushed"). On the grain the black still hides the sky's speckle and lines, and the slow light fades
+out smoothly through the toe instead.
+"""
+def sky_grain(ims, masks):
+    out = []
+    for im, m in zip(ims, masks):
+        if not m.any():
+            continue
+        k = max(3, int(round(GRAIN_SMOOTH * im.shape[1] / 1024)) | 1)
+        w = m.astype(np.float32)
+        x = np.where(m, im, 0).astype(np.float32)
+        den = cv2.blur(w, (k, k))
+        local = cv2.blur(x, (k, k)) / np.maximum(den, np.float32(1e-6))
+        out.append((im.astype(np.float32) - local)[m])
+    return np.concatenate(out) if out else np.zeros(0, np.float32)
 
 
 """
