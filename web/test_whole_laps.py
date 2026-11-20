@@ -94,6 +94,26 @@ for lap in range(5):
 assert len(set(s)) == 4, sorted(set(s))
 assert om.lap_ends(u) == [32 * k + 31 for k in range(5)], om.lap_ends(u)
 
+# a pass whose pointing creeps like a scan (217SA AURSTARE001: a little further along every frame) makes many places
+# a slot: its near pairs are merged as before, not drawn as a staircase of tiles a few px apart
+def creep():
+    fr, t = [], 1000.0
+    for lap in range(9):
+        for a, b in [(0, 0), (560, 0), (0, 1000), (560, 1000)]:
+            d = 25 * len(fr)
+            fr.append((f"p{len(fr)}", f"N{1500000000 + len(fr)}_1", "CL2", t, 600, -(a + d), -(b + d * 0.6), 1e6))
+            t += 60
+    u = {"key": ("SATURN", "OBS", "N", 0), "frames": fr, "taken": [(f[2], f[5], f[6], f[7]) for f in fr], "z": 1e6}
+    om._judge(u)
+    return u
+
+
+u = creep()
+assert len(set(om.places(u))) > om.PLACES_A_SLOT * len(set(om.slots(u))), (len(set(om.places(u))), sorted(set(om.slots(u))))
+keep, om.PLACES_A_SLOT = om.PLACES_A_SLOT, 1e9
+assert len(set(om.slots(creep()))) > len(set(om.slots(u)))   # (without the gate it is split: the staircase)
+om.PLACES_A_SLOT = keep
+
 # not a mosaic movie: no lap ends
 assert om.lap_ends(unit([0, 1, 2, 3], ["CB2"] * 4, kind="mosaic")) == []
 

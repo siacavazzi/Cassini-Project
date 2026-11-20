@@ -10879,6 +10879,7 @@ def slots(u):
 # classifier's line lap after lap too, and kept apart they left gaps between its tiles; a raster's tiles overlap by
 # three quarters at most (the 2017-09-08 north pole map's columns are 0.3 and 0.43 of a frame apart)
 RASTER_STEP = 0.25
+PLACES_A_SLOT = 2   # a raster's tile drifts over this many places at most; more is a scan (_slot_of)
 
 
 def _slot_of(u, where):
@@ -10895,7 +10896,6 @@ def _slot_of(u, where):
         last[fr[2]] = (i, p)
     near = 0.5 * float(np.median(steps)) if steps else 0.0
     centre = {i: np.mean(v, 0) for i, v in at.items()}
-    parent = {i: i for i in centre}
 
     # places the camera goes straight between lap after lap (one frame at one, the next placed frame at the other,
     # and again after it has been somewhere else), RASTER_STEP of a frame or more apart, are two tiles of the
@@ -10916,22 +10916,31 @@ def _slot_of(u, where):
         # two of its steps with a third place taken between them: a lap went round in between
         if any(v not in (a, b) for v in visits[ks[0]:ks[-1]]):
             beside.add((a, b))
-    members = {i: {i} for i in centre}
+    def merged(apart):
+        parent = {i: i for i in centre}
+        members = {i: {i} for i in centre}
 
-    def root(i):
-        while parent[i] != i:
-            i = parent[i]
-        return i
-    if near > mosaic.min_step * FRAME:
-        for a in sorted(centre):
-            for b in sorted(centre):
-                ra, rb = root(a), root(b)
-                if b > a and np.abs(centre[a] - centre[b]).max() < near and ra != rb and not any(
-                        (min(x, y), max(x, y)) in beside for x in members[ra] for y in members[rb]):
-                    lo, hi = min(ra, rb), max(ra, rb)
-                    parent[hi] = lo
-                    members[lo] |= members.pop(hi)
-    return [root(i) if i in parent else i for i in where]
+        def root(i):
+            while parent[i] != i:
+                i = parent[i]
+            return i
+        if near > mosaic.min_step * FRAME:
+            for a in sorted(centre):
+                for b in sorted(centre):
+                    ra, rb = root(a), root(b)
+                    if b > a and np.abs(centre[a] - centre[b]).max() < near and ra != rb and not any(
+                            (min(x, y), max(x, y)) in apart for x in members[ra] for y in members[rb]):
+                        lo, hi = min(ra, rb), max(ra, rb)
+                        parent[hi] = lo
+                        members[lo] |= members.pop(hi)
+        return [root(i) if i in parent else i for i in where]
+    out = merged(beside)
+    # ... in a raster that comes back to a stable spot lap after lap, where a drifting tile is a place or two; a pass
+    # whose pointing creeps like a scan (217SA AURSTARE001: 54 places, every frame a little further along) makes
+    # many places a slot, and keeping its near pairs apart drew a staircase of tiles a few px apart: merged as before
+    if beside and len(centre) > PLACES_A_SLOT * len({i for i in out if i is not None}):
+        out = merged(set())
+    return out
 
 
 def lap_of(u):
