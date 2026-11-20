@@ -10772,21 +10772,25 @@ def _slot_of(u, where):
     centre = {i: np.mean(v, 0) for i, v in at.items()}
     parent = {i: i for i in centre}
 
-    # places the camera goes straight between more than once (one frame at one, the next placed frame at the other,
-    # lap after lap), a tile's step or more apart (mosaic.min_step), are two tiles of the raster, however near: the
-    # camera drifts onto a drifted place once and stays, it does not step to it and back every lap. A raster whose
-    # steps differ by axis (the 2017-09-08 north pole map's columns half a frame apart, its rows a whole frame) has
-    # a column step under half the median step, and its columns were one slot: each lap's second column took the
-    # first one's place, and the movie showed one tile fewer than the lap took (a panel missing most of the time)
-    stepped, prev = collections.Counter(), None
-    for i in where:
-        if i is None:
+    # places the camera goes straight between lap after lap (one frame at one, the next placed frame at the other,
+    # and again after it has been somewhere else), a tile's step or more apart (mosaic.min_step), are two tiles of the
+    # raster, however near: the camera drifts onto a drifted place once and stays, or wavers between the two in a row
+    # where the drift crosses the classifier's line, but does not step to it and back every lap. A raster whose steps
+    # differ by axis (the 2017-09-08 north pole map's columns half a frame apart, its rows a whole frame) has a column
+    # step under half the median step, and its columns were one slot: each lap's second column took the first one's
+    # place, and the movie showed one tile fewer than the lap took (a panel missing most of the time)
+    visits = [i for i in where if i is not None]
+    visits = [i for k, i in enumerate(visits) if k == 0 or i != visits[k - 1]]
+    steps_at = {}
+    for k in range(1, len(visits)):
+        steps_at.setdefault((min(visits[k - 1], visits[k]), max(visits[k - 1], visits[k])), []).append(k)
+    beside = set()
+    for (a, b), ks in steps_at.items():
+        if len(ks) < 2 or a not in centre or b not in centre or np.abs(centre[a] - centre[b]).max() < mosaic.min_step * FRAME:
             continue
-        if prev is not None and i != prev:
-            stepped[(min(i, prev), max(i, prev))] += 1
-        prev = i
-    beside = {(a, b) for (a, b), k in stepped.items() if k > 1 and a in centre and b in centre
-              and np.abs(centre[a] - centre[b]).max() >= mosaic.min_step * FRAME}
+        # two of its steps with a third place taken between them: a lap went round in between
+        if any(v not in (a, b) for v in visits[ks[0]:ks[-1]]):
+            beside.add((a, b))
     members = {i: {i} for i in centre}
 
     def root(i):
