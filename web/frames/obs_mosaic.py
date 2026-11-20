@@ -10186,6 +10186,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return q
     spice, raw = t["offset"], t
     t = at(t)
+    # (how far the stabilization moves the shown frame: its colour set's channels move with it, below)
+    shift = (t["offset"][0] - spice[0], t["offset"][1] - spice[1])
     if track:
         rep["steady"] = "track"
     elif places:
@@ -10226,6 +10228,13 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 base = dict(base, gain=round((base.get("gain") or 1.0) * to_white[id(base)], 4),
                             gamma=base.get("gamma", gamma))
             newest[f] = at(base)
+            if places and not track and "offset" in base:
+                # (a colour set's channels moved together, by the shown frame's own stabilization: each keeps its place
+                # against the others as SPICE has it (the channels' registration). Each at its own stabilized place, a
+                # channel the pictures could not match went on along the smoothed path while the others followed
+                # their matches, and the channels came apart: 257DA DAPHNIS001's blue-violet fringe along the
+                # Keeler gap's edge, #602)
+                newest[f] = dict(newest[f], offset=[base["offset"][0] + shift[0], base["offset"][1] + shift[1]])
             own_gain[f] = base.get("gain")
         used = want
     if used:

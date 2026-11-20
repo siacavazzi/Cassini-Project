@@ -142,7 +142,10 @@ def server_lut(g, gm):
 def in_node(table):
     js = ("const window = {};\n" + script + "\nconst M = window.cassiniSteadyMath(), t = " + json.dumps(table) + ";\n"
           "const out = {}, base = t.auto ? M.places(t, t.auto) : null;\nfor (const s of " + json.dumps(SMOOTHS) + ") { const p = M.places(t, s); "
-          "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a, base)) }; }\n"
+          "out[s] = { places: p, shifts: t.n.map((_, a) => M.shift(t, p, a, base)), sets: {} };\n"
+          # (a colour set's channels moved together, by the shown frame's stabilization: movie_frame's rule since #602's fringe)
+          "if (t.sets) for (const [nn, js] of Object.entries(t.sets.by)) { const sh = t.n.indexOf(M.shownOf(t, +nn, true)); "
+          "out[s].sets[nn] = js.map(j => M.shift(t, p, t.n.indexOf(j), base, js.length > 1 ? sh : null)); } }\n"
           "const r = []; for (const x of [0.125, -0.125, 2.5, -2.5, 1.5, -1.5, 0.375, 1.005, 2.675, -3.14159]) r.push([x, M.pyRound(x), M.pyRound2(x)]);\n"
           "out.gains = {}; for (const x of " + json.dumps(EXPOSURES) + ") out.gains[x] = t.exposure ? M.gains(t.exposure, x) : null;\n"
           "out.chains = " + json.dumps(CHAINS) + ".map(c => " + json.dumps(EXPOSURES) + ".map(x => M.gains(c, x)));\n"
@@ -305,9 +308,10 @@ with calibration.looking("balanced"):
             recipe = table["sets"]["by"].get(str(n)) or [n]
             planes, strip = [], 0
             g = gains.get(str(n), 1.0)
-            for j in recipe:
+            for q, j in enumerate(recipe):
                 A = np.asarray(om.movie_frame(u2, j, cache, colour=False, centre=True)[0])
-                dx, dy = got[str(s)]["shifts"][table["n"].index(j)] if s else (0, 0)
+                moves = got[str(s)]["sets"].get(str(n)) if s else None
+                dx, dy = (moves[q] if moves else got[str(s)]["shifts"][table["n"].index(j)]) if s else (0, 0)
                 C = moved(A, dx, dy)
                 strip += abs(dx) * A.shape[0] + abs(dy) * A.shape[1]
                 if page_gains(g, len(recipe) > 1):
@@ -464,9 +468,10 @@ with calibration.looking("balanced"):
                 if not colour and T:
                     recipe = [j for j in range(n - 1, max(-1, n - 8 * T), -1)][:T][::-1] + [n]
                 planes, strip = [], None
-                for j in recipe:
+                for q, j in enumerate(recipe):
                     A = np.asarray(om.movie_frame(v, j, cache, colour=False, centre=True, sharpen=False)[0])
-                    dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
+                    moves = got[str(s_)]["sets"].get(str(n)) if s_ and colour else None
+                    dx, dy = (moves[q] if moves else got[str(s_)]["shifts"][table["n"].index(j)]) if s_ else (0, 0)
                     C = moved(A, dx, dy)
                     gone = moved(np.ones(A.shape[:2], np.uint8), dx, dy) == 0
                     strip = gone if strip is None else strip | gone
@@ -569,10 +574,11 @@ with calibration.looking("balanced"):
                 recipe = (table["sets"]["by"].get(str(n)) if colour else None) or \
                     ((held["trails"][str(T)][a] if T else []) + [shown])
                 pl, strip = [], np.zeros(planes0[n].shape[:2], bool)
-                for j in recipe:
+                for q, j in enumerate(recipe):
                     # (the page loads the frame's own plane for the frame shown, another frame's for the rest)
                     A = planes0[n] if j in (n, shown) else planes0[j]
-                    dx, dy = got[str(s_)]["shifts"][table["n"].index(j)] if s_ else (0, 0)
+                    moves = got[str(s_)]["sets"].get(str(n)) if s_ and colour and len(recipe) > 1 else None
+                    dx, dy = (moves[q] if moves else got[str(s_)]["shifts"][table["n"].index(j)]) if s_ else (0, 0)
                     C = moved(A, dx, dy)
                     # (as above: the strip along the view's edge a move uncovers has none of this frame on the page)
                     strip |= moved(np.ones(A.shape[:2], np.uint8), dx, dy) == 0

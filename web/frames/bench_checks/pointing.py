@@ -124,6 +124,58 @@ def _sources(ctx):
 ITEMS = [
     {"name": "encset293-movie", "kind": "pass", "frame": "N1884013382_1", "group": "hard",
      "watch": "Enceladus setting behind Saturn: steady to the end, no frame at SPICE's raw pointing (2026-11-18)"},
+    {"name": "daphnis257n1-movie", "kind": "pass", "frame": "N1863264697_1", "group": "hard",
+     "watch": "Daphnis colour movie: channels line up along the Keeler gap edge, no blue-violet fringe (#602 regression)"},
+    {"name": "fring039-movie", "kind": "pass", "frame": "N1551253524_1", "group": "hard",
+     "watch": "2007 F ring movie (039RF FMOVIE001): no jitter (#602 regression, p90 16.5 to 31 px)"},
+    {"name": "fring183-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard",
+     "watch": "2013 F ring movie (183RF FMOVIE001): no jitter (#602 regression, p90 19.5 to 28.8 px)"},
     {"name": "titancloud264-movie", "kind": "pass", "frame": "N1867408664_1", "group": "hard",
      "watch": "Titan cloud watch: steady, no frame at SPICE's raw pointing"},
 ]
+
+
+def _channel_moves(rgba):
+    """The largest move (px of the picture) between a colour picture's channels: each channel's edges (Sobel
+    magnitude) matched to the green channel's by phase correlation, even-padded. 0 for a grey picture."""
+    import cv2
+    import numpy as np
+    a = rgba[..., :3].astype(np.float32)
+    if float(np.abs(a[..., 0] - a[..., 1]).mean()) < 0.5 and float(np.abs(a[..., 2] - a[..., 1]).mean()) < 0.5:
+        return 0.0
+    lit = rgba[..., 3] > 0
+
+    def edges(c):
+        c = cv2.GaussianBlur(c * lit, (0, 0), 1.5)
+        return np.hypot(cv2.Sobel(c, cv2.CV_32F, 1, 0), cv2.Sobel(c, cv2.CV_32F, 0, 1))
+    h, w = a.shape[:2]
+    pad = lambda x: cv2.copyMakeBorder(x, 0, _even(h) - h, 0, _even(w) - w, cv2.BORDER_CONSTANT, value=0)
+    win = pad(cv2.createHanningWindow((w, h), cv2.CV_32F))
+    g = pad(edges(a[..., 1]))
+    worst = 0.0
+    for ch in (0, 2):
+        (dx, dy), resp = cv2.phaseCorrelate(g, pad(edges(a[..., ch])), win)
+        if resp >= 0.1:
+            worst = max(worst, float(np.hypot(dx, dy)))
+    return worst
+
+
+@check("channel_registration", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.25,
+       about="a colour movie's channels do not line up: a coloured fringe along edges (257DA DAPHNIS001, #602)")
+def channel_registration(p, limit=1.5):
+    """The 90th percentile, over a colour movie's frames, of the largest move between a frame's colour channels
+    (_channel_moves: each channel's edges matched to green's). A registered colour set's channels sit within a pixel."""
+    import numpy as np
+    vals = {}
+    for f in p.frames():
+        m = _channel_moves(p.load(f))
+        if m:
+            vals[f] = round(m, 2)
+    if len(vals) < 2:
+        return Result(0, limit, True, "no colour frames to judge")
+    v = np.array(list(vals.values()))
+    p90 = float(np.percentile(v, 90))
+    worst = max(vals, key=vals.get)
+    return Result(p90, limit, p90 <= limit, f"colour channels apart: p90 {p90:.2f} px, largest {vals[worst]:.2f} px "
+                                            f"({len(vals)} colour frames)", where=worst,
+                  values={k: x for k, x in vals.items() if x > limit})
