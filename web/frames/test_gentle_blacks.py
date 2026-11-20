@@ -55,9 +55,9 @@ def test_flat_clean_deck_spreads():
     lit = np.ones(lum.shape, bool)
     floor, top = (float(v) for v in np.percentile(lum, (calibration.FLOOR_PCT, calibration.WHITE_PCT)))
     old = min(calibration.FLOOR_SHARE * floor, calibration._floor_cap(top))
-    new = calibration._flat_black(lum, lit, floor, top, old)
+    new = calibration._flat_black(lum, lit, lum, top, old)
     assert new > old
-    assert new <= calibration.FLAT_SHARE * floor + 1e-9
+    assert new <= calibration.FLAT_SHARE * float(np.percentile(lum, calibration.FLAT_PCT)) + 1e-9
     # the stretch now shows the deck's contrast: its floor well under the top on the new scale
     assert (floor - new) / (top - new) < 0.7 * (floor - old) / (top - old)
 
@@ -69,7 +69,7 @@ def test_flat_noisy_deck_stretches_less():
         lit = np.ones(lum.shape, bool)
         floor, top = (float(v) for v in np.percentile(lum, (calibration.FLOOR_PCT, calibration.WHITE_PCT)))
         old = min(calibration.FLOOR_SHARE * floor, calibration._floor_cap(top))
-        got.append(calibration._flat_black(lum, lit, floor, top, old) - old)
+        got.append(calibration._flat_black(lum, lit, lum, top, old) - old)
     assert got[1] < got[0], got
 
 
@@ -78,7 +78,7 @@ def test_contrasty_picture_unchanged():
     lit = np.ones(lum.shape, bool)
     floor, top = (float(v) for v in np.percentile(lum, (calibration.FLOOR_PCT, calibration.WHITE_PCT)))
     old = min(calibration.FLOOR_SHARE * floor, calibration._floor_cap(top))
-    assert calibration._flat_black(lum, lit, floor, top, old) == old
+    assert calibration._flat_black(lum, lit, lum, top, old) == old
 
 
 def test_sky_track_follows_the_sky_and_ignores_one_frame():

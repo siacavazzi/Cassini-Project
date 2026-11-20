@@ -1136,6 +1136,7 @@ FLAT_EVEN = (0.5, 0.7)   # _flat_black: a picture with no sky whose floor is ove
 FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its grain (the
 FLAT_GRAIN = 24          # FLAT_GRAIN_PCT percentile over the median) spans no more than 1 / FLAT_GRAIN of the range
 FLAT_GRAIN_PCT = 99
+FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
@@ -2797,7 +2798,7 @@ def _floor(iofs, levels, sky=None, glow=1.0):
         lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & _inner(lum.shape)
         lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
         floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
-        black = _flat_black(lum, lit, floor, top, min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top)))
+        black = _flat_black(lum, lit, dark, top, min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top)))
         dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
         bright = max(bright - black, 0.0)
         if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
@@ -2830,16 +2831,17 @@ def _floor(iofs, levels, sky=None, glow=1.0):
 
 """
 The floor black of a low-contrast picture with no sky (FLAT_EVEN): a close-up a cloud deck, Titan's haze or the rings
-fill, whose darkest real feature (floor, its FLOOR_PCT percentile) is most of the way to its top (its WHITE_PCT
-percentile). FLOOR_SHARE of the floor, capped at FLOOR_GAIN, left such a picture in the top third of the range and the
+fill, whose floor (its FLAT_PCT percentile: a narrow dark line across it, a ring's shadow or a dark column, is not its
+floor) is most of the way to its top (its WHITE_PCT percentile). FLOOR_SHARE of the floor, capped at FLOOR_GAIN, left such a picture in the top third of the range and the
 gamma drew it as one plain square (2007 Saturn cloud decks N1565100696_1 and N1565242114_1 peach, 2008 Titan MT1
 N1578275934_1 white, their raw codes full of structure; regression 11-20). From FLAT_EVEN[0] to FLAT_EVEN[1] of
 evenness the black goes up to FLAT_SHARE of the floor, but never so high that the picture's own grain (sky_grain on the
 lit part: noise, compression blocks, 8-bit steps, never its slow light) spans more than 1 / FLAT_GRAIN of the range
 from black to top: a clean picture spreads, a blocky or noisy one stretches only as far as its blocks allow (the "pushed
-too far" of 11-08). lum, lit = _floor's brightness and lit pixels; black = the floor black as it was
+too far" of 11-08). lum, lit, dark = _floor's brightness, lit pixels and brightness after its 3x3 median; black = the floor black as it was
 """
-def _flat_black(lum, lit, floor, top, black):
+def _flat_black(lum, lit, dark, top, black):
+    floor = float(np.percentile(dark[lit], FLAT_PCT))
     if floor <= 0 or top <= 0:
         return black
     flat = min(max((floor / top - FLAT_EVEN[0]) / (FLAT_EVEN[1] - FLAT_EVEN[0]), 0.0), 1.0)
