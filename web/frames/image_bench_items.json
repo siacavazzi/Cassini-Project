@@ -54,6 +54,7 @@
   {"name": "june2004-mosaic", "kind": "pass", "frame": "N1466207340_1", "group": "hard", "watch": "Saturn 2004-06-17 2X2PLRNC015 (polarized BL2/GRN/CB1) in colour, not gray (#483)", "checks": {"gray_colour": {}}},
   {"name": "saturn-limb-still", "kind": "still", "frame": "N1469611288_1", "group": "hard", "watch": "Saturn's limb on black sky: no black gap and grainy halo past it (#574 sky smoothing lift)", "checks": {"limb_halo": {}}},
   {"name": "enceladus-eye-composite", "kind": "composite", "frame": "N1602286223_2", "colors": "eye", "group": "hard", "watch": "Enceladus IR3/GRN/UV3 in Natural color (emulated): near gray, not orange (#570 eye colours)", "checks": {"body_tint": {}}},
-  {"name": "impact293-movie", "kind": "pass", "frame": "N1884113057_1", "group": "hard", "watch": "293SA IMPACTOBS001 (2017) colour movie: its MT3 frame (7) drawn gray between colour frames, no set drawn for it (odd_frame 18.4 on main 16b3f6c4; known defect, 11-19 spot check)"}
+  {"name": "impact293-movie", "kind": "pass", "frame": "N1884113057_1", "group": "hard", "watch": "293SA IMPACTOBS001 (2017) colour movie: its MT3 frame (7) drawn gray between colour frames, no set drawn for it (odd_frame 18.4 on main 16b3f6c4; known defect, 11-19 spot check)"},
+  {"name": "mimas167-mosaic", "kind": "pass", "frame": "N1717571087_1", "group": "hard", "watch": "colour fringes on every crater: the GRN and UV3 frames of a pointing drawn 1.4 to 3.7 degrees turned from the clear frame (SPICE's twist the wrong way round), which colour registration only moved"}
  ]
 }
