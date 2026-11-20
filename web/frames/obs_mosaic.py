@@ -91,6 +91,7 @@ import label_handler  # noqa: E402
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
+# obs-v145/v128/v114: a mosaic movie's tiles the camera steps between lap after lap are two slots, not one (#604, numbered past #602)
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 VERSIONS = {"balanced": "obs-v146", "raw": "obs-v129", "eye": "obs-v146-eye", "false": "obs-v146-false", "classic": "obs-v115-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
@@ -11049,7 +11050,7 @@ def warm_movie(u, n, ahead, cache, steady=False, exposure=None, footprint=False)
 def slots(u):
     """The place of each frame of pass u (places), with the camera's drift over a long mosaic movie taken out:
     places closer than half the pass's step (the median jump from one place to the next in one filter) are one
-    slot. The Jupiter approach's 2x2s drift over nine laps by more than mosaic.min_step, so the classifier gives
+    slot, unless the camera steps straight from one to the other lap after lap (two tiles of the raster, not a drift). The Jupiter approach's 2x2s drift over nine laps by more than mosaic.min_step, so the classifier gives
     their last laps places of their own (8 for 4 tiles), and without this a lap over the drifted places would run
     on into the next (lap_of) and a drifted tile would stay up beside its own older copy (rolling_layout). None
     for a frame with no place."""
@@ -11057,6 +11058,14 @@ def slots(u):
         return u["slots"]
     u["slots"] = _slot_of(u, places(u))
     return u["slots"]
+
+
+# two places a mosaic movie steps between lap after lap are two tiles (not a drifted copy) when at least this far apart,
+# of a frame: a storm movie's places drifting 0.13-0.19 of a frame a lap (052SA STRMOVIA003) waver across the
+# classifier's line lap after lap too, and kept apart they left gaps between its tiles; a raster's tiles overlap by
+# three quarters at most (the 2017-09-08 north pole map's columns are 0.3 and 0.43 of a frame apart)
+RASTER_STEP = 0.25
+PLACES_A_SLOT = 2   # a raster's tile drifts over this many places at most; more is a scan (_slot_of)
 
 
 def _slot_of(u, where):
@@ -11073,18 +11082,51 @@ def _slot_of(u, where):
         last[fr[2]] = (i, p)
     near = 0.5 * float(np.median(steps)) if steps else 0.0
     centre = {i: np.mean(v, 0) for i, v in at.items()}
-    parent = {i: i for i in centre}
 
-    def root(i):
-        while parent[i] != i:
-            i = parent[i]
-        return i
-    if near > mosaic.min_step * FRAME:
-        for a in sorted(centre):
-            for b in sorted(centre):
-                if b > a and np.abs(centre[a] - centre[b]).max() < near and root(a) != root(b):
-                    parent[max(root(a), root(b))] = min(root(a), root(b))
-    return [root(i) if i in parent else i for i in where]
+    # places the camera goes straight between lap after lap (one frame at one, the next placed frame at the other,
+    # and again after it has been somewhere else), RASTER_STEP of a frame or more apart, are two tiles of the
+    # raster, however near: the camera drifts onto a drifted place once and stays, or wavers between the two in a row
+    # where the drift crosses the classifier's line, but does not step to it and back every lap. A raster whose steps
+    # differ by axis (the 2017-09-08 north pole map's columns half a frame apart, its rows a whole frame) has a column
+    # step under half the median step, and its columns were one slot: each lap's second column took the first one's
+    # place, and the movie showed one tile fewer than the lap took (a panel missing most of the time)
+    visits = [i for i in where if i is not None]
+    visits = [i for k, i in enumerate(visits) if k == 0 or i != visits[k - 1]]
+    steps_at = {}
+    for k in range(1, len(visits)):
+        steps_at.setdefault((min(visits[k - 1], visits[k]), max(visits[k - 1], visits[k])), []).append(k)
+    beside = set()
+    for (a, b), ks in steps_at.items():
+        if len(ks) < 2 or a not in centre or b not in centre or np.abs(centre[a] - centre[b]).max() < RASTER_STEP * FRAME:
+            continue
+        # two of its steps with a third place taken between them: a lap went round in between
+        if any(v not in (a, b) for v in visits[ks[0]:ks[-1]]):
+            beside.add((a, b))
+    def merged(apart):
+        parent = {i: i for i in centre}
+        members = {i: {i} for i in centre}
+
+        def root(i):
+            while parent[i] != i:
+                i = parent[i]
+            return i
+        if near > mosaic.min_step * FRAME:
+            for a in sorted(centre):
+                for b in sorted(centre):
+                    ra, rb = root(a), root(b)
+                    if b > a and np.abs(centre[a] - centre[b]).max() < near and ra != rb and not any(
+                            (min(x, y), max(x, y)) in apart for x in members[ra] for y in members[rb]):
+                        lo, hi = min(ra, rb), max(ra, rb)
+                        parent[hi] = lo
+                        members[lo] |= members.pop(hi)
+        return [root(i) if i in parent else i for i in where]
+    out = merged(beside)
+    # ... in a raster that comes back to a stable spot lap after lap, where a drifting tile is a place or two; a pass
+    # whose pointing creeps like a scan (217SA AURSTARE001: 54 places, every frame a little further along) makes
+    # many places a slot, and keeping its near pairs apart drew a staircase of tiles a few px apart: merged as before
+    if beside and len(centre) > PLACES_A_SLOT * len({i for i in out if i is not None}):
+        out = merged(set())
+    return out
 
 
 def lap_of(u):
