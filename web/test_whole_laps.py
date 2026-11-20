@@ -66,6 +66,34 @@ u["frames"] = [(*f[:5], -100.0 * (i % 8), 0, 1e6) for i, f in enumerate(u["frame
 u["z"] = 1e6
 assert om.slots(u) == u["place"] and om.lap_ends(u) == [7, 15], om.lap_ends(u)
 
+# a raster whose columns are nearer than its rows (the 2017-09-08 north pole map, ISS_292SA_NPOLEMAP001_VIMS: columns
+# ~460 px apart, rows ~1000, drifting ~30 px a lap: its pointings as the geometry cache has them) keeps its four tiles four slots: its columns are under half the
+# median step apart, but the camera steps straight from one to the other, so neither is the other drifted. They were
+# one slot, each lap's second column took the first's place and the movie lacked a panel most of the time
+def npole(laps=5):
+    F8 = ["BL1", "CB3", "VIO", "RED", "GRN", "MT2", "MT3", "CB2"]
+    fr, t = [], 1000.0
+    for lap in range(laps):
+        dx, dy = 15 * lap, -30 * lap
+        for x, y in [(1553 + dx, 492 + dy), (1524 + dx, -509 + dy), (1066 + dx, -502 + dy), (1048 + dx, 469 + dy)]:
+            for f in F8:
+                fr.append((f"p{len(fr)}", f"W{1500000000 + len(fr)}_1", f, t, 600, x, y, 5e5))
+                t += 20
+            t += 600
+    u = {"key": ("SATURN", "OBS", "W", 0), "frames": fr, "taken": [(f[2], f[5], f[6], f[7]) for f in fr], "z": 5e5}
+    om._judge(u)
+    return u
+
+
+u = npole()
+assert u["kind"] == "mosaic_movie", u["kind"]
+s = om.slots(u)
+# every lap takes four slots, one per pointing, in the order taken
+for lap in range(5):
+    assert len({s[32 * lap + 8 * q] for q in range(4)}) == 4, (lap, s[32 * lap: 32 * lap + 32: 8])
+assert len(set(s)) == 4, sorted(set(s))
+assert om.lap_ends(u) == [32 * k + 31 for k in range(5)], om.lap_ends(u)
+
 # not a mosaic movie: no lap ends
 assert om.lap_ends(unit([0, 1, 2, 3], ["CB2"] * 4, kind="mosaic")) == []
 
