@@ -1092,6 +1092,8 @@ def _gained(color, gain, gamma):
     return keep_clipped(out, color)
 
 
+# _blended applies keep_clipped again after a frame's seam level field, which is per band too (ringsFA's block
+# was still 255/255/247 with the gains alone neutral, bench 11-21)
 CLIPPED = 255   # _gained: a level this high was clipped at white
 
 
@@ -1159,14 +1161,14 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     fields = [None] * len(infos)
     if level and decided is not None:
         fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
-        toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
+        toned = [t if fl is None else keep_clipped(t * fl, info[1]) for t, fl, info in zip(toned, fields, infos)]
     elif level and sum(info is not None for info in infos) > 1:
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
         found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                         [None if info is None else info[4] for info in infos],
                         None if pin is None else range(len(infos))[pin],
                         max(info[5] for info in infos if info is not None) * GAP_REACH)
-        toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
+        toned = [t if lv is None else keep_clipped(t * _field(lv, b), info[1]) for t, lv, b, info in zip(toned, found, boxes, infos)]
         if _watch is not None:
             fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
         for d, lv in zip(decisions, found):
