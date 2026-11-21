@@ -452,7 +452,8 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     fields = derotation_fields(lbls, ref, (linear[0] if linear is not None else imgs)[ref].shape[:2]) \
         if align and len(lbls) > 1 else None
     if fields:
-        masks = [m if f is None else derotated([f], [m.astype(np.float32)])[0] > 0.99 for f, m in zip(fields, masks)]
+        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.99, m)
+                 for f, m in zip(fields, masks)]
         if linear is not None:
             linear = (derotated(fields, linear[0]),) + tuple(linear[1:])
             if guide is not None:
@@ -1515,6 +1516,36 @@ def _derotation_fields(lbls, ref, shape):
                 continue
             out.append((dx, dy, weight, round(most, 2)))
     return out if any(f is not None for f in out) else None
+
+
+def _squared(new, old):
+    """A derotated channel's valid pixels (new; old: before) with each side of the frame cut straight where the
+    redrawing drew from past it: the disk's motion changes along the edge, and Saturn's rings in front of it do not
+    move, so the edge it left came out slanted, stepped, with the ring's line poking past it into the black (Fable's
+    blind check of saturn07-deck, 11-21). Each side cut where 95% of its lines are left (the corners of the sides
+    beside it, where those lose their strips, are the other 5%)."""
+    out = new.copy()
+    for axis in (0, 1):
+        for flip in (False, True):
+            def firsts(m):
+                m = m if axis == 1 else m.T
+                m = m[:, ::-1] if flip else m
+                # (over the lines mostly valid: a line across the edge's own strip, the ring's alone, is not one)
+                has = m.mean(axis=1) >= 0.5
+                return np.argmax(m, axis=1)[has]
+            a, b = firsts(new), firsts(old)
+            if not len(a) or not len(b):
+                continue
+            cut, was = int(np.percentile(a, 95)), int(np.percentile(b, 95))
+            if cut <= was:
+                continue
+            n = new.shape[1] if axis == 1 else new.shape[0]
+            sl = slice(n - cut, n) if flip else slice(0, cut)
+            if axis == 1:
+                out[:, sl] = False
+            else:
+                out[sl, :] = False
+    return out
 
 
 def derotated(fields, planes):
