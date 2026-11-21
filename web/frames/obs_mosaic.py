@@ -2789,8 +2789,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     return out
 
 
-TRACK_STILL = 0.5  # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
-TRACK_TOE = 2.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
+TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
+TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
 TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
                    # neighbours (an odd number), so one frame's stray light or lost lines do not set the frames round it
 
@@ -2823,7 +2823,7 @@ def sky_track(qs, masks, ts, top):
         (still,), still_margin, _, measured = calibration._balanced_scale([clean], floor=False)
         black = level + top
         if measured and still + still_margin > black:
-            # half of the way up (TRACK_STILL): all the way, the F ring's arc, a ring's faint sheet and the plume's outer
+            # a quarter of the way up (TRACK_STILL; half and all the way lost faint light): all the way, the F ring's arc, a ring's faint sheet and the plume's outer
             # glow went black at Full (review 11-21, Sam's "go more conservative")
             black += TRACK_STILL * (still + still_margin - black)
         got.append((t, black))
