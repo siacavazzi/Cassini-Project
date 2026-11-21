@@ -1136,6 +1136,7 @@ FLAT_EVEN = (0.4, 0.6)   # _flat_black: a picture with no sky whose floor is ove
 FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
 FLAT_NOISE = 150         # no more than 1 / FLAT_NOISE of the range from black to top (1.7 of 255 levels: at 100 the
                          # grain showed on near-featureless frames, Fable 11-21)
+FLAT_DARK = 0.25         # ... and the darkest features' light kept unless they are under this share of its top
 FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
@@ -2853,6 +2854,12 @@ def _flat_black(lum, lit, dark, top, black):
         return black
     noise = 1.4826 * float(np.median(steps)) / math.sqrt(2)
     want = min(FLAT_SHARE * floor, top - FLAT_NOISE * noise)
+    darkest = float(np.percentile(dark[lit], FLOOR_PCT))
+    if darkest > FLAT_DARK * top:
+        # the few darkest real features (an icy moon's cracks, under the FLAT_PCT percentile) keep some light: black no
+        # higher than FLAT_SHARE of them. Not when they are far darker than the rest (a dark line across a cloud deck,
+        # a lost column: under FLAT_DARK of the top), which would hold the whole picture back
+        want = min(want, FLAT_SHARE * darkest)
     return black + flat * max(want - black, 0.0)
 
 
