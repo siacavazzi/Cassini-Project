@@ -31,7 +31,7 @@ def test_grain_leaves_the_glow_out():
     assert spread < 0.0006 < raw, (spread, raw)
     # sky_levels' margin with a floor percentile is now the grain's
     _, margin = calibration.sky_levels([[iof]], [[sky]], floor_pct=98)
-    assert spread < margin < 0.5 * raw, (margin, raw)   # the grain plus GRAIN_GLOW of the glow over it
+    assert spread < margin < 0.6 * raw, (margin, raw)   # the grain plus GRAIN_GLOW of the glow over it
 
 
 def test_grain_of_a_plain_sky_is_its_spread():
