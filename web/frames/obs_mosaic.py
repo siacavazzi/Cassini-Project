@@ -3586,6 +3586,10 @@ def _colour_filters(u):
 # drew doubled crater rims (the image benchmark, #506)
 LIMB_REGISTER = 2.0      # px
 LIMB_HAZY = frozenset({"TITAN"})   # bodies whose haze puts each filter's limb at its own height, many px apart
+LIMB_HAZE = 6.0   # px: ... and the furthest the haze alone puts one filter's limb from another's: SPICE's place further
+#                   off than the match by more than this is wrong, not haze (236TI's BL1: 18 px at SPICE, 5 at the
+#                   match); within it the haze is the filter's own, and a match that lines the limbs up drew Titan's
+#                   blue haze rim in under the red, a warm band inside the limb (185TI rz-titan13-movie2)
 LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
 
 
@@ -3791,7 +3795,7 @@ def _limb_register(u, q, ref, out, crop):
     if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
         e = l0[0] - lq[0]
         v = (-e * l0[1][0], -e * l0[1][1])
-        if u["key"][0] in LIMB_HAZY and "spice_offset" in out and abs(e) > abs(off) + LIMB_REGISTER:
+        if u["key"][0] in LIMB_HAZY and "spice_offset" in out and abs(e) > abs(off) + LIMB_HAZE:
             # (a hazy body's limb (LIMB_HAZY) further off at SPICE's place than at the match: it measures the filter's
             # own haze height, not its place, and the match stands. Only Titan: on Saturn's ring mosaics the matches
             # this let stand moved the panels and cut 4% of 2004 RINGMOSAIC's rings off its edges (image bench). 236TI M30R2CLD155's BL1, its limb 5 px out in Titan's blue haze, went
