@@ -10050,6 +10050,27 @@ def blank_frame(frames, n, tile_of):
     return all(me < BLANK_SHARE * v for v in near)
 
 
+VEIL_LIT = 0.5     # of a frame: (veiled_frame) a frame lit (LIT_LEVEL and up) over this much ...
+VEIL_CLEAR = 0.05  # ... among its filter's nearest frames on both sides lit over this much or less is a lone veiled frame
+
+
+def veiled_frame(frames, n, tile_of):
+    """True when frame n of a movie is lit nearly all over (its tile's "lit" share VEIL_LIT or more) between frames of
+    its filter lit over VEIL_CLEAR or less: a lone frame of another kind among them, whose sky did not calibrate to the
+    others' (Skathi 2011: one 460 s full-resolution frame among 220 s summed ones, its dark current a gray veil 64 levels
+    over a black sky, a flash every few dozen frames). A pass that brightens steadily has a lit frame on one side, so its
+    frames are never veiled by this rule."""
+    me = tile_of(n).get("lit")
+    if me is None or me < VEIL_LIT:
+        return False
+    f = frames[n][2]
+    for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
+        j = next((j for j in js if frames[j][2] == f and "offset" in tile_of(j)), None)
+        if j is None or tile_of(j).get("lit", 0.0) > VEIL_CLEAR:
+            return False
+    return True
+
+
 def unfit(frames, n, tile_of):
     """True when frame n of a movie (frames: the pass's, tile_of(j): tile j's report) is not shown, its filter's
     whole frame before it held in its place (held_of): a partial frame (partial), a frame that can't be calibrated
@@ -10064,7 +10085,8 @@ def unfit(frames, n, tile_of):
     t = tile_of(n)
     if "offset" not in t:
         return False
-    if partial(t) or lost_held(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
+    if partial(t) or lost_held(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of) \
+            or veiled_frame(frames, n, tile_of):
         return True
     s = t.get("saturated", 0.0)
     if s < OVER_LEAST:
