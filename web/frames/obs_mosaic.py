@@ -2819,13 +2819,34 @@ def sky_track(qs, masks, ts, top):
         # (its sky black alone, not the floor black a still takes off a lit part: with it, a dim ring band between
         # bright rings went solid black, 2008 W1602057697_1's movie, lit share 33% -> 10%; Fable 11-21)
         (still,), still_margin, _, measured = calibration._balanced_scale([clean], floor=False)
-        got.append((t, max(level + top, still + still_margin if measured else level + top)))
+        black = level + top
+        if measured and still + still_margin > black:
+            # but not where what it takes under black has structure of its own (ringlets: a dim ring band between bright
+            # rings, which the still's sky test counts as sky, went solid black in 088RI TMAPN20LP001's movie, W1602057697_1,
+            # Fable 11-21). Scattered light and a veil are smooth (calibration.GLOW_FINE); rings are not
+            taken = (q > black) & (q <= still + still_margin)
+            if not taken.mean() > TRACK_TAKEN or _smooth_light(q, taken):
+                black = still + still_margin
+        got.append((t, black))
     if len(got) < 3:
         return []
     got.sort(key=lambda g: g[0])
     half = TRACK_WINDOW // 2
     levels = [g[1] for g in got]
     return [[got[i][0], float(np.median(levels[max(0, i - half):i + half + 1]))] for i in range(len(got))]
+
+
+TRACK_TAKEN = 0.02   # sky_track: a still's black over the pass's height is checked for structure when it takes more than
+                     # this share of the frame under black
+
+
+def _smooth_light(q, where):
+    """(sky_track) True when the light at the pixels where of q (a quarter size frame, I/F) is smooth, a glow or a veil:
+    its detail at 1.5 px against 6 px, the 90th percentile over its median, under calibration.GLOW_FINE[1]"""
+    q = np.ascontiguousarray(q, dtype=np.float32)
+    detail = np.abs(cv2.GaussianBlur(q, (0, 0), 1.5) - cv2.GaussianBlur(q, (0, 0), 6))
+    middle = float(np.median(np.abs(q[where])))
+    return middle > 0 and float(np.percentile(detail[where], 90)) / middle < calibration.GLOW_FINE[1]
 
 
 def track_black(track, t):
