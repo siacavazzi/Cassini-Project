@@ -7247,8 +7247,6 @@ def layout(u, n, cache):
         at = {"ring_at": u["frames"][len(u["frames"]) // 2][1]} if rung else {}
         tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t), **at) if t["n"] in surfaced else t
                  for t in tiles]
-    # a clouded body's filters of one pointing as at one time (derotated_tiles)
-    tiles = derotated_tiles(u, cache, p, tiles)
     # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
     # keep that place, and their pointings' panel moves are not added
     rung = ring_moves(u, cache, p, tiles)
@@ -7263,6 +7261,9 @@ def layout(u, n, cache):
         tiles = [dict(t, offset=[t["offset"][0] + moved[t["n"]][0], t["offset"][1] + moved[t["n"]][1]], spice_place=t["offset"],
                       **({"turn": moved[t["n"]][2]} if len(moved[t["n"]]) > 2 else {}))
                  if t["n"] in moved and "offset" in t else t for t in tiles]
+    # a giant planet's filters of one pointing as at one time (derotated_tiles), once every tile is placed: redrawn
+    # before, their pictures took part in the panels' registration, which moved the whole 2004 ring mosaic COMPHIDRK001
+    tiles = derotated_tiles(u, cache, p, tiles)
     count = {}
     for t in tiles:
         if "offset" in t:
