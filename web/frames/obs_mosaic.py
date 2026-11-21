@@ -2282,8 +2282,8 @@ MIX_SPAN = sets_passes.SET_GAP   # s: frames on top taken further apart than thi
 SLOW_MIX_SPAN = {"TITAN": 4 * 3600}   # s: on these bodies, whose clouds change little in hours, a colour picture
 # mixes visits taken up to this far apart (mix_span): Titan 059TI GLOBMAP001 (2008, an MT1 and two CB3 at each of 26
 # pointings over 3.4 h) drew the gray base, tinted to match the colour round it, wherever one pointing's MT1 sat under
-# the next one's CB3, and those patches read as tiles of another colour (a pale block at upper left, a gray one over
-# the dark terrain). Still a mosaic's gray base wherever no colour lies (mixes keeps MIX_SPAN for that).
+# the next one's CB3 or the second CB3 came more than MIX_SPAN after the MT1 (visit_frames drew it in gray), and
+# those patches read as tiles of another colour (a pale block at upper left, a gray one over the dark terrain).
 
 
 def mix_span(u):
@@ -2356,7 +2356,7 @@ def drawn_time(u, t):
 
 def visit_frames(u, colour):
     """The frames (indices) of a clouded pass's colour filters that take part in a whole colour visit: every other
-    colour filter has a frame within SAME_PLACE of a frame at its place and taken within MIX_SPAN of it (set_time).
+    colour filter has a frame within SAME_PLACE of a frame at its place and taken within mix_span of it (set_time).
     A pointing that took only some of the filters (Jupiter C23 NSMAP101: 15 of 21) is drawn in the gray base instead of
     the colour, so the colour under it is a whole visit's, not one filter of each visit. Decided on the pass's frames
     from the geometry cache (as lum_frames), so it only grows as the pass goes on; every frame on any other body."""
@@ -2369,12 +2369,13 @@ def visit_frames(u, colour):
     def at(fr):
         return (-fr[5] * fr[7] / u["z"], -fr[6] * fr[7] / u["z"]) if fr[7] and u["z"] else None
     whole = set(range(len(frames)))
+    span = mix_span(u)
     if clouded(u) and len(colour) >= 2:
         by = {f: [(j, at(fr), set_time(u, j)) for j, fr in enumerate(frames) if fr[2] == f] for f in colour}
         whole = {j for j, fr in enumerate(frames) if fr[2] not in colour}
         for f in colour:
             for j, q, t in by[f]:
-                if q is not None and all(any(r is not None and abs(t - tg) <= MIX_SPAN
+                if q is not None and all(any(r is not None and abs(t - tg) <= span
                                              and math.hypot(q[0] - r[0], q[1] - r[1]) <= SAME_PLACE * FRAME
                                              for _, r, tg in by[g]) for g in colour if g != f):
                     whole.add(j)
