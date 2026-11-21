@@ -33,15 +33,18 @@ def tinted_before(colour, grey, gamma=2.2, same=False):
     near = np.clip((grey[..., 0].astype(np.float32) - om.TINT_CLIP) / max(1.0, om.CLIP_FROM - om.TINT_CLIP), 0, 1)
     clipped = near > 0
     both = (ca > 0.99) & (ga > 0.99) & ~clipped
-    top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
-    top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
-    lit = both & (y > om.TINT_LIT * top_y) & (g > om.TINT_LIT * top_g)
+    # (the bright end over what is lit in either, as tinted_frame measures it since the Jupiter W_10 flips)
+    up = both & ((grey[..., 0] >= om.TINT_LIT_LEVEL) | (colour[..., :3].max(axis=2) >= om.TINT_LIT_LEVEL))
+    top_y = float(np.percentile(y[up], 99)) if up.any() else 0.0
+    top_g = float(np.percentile(g[up], 99)) if up.any() else 0.0
+    lit = both & (y > om.TINT_LIT * top_y) & (g > om.TINT_LIT * top_g) if top_y > 0 and top_g > 0 else np.zeros_like(both)
     if lit.sum() >= om.LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
     else:
-        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= om.LUM_MATCH_MIN else 1.0
-        hue = np.ones(3, np.float32)
+        match = 1.0
+        hue = (np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0) if lit.sum() >= om.TINT_HUE_LEAST
+               else np.ones(3, np.float32))
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within om.TINT_MATCH)
     match = float(np.clip(match, *((1 / om.LUM_MATCH[1], om.LUM_MATCH[1]) if same else om.TINT_MATCH)))
