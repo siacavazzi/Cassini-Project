@@ -8209,7 +8209,8 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
         if edges:
             shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
-            how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else f"edges: {seen}"
+            how = (f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
+                   if shift is not None else f"edges: {seen}")
         else:
             shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                      around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
@@ -8317,10 +8318,12 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
-        if not str(how).startswith("rings"):
+        if not str(how).startswith("rings") and not str(how).endswith("(one line)"):
             by_picture |= {j, n}
-    # (a tile whose every link is a ring profile's, across the rings only, its place along them SPICE's smoothed step:
-    # "along the rings", so a colour set does not take that place as the pictures' own, movie_frame)
+    # (a tile whose every link is a ring profile's, across the rings only, or one straight edge's (a ring's edge, a
+    # limb's arc too short to bend), its place along them SPICE's smoothed step: "along the rings", so a colour set
+    # does not take that place as the pictures' own, movie_frame. Taken as the channel's own, 2015's ring scan
+    # (rx-saturn15-movie2) drew its A ring's outer edge with a stronger magenta rim, blue 1.4 px off green)
     hows = {n: ("held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
                 else (f"linked to {sorted(linked[n])}" + ("" if n in by_picture else " along the rings")) if n in linked
                 else "first" if n == order[0] else "linked from later tiles")
