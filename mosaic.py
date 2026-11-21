@@ -1095,7 +1095,9 @@ CLIPPED = 255   # _gained: a level this high was clipped at white
 
 
 def keep_clipped(out, color):
-    """out with each channel that was clipped in color (CLIPPED) kept at least where it was"""
+    """out with each channel that was clipped in color (a frame's own levels, CLIPPED) kept at white or over. Only ever
+    the frame's own levels: a level a gain over 1 took past white is not clipped, and holding it there kept the seam
+    leveling from bringing it down (ringmosaic04 and the Enceladus south pole map 8% and 32% clipped)"""
     hit = color >= CLIPPED
     if hit.any():
         out = np.where(hit, np.maximum(out, np.float32(CLIPPED)), out).astype(np.float32)
@@ -1154,14 +1156,14 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     fields = [None] * len(infos)
     if level and decided is not None:
         fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
-        toned = [t if fl is None else keep_clipped(t * fl, t) for t, fl in zip(toned, fields)]
+        toned = [t if fl is None else keep_clipped(t * fl, info[1]) for t, fl, info in zip(toned, fields, infos)]
     elif level and sum(info is not None for info in infos) > 1:
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
         found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                         [None if info is None else info[4] for info in infos],
                         None if pin is None else range(len(infos))[pin],
                         max(info[5] for info in infos if info is not None) * GAP_REACH)
-        toned = [t if lv is None else keep_clipped(t * _field(lv, b), t) for t, lv, b in zip(toned, found, boxes)]
+        toned = [t if lv is None else keep_clipped(t * _field(lv, b), info[1]) for t, lv, b, info in zip(toned, found, boxes, infos)]
         if _watch is not None:
             fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
         for d, lv in zip(decisions, found):
