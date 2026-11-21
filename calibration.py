@@ -1136,6 +1136,7 @@ FLAT_EVEN = (0.4, 0.6)   # _flat_black: a picture with no sky whose floor is ove
 FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
 FLAT_NOISE = 150         # no more than 1 / FLAT_NOISE of the range from black to top (1.7 of 255 levels: at 100 the
                          # grain showed on near-featureless frames, Fable 11-21)
+FLAT_DARK_SHARE = 0.02   # ... and only when what is that dark is a thin line, at most this share of the picture
 FLAT_DARK = 0.25         # ... and the darkest features' light kept unless they are under this share of its top
 FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
@@ -2865,7 +2866,9 @@ def _flat_black(lum, lit, dark, top, black):
     if floor <= 0 or top <= 0:
         return black
     flat = min(max((floor / top - FLAT_EVEN[0]) / (FLAT_EVEN[1] - FLAT_EVEN[0]), 0.0), 1.0)
-    if flat <= 0:
+    if flat <= 0 or float(np.mean(dark[lit] < FLAT_DARK * top)) > FLAT_DARK_SHARE:
+        # (and not a picture with dark parts of its own over FLAT_DARK_SHARE of it: rings with dark bands between them,
+        # equinox-shadow-still, whose faint ringlets went black; only a thin dark line is let go black)
         return black
     steps = np.abs(np.diff(lum, axis=1))[lit[:, 1:] & lit[:, :-1]]
     if steps.size < GRAIN_LEAST:
@@ -2944,9 +2947,9 @@ def sky_levels(images, masks, floor_pct=None):
 
 GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
-GRAIN_GLOW = 0.35    # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
-                     # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still);
-                     # with a third of it the glow is fainter and narrower and still fades out, no hard rim
+GRAIN_GLOW = 0.5     # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
+                     # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still), and Titan's
+                     # scattered light as a lifted rectangle the size of the frame in a colour set (titan04-composite); with half of it the glow is fainter and narrower and still fades out, no hard rim
 
 
 """
