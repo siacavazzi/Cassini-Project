@@ -9183,9 +9183,10 @@ def centre_half(fp, radius, seen):
     half = fitted_half(seen, around / 2, wide)
     # (a body the frames cut, at their edge: the square round it that keeps the frames is mostly empty, the pictures
     # in one corner of it (127HE ROTCOLR003's best Helene, 28% of the view). Under CENTRE_FILL of the square holding
-    # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame
-    # stays centred however little of the square the frames fill: the 1999 Moon near its frame's edge)
-    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius):
+    # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame,
+    # with CENTRE_MARGIN round its disk, stays centred however little of the square the frames fill: the 1999 Moon near
+    # its frame's edge; SPICE's mean radius of Helene fits its frame's corner bare, the moon itself does not)
+    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius * (1 + CENTRE_MARGIN)):
         return None
     return half
 
