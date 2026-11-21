@@ -1146,7 +1146,7 @@ GLOW_FINE = (0.04, 0.12)  # ... but only for smooth light: none of it as the pic
                      # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
                      # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
                      # under 0.04, rings over 0.15)
-FINE_NOISE = 0.33    # fine_structure(net): white noise of this spread puts 0.33 of it in the 90th percentile of its 1.5 px detail
+FINE_NOISE = 0.4     # fine_structure(net): white noise of this spread puts about 0.31 of it (0.4 with 8-bit steps) in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
@@ -2782,8 +2782,11 @@ def fine_structure(lum, net=False):
         lum = np.ascontiguousarray(lum, dtype=np.float32)
         middle = float(np.median(lum))
         lum = lum - np.median(lum, axis=1, keepdims=True) - np.median(lum, axis=0, keepdims=True) + np.float32(2 * middle)
-        steps = np.abs(np.diff(lum, axis=1))
-        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2)
+        # the noise from neighbouring pixels' differences, as their spread up to the 95th percentile (a sky stored in
+        # 8 bits steps by whole codes: most differences are 0 and their median says nothing; edges and stars past it)
+        steps = np.abs(np.diff(lum, axis=1)).ravel()
+        steps = steps[steps <= np.percentile(steps, 95)]
+        noise = float(np.sqrt(np.mean(steps * steps))) / math.sqrt(2) if steps.size else 0.0
     detail = np.abs(cv2.GaussianBlur(lum, (0, 0), 1.5) - cv2.GaussianBlur(lum, (0, 0), 8))
     top = float(np.percentile(detail, 90))
     if net:
