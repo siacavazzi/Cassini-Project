@@ -2624,9 +2624,11 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     out.pop("sky_track", None)
     track = (scale.get("sky_track") or {}).get(f)
     if own_sky and track and t is not None:
-        # a movie frame's black follows the pass's sky as it changes (sky_track), down as well as up, on the pass's one
-        # white: the frame's own sky sets it, not the pass's typical sky
-        out["blacks"] = [track_black(track, t)]
+        # a movie frame's black follows the pass's sky as it changes (sky_track), on the pass's one white: up where the
+        # frame's sky or its black as a still is over the pass's typical black, never under it (taken under it, the
+        # 279EN plume movie's E ring glow came up as a gray square on some frames and not on the frames black_of raises,
+        # and the movie strobed more: odd_frame 14.8 -> 19.9)
+        out["blacks"] = [max(track_black(track, t), out["blacks"][0])]
         if seen is not None:
             seen["track_black"] = out["blacks"][0]
     long = scale.get("long")

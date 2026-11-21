@@ -101,10 +101,13 @@ def test_sky_track_follows_the_sky_and_ignores_one_frame():
     assert obs_mosaic.track_black(track, -10.0) == b[0]
 
 
-def test_tile_scale_uses_the_track_both_ways():
+def test_tile_scale_raises_to_the_track():
     scale = {"blacks": {"CL1": 0.005}, "white": 0.3, "gamma": 3.0, "sky_track": {"CL1": [[0.0, 0.001], [10.0, 0.002]]}}
     out = obs_mosaic.tile_scale(scale, "CL1", own_sky=True, t=5.0, on_body=True)
-    assert abs(out["blacks"][0] - 0.0015) < 1e-9       # under the pass's black
+    assert out["blacks"][0] == 0.005                   # never under the pass's black
+    scale["sky_track"]["CL1"] = [[0.0, 0.006], [10.0, 0.008]]
+    out = obs_mosaic.tile_scale(scale, "CL1", own_sky=True, t=5.0, on_body=True)
+    assert abs(out["blacks"][0] - 0.007) < 1e-9        # over it where the frame's sky is
     assert "sky_track" not in out
     assert obs_mosaic.tile_scale(scale, "CL1", own_sky=False, t=5.0)["blacks"][0] == 0.005   # mosaics keep the pass's
 
