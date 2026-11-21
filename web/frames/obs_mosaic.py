@@ -7398,7 +7398,7 @@ def _onto_frame(colour, grey):
                           borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
 
-def tinted_frame(colour, grey, gamma=2.2, same=False):
+def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
     """A movie frame's own picture (grey: RGBA, its first channel the frame on the pass's display scale) drawn in the
     colour of a colour set (colour: colour_picture's RGBA on the same canvas): in linear light, the set's hue (each
     channel over its luminance) times the frame's brightness, brought to the set's over the lit part both cover. Where
@@ -7436,6 +7436,13 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     top_y = float(np.percentile(y[up], 99)) if up.any() else 0.0
     top_g = float(np.percentile(g[up], 99)) if up.any() else 0.0
     lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g) if top_y > 0 and top_g > 0 else np.zeros_like(both)
+    if body is not None:
+        # body: the target's disk on the picture (movie_frame). The set's hue is the body's, measured on it, not on the
+        # glare or stray light round it: each channel's own sky black takes a different share of a veil off (Mimas 2004,
+        # 000OT TIMIIA001: the glare drew red 27, green 1, blue 5), so its hue is no colour of anything. A body under
+        # LUM_MATCH_MIN pixels of the picture (speck: its channels a few px apart, each a dot) gives the frame no hue at
+        # all: drawn in gray, as taken (its brightness unmatched)
+        lit = lit & body
     if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
@@ -7448,6 +7455,9 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within TINT_MATCH)
     match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
+    if speck:
+        out = np.dstack([grey[..., 0]] * 3 + [grey[..., 3]]).astype(np.uint8)
+        return out
     own = rgb / np.maximum(y, 1e-6)[..., None]
     # how far a pixel's hue strays from the set's mean, its largest per channel: past TINT_TRUST it fades to the mean,
     # gone at TINT_HUE (a channel lit where the others are not, the set's channels apart on a limb against the frame's
@@ -10667,8 +10677,18 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
                 # frame n's own picture in the set's colour (set_shown): its brightness and detail, the set's hue
+                body, speck = None, False
+                if unturn is None and radius > 0:
+                    # (the target's disk on the picture, DISK_MARGIN wider for the pointing: where the set's hue is read)
+                    yy, xx = np.ogrid[:H, :W]
+                    rr = radius * k * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1] * k
+                    body = (xx + 0.5 + rect[0] * k) ** 2 + (yy + 0.5 + rect[1] * k) ** 2 <= rr * rr
+                    # (a disk off the picture, a ring movie of Saturn's rings: the hue as before, from all that is lit)
+                    speck = math.pi * rr * rr < LUM_MATCH_MIN
+                    if not speck and not body.any():
+                        body = None
                 rgba = tinted_frame(rgba, shown if shown is not None else _place(u, t, rect, k, W, H, cache, p["display_scale"]),
-                                    gamma, tint == "near")
+                                    gamma, tint == "near", body, speck)
                 rep["tint"] = True
         else:
             used = None
