@@ -2826,7 +2826,16 @@ def sky_track(qs, masks, ts, top, share=None):
         if ok.mean() <= SKY_MIN:
             continue
         (level,), margin = calibration.sky_levels([[q]], [[ok]])
-        got.append((t, level + (max(share * level, margin) if share else top)))
+        if share:
+            got.append((t, level + max(share * level, margin)))
+            continue
+        # and no lower than the frame's own black as a still (Processed: calibration._balanced_scale, its sky level, the
+        # grain over it and the floor black), so Full keeps the black sky Processed has: the 2004 ring movie and 2007-13
+        # Saturn movies lost 30-60 points of it at Full, their faint ring light and scattered light drawn gray over the
+        # pass's lower black (bench full_black, spot check 11-20). Pixels far under the sky take its median first
+        clean = np.where(ok | ~m, q, np.float32(median))
+        (still,), still_margin, _, measured = calibration._balanced_scale([clean])
+        got.append((t, max(level + top, still + still_margin if measured else level + top)))
     if len(got) < 3:
         return []
     got.sort(key=lambda g: g[0])
