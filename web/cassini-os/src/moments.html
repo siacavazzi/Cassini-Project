@@ -103,7 +103,7 @@ body.phone #mbar .mrow.mlenrow { grid-template-columns: 40px minmax(0, 1fr) 48px
     <div class="mrow mx"><span class="mlab">Show</span><div id="mtypes" role="group" aria-label="Types shown"></div></div>
     <div class="mrow mx mlenrow"><span class="mlab" title="Keep the entries that last at least this long">At least</span><input id="mlen" type="range" min="0" max="${LENS.length - 1}" step="1" aria-label="Longer than"><span id="mlenv"></span></div>
     <div class="mrow mx mone"><div class="mpot"><button class="sw" id="mpot" role="switch" aria-checked="false" aria-label="Potential moments"></button>
-      <span title="Finds, transits and closest views the searches turned up that nobody has picked yet">Potential finds and transits too</span></div></div>`;
+      <span title="Finds, transits and closest views from the automatic searches that nobody has picked yet">Potential finds and transits too</span></div></div>`;
   win.insertBefore(bar, $("mlist"));
   for (const [k, l] of SORTS) {
     const b = document.createElement("button"); b.dataset.sort = k; b.textContent = l;
@@ -265,7 +265,7 @@ body.phone #mbar .mrow.mlenrow { grid-template-columns: 40px minmax(0, 1fr) 48px
       : n === picks.length && !V.movies && !V.potential ? `${fmtInt(n)} moments, ${ms} milestone${ms === 1 ? "" : "s"}` : `${fmtInt(n)} shown`)
       + (window.cassiniSlice && cassiniSlice.spans ? ` · ${cassiniSlice.label} only` : "")
       + (V.movies || V.potential ? ` · ${fmtInt(pot)} potential in all` : "");
-    foot.title = "Potential moments: the movie catalog and the finds and transits nobody has picked yet (Potential movies, and the switch above)";
+    foot.title = "Potential moments: the movie catalog and the finds and transits that nobody has picked yet (Potential movies, and the switch above)";
   }
 
   // the list's entries arrive with the viewer's picks (buildUi -> studyMoments); the chrome's own part still runs first

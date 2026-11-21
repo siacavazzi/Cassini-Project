@@ -213,9 +213,9 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the movie editor">×</button><button class="min" aria-label="Close the movie editor">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie Editor</div>
   <div id="meload" role="status" aria-live="polite">
     <div class="mlwhen" id="mlwhen"></div><div class="mlwhat" id="mlwhat"></div>
-    <ol><li id="mlplan">Listing the frames</li><li id="mlmake">Making the pictures ahead</li></ol>
+    <ol><li id="mlplan">Listing the frames</li><li id="mlmake">Making the pictures in advance</li></ol>
     <div id="mlbar"><i></i></div>
-    <div class="mlbtns"><button class="galbtn" id="mlcancel">Cancel</button><button class="galbtn go" id="mlnow" title="Open the editor now; the pictures keep being made ahead">Open now</button></div>
+    <div class="mlbtns"><button class="galbtn" id="mlcancel">Cancel</button><button class="galbtn go" id="mlnow" title="Open the editor now; the pictures are still made in advance">Open now</button></div>
   </div>
   <div class="mebody">
     <div class="memain">
@@ -232,7 +232,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="rnd" id="meplay" aria-label="Play the kept frames (Space)" title="Play the kept frames (Space)">▶</button>
         <button class="rnd" id="menext" aria-label="Next frame (→)" title="Next frame (→)">›</button>
         <span id="mepos"></span>
-        <input type="range" id="mefps" min="1" max="30" step="1" aria-label="Play frame rate" title="Play's frame rate (the movie mode frame rate, Settings > Playback)"><span id="mefpsv"></span>
+        <input type="range" id="mefps" min="1" max="30" step="1" aria-label="Play frame rate" title="Frame rate for Play (the movie mode frame rate in Settings > Playback)"><span id="mefpsv"></span>
         <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
         <span class="sp"></span>
         <button class="galbtn go" id="mekeep" title="Keep only the picked frames: every other frame comes out of the movie (K)" hidden>Keep only</button>
@@ -246,7 +246,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
-      <h4 style="margin-top:10px"><span>Look</span><span class="sp"></span><button id="melkclear" title="Take the look off what Apply to says">Reset</button></h4>
+      <h4 style="margin-top:10px"><span>Look</span><span class="sp"></span><button id="melkclear" title="Remove the look from the frames chosen under Apply to">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Apply to</div>
       <div class="galseg mescope" id="mescope" role="radiogroup" aria-label="Changes to the look apply to"><button data-v="movie" role="radio" title="Every frame of the movie">Whole movie<i id="mescopen"></i></button><button data-v="frames" role="radio" title="Only the frame in front, or the picked frames">This frame</button></div>
       <div class="merow"><span>Exposure</span><input type="range" id="melk-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="Exposure"><span class="val"></span></div>
@@ -266,13 +266,13 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">Default</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">Default</button><button data-v="whole" title="Each mosaic once it is complete: a mosaic pass at its last tile, and a mosaic movie once per lap, when every tile is new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip is shown on its own, as in a still pass">Off</button></div>
       <div class="menote" id="memosnote"></div>
-      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off, put every nudged frame back and Additional stabilization as Settings has it">Reset</button></h4>
+      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Remove the crop, put every moved frame back, and set Additional stabilization back to its value in Settings">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
       <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting (Settings > Processing)">Default</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
       <div class="melabel">Additional stabilization</div>
-      <div class="merow" style="margin-top:2px"><span>Steady over</span><input type="range" id="mestab" min="0" max="60" step="2" aria-label="Additional stabilization: the pictures the matching is believed over" title="For when SPICE's centering wobbles (a small moon in the NAC): each picture is matched to the one before it by what the two show, and the wobble taken out. Higher holds the body stiller, lower keeps more of its slow motion. Worked out on this computer."><span class="val" id="mestabv"></span></div>
+      <div class="merow" style="margin-top:2px"><span>Steady over</span><input type="range" id="mestab" min="0" max="60" step="2" aria-label="Additional stabilization: how many pictures the matching is trusted over" title="Use this when SPICE's centering wobbles (for a small moon in the NAC). Each picture is matched to the one before it by what the two show, and the wobble is removed. Higher holds the body stiller; lower keeps more of its slow motion. Your computer works this out."><span class="val" id="mestabv"></span></div>
       <div class="menote" id="mestabnote"></div>
       <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
       <div class="mecropctl" id="mecropctl" hidden>
@@ -298,7 +298,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
   </div>
   <div class="mefoot">
     <span id="mesum"></span>
-    <span id="meprep" hidden><span id="mepreptext"></span><button id="meprepstop" title="Stop making the pictures ahead (what is made stays made)">Stop</button></span>
+    <span id="meprep" hidden><span id="mepreptext"></span><button id="meprepstop" title="Stop making the pictures in advance (pictures already made are kept)">Stop</button></span>
     <span class="sp"></span>
     <button class="galbtn" id="meundo" title="Undo (Ctrl+Z / ⌘Z)" disabled>Undo</button>
     <button class="galbtn" id="mecopy" title="A link that opens this stretch with these frames and this look">Copy link</button>
@@ -459,7 +459,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     if (!el) return;
     if (document.activeElement !== el || !el.matches(":active")) el.value = v;
     $("mestabv").textContent = v ? `${autoNow() ? "Auto · " : ""}${v} pictures` : "Off";
-    note.textContent = !FS ? "" : !v ? "Off. For when SPICE's centering wobbles, as on a small moon in the NAC: slide it up to steady the movie by what the pictures show."
+    note.textContent = !FS ? "" : !v ? "Off. Use it when SPICE's centering wobbles, as on a small moon in the NAC: slide it up to steady the movie by what the pictures show."
       : SD.error || (SD.phase === "fetch" ? `Steadying: getting pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
         : SD.phase === "match" ? `Steadying: matching pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
           : SD.measured && SD.smooth === v ? steadyText() : "Steadying…");
@@ -1455,7 +1455,7 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `On hold: the frame server is busy with another job · ${of}`
-      : short ? `Making pictures ahead · ${j.total ? Math.floor(100 * j.done / j.total) : 0}%${left}` : `Making the pictures ahead · ${of}${left}`;
+      : short ? `Making pictures in advance · ${j.total ? Math.floor(100 * j.done / j.total) : 0}%${left}` : `Making the pictures in advance · ${of}${left}`;
   }
   function loadUi() {
     if (!L) return;
@@ -1468,11 +1468,11 @@ body.phone #mestrip { grid-template-columns: repeat(auto-fill, 72px); grid-auto-
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
     plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
     mk.className = !j ? "on" : BUSY.test(j.state) ? "on" : j.state === "done" ? "ok" : j.unsupported ? "" : "warn";
-    mk.textContent = !j ? "Making the pictures ahead"
+    mk.textContent = !j ? "Making the pictures in advance"
       : BUSY.test(j.state) ? jobText(j) + (j.state === "planning" || j.state === "queued" ? secs(L.makeAt || L.planAt) : "")
-      : j.state === "done" ? (j.took != null && j.took < 1 && j.total ? `Every picture made already (${j.total.toLocaleString()})` : `${(j.total || 0).toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`)
+      : j.state === "done" ? (j.took != null && j.took < 1 && j.total ? `Every picture made already (${j.total.toLocaleString()})` : `${(j.total || 0).toLocaleString()} pictures made in advance${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`)
       : j.state === "stopped" ? "Stopped; the rest are made as they are shown"
-      : j.unsupported ? "Pictures are made as they are shown" : (j.error || "Could not make the pictures ahead") + "; they are made as they are shown";
+      : j.unsupported ? "Pictures are made as they are shown" : (j.error || "Could not make the pictures in advance") + "; they are made as they are shown";
     // the bar: the listing's own count while it lists (when the server gives one), then the pictures made
     const g = ME.listing, frac = !L.plan ? (g && g.total && g.step === "frames" ? Math.min(1, g.done / g.total) : null)
       : j && j.total && BUSY.test(j.state) ? j.done / j.total : j && j.state === "done" ? 1 : null, bar = $("mlbar");

@@ -214,7 +214,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
       const b = w.querySelector(".flagbtn"); if (b) { b.classList.add("done"); setTimeout(() => b.classList.remove("done"), 2500); }
       say(`Flagged · ${res.count} so far`, res.name);
     } catch (e) {
-      say(e.message === "404" || e.message === "501" ? "This frame server can't save flags yet (it needs restarting on the new version)" : "Could not save the flag: the frame server did not answer");
+      say(e.message === "404" || e.message === "501" ? "This frame server can't save flags yet (it needs to be restarted with the new version)" : "Could not save the flag: the frame server did not answer");
     }
   }
 
@@ -255,7 +255,7 @@ body.phone #flagtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 
   if (S) {
     S.define({ key: "interface.flags", section: "Interface", label: "Flag button on picture windows", type: "toggle", value: true,
-      hint: "A flag in each picture window's title bar (or R) saves the picture as shown, with its frames and the mission time, to the frame server's flagged-pictures folder, so odd pictures can be looked into later." });
+      hint: "A flag button in each picture window's title bar (or the R key) saves the picture as shown, with its frames and the mission time, to a folder of flagged pictures on the frame server, so odd pictures can be checked later." });
     S.on("interface.flags", v => document.body.classList.toggle("noflags", !v));
     S.define({ key: "interface.flagged", section: "Interface", label: "Flagged pictures", type: "action", button: "Open",
       hint: "Every flagged picture on one page, newest first, with a link back to its moment.", run: () => window.open(`${FRAMES}/flags/`, "_blank", "noopener") });

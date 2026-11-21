@@ -257,7 +257,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
         <figure class="frame"><img id="raw-img" alt="A raw frame" width="640" height="640"><figcaption id="raw-cap" style="padding:0 10px 8px"></figcaption></figure>
       </div>
       <div>
-        <p>This is a frame as the pipeline starts from it: an 8-bit PNG copy made from NASA's archive. Pick a few and notice:</p>
+        <p>This is a frame as the pipeline receives it: an 8-bit PNG copy made from NASA's archive. Pick a few and notice:</p>
         <p><b style="color:#fff;font-weight:normal">It is gray.</b> One filter, one brightness per pixel.</p>
         <p><b style="color:#fff;font-weight:normal">Its brightness is relative.</b> The PNG copy is stretched so its darkest pixel is black and its brightest is white, which hides how bright things really were (NASA's archive itself keeps the camera's own numbers). Put three such frames together as red, green and blue and the colors come out wrong, so the pipeline undoes the stretch, from the frame's label, before it calibrates.</p>
         <p><b style="color:#fff;font-weight:normal">Parts can be missing.</b> Lines lost on the way to Earth are black: in bands, every other line, or a whole block. Specks and streaks are cosmic rays and stars.</p>
@@ -283,7 +283,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
           <li>account for the gain setting, pixel binning and the sensor's slow aging</li>
           <li>divide by how much sunlight that filter lets through and how far the Sun was</li>
         </ol>
-        <p>Around that: lines lost in transmission are filled from the lines above and below, and when the camera took the same shot more than once in quick succession, the repeats are stacked to beat down noise and cosmic-ray hits.</p>
+        <p>Around that: lines lost in transmission are filled from the lines above and below, and when the camera took the same shot more than once in quick succession, the repeats are stacked to reduce noise and cosmic-ray hits.</p>
       </div>
       <div>
         <div class="chips" id="step-chips"></div>
@@ -297,7 +297,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
   <section id="spice">
     <h2><span class="n">04</span>SPICE: where everything was</h2>
     <div class="narrow" style="max-width:780px">
-      <p>To place a picture you need to know where Cassini was, where the moon or planet was, and which way the camera pointed, at the instant the shutter opened. NASA's navigation team kept that record for the whole mission in files called <b style="color:#fff;font-weight:normal">SPICE kernels</b>, read with NASA's own SPICE toolkit. Three kinds do the heavy lifting here:</p>
+      <p>To place a picture you need to know where Cassini was, where the moon or planet was, and which way the camera pointed, at the instant the shutter opened. NASA's navigation team kept that record for the whole mission in files called <b style="color:#fff;font-weight:normal">SPICE kernels</b>, read with NASA's own SPICE toolkit. Three kinds matter most here:</p>
     </div>
     <div class="kernels">
       <figure class="panel"><canvas id="spk" class="kcanvas" aria-label="Cassini and Saturn's moons moving over three weeks, seen from above Saturn's pole"></canvas>
@@ -389,7 +389,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
       <div class="frame" style="background:#000"><img id="mos-img" alt="Jupiter's color mosaic as it grows" width="900" height="900"></div>
       <div>
         <p>When the body is bigger than the camera's view, Cassini took a grid of pointings. Each pointing becomes a color picture as above. SPICE says where each one goes, the tiles are nudged so their overlaps agree, their brightness is evened out along the seams, and they are blended together.</p>
-        <p>Jupiter's portrait didn't stop at one grid: Cassini went round the same 3 × 3 grid again an hour later, so it is a <b style="color:#fff;font-weight:normal">mosaic movie</b>. Each new tile replaces the same spot from the lap before. Play it and watch the Great Red Spot ride Jupiter's ten-hour day; halfway through a lap, old and new tiles sit side by side, so a storm can show up twice.</p>
+        <p>Jupiter's portrait didn't stop at one grid: Cassini went round the same 3 × 3 grid again an hour later, so it is a <b style="color:#fff;font-weight:normal">mosaic movie</b>. Each new tile replaces the same spot from the lap before. Play it and watch the Great Red Spot turn with Jupiter's ten-hour day; halfway through a lap, old and new tiles sit side by side, so a storm can show up twice.</p>
         <div class="scrub" style="margin-top:14px">
           <button id="mos-play">Play</button>
           <input id="mos-n" type="range" min="1" max="18" step="1" value="9" aria-label="Pointings added">
@@ -405,7 +405,7 @@ footer { margin-top: 96px; padding-top: 14px; border-top: 1px solid var(--line);
     <div class="never">
       <div class="panel"><b>Nothing invented</b><span class="small">Every pixel comes from a frame in the archive. Short runs of lines lost in transmission are filled from the lines next to them; bigger gaps that no frame covers stay black.</span></div>
       <div class="panel"><b>No sharpening, no AI</b><span class="small">No detail is invented or exaggerated; the pictures are as sharp as the camera was.</span></div>
-      <div class="panel"><b>Placed by the record</b><span class="small">Where a picture goes comes from SPICE and the picture itself, not by hand.</span></div>
+      <div class="panel"><b>Placed by the record</b><span class="small">Each picture is placed using SPICE and the picture itself, never by hand.</span></div>
     </div>
     <p style="margin-top:24px"><a href="../?t=2009-01-25T07:55:00&amp;view=titan&amp;play=0">See Titan in color in Cassini OS</a> · <a href="../?t=2008-01-04T02:21:47&amp;view=dione&amp;play=0">Dione, 4 Jan 2008</a> · <a href="../?t=2000-12-29T05:19:00&amp;view=jupiter&amp;play=0">See the Jupiter mosaic</a></p>
   </section>

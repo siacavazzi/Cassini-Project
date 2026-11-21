@@ -89,7 +89,7 @@ body:not(.phone) #soi .cs-read { bottom: max(7vh, 52px); }
   // header and in About's sources; as a fifth line of the burn it left each of them under four and a half seconds)
   const steer = D.steering.total_deg;
   const LINES = [
-    [-Infinity, `<b>July 1, 2004 · Saturn</b>After nearly seven years in space, Cassini arrives, ${Math.round((T_IGN - T_CROSS) / 60) + 1} minutes before the burn that has to catch it.`],
+    [-Infinity, `<b>July 1, 2004 · Saturn</b>After nearly seven years in space, Cassini arrives, ${Math.round((T_IGN - T_CROSS) / 60) + 1} minutes before the engine burn that must put it into orbit.`],
     [T_CROSS - T_IGN - 15, `<b>${hhmm(T_CROSS).slice(0, 5)} UTC · The ring plane</b>It crosses through ${D.ring_crossing.where}, its dish turned forward as a shield against dust.`],
     [T_CROSS - T_IGN + 200, `Then it turns end for end, to point its main engine the way it is going.`],
     [0, `<b>${hhmm(T_IGN).slice(0, 5)} UTC · Main engine on</b>To be caught by Saturn's gravity it has to brake, for ${Math.round(D.burn_minutes.value)} minutes.`],
@@ -98,7 +98,7 @@ body:not(.phone) #soi .cs-read { bottom: max(7vh, 52px); }
     [T_CA - T_IGN - 60, `<b>Closest approach</b>${fmtInt(D.closest_approach.above_clouds_km)} km above Saturn's clouds, closer than it would come again until the Grand Finale.`],
     [BURN, `<b>${hhmm(T_OFF).slice(0, 5)} UTC · Engine off</b>${Math.round(D.delta_v_ms.value)} meters per second slower, and about ${fmtInt(D.propellant_kg.value)} kg of propellant lighter.`],
   ];
-  const LAST = `<b>In orbit</b>Saturn has caught it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
+  const LAST = `<b>In orbit</b>Saturn's gravity has captured it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
   // screen seconds after shutdown: the cut to Saturn, the last line (the shutdown's own line stays up across the cut
   // until then, long enough to read), how long the last line stays
   const CUT = 3, LAST_AT = 4.8, LAST_FOR = 5.2;

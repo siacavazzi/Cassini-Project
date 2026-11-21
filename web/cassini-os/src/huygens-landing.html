@@ -172,21 +172,21 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
     const P = DATA.pictures;
     const down = screenAt(EV.landing);
     return [
-      [1.5, 6.5, `<b>January 14, 2005 · ${utc(N.E).slice(0, 5)} UTC</b>After twenty days asleep, Huygens hits Titan's air 1,270 km up, at ${N.vEntry.toFixed(1)} km/s.`, "", [0, 2, 4]],
+      [1.5, 6.5, `<b>January 14, 2005 · ${utc(N.E).slice(0, 5)} UTC</b>After twenty days switched off, Huygens hits Titan's air 1,270 km up, at ${N.vEntry.toFixed(1)} km/s.`, "", [0, 2, 4]],
       [8.5, 5, `Its heat shield takes the blow. Titan's air slows it to ${Math.round(N.vT0 / 10) * 10} m/s in under five minutes, at up to ${N.peak.toFixed(0)} g.`, "", null],
       [14, 6.5, `${utc(T0).slice(0, 5)} UTC · A ${CH.pilot.toFixed(1)} m pilot chute fires out and pulls the back cover away. The back cover pulls out the ${CH.main} m main parachute.`, "", [0, 4, 7]],
-      [21.5, 4.5, `Half a minute later the heat shield drops away, and the instruments meet Titan's air.`, "", null],
-      [26.5, 3.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts talking to Cassini. Its camera takes pictures as it turns.`, "", [2, 4, 7]],
-      [30, 4, `At 111 km the main chute lets go. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
+      [21.5, 4.5, `Half a minute later the heat shield drops away, and the instruments are open to Titan's air.`, "", null],
+      [26.5, 3.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts sending data to Cassini. Its camera takes pictures as the probe turns.`, "", [2, 4, 7]],
+      [30, 4, `At 111 km the main chute is released. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
       [35.5, 4.5, `Cassini, ${fmtInt(Math.round(N.cassiniKm / 1000) * 1000)} km away, has its dish on Titan, recording everything Huygens sends.`, "", [0, 3, 5]],
-      [40, 4.3, `Earth heard it too. At 10:25 UTC the Green Bank telescope caught Huygens's faint carrier, ${lt} minutes after it left.`, "", null],
-      [47.5, 5.5, `Under the haze its camera maps the ground it falls toward. Each outline is where one picture fell.`, "", [1, 3, 5]],
+      [40, 4.3, `Radio telescopes on Earth picked it up too. At 10:25 UTC the Green Bank telescope detected Huygens's faint carrier signal, ${lt} minutes after it left the probe.`, "", null],
+      [47.5, 5.5, `Below the haze, its camera maps the ground beneath it. Each outline shows the area of one picture.`, "", [1, 3, 5]],
       [53.6, 4.8, `${utc(T0 + EV.lamp).slice(0, 5)} UTC · A lamp switches on, to light the ground for the last pictures.`, "", null],
       [down, 5.2, `<b>${utc(N.L)} UTC · Touchdown</b>At ${N.vLand.toFixed(1)} m/s, about walking pace. The first landing in the outer solar system.`, "big", [0, 2, 4, 7, 9]],
-      [down + 5.2, 72.9 - down - 5.2, `Huygens keeps talking from the ground: ${DATA.surface_k} K, ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
-      [73.3, 4.5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · The landing site sinks below Titan's edge as Cassini sees it, and the link ends.`, "", [2, 4, 5]],
+      [down + 5.2, 72.9 - down - 5.2, `Huygens keeps sending data from the ground: ${DATA.surface_k} K, with ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
+      [73.3, 4.5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · Seen from Cassini, the landing site sinks below Titan's edge, and the link ends.`, "", [2, 4, 5]],
       [77.8, 4.2, `Cassini turns its dish to Earth and plays the recording back, more than once to be safe.`, "", null],
-      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never listened on one of the two channels, so ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
+      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never received one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
       [88.3, 99, `<b>Huygens on Titan · January 14, 2005</b>Its pictures are the landing-site map under the probe.<div class="btns"><button type="button" data-hl="stay">Stay with Huygens</button><button type="button" data-hl="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
     ];
   }

@@ -939,7 +939,7 @@ body.idle .win.full .titlebar { opacity: 0; }
       </div>
     </div>
     <div id="focusrow" aria-label="Center the view on"></div>
-    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames colored by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
+    <div class="statusbar"><span>Positions come from Cassini's SPICE kernels (J2000). The timeline lanes show narrow-angle (NAC) and wide-angle (WAC) frames, colored by filter. RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
   <div id="loading"><div>Starting Cassini OS<br>Loading trajectories<div class="bar"></div></div></div>
@@ -1723,7 +1723,7 @@ function targetLabel(k) {
   // windows back. Settings > Cameras: cameras.closedOff, cameras.momentsReopen.
   const CAMWIN = { N: "imgcard", W: "wacard" }, CAMWORD = { N: "narrow-angle", W: "wide-angle" };
   S.define({ key: "cameras.closedOff", section: "Cameras", label: "A closed camera window turns its camera off", type: "toggle", value: true,
-    hint: "With only one of the two camera windows open, the other camera's pictures are not loaded or processed, the timeline shows the open camera's frames only, and playback and movie mode go by its pictures alone." });
+    hint: "When only one of the two camera windows is open, the other camera's pictures are not loaded or processed. The timeline shows only the open camera's frames, and playback and movie mode follow only its pictures." });
   S.define({ key: "cameras.momentsReopen", section: "Cameras", label: "Moments open both camera windows", type: "toggle", value: true,
     hint: "Jumping to a Moment brings back a camera window that is closed or minimized." });
   const camOpen = c => { const w = $(CAMWIN[c]); return !!w && !w.hidden && !w.dataset.min; };
@@ -2018,7 +2018,7 @@ function targetLabel(k) {
     ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2],
     ["movies.colorSmooth", "movies.colorSmoothStrength", "Even color", 10, 100, 10]];
   // the note under a row's label while it is on: its smoothing in frames, or color smoothing's strength
-  const steadyNote = (key, v) => key === "movies.colorSmooth" ? `${v}% toward the pictures round it` : `smoothed over ${v} frames`;
+  const steadyNote = (key, v) => key === "movies.colorSmooth" ? `${v}% toward the pictures around it` : `smoothed over ${v} frames`;
   function winMenu(win, card) {
     const bar = win.querySelector(".titlebar");
     let btn = bar.querySelector(".winopt");
@@ -2245,7 +2245,7 @@ function targetLabel(k) {
     function orbitOpen(on) {
       if (!orbitPop) {
         orbitPop = document.createElement("div"); orbitPop.className = "orbitpop"; orbitPop.hidden = true;
-        orbitPop.innerHTML = '<div class="orbitbig"></div><span class="orbitnote">Seen from above the rings, the Sun up. Distances from Saturn on a square-root scale.</span>';
+        orbitPop.innerHTML = '<div class="orbitbig"></div><span class="orbitnote">Seen from above the rings, with the Sun toward the top. Distances from Saturn are on a square-root scale.</span>';
         for (const t of ["click", "dblclick", "pointerdown"]) orbitPop.addEventListener(t, e => { e.stopPropagation(); if (t === "click") orbitOpen(false); });
         well.appendChild(orbitPop);
       }
@@ -3205,7 +3205,7 @@ function targetLabel(k) {
     // frames open from it like any other mosaic's.
     const openM = document.createElement("button");
     openM.className = "openmosaic"; openM.hidden = true; openM.textContent = "Open its mosaic";
-    openM.title = "Hold this window on the whole mosaic of the pass this frame is in (Esc goes back)";
+    openM.title = "Show the whole mosaic of this frame's pass in this window (Esc goes back)";
     for (const t of ["dblclick", "pointerdown"]) openM.addEventListener(t, e => e.stopPropagation());
     openM.addEventListener("click", e => { e.stopPropagation(); unfocus(e); openMosaic(); });
     well.appendChild(openM);
@@ -3237,7 +3237,7 @@ function targetLabel(k) {
     // whole mosaic, and the clock stops before the camera's next picture.
     const finishB = document.createElement("button");
     finishB.className = "finishmosaic"; finishB.hidden = true; finishB.textContent = "Finish mosaic";
-    finishB.title = "Jump to the moment this pass's last tile is taken: the whole mosaic, before the next picture";
+    finishB.title = "Jump to the moment the last tile of this pass is taken, to see the whole mosaic before the next picture";
     for (const t of ["dblclick", "pointerdown"]) finishB.addEventListener(t, e => e.stopPropagation());
     finishB.addEventListener("click", e => { e.stopPropagation(); unfocus(e); finishMosaic(); });
     well.appendChild(finishB);
@@ -3911,11 +3911,11 @@ function targetLabel(k) {
   if (SETTINGS) {
     document.querySelectorAll("#menubar [data-rate]").forEach(li => li.remove());
     maxRate = +SETTINGS.define({ key: "playback.maxImageRate", section: "Playback", label: "Maximum images per second",
-      hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new pictures a second. Only frames that change the picture count: a color set counts once, at its last filter. 0 = no limit.",
+      hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new pictures a second. Only frames that change the picture count; a color set counts once, at its last filter. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, was: [5], min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
     SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
-      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      hint: "However many pictures a burst has, the timeline plays at no less than this share of the chosen speed, so a faster speed always plays faster (long bursts skip some pictures). 100 % = never slow down.",
       type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
     SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
@@ -3933,8 +3933,8 @@ function targetLabel(k) {
   const BEHIND_DEFAULT = 2;
   let maxBehind = BEHIND_DEFAULT, paced = 1;
   if (SETTINGS) {
-    maxBehind = +SETTINGS.define({ key: "playback.maxBehind", section: "Playback", label: "Pictures a window may fall behind",
-      hint: "When the frame server cannot make pictures as fast as the timeline passes them (a mosaic movie nobody has watched yet), the timeline slows down in proportion so each camera window stays within this many frames of the clock. 0 = never slow down.",
+    maxBehind = +SETTINGS.define({ key: "playback.maxBehind", section: "Playback", label: "Most pictures a window can lag",
+      hint: "Sometimes the frame server cannot make pictures as fast as the timeline reaches them, for example in a mosaic movie that nobody has watched yet. Then the timeline slows down in proportion, so each camera window stays within this many frames of the clock. 0 = never slow down.",
       type: "range", value: BEHIND_DEFAULT, min: 0, max: 10, step: 1, unit: "frames" });
     if (!isFinite(maxBehind)) maxBehind = BEHIND_DEFAULT;
     SETTINGS.on("playback.maxBehind", v => { maxBehind = +v || 0; });
@@ -3964,7 +3964,7 @@ function targetLabel(k) {
   // pictures straight back. All the way right = always load.
   if (SETTINGS) SETTINGS.define({ key: "playback.picturesUpTo", section: "Playback", label: "Load pictures up to", type: "range", log: true,
       value: 86400, min: 60, max: cassiniSpeed.max, stops: cassiniSpeed.stops.filter(v => v >= 60), format: v => v >= cassiniSpeed.max ? "any speed" : cassiniSpeed.label(v),
-      hint: "Faster than this, the camera windows stop loading pictures (no frame server keeps up) and the timeline plays at the full speed; they show the picture of the moment again as soon as you slow down, pause or scrub. The time warp arrows and the speed slider's track are dimmer past this point. All the way right = always load." });
+      hint: "Above this speed, the camera windows stop loading pictures, because no frame server can keep up, and the timeline plays at full speed. The windows show the current picture again as soon as you slow down, pause or scrub. The time warp arrows and the speed slider's track are dimmer past this point. All the way right = always load." });
   function picturesCap() { return +S.get("playback.picturesUpTo") || 86400; }
   function tooFast() {
     const cap = picturesCap();

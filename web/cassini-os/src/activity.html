@@ -31,11 +31,11 @@ body.cutscene #mact, body.ambient #mact { display: none; }
 (function () {
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
   let on = S.define({ key: "view.activity", section: "View", label: "What Cassini is doing", type: "toggle", value: true,
-    hint: "A thin strip along the top of the timeline and a line in the menu bar: sending data to Earth, radio signal through the rings, radar, rolling, or pointed at a body. Worked out from the recorded pointing." });
+    hint: "A thin strip along the top of the timeline and a line in the menu bar show what Cassini is doing: sending data to Earth, sending a radio signal through the rings, using its radar, rolling, or pointing at a body. Worked out from the recorded pointing." });
   let beamOn = S.define({ key: "view.radioBeam", section: "View", label: "Radio beam", type: "toggle", value: true,
     hint: "A faint beam from Cassini's dish while it points at Earth or at a body." });
   let earthOn = S.define({ key: "view.earthMarker", section: "View", label: "Earth's marker while the dish is on it", type: "toggle", value: true,
-    hint: "Earth is too far away to be on stage at Saturn. While Cassini's dish points at it, Earth gets its marker and tag like any other body, so you can see where the beam is going." });
+    hint: "Earth is too far away to see from Saturn. While Cassini's dish points at Earth, Earth gets a marker and a label like any other body, so you can see where the beam is going." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
   // (the settings' handlers are at the end of this script: cassiniSettings.on() calls a handler at once with the saved
   // value, and a handler must not run before the variables it reaches exist)
@@ -212,8 +212,8 @@ body.cutscene #mact, body.ambient #mact { display: none; }
     const B = a.body ? name(a.body) : "";
     switch (a.kind) {
       case KINDS.DOWN: return [`<b>Dish on Earth</b> · data takes ${fmtDur(lt)} to arrive`, "Cassini's high-gain dish points at Earth: it is sending what it recorded to the Deep Space Network."];
-      case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish is on Earth with the rings in between: the radio signal crosses them, and how it fades maps the rings (a radio occultation)."]
-        : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish is on Earth with ${B} in between: the radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
+      case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish points at Earth, with the rings in between. The radio signal crosses the rings, and the way it fades maps them (a radio occultation)."]
+        : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish points at Earth, with ${B} in between. The radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
       case KINDS.DISH: return a.body === "TITAN" && et > HUYGENS[0] && et < HUYGENS[1]
         ? [`<b>Dish on Titan</b> · receiving Huygens`, "Cassini's dish points at Titan to record everything the Huygens probe sends on its way down."]
         : [`<b>Dish on ${B}</b> · radar or radio science`, `Cassini's dish points at ${B}: the radar and the radio science experiments use it as their antenna, so the cameras look elsewhere.`];
