@@ -1133,9 +1133,8 @@ FLOOR_BODY = 2e-4    # ... and a lit thing of at least this share of the picture
 FLOOR_BORDER = 4     # ... and none of it within this many px (of 1024) of the frame's edge: the CCD's last columns read dark
                      # on many frames (N1492367324_1, Titan's even haze: columns 1022-1023), and the 3x3 median keeps them
 FLAT_EVEN = (0.5, 0.7)   # _flat_black: a picture with no sky whose floor is over FLAT_EVEN[0] of its top is low-contrast,
-FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its grain (the
-FLAT_GRAIN = 24          # FLAT_GRAIN_PCT percentile over the median) spans no more than 1 / FLAT_GRAIN of the range
-FLAT_GRAIN_PCT = 99
+FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
+FLAT_NOISE = 100         # no more than 1 / FLAT_NOISE of the range from black to top (2.5 of 255 levels)
 FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
@@ -2835,10 +2834,11 @@ fill, whose floor (its FLAT_PCT percentile: a narrow dark line across it, a ring
 floor) is most of the way to its top (its WHITE_PCT percentile). FLOOR_SHARE of the floor, capped at FLOOR_GAIN, left such a picture in the top third of the range and the
 gamma drew it as one plain square (2007 Saturn cloud decks N1565100696_1 and N1565242114_1 peach, 2008 Titan MT1
 N1578275934_1 white, their raw codes full of structure; regression 11-20). From FLAT_EVEN[0] to FLAT_EVEN[1] of
-evenness the black goes up to FLAT_SHARE of the floor, but never so high that the picture's own grain (sky_grain on the
-lit part: noise, compression blocks, 8-bit steps, never its slow light) spans more than 1 / FLAT_GRAIN of the range
-from black to top: a clean picture spreads, a blocky or noisy one stretches only as far as its blocks allow (the "pushed
-too far" of 11-08). lum, lit, dark = _floor's brightness, lit pixels and brightness after its 3x3 median; black = the floor black as it was
+evenness the black goes up to FLAT_SHARE of the floor, but never so high that the picture's own noise (from neighbouring
+pixels' differences over the lit part, as sky_levels measures the sky's: its texture and edges, a dark line, do not
+count) is over 1 / FLAT_NOISE of the range from black to top: a clean picture spreads, a noisy one only as far as its
+noise allows (the "pushed too far" of 11-08). (A sky_grain measure over 33 px counted the clouds' own texture and the
+dark line's edges as grain, 0.115 I/F on N1565242114_1, and left the decks as they were.) lum, lit, dark = _floor's brightness, lit pixels and brightness after its 3x3 median; black = the floor black as it was
 """
 def _flat_black(lum, lit, dark, top, black):
     floor = float(np.percentile(dark[lit], FLAT_PCT))
@@ -2847,11 +2847,11 @@ def _flat_black(lum, lit, dark, top, black):
     flat = min(max((floor / top - FLAT_EVEN[0]) / (FLAT_EVEN[1] - FLAT_EVEN[0]), 0.0), 1.0)
     if flat <= 0:
         return black
-    grain = sky_grain([lum], [lit])
-    if grain.size < GRAIN_LEAST:
+    steps = np.abs(np.diff(lum, axis=1))[lit[:, 1:] & lit[:, :-1]]
+    if steps.size < GRAIN_LEAST:
         return black
-    spread = float(np.percentile(grain, FLAT_GRAIN_PCT) - np.median(grain))
-    want = min(FLAT_SHARE * floor, top - FLAT_GRAIN * max(spread, 0.0))
+    noise = 1.4826 * float(np.median(steps)) / math.sqrt(2)
+    want = min(FLAT_SHARE * floor, top - FLAT_NOISE * noise)
     return black + flat * max(want - black, 0.0)
 
 

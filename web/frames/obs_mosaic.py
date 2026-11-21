@@ -3096,6 +3096,19 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                 track = {f: sky_track(by[f], masks[f], times[f], tops[f], share and f in share["filters"] and share["share"])
                          for f in by}
                 track = {f: v for f, v in track.items() if v}
+        if share is None and u.get("movie") and not u.get("mosaic"):
+            # a pass where some filter has no dark sky (a narrow band's frames lit all over) has no sky heights, but its
+            # colour set's filters can still share one: measured on those filters' own sky (Mimas 2004, 000OT
+            # TIMIIA001: UV1 and IR4 have none, and its RED, GRN and BL1 frames' blacks went up by different shares)
+            mine = [f for f in (drawn or []) if f in by
+                    and sum(int(m.sum()) for m in masks[f]) > SKY_MIN * sum(m.size for m in masks[f])]
+            if len(mine) >= SHARE_LEAST:
+                own_levels, own_margin = calibration.sky_levels([by[f] for f in mine], [masks[f] for f in mine])
+                heights = {}
+                for f in mine:
+                    v = _sky_fine(by[f], masks[f])
+                    heights[f] = max(own_margin, float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0)
+                share = set_share(mine, dict(zip(mine, own_levels)), heights)
     if calibration.look() == "balanced":
         blacks = undrawn_blacks(blacks, drawn, {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), UNDRAWN_TOP))
                                                 for f, iofs in by.items()})
