@@ -2692,6 +2692,14 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         if off_disk is not None:
             m &= ~_disk_mask(q.shape, iof.shape, *off_disk)
         veiled = glow = False
+
+        def short(m):
+            # too little dark sky to measure: under SKY_MIN of the frame, or for a mosaic's tile with the disk across
+            # most of it, under MOSAIC_SKY_PX pixels off the disk (a sliver of sky still measures its offset: Enceladus
+            # 144EN's clear and colour frames of the disk, 3-4% sky, were the gray rectangle round it)
+            if most is not None and off_disk is not None:
+                return int(m.sum()) < MOSAIC_SKY_PX
+            return m.mean() <= SKY_MIN
         if speck and disk is not None and disk[2] < SPECK_PX:
             # a body from beyond Saturn's system under a pixel across (Earth from Saturn, SPECKS): the frame is all sky,
             # and a dark sky found under 5% of its brightest is still the veil's lower part, whose line bands and other
@@ -2705,7 +2713,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         unlit = (q < top_of_sky).mean() <= SKY_MIN
         if glow_only and not unlit:
             return None
-        if (glow_only or m.mean() <= SKY_MIN) and unlit and disk is None and not on_body:
+        if (glow_only or short(m)) and unlit and disk is None and not on_body:
             # no dark sky under 5% of the top: a frame lit all over by a glow (the forward-scattered light round a
             # backlit plume, ISS_155EN_PLMHPHR001_PIE's jet frames: their sky at a sixth of the jets' root, every one
             # of them a flat gray square in the movie) has a flat floor, its sky; a frame a lit body fills (its darkest
@@ -2714,7 +2722,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             if not (hi > floor and floor - lo <= GLOW_FLAT * (hi - floor)):
                 return None
             m, top_of_sky, glow = q <= floor, floor, True
-        elif m.mean() <= SKY_MIN:
+        elif short(m):
             if disk is None:
                 # no dark sky and no small body to take the sky off from (a frame the body fills, 191SA FEATRAK001):
                 # the pass's black (the guard the #279 merge lost: 75 of that movie's 120 tiles failed with TypeError)
@@ -2735,7 +2743,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         if low.any():
             m &= ~low
             q = np.where(low, np.float32(median), q)
-            if m.mean() <= SKY_MIN:
+            if short(m):
                 return None
         (level,), margin = calibration.sky_levels([[q]], [[m]])
         spread, before = 0.0, None
@@ -2786,7 +2794,9 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             return None
         if most is not None and raised - black > most:
             return None   # (a mosaic's tile: more than an offset in its sky, so its own black would show as a step)
-        if not (veiled or glow) and lit.size and raised >= float(np.median(lit)):
+        if not (veiled or glow) and most is None and lit.size and raised >= float(np.median(lit)):
+            # (not a mosaic's tile: its rise is held under most, and a tile of sky alone has no lit pixels but its own
+            # sky's upper half, so the rule kept 144EN's sky tiles on the pass's black, gray squares under the plume)
             return None
         if seen is not None:
             seen["black"] = raised
@@ -2902,6 +2912,7 @@ def small_body(u, frame):
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
+MOSAIC_SKY_PX = 1000   # tile_scale: the fewest pixels of a mosaic tile's quarter-size picture off the disk that measure its sky
 MOSAIC_SKY_MOST = 0.01   # mosaic_sky_most: a mosaic's sky tile's own black at most this share of the pass's white over its black
 
 
