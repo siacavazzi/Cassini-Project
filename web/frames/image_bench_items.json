@@ -67,6 +67,11 @@
   {"name": "wind170-movie", "kind": "pass", "frame": "N1724399336_1", "group": "hard", "watch": "170SA WIND5HR005 N_1 (2012): last cycle's MT2 lost 254 lines and jumped back two cycles (85 px), then its MT3 played near black; no hop, no dark last frame (_shown_of)"},
   {"name": "albiorix129-movie", "kind": "pass", "frame": "N1650145965_1", "group": "hard", "watch": "129OT OUTERSATS002 Albiorix (2010), a moon its frames never show: stabilization matched its square's noise and the stars hopped 15 to 45 px frame to frame; stars steady (_shift_onto, steady9)"},
   {"name": "aurora101-movie", "kind": "pass", "frame": "W1611761388_1", "group": "hard", "watch": "101SA AURORA003 W (2009) colour movie: its unfit MT3 frame (28) held one 22 minutes back and Saturn jumped to that frame's size and place for one frame (odd_frame 88); held to its own moment (_shown_of)"},
-  {"name": "approach04-movie", "kind": "pass", "frame": "N1460416300_1", "group": "hard", "watch": "C44SA APPRMOVM001 (2004 approach) colour movie: two clear _2 frames (45, 46) drawn as a clipped white sliver of Saturn between colour frames (odd_frame 44)"}
+  {"name": "approach04-movie", "kind": "pass", "frame": "N1460416300_1", "group": "hard", "watch": "C44SA APPRMOVM001 (2004 approach) colour movie: two clear _2 frames (45, 46) drawn as a clipped white sliver of Saturn between colour frames (odd_frame 44)"},
+  {"name": "saturn07-fullblack-movie", "kind": "pass", "frame": "N1551253524_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "saturn08w-fullblack-movie", "kind": "pass", "frame": "W1602057697_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "saturn13-fullblack-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "saturn08-fullblack-movie", "kind": "pass", "frame": "N1601603945_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"}
  ]
 }

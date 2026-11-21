@@ -1132,10 +1132,12 @@ FLOOR_BODY = 2e-4    # ... and a lit thing of at least this share of the picture
                      # drawn black (Mimas under the A ring, spot check round 3)
 FLOOR_BORDER = 4     # ... and none of it within this many px (of 1024) of the frame's edge: the CCD's last columns read dark
                      # on many frames (N1492367324_1, Titan's even haze: columns 1022-1023), and the 3x3 median keeps them
-FLAT_EVEN = (0.5, 0.7)   # _flat_black: a picture with no sky whose floor is over FLAT_EVEN[0] of its top is low-contrast,
-FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its grain (the
-FLAT_GRAIN = 24          # FLAT_GRAIN_PCT percentile over the median) spans no more than 1 / FLAT_GRAIN of the range
-FLAT_GRAIN_PCT = 99
+FLAT_EVEN = (0.4, 0.6)   # _flat_black: a picture with no sky whose floor is over FLAT_EVEN[0] of its top is low-contrast,
+FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
+FLAT_NOISE = 150         # no more than 1 / FLAT_NOISE of the range from black to top (1.7 of 255 levels: at 100 the
+                         # grain showed on near-featureless frames, Fable 11-21)
+FLAT_DARK = 0.25         # ... and the darkest features' light kept unless they are under this share of its top
+FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
@@ -1144,6 +1146,7 @@ GLOW_FINE = (0.04, 0.12)  # ... but only for smooth light: none of it as the pic
                      # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
                      # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
                      # under 0.04, rings over 0.15)
+FINE_NOISE = 0.33    # fine_structure(net): white noise of this spread puts 0.33 of it in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
@@ -2770,9 +2773,22 @@ def saturated_of(lbl, shape):
 A picture's fine structure (GLOW_FINE): the 90th percentile of its detail at 1.5 px (against 8 px) over its median
 brightness; a smooth glow, a star field or noise measure little, ringlets and gaps a lot
 """
-def fine_structure(lum):
+def fine_structure(lum, net=False):
+    if net:
+        # (net: the camera's own pattern left out: each line's and column's median taken off, so row banding and column
+        # stripes are not structure, and the pixel noise's share of the detail taken off in quadrature. A faint sky
+        # round a distant moon, a few times its noise over zero, measured 0.06-0.09 on its noise and banding alone, was
+        # taken for faint rings and kept its gray: 24 distant-moon stills on a mid-gray banded sky, spot check 11-21)
+        lum = np.ascontiguousarray(lum, dtype=np.float32)
+        middle = float(np.median(lum))
+        lum = lum - np.median(lum, axis=1, keepdims=True) - np.median(lum, axis=0, keepdims=True) + np.float32(2 * middle)
+        steps = np.abs(np.diff(lum, axis=1))
+        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2)
     detail = np.abs(cv2.GaussianBlur(lum, (0, 0), 1.5) - cv2.GaussianBlur(lum, (0, 0), 8))
-    return float(np.percentile(detail, 90) / max(float(np.percentile(lum, 50)), 1e-12))
+    top = float(np.percentile(detail, 90))
+    if net:
+        top = math.sqrt(max(top * top - (FINE_NOISE * noise) ** 2, 0.0))
+    return float(top / max(float(np.percentile(lum, 50)), 1e-12))
 
 
 """
@@ -2797,7 +2813,7 @@ def _floor(iofs, levels, sky=None, glow=1.0):
         lit = (lum >= 0.05 * np.percentile(lum, 99.9)) & _inner(lum.shape)
         lit = lit if lit.sum() > 100 else np.ones(lum.shape, dtype=bool)
         floor, top = (float(v) for v in np.percentile(dark[lit], (FLOOR_PCT, WHITE_PCT)))
-        black = _flat_black(lum, lit, floor, top, min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top)))
+        black = _flat_black(lum, lit, dark, top, min(FLOOR_SHARE * max(floor, 0.0), _floor_cap(top)))
         dim = min(max(float(np.log(GLOW_IOF[1] / max(middle, 1e-12)) / np.log(GLOW_IOF[1] / GLOW_IOF[0])), 0.0), 1.0)
         bright = max(bright - black, 0.0)
         if dim == 0 and -1e30 < lum.min() and lum.max() < 1e30:
@@ -2805,7 +2821,7 @@ def _floor(iofs, levels, sky=None, glow=1.0):
             # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
             # sign) without measuring it (two blurs, ~35 ms)
             return black + glow * dim * bright
-        smooth = (GLOW_FINE[1] - fine_structure(lum)) / (GLOW_FINE[1] - GLOW_FINE[0])
+        smooth = (GLOW_FINE[1] - fine_structure(lum, net=True)) / (GLOW_FINE[1] - GLOW_FINE[0])
         return black + glow * dim * min(max(smooth, 0.0), 1.0) * bright
     side = 2 * FLOOR_EDGE + 1
     lit = (~sky).astype(np.uint8)
@@ -2830,26 +2846,34 @@ def _floor(iofs, levels, sky=None, glow=1.0):
 
 """
 The floor black of a low-contrast picture with no sky (FLAT_EVEN): a close-up a cloud deck, Titan's haze or the rings
-fill, whose darkest real feature (floor, its FLOOR_PCT percentile) is most of the way to its top (its WHITE_PCT
-percentile). FLOOR_SHARE of the floor, capped at FLOOR_GAIN, left such a picture in the top third of the range and the
+fill, whose floor (its FLAT_PCT percentile: a narrow dark line across it, a ring's shadow or a dark column, is not its
+floor) is most of the way to its top (its WHITE_PCT percentile). FLOOR_SHARE of the floor, capped at FLOOR_GAIN, left such a picture in the top third of the range and the
 gamma drew it as one plain square (2007 Saturn cloud decks N1565100696_1 and N1565242114_1 peach, 2008 Titan MT1
 N1578275934_1 white, their raw codes full of structure; regression 11-20). From FLAT_EVEN[0] to FLAT_EVEN[1] of
-evenness the black goes up to FLAT_SHARE of the floor, but never so high that the picture's own grain (sky_grain on the
-lit part: noise, compression blocks, 8-bit steps, never its slow light) spans more than 1 / FLAT_GRAIN of the range
-from black to top: a clean picture spreads, a blocky or noisy one stretches only as far as its blocks allow (the "pushed
-too far" of 11-08). lum, lit = _floor's brightness and lit pixels; black = the floor black as it was
+evenness the black goes up to FLAT_SHARE of the floor, but never so high that the picture's own noise (from neighbouring
+pixels' differences over the lit part, as sky_levels measures the sky's: its texture and edges, a dark line, do not
+count) is over 1 / FLAT_NOISE of the range from black to top: a clean picture spreads, a noisy one only as far as its
+noise allows (the "pushed too far" of 11-08). (A sky_grain measure over 33 px counted the clouds' own texture and the
+dark line's edges as grain, 0.115 I/F on N1565242114_1, and left the decks as they were.) lum, lit, dark = _floor's brightness, lit pixels and brightness after its 3x3 median; black = the floor black as it was
 """
-def _flat_black(lum, lit, floor, top, black):
+def _flat_black(lum, lit, dark, top, black):
+    floor = float(np.percentile(dark[lit], FLAT_PCT))
     if floor <= 0 or top <= 0:
         return black
     flat = min(max((floor / top - FLAT_EVEN[0]) / (FLAT_EVEN[1] - FLAT_EVEN[0]), 0.0), 1.0)
     if flat <= 0:
         return black
-    grain = sky_grain([lum], [lit])
-    if grain.size < GRAIN_LEAST:
+    steps = np.abs(np.diff(lum, axis=1))[lit[:, 1:] & lit[:, :-1]]
+    if steps.size < GRAIN_LEAST:
         return black
-    spread = float(np.percentile(grain, FLAT_GRAIN_PCT) - np.median(grain))
-    want = min(FLAT_SHARE * floor, top - FLAT_GRAIN * max(spread, 0.0))
+    noise = 1.4826 * float(np.median(steps)) / math.sqrt(2)
+    want = min(FLAT_SHARE * floor, top - FLAT_NOISE * noise)
+    darkest = float(np.percentile(dark[lit], FLOOR_PCT))
+    if darkest > FLAT_DARK * top:
+        # the few darkest real features (an icy moon's cracks, under the FLAT_PCT percentile) keep some light: black no
+        # higher than FLAT_SHARE of them. Not when they are far darker than the rest (a dark line across a cloud deck,
+        # a lost column: under FLAT_DARK of the top), which would hold the whole picture back
+        want = min(want, FLAT_SHARE * darkest)
     return black + flat * max(want - black, 0.0)
 
 
@@ -2903,8 +2927,11 @@ def sky_levels(images, masks, floor_pct=None):
         if floor_pct is not None:
             # the floor on the sky's grain only (sky_grain): its spread less its slow light
             grain = sky_grain(ims, ms)
-            floors.append(float(np.percentile(grain, floor_pct) - np.median(grain)) if grain.size >= GRAIN_LEAST
-                          else float(pcts[1] - median))
+            spread = float(pcts[1] - median)
+            if grain.size >= GRAIN_LEAST:
+                fine = float(np.percentile(grain, floor_pct) - np.median(grain))
+                spread = fine + GRAIN_GLOW * max(spread - fine, 0.0)
+            floors.append(spread)
     margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
     if floor_pct is not None:
         margin = max(margin, max(floors))
@@ -2913,6 +2940,9 @@ def sky_levels(images, masks, floor_pct=None):
 
 GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
+GRAIN_GLOW = 0.35    # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
+                     # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still);
+                     # with a third of it the glow is fainter and narrower and still fades out, no hard rim
 
 
 """
