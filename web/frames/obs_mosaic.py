@@ -10569,7 +10569,7 @@ def _shown_of(u, p, n, not_shown, tile_of):
         covered_before = lambda: side(range(n - 1, max(-1, n - 1 - STEP_RUN), -1))
         covered_after = lambda: side(range(n + 1, min(len(frames), n + 1 + STEP_RUN)))
         apart = bool(near_set) and covered_before() and covered_after()
-        if colours and (held or apart or (s == n and held_band(frames[n][2]))):
+        if colours and (held or apart or held_band(frames[n][2])):
             # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
             # last whole frame is a cycle or more back (and step_frame's gray frame beside that one older still), and a
             # held band's frame with no gray frame near, whose own gray is not the body's look, show what the frame
