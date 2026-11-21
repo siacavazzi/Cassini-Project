@@ -7441,8 +7441,10 @@ def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
         # glare or stray light round it: each channel's own sky black takes a different share of a veil off (Mimas 2004,
         # 000OT TIMIIA001: the glare drew red 27, green 1, blue 5), so its hue is no colour of anything. A body under
         # LUM_MATCH_MIN pixels of the picture (speck: its channels a few px apart, each a dot) gives the frame no hue at
-        # all: drawn in gray, as taken (its brightness unmatched)
-        lit = lit & body
+        # all: drawn in gray, its brightness matched to the set's as before (on all that is lit: Methone's core, clipped
+        # on the frame's own scale, came out flat white when left unmatched)
+        if not speck:
+            lit = lit & body
     if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
@@ -7456,8 +7458,7 @@ def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
     # further off only within TINT_MATCH)
     match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
     if speck:
-        out = np.dstack([grey[..., 0]] * 3 + [grey[..., 3]]).astype(np.uint8)
-        return out
+        hue = np.ones(3, np.float32)
     own = rgb / np.maximum(y, 1e-6)[..., None]
     # how far a pixel's hue strays from the set's mean, its largest per channel: past TINT_TRUST it fades to the mean,
     # gone at TINT_HUE (a channel lit where the others are not, the set's channels apart on a limb against the frame's
@@ -7475,6 +7476,8 @@ def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
     frame_lit = np.clip(g / max(TINT_DARK * top_g, 1e-6), 0, 1)[..., None]
     # (and only where the frame itself is lit: its dark sky takes no hue from the set's cosmic rays and hot pixels)
     w = (seen * trust)[..., None] * frame_lit
+    if speck:
+        w = np.zeros_like(w)   # (a speck: gray, no hue of the set's at any pixel)
     rest = hue[None, None, :] * frame_lit + (1 - frame_lit)
     h = own * w + rest * (1 - w)
     out = np.clip(h * (g * match)[..., None], 0, 1)
@@ -7512,6 +7515,9 @@ def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
         # misregistration in, a lime rim round Epimetheus' clipped clear frames, 259EP EPIMETHEU001)
         fill = np.clip(h * (y * local)[..., None], 0, 1)
         out = out * (1 - clip[..., None]) + fill * clip[..., None]
+    if speck:
+        # (gray: the clipped fill above took the set's colours, a speck's channels apart)
+        out = np.repeat((out @ np.asarray([0.2126, 0.7152, 0.0722], np.float32))[..., None], 3, axis=2)
     rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)
     return np.dstack([rgb8, grey[..., 3]])
 
@@ -10488,23 +10494,14 @@ def _shown_of(u, p, n, not_shown, tile_of):
         # the planet at the frame's edge between colour frames)
         # (only between frames the set does cover: a run of frames the sets never take in plays as it is)
         near_set = set_of(u, n, want, not_shown, placed) if colours and got is None and s == n else None
-        # (and with frames the sets cover on both sides of it within STEP_RUN: a frame that starts a new pointing, whose
-        # own set is still to come or never comes, plays as it is: 257DA DAPHNIS001's GRN frame at its next view)
         cover_of = lambda m, got: placed(m) and set_cover(tile_of(m), [tile_of(j) for j in got.values()]) >= HELD_COVER
 
-        def covered_before():
-            for m in range(n - 1, max(-1, n - 1 - STEP_RUN), -1):
-                got_m = set_of(u, m, want, not_shown, placed)
-                if got_m and cover_of(m, got_m):
-                    return True
-            return False
-
-        def covered_after():
-            for m in range(n + 1, min(len(frames), n + 1 + STEP_RUN)):
-                # (the set frame m shows, the next one when it is the one that covers m: set_shown)
-                if set_shown(u, m, want, not_shown, placed, lambda got, m=m: cover_of(m, got))[0]:
-                    return True
-            return False
+        # (the same set covering a fit frame on each side of it within STEP_RUN: the movie goes on at that set's view
+        # after it. A frame that starts a new view, whose frames after it the set no longer covers, plays as it is:
+        # 257DA DAPHNIS001's GRN frame at its next view, which drew the set before it, pink and teal, over the new view)
+        side = lambda ms: any(not not_shown(m) and cover_of(m, near_set) for m in ms)
+        covered_before = lambda: side(range(n - 1, max(-1, n - 1 - STEP_RUN), -1))
+        covered_after = lambda: side(range(n + 1, min(len(frames), n + 1 + STEP_RUN)))
         apart = bool(near_set) and covered_before() and covered_after()
         if colours and (held or apart or (s == n and held_band(frames[n][2]))):
             # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
