@@ -49,21 +49,21 @@ body.phone #ssound { width: 30px; height: 30px; }
   if (!S || !AC) return;
   const D = d => S.define(Object.assign({ section: "Sound" }, d));
   D({ key: "sound.on", label: "Sound", type: "toggle", value: true,
-      hint: "A chime for each picture that arrives, after the Huygens descent movie. Browsers start it at your first click or key press. The speaker by the play button, the one in the menu bar, or S mutes it." });
+      hint: "A chime plays for each picture that arrives, inspired by the Huygens descent movie. Browsers start the sound at your first click or key press. To mute it, use the speaker by the play button, the one in the menu bar, or the S key." });
   D({ key: "sound.voice", label: "Instrument", type: "choice", menu: true, value: "bell",
       options: [["bell", "Bell (default)"], ["glass", "Glass"], ["crystal", "Crystal"], ["wood", "Wood"], ["pluck", "Pluck"], ["sine", "Soft sine"], ["night", "Night bell"]],
       hint: "The synthesized voice that plays the notes for arriving pictures, color sets and mosaics. Every voice follows the same pitches and rules." });
   D({ key: "sound.volume", label: "Volume", type: "range", value: 70, min: 0, max: 100, step: 1, unit: "%" });
   D({ key: "sound.chimes", label: "Picture chimes", type: "range", value: 80, min: 0, max: 100, step: 1, unit: "%",
-      hint: "Pitch from the filter (blue high, red and infrared low) and the target's size; the narrow-angle camera rings an octave above the wide-angle one." });
+      hint: "The pitch comes from the filter (blue high, red and infrared low) and the target's size. The narrow-angle camera plays an octave above the wide-angle one." });
   D({ key: "sound.chords", label: "Color set chords", type: "range", value: 60, min: 0, max: 100, step: 1, unit: "%",
-      hint: "When a color picture is complete, its channels' notes together." });
+      hint: "When a color picture is complete, its channels' notes play together." });
   D({ key: "sound.mosaic", label: "Mosaic tiles", type: "range", value: 50, min: 0, max: 100, step: 1, unit: "%",
       hint: "A high note that climbs with each new tile of a mosaic, and a chord when it is finished." });
   D({ key: "sound.hum", label: "Spacecraft tones", type: "range", value: 25, min: 0, max: 100, step: 1, unit: "%",
-      hint: "Two quiet tones: one rises and wavers while Cassini turns, the other rises as it nears its target." });
+      hint: "Two quiet tones: one rises and wavers while Cassini turns, and the other rises as Cassini nears its target." });
   D({ key: "sound.crescendo", label: "Flyby crescendo", type: "range", value: 85, min: 0, max: 100, step: 1, unit: "%",
-      hint: "The closer Cassini is to its target (for its size), the bigger the music: louder, brighter chimes, a swelling chord and a quickening pulse." });
+      hint: "The closer Cassini is to its target (relative to the target's size), the bigger the music: louder, brighter chimes, a swelling chord and a quickening pulse." });
   D({ key: "sound.length", label: "Note length", type: "range", value: 1.4, min: 0.2, max: 4, step: 0.1, unit: "s",
       hint: "How long a chime rings at 10 min/s. Faster playback shortens it." });
   // (a new key, so a browser that saved the old, heavier echo setting starts from the lighter default)

@@ -128,7 +128,7 @@ body { background: var(--void); color: var(--text); font-family: var(--font-body
       <button class="btn" id="mtoggle" aria-pressed="false">Moments</button>
     </div>
     <canvas id="tl" aria-label="Timeline: drag to scrub, drag the top edge or scroll to move through time, pinch to zoom"></canvas>
-    <div class="note">Positions from Cassini's SPICE kernels (J2000, sub-pixel accurate). Timeline bars are camera frames per time slice. <span id="pnote">Spacecraft attitude and the camera cone come from the CK pointing kernels (exact at each frame, interpolated every 10 min between frames). The photos are not loaded yet.</span></div>
+    <div class="note">Positions come from Cassini's SPICE kernels (J2000, accurate to under a pixel). Each timeline bar counts the camera frames in a slice of time. <span id="pnote">Spacecraft attitude and the camera cone come from the CK pointing kernels (exact at each frame, interpolated every 10 min between frames). The photos are not loaded yet.</span></div>
   </div>
 
   <div id="loading">Loading trajectories…</div>

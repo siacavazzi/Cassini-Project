@@ -632,7 +632,7 @@ void main() {
     $("stumoshide").disabled = !q; $("stumoshide").textContent = q && m.hide.has(q.n) ? "Show" : "Hide";
     $("stumosback").disabled = !q || !(m.moves[q.n] && (m.moves[q.n][0] || m.moves[q.n][1]));
     $("stumosall").disabled = !Object.keys(m.moves).length && !m.hide.size;
-    $("stumosnote").textContent = m.busy ? "The frame server is putting the mosaic together…" : Object.keys(m.moves).length || m.hide.size ? `${Object.keys(m.moves).length} moved, ${m.hide.size} hidden. Reset the mosaic brings back the frame server's own.` : "";
+    $("stumosnote").textContent = m.busy ? "The frame server is putting the mosaic together…" : Object.keys(m.moves).length || m.hide.size ? `${Object.keys(m.moves).length} moved, ${m.hide.size} hidden. Reset the mosaic restores the frame server's version.` : "";
   }
   // made again by the frame server, then the edit goes on as before
   let mosT = 0, mosAsk = 0;
@@ -752,7 +752,7 @@ void main() {
   async function open(opts = {}) {
     show();
     if (!opts.blob && !opts.url) { sync(); $("stuempty").hidden = !!source(); draw(); return; }
-    if (!R) { $("stuempty").textContent = "This browser has no WebGL, which the studio draws with."; $("stuempty").hidden = false; return; }
+    if (!R) { $("stuempty").textContent = "Studio needs WebGL, and this browser does not have it."; $("stuempty").hidden = false; return; }
     unload(); $("stuempty").hidden = true; wait("Opening…");
     st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null; st.lookLabel = opts.lookLabel || "";
     st.p = opts.edit ? (typeof opts.edit === "string" ? decode(opts.edit) : clone(opts.edit)) : clone(DEF);
@@ -813,7 +813,7 @@ void main() {
   let cancelled = false;
   async function movieBlob(progress) {
     if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error("this browser cannot record films");
-    const mime = MIME.find(m => MediaRecorder.isTypeSupported(m)); if (!mime) throw new Error("this browser records no film format");
+    const mime = MIME.find(m => MediaRecorder.isTypeSupported(m)); if (!mime) throw new Error("this browser cannot record any film format");
     st.video.pause();
     const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.src = st.url;
     const c = document.createElement("canvas"), hold = document.createElement("div");

@@ -245,7 +245,7 @@ body.cutscene #mcov, body.ambient #mcov { display: none; }
       // a table built for some years only says nothing about the others
       const y = index.years, span = y.length > 1 ? `${y[0]} to ${y[y.length - 1]}` : `${y[0]}`;
       html = `<b>${titleCase(moon)}</b> · seen so far is worked out for ${span} only`;
-      tip = `This site's table of what Cassini had photographed was built for ${span}. Outside those years the moons are drawn as the whole map.`;
+      tip = `This site's record of what Cassini had photographed covers only ${span}. Outside those years, the moons are drawn with their whole map.`;
     }
     if (html !== shown) {
       host.innerHTML = shown = html;

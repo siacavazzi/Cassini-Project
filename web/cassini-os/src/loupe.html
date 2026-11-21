@@ -53,7 +53,7 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
   const cv = lens.querySelector("canvas"), ctx = cv.getContext("2d"), tag = lens.querySelector(".lzt");
   if (S) {
     S.define({ key: "loupe.on", section: "Zoom lens", label: "Zoom lens", type: "toggle", value: true,
-      hint: "Move the pointer onto a picture and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
+      hint: "Move the pointer onto a picture, and a lens shows the area under it magnified, from the full-resolution picture. The lens follows the pointer, and the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
     S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 32, step: 0.5, format: v => `${v}×`,
       hint: "How much bigger the lens shows the picture than the window does. Past 12× is for mosaics, whose native pixels are many times smaller than the window shows them." });
     S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 380, min: 160, max: 720, step: 20, unit: "px",
@@ -66,9 +66,9 @@ body.idle .win.full .lensbtn { opacity: .35; } body.idle .win.full .lensbtn:hove
       options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
     S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
-      hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
+      hint: "A mosaic is shown at a smaller scale than its frames were taken at. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
     S.define({ key: "loupe.mosaicFull", section: "Zoom lens", label: "On mosaics in full view", type: "toggle", value: false,
-      hint: "In full view a mosaic is shown big enough to look at its seams, so the lens stays away there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
+      hint: "In full view, a mosaic is shown big enough to look at its seams, so the lens is off there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const HOLD = 450, MOVE = 10;   // a press and hold on a phone: how long, and how far the finger may wander

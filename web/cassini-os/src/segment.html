@@ -42,7 +42,7 @@ body.phone #segbar button { padding: 6px 11px; }
     <button id="segedit" title="Open this stretch in the Movie Editor: pick its frames, its look, play it and save it (Enter)">Edit</button>
     <button id="segx" aria-label="Clear the highlight" title="Clear the highlight (Esc)">×</button>
   </div>
-  <div id="seghint" role="status" aria-live="polite" hidden><span>Movie mode is waiting for pictures to be made. Highlight a stretch of the timeline and press Edit: its pictures are made ahead while it opens.</span><button id="seghintgo">Highlight what’s next</button><button class="x" id="seghintx" aria-label="Dismiss">×</button></div>
+  <div id="seghint" role="status" aria-live="polite" hidden><span>Movie mode is waiting for pictures to be made. Highlight a stretch of the timeline and press Edit, and its pictures are made in advance while the editor opens.</span><button id="seghintgo">Highlight what’s next</button><button class="x" id="seghintx" aria-label="Dismiss">×</button></div>
 </aside>
 
 <script>
@@ -62,10 +62,10 @@ body.phone #segbar button { padding: 6px 11px; }
   const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
   if (S) {
     // the most frames one stretch makes ahead (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
-    S.define({ key: "segment.maxFrames", section: "Playback", label: "Make ahead up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
+    S.define({ key: "segment.maxFrames", section: "Playback", label: "Make in advance up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
       format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
-      hint: "The most frames of a stretch opened in the Movie Editor that are made ahead while it opens (a busy day near Saturn has about 1,500). A long stretch takes a while: the editor shows how long is left, can open before it is done, and what is made stays made. A public site may set its own limit." });
-    S.define({ key: "segment.hint", section: "Playback", label: "Suggest making a stretch ahead when movie mode waits", type: "toggle", value: true,
+      hint: "The most frames of a stretch that are made in advance while it opens in the Movie Editor (a busy day near Saturn has about 1,500). A long stretch takes a while. The editor shows how long is left and can open before it is done, and pictures already made are kept. A public site may set its own limit." });
+    S.define({ key: "segment.hint", section: "Playback", label: "Suggest making a stretch in advance when movie mode waits", type: "toggle", value: true,
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
   const bar = $("segbar"), hint = $("seghint");
@@ -182,9 +182,9 @@ body.phone #segbar button { padding: 6px 11px; }
       try {
         const r = await fetch(`${FRAMES}/prebuild?${params(a, b)}&most=${most()}`, { method: "POST" }), j = await r.json().catch(() => ({}));
         if (me.gone) return;
-        if (!r.ok) { tell({ state: "failed", error: j.error || "The frame server cannot make that ahead.", done: 0, total: 0 }); if (J === me) J = null; return; }
+        if (!r.ok) { tell({ state: "failed", error: j.error || "The frame server cannot make that stretch in advance.", done: 0, total: 0 }); if (J === me) J = null; return; }
         follow(j);
-      } catch (err) { if (!me.gone) { tell({ state: "failed", error: `No frame server at ${FRAMES} that makes pictures ahead.`, unsupported: true, done: 0, total: 0 }); if (J === me) J = null; } }
+      } catch (err) { if (!me.gone) { tell({ state: "failed", error: `No frame server at ${FRAMES} that makes pictures in advance.`, unsupported: true, done: 0, total: 0 }); if (J === me) J = null; } }
     })();
     return me;
   }
@@ -193,7 +193,7 @@ body.phone #segbar button { padding: 6px 11px; }
   const TITLE = document.title;
   function titled() {
     const j = J && J.job, busy = j && BUSY.test(j.state);
-    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% made ahead · ${TITLE}` : TITLE;
+    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% made in advance · ${TITLE}` : TITLE;
   }
 
   // ---- the timeline: how far the stretch is made, a line along its foot ----
@@ -223,7 +223,7 @@ body.phone #segbar button { padding: 6px 11px; }
   const away = $("awaynote"), awayText = away && away.textContent;
   document.addEventListener("cassini:away", e => {
     const busy = J && J.job && BUSY.test(J.job.state);
-    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the stretch in the Movie Editor keeps being made ahead` : awayText;
+    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the pictures for the Movie Editor are still being made` : awayText;
     if (!e.detail.away) titled();
   });
 

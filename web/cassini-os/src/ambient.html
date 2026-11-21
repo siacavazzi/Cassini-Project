@@ -95,27 +95,27 @@ body.ambient.phone .amb-where { font-size: 18px; }
   const MODES = [["live", "Live, 10 years ago"], ["60", "1 min/s"], ["600", "10 min/s"], ["3600", "1 h/s"], ["pictures", "Every picture"], ["highlights", "Highlights"]];
   const D = d => S.define(Object.assign({ section: "Ambient" }, d));
   D({ key: "ambient.mode", label: "Mode", type: "choice", value: "live", options: MODES,
-    hint: "Live runs in real time, ten years behind today. The faster modes catch more pictures; Every picture skips the quiet hours; Highlights plays the highlight reel over and over." });
+    hint: "Live runs in real time, ten years behind today. The faster modes show more pictures. Every picture skips the quiet hours. Highlights plays the highlight reel over and over." });
   D({ key: "ambient.sizeLive", label: "Picture size, live", type: "range", value: 46, min: 20, max: 90, step: 1, unit: "%",
     hint: "Height of each camera panel as a share of the screen in real time, when pictures are rare." });
   D({ key: "ambient.sizeFast", label: "Picture size, fast", type: "range", value: 32, min: 15, max: 90, step: 1, unit: "%",
-    hint: "The same when pictures come fast (1 h/s, every picture, highlights); the speeds between are in between." });
+    hint: "The same, when pictures come fast (1 h/s, Every picture, Highlights). Speeds in between get sizes in between." });
   D({ key: "ambient.pace", label: "Every picture: seconds each", type: "range", value: 4, min: 1, max: 30, step: 1, unit: "s",
     hint: "How long each picture stays up in Every picture mode." });
   D({ key: "ambient.drift", label: "Camera drift", type: "range", value: 6, min: 0, max: 30, step: 1, unit: "°/min",
     hint: "How fast the view swings slowly around Cassini. 0 holds it still." });
   D({ key: "ambient.framing", label: "Framing", type: "choice", value: "both",
     options: [["both", "Cassini and its subject"], ["past", "Past Cassini, at the subject"]],
-    hint: "Cassini and its subject: the camera stands off to the side so the spacecraft and the body it looks at (its near edge, for a big one) are both in the picture; close to a big body that puts the camera between them, looking back at Cassini with the body's edge beside it. Past Cassini: the earlier view over the spacecraft's shoulder, at the subject." });
+    hint: "Cassini and its subject: the camera stands off to the side, so the spacecraft and the body it is looking at (the body's near edge, for a big one) are both in the picture. Close to a big body, this puts the camera between them, looking back at Cassini with the body's edge beside it. Past Cassini: the earlier view over the spacecraft's shoulder, toward the subject." });
   D({ key: "ambient.spacing", label: "Spacing", type: "range", value: 22, min: 6, max: 40, step: 1, unit: "°",
-    hint: "How far apart Cassini and its subject's near edge sit on screen, Cassini and its subject framing. Kept inside the screen." });
+    hint: "With Cassini and its subject framing, how far apart Cassini and the near edge of its subject are on screen. Both stay inside the screen." });
   D({ key: "ambient.captions", label: "Caption", type: "toggle", value: true, hint: "What Cassini is looking at, the date and the time to the next picture, at the top of the screen." });
   D({ key: "ambient.timeline", label: "Timeline", type: "toggle", value: true,
-    hint: "A thin line along the top: the pictures of the last stretch and the ones coming, with the next few bodies named." });
+    hint: "A thin line along the top showing the pictures from the last stretch and the ones coming next, with the names of the next few bodies." });
   D({ key: "ambient.cones", label: "Camera cones", type: "toggle", value: true,
     hint: "The narrow-angle and wide-angle cameras' field of view, drawn from Cassini while it takes pictures: fainter than in Cassini OS, fading in and out and turning smoothly." });
   D({ key: "ambient.calmSound", label: "Calm sound", type: "toggle", value: true,
-    hint: "Softer, slower chimes with more echo, a quiet bed under them and no flyby pulse. Off plays the sound as in Cassini OS." });
+    hint: "Softer, slower chimes with more echo, a quiet background tone under them, and no flyby pulse. Off plays the sound as in Cassini OS." });
   D({ key: "ambient.fps", label: "Frame rate", type: "range", value: 30, min: 10, max: 60, step: 5, unit: "fps",
     hint: "The 3D view is drawn at most this often. A slow drift looks the same at 30 as at 60, for half the work." });
   D({ key: "ambient.start", label: "Ambient mode", type: "action", button: "Start", run: () => { S.close(); start(); } });

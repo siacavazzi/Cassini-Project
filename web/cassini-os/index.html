@@ -2238,7 +2238,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       </div>
     </div>
     <div id="focusrow" aria-label="Center the view on"></div>
-    <div class="statusbar"><span>Positions from Cassini's SPICE kernels (J2000). LCD lanes: narrow-angle (NAC) and wide-angle (WAC) frames colored by filter; RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
+    <div class="statusbar"><span>Positions come from Cassini's SPICE kernels (J2000). The timeline lanes show narrow-angle (NAC) and wide-angle (WAC) frames, colored by filter. RGB marks frames that belong to a red, green and blue set.</span><span id="pnote" hidden></span><b id="sbar">—</b></div>
   </div>
 
   <section id="flagpop" role="dialog" aria-label="Flag this picture" hidden>
@@ -2313,7 +2313,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     <button id="segedit" title="Open this stretch in the Movie Editor: pick its frames, its look, play it and save it (Enter)">Edit</button>
     <button id="segx" aria-label="Clear the highlight" title="Clear the highlight (Esc)">×</button>
   </div>
-  <div id="seghint" role="status" aria-live="polite" hidden><span>Movie mode is waiting for pictures to be made. Highlight a stretch of the timeline and press Edit: its pictures are made ahead while it opens.</span><button id="seghintgo">Highlight what’s next</button><button class="x" id="seghintx" aria-label="Dismiss">×</button></div>
+  <div id="seghint" role="status" aria-live="polite" hidden><span>Movie mode is waiting for pictures to be made. Highlight a stretch of the timeline and press Edit, and its pictures are made in advance while the editor opens.</span><button id="seghintgo">Highlight what’s next</button><button class="x" id="seghintx" aria-label="Dismiss">×</button></div>
 </aside>
 
   <section class="win" id="galcard" aria-label="Gallery" hidden>
@@ -2322,7 +2322,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
     <div class="galseg" id="galfilter"><button data-v="all" aria-pressed="true">All</button><button data-v="picture" aria-pressed="false">Pictures</button><button data-v="movie" aria-pressed="false">Movies</button></div>
     <span id="galsum"></span><span class="sp"></span>
     <button class="galbtn" id="galexport" title="Save every picture (JPEG) and film (MP4) in the gallery as one .zip file">Export Library</button>
-    <label class="galchk" title="Also put in how each item was made and its thumbnail (gallery.json), so Import can bring the whole gallery back"><input type="checkbox" id="galmeta"> Include metadata</label>
+    <label class="galchk" title="Also include how each item was made, and its thumbnail (gallery.json), so Import can restore the whole gallery"><input type="checkbox" id="galmeta"> Include metadata</label>
     <button class="galbtn" id="galimport" title="Add the items of a gallery .zip exported with its metadata">Import</button>
     <input type="file" id="galfile" accept=".zip,application/zip" hidden>
   </div>
@@ -2421,9 +2421,9 @@ body.ambient.phone .amb-where { font-size: 18px; }
   <div class="titlebar"><span class="lights"><button class="close" aria-label="Close the movie editor">×</button><button class="min" aria-label="Close the movie editor">–</button><button class="zoom" aria-label="Zoom">+</button></span>Movie Editor</div>
   <div id="meload" role="status" aria-live="polite">
     <div class="mlwhen" id="mlwhen"></div><div class="mlwhat" id="mlwhat"></div>
-    <ol><li id="mlplan">Listing the frames</li><li id="mlmake">Making the pictures ahead</li></ol>
+    <ol><li id="mlplan">Listing the frames</li><li id="mlmake">Making the pictures in advance</li></ol>
     <div id="mlbar"><i></i></div>
-    <div class="mlbtns"><button class="galbtn" id="mlcancel">Cancel</button><button class="galbtn go" id="mlnow" title="Open the editor now; the pictures keep being made ahead">Open now</button></div>
+    <div class="mlbtns"><button class="galbtn" id="mlcancel">Cancel</button><button class="galbtn go" id="mlnow" title="Open the editor now; the pictures are still made in advance">Open now</button></div>
   </div>
   <div class="mebody">
     <div class="memain">
@@ -2440,7 +2440,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="rnd" id="meplay" aria-label="Play the kept frames (Space)" title="Play the kept frames (Space)">▶</button>
         <button class="rnd" id="menext" aria-label="Next frame (→)" title="Next frame (→)">›</button>
         <span id="mepos"></span>
-        <input type="range" id="mefps" min="1" max="30" step="1" aria-label="Play frame rate" title="Play's frame rate (the movie mode frame rate, Settings > Playback)"><span id="mefpsv"></span>
+        <input type="range" id="mefps" min="1" max="30" step="1" aria-label="Play frame rate" title="Frame rate for Play (the movie mode frame rate in Settings > Playback)"><span id="mefpsv"></span>
         <div class="galseg" id="mesrc" role="group" aria-label="Picture shown"><button data-v="movie" title="The picture the film shows for this frame (mosaic, color, movie pass or processed)">As in the movie</button><button data-v="raw" title="The frame as Cassini took it">Raw frame</button></div>
         <span class="sp"></span>
         <button class="galbtn go" id="mekeep" title="Keep only the picked frames: every other frame comes out of the movie (K)" hidden>Keep only</button>
@@ -2454,7 +2454,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
       <div id="mestrip" role="listbox" aria-label="Frames of the movie" aria-multiselectable="true"></div>
     </div>
     <div class="meside" hidden>
-      <h4 style="margin-top:10px"><span>Look</span><span class="sp"></span><button id="melkclear" title="Take the look off what Apply to says">Reset</button></h4>
+      <h4 style="margin-top:10px"><span>Look</span><span class="sp"></span><button id="melkclear" title="Remove the look from the frames chosen under Apply to">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Apply to</div>
       <div class="galseg mescope" id="mescope" role="radiogroup" aria-label="Changes to the look apply to"><button data-v="movie" role="radio" title="Every frame of the movie">Whole movie<i id="mescopen"></i></button><button data-v="frames" role="radio" title="Only the frame in front, or the picked frames">This frame</button></div>
       <div class="merow"><span>Exposure</span><input type="range" id="melk-ex" data-k="exposure" min="-4" max="4" step="0.05" aria-label="Exposure"><span class="val"></span></div>
@@ -2474,13 +2474,13 @@ body.ambient.phone .amb-where { font-size: 18px; }
         <button class="galbtn" data-v="raw" title="Every frame in every filter as Cassini took it: nothing stacked, calibrated or put together">Every frame, raw</button>
       </div>
       <div class="melabel">Mosaics</div>
-      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">Default</button><button data-v="whole" title="Each mosaic once it is whole: a mosaic pass at its last tile, a mosaic movie once a lap, every tile new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip on its own, as a still pass shows">Off</button></div>
+      <div class="galseg" id="memos" role="group" aria-label="Mosaics in the movie"><button data-v="" title="As the camera windows show them (Settings: Mosaic movie frames, Complete mosaics only)">Default</button><button data-v="whole" title="Each mosaic once it is complete: a mosaic pass at its last tile, and a mosaic movie once per lap, when every tile is new">Whole</button><button data-v="tiles" title="Every tile as it is taken, the mosaic building up">Tile by tile</button><button data-v="off" title="No mosaics: every frame of a mosaic or a ring strip is shown on its own, as in a still pass">Off</button></div>
       <div class="menote" id="memosnote"></div>
-      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Take the crop off, put every nudged frame back and Additional stabilization as Settings has it">Reset</button></h4>
+      <h4><span>Framing</span><span class="sp"></span><button id="mefrclear" title="Remove the crop, put every moved frame back, and set Additional stabilization back to its value in Settings">Reset</button></h4>
       <div class="melabel" style="margin-top:2px">Auto center</div>
       <div class="galseg" id="mectr" role="group" aria-label="Auto center for the movie"><button data-v="" title="Each camera window's Auto center setting (Settings > Processing)">Default</button><button data-v="1" title="Every picture centered on its body (north up), movie passes and single pictures alike">On</button><button data-v="0" title="Every picture as Cassini pointed">Off</button></div>
       <div class="melabel">Additional stabilization</div>
-      <div class="merow" style="margin-top:2px"><span>Steady over</span><input type="range" id="mestab" min="0" max="60" step="2" aria-label="Additional stabilization: the pictures the matching is believed over" title="For when SPICE's centering wobbles (a small moon in the NAC): each picture is matched to the one before it by what the two show, and the wobble taken out. Higher holds the body stiller, lower keeps more of its slow motion. Worked out on this computer."><span class="val" id="mestabv"></span></div>
+      <div class="merow" style="margin-top:2px"><span>Steady over</span><input type="range" id="mestab" min="0" max="60" step="2" aria-label="Additional stabilization: how many pictures the matching is trusted over" title="Use this when SPICE's centering wobbles (for a small moon in the NAC). Each picture is matched to the one before it by what the two show, and the wobble is removed. Higher holds the body stiller; lower keeps more of its slow motion. Your computer works this out."><span class="val" id="mestabv"></span></div>
       <div class="menote" id="mestabnote"></div>
       <div class="mechips" style="margin-top:7px"><button class="galbtn" id="mecrop" aria-pressed="false" title="Draw the crop on the picture">Crop…</button></div>
       <div class="mecropctl" id="mecropctl" hidden>
@@ -2506,7 +2506,7 @@ body.ambient.phone .amb-where { font-size: 18px; }
   </div>
   <div class="mefoot">
     <span id="mesum"></span>
-    <span id="meprep" hidden><span id="mepreptext"></span><button id="meprepstop" title="Stop making the pictures ahead (what is made stays made)">Stop</button></span>
+    <span id="meprep" hidden><span id="mepreptext"></span><button id="meprepstop" title="Stop making the pictures in advance (pictures already made are kept)">Stop</button></span>
     <span class="sp"></span>
     <button class="galbtn" id="meundo" title="Undo (Ctrl+Z / ⌘Z)" disabled>Undo</button>
     <button class="galbtn" id="mecopy" title="A link that opens this stretch with these frames and this look">Copy link</button>
@@ -2636,7 +2636,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   const SECTIONS = ["Interface", "Cameras", "Processing", "Playback", "View", "Movie", "Data"];   // sections other code adds go after these
   const NOTES = {
     Cameras: "These settings choose what the camera windows show and how long. How each picture is made is under Processing.",
-    Processing: "Each step the pictures go through, in the order they run. With everything on you see the mission's pictures processed; turn a step off to see what it does. A picture with a step off is made the first time it is asked for (a few seconds); with everything on it comes from the cache at once.",
+    Processing: "Each step of picture processing, in the order the steps run. With every step on, you see the mission's pictures fully processed. Turn a step off to see what it does. A picture with a step off is made the first time you ask for it, which takes a few seconds. With every step on, it comes from the cache at once.",
     Data: "Window positions and these settings are kept in this browser only."
   };
   let saved = {};
@@ -2767,9 +2767,9 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   const D = d => S.define(d), cls = (key, name, on) => S.on(key, v => document.body.classList.toggle(name, v === on));
   // Interface (the chrome script reads interface.autohide, interface.idleDelay and interface.hud)
   D({ key: "interface.autohide", section: "Interface", label: "Hide interface when idle", type: "toggle", value: true,
-      hint: "Menus and windows fade out when the pointer rests, so the view has the screen to itself." });
+      hint: "Menus and windows fade out when you stop moving the pointer, so you see only the view." });
   D({ key: "interface.idleDelay", section: "Interface", label: "Fade after", type: "range", value: 3.5, min: 1, max: 30, step: 0.5, unit: "s",
-      hint: "How long the pointer has to rest before the interface fades." });
+      hint: "How long the pointer has to stay still before the interface fades." });
   D({ key: "interface.hud", section: "Interface", label: "Neon HUD", type: "toggle", value: true,
       hint: "Orbits, Cassini's trail and the camera cone drawn with a glow." });
   D({ key: "interface.labels", section: "Interface", label: "Body labels", type: "toggle", value: true,
@@ -2782,70 +2782,70 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   // switched off on its own to see what it does (the camera windows read cameras.*; processing.* go to the frame
   // server as off=, calibration.STEPS, which keeps pictures made with a step off in caches of their own)
   D({ key: "cameras.processedFrames", section: "Processing", label: "Processed single frames", type: "toggle", value: true,
-      hint: "A frame shown on its own goes through the pipeline like a color picture's channels: repeat exposures stacked, calibrated, lost lines filled, on the same display stretch. Off shows the frame as it is in the archive." });
+      hint: "A frame shown on its own is processed the same way as the channels of a color picture: repeat exposures are stacked, the frame is calibrated, lost lines are filled, and it is shown on the same display stretch. Off shows the frame as it is in the archive." });
   D({ key: "cameras.level", section: "Processing", label: "Processing level", type: "choice", value: "full",
       options: [["raw", "Raw"], ["processed", "Processed"], ["color", "Color"], ["full", "Full"]],
-      hint: "How much of the pipeline the camera windows show, also set for each window on the bar under its picture. Raw: each frame as Cassini sent it, nothing done to it (with Auto center, only moved and turned into place by SPICE). Processed: each frame on its own, repeat exposures stacked, calibrated, cleaned and on the display stretch. Color: a filter set's frames put together as one color picture, but no mosaics or movies. Full: everything, with mosaics and steadied movies." });
+      hint: "How much processing the camera windows show. You can also set it for each window on the bar under its picture. Raw: each frame as Cassini sent it, with nothing done to it (with Auto center on, SPICE only moves and turns it into place). Processed: each frame on its own, with repeat exposures stacked, calibrated, cleaned and on the display stretch. Color: the frames of a filter set are combined into one color picture, but there are no mosaics or movies. Full: everything, including mosaics and steadied movies." });
   window.cassiniSteps = [
     { key: "processing.stack", step: "stack", label: "Stack repeat exposures",
-      hint: "Frames Cassini took again of the same thing, with the same filter and exposure, are averaged into one picture, which cuts the noise (a plain stack). Off shows each frame alone." },
+      hint: "When Cassini took the same picture more than once, with the same filter and exposure, the frames are averaged into one picture to reduce the noise (a plain stack). Off shows each frame alone." },
     { key: "processing.hdr", step: "hdr", label: "HDR merge",
-      hint: "In mosaics, mosaic movies and the body reels, an exposure bracket (short exposures for the bright parts, long ones for the faint) is merged into one picture that has the range of both. Off merges only identical exposures, like the plain stack. Needs Stack repeat exposures." },
+      hint: "In mosaics, mosaic movies and the body reels, Cassini sometimes took short exposures for the bright parts and long exposures for the faint parts (an exposure bracket). These are merged into one picture with the range of both. Off merges only identical exposures, like the plain stack. Needs Stack repeat exposures." },
     { key: "processing.fill", step: "fill", label: "Fill lost lines",
-      hint: "Lines a frame lost on its way to Earth are filled from the lines round them, so they don't show as black stripes or throw off the stretch. Off leaves them black." },
+      hint: "Some lines of a frame were lost on the way to Earth. They are filled in from the lines around them, so they don't show as black stripes or spoil the brightness stretch. Off leaves them black." },
     { key: "processing.calibrate", step: "calibrate", label: "Calibrate",
-      hint: "Every frame is turned into reflectance (I/F: bias, exposure, gain, filter and distance from the Sun taken out) and drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it came down." },
+      hint: "Every frame is converted to reflectance (I/F), which removes the effects of bias, exposure, gain, filter and distance from the Sun. All frames are then drawn on one display scale, so filters and mosaic tiles match and colors are true. Off shows each frame on the archive's own stretch, as it was received." },
     { key: "processing.twohz", step: "twohz", label: "2 Hz noise",
-      hint: "Takes out the faint horizontal bands (\"2 Hz noise\") the camera's electronics added while each picture was read out, line by line from the extra pixels the camera read past the end of every line, as the camera team's calibration (CISSCAL) does. Most visible in dark sky and faint pictures. Full-size frames only. Off leaves the bands in. Needs Calibrate." },
+      hint: "Removes the faint horizontal bands (\"2 Hz noise\") that the camera's electronics added while each picture was read out. The camera read a few extra pixels past the end of every line, and the bands are measured from these pixels, line by line, as the camera team's calibration (CISSCAL) does. Most visible in dark sky and faint pictures. Full-size frames only. Off leaves the bands in. Needs Calibrate." },
     { key: "processing.twohzsky", step: "twohzsky", label: "Bands from the sky",
-      hint: "Measures the 2 Hz bands from the picture's own dark sky (the median of each line with stars and bodies masked out, CISSCAL's \"image mean\" method) instead of from the few extra pixels past each line, which catch only part of them. Takes the bands out far more completely, and also on the 8-bit and lossy frames CISSCAL skips. Used where at least 9 lines in 10 have some clear sky; a frame filled by a moon or Saturn keeps the extra-pixel method. Off uses the extra pixels only, as CISSCAL does by default. Needs 2 Hz noise." },
+      hint: "Measures the 2 Hz bands from the picture's own dark sky: the median of each line, with stars and bodies masked out (CISSCAL's \"image mean\" method). The few extra pixels past each line show only part of the bands, so this removes the bands far more completely. It also works on the 8-bit and lossy frames that CISSCAL skips. It is used where at least 9 lines in 10 have some clear sky. When a moon or Saturn fills the frame, the extra pixels are used instead. Off uses only the extra pixels, as CISSCAL does by default. Needs 2 Hz noise." },
     { key: "processing.skysmooth", step: "skysmooth", label: "Smooth dark sky",
-      hint: "The archive keeps a dark sky as only a handful of brightness steps, so once the bands are measured from the sky each line still sits a fraction of a step above or below the next and the bands show again when the sky is stretched. Where the bands were measured from the sky, its one-step speckle is evened out over a few pixels; stars, cosmic rays and edges, several steps brighter, are left as they were. Off shows the sky's steps as they came down. Needs Bands from the sky." },
+      hint: "In the archive, a dark sky has only a handful of brightness steps. Even after the bands are measured from the sky, each line can sit a fraction of a step above or below the next, and the bands show again when the sky is stretched. Where the bands were measured from the sky, this evens out the one-step speckle over a few pixels. Stars, cosmic rays and edges are several steps brighter, so they are left as they were. Off shows the sky's steps as they were received. Needs Bands from the sky." },
     { key: "processing.dark", step: "dark", label: "Dark current",
-      hint: "Takes out the charge the camera's detector gathers without any light, which grows with the exposure and with how long each line waits to be read out, with the camera team's own dark model. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves them in. Needs Calibrate." },
+      hint: "Removes the charge that builds up in the camera's detector without any light, using the camera team's own dark model. This charge grows with the exposure and with how long each line waits to be read out. Most visible on long exposures: night sides, rings, Titan's surface. Off leaves it in. Needs Calibrate." },
     { key: "processing.darksky", step: "darksky", label: "Dark from the sky",
-      hint: "The camera team's dark model is right on average but not in detail: on long star fields and the dark sky round a moon it leaves a faint glow round the picture's edges and fine vertical stripes, which the display stretch lifts into a grey, striped sky. Where a picture has enough dark sky, what the model leaves there is measured and taken out too: the stripes column by column, the glow near the edges only (a plume or a faint ring in the middle stays). Lit pictures are left alone. Off uses the model as it is, as the camera team's calibration (CISSCAL) does. Needs Dark current." },
+      hint: "The camera team's dark model is right on average but not in detail. On long star fields, and in the dark sky around a moon, it leaves a faint glow around the picture's edges and fine vertical stripes. The display stretch then makes the sky look gray and striped. Where a picture has enough dark sky, this measures what the model left behind and removes it too: the stripes column by column, and the glow only near the edges (a plume or a faint ring in the middle stays). Lit pictures are left alone. Off uses the model as it is, as the camera team's calibration (CISSCAL) does. Needs Dark current." },
     { key: "processing.pairs", step: "pairs", label: "Pixel pairs",
-      hint: "In anti-blooming mode the detector leaves pairs of pixels, one too bright sitting on one too dark, scattered over the picture. As the camera team's calibration (CISSCAL) does, each pair more than 30 DN off its neighbors is replaced by the mean of the pixels either side of it. Full-size frames with anti-blooming on only. Off leaves them in. Needs Calibrate." },
+      hint: "In anti-blooming mode, the detector leaves pairs of pixels scattered over the picture: one too bright, sitting on one too dark. As in the camera team's calibration (CISSCAL), each pair that differs from its neighbors by more than 30 DN is replaced by the mean of the pixels on either side. Full-size frames with anti-blooming on only. Off leaves them in. Needs Calibrate." },
     { key: "processing.flat", step: "flat", label: "Flat field",
-      hint: "Takes out what the camera itself adds to every picture, with the mission's own calibration maps: the dust rings (shadows of dust on the narrow-angle camera's optics, more of them as the mission went on), the fine mottle that appeared in late 2003, the darker corners and the faint column pattern of the detector. Off leaves them in. Needs Calibrate." },
+      hint: "Removes what the camera itself adds to every picture, using the mission's own calibration maps: the dust rings (shadows of dust on the narrow-angle camera's optics, more of them as the mission went on), the fine mottle that appeared in late 2003, the darker corners and the faint column pattern of the detector. Off leaves them in. Needs Calibrate." },
     { key: "processing.hotpix", step: "hotpix", label: "Hot pixels",
-      hint: "The detector pixels that went hot or dead over the mission (the camera team's lists, and the far more the archive's own frames show, month by month) are filled in from the pixels round them, so they don't show as dots that stay put while the stars and the moon move in a movie. A star that lands exactly on one is filled in too. Off leaves them in. Needs Calibrate." },
+      hint: "Over the mission, some detector pixels went hot or dead. The camera team listed some of them, and the archive's own frames show many more, month by month. These pixels are filled in from the pixels around them, so they don't show as dots that stay put while the stars and the moon move in a movie. A star that lands exactly on one is filled in too. Off leaves them in. Needs Calibrate." },
     { key: "processing.geom", step: "geom", label: "Lens distortion",
-      hint: "The wide-angle camera's lens bends the picture a little towards its corners, up to 3 pixels, and each of its filters focuses at a slightly different length, so the same scene is up to a pixel bigger in one filter than another. As the camera team's calibration (CISSCAL) does, every wide-angle frame is redrawn onto one straight grid at one focal length for every filter, so mosaic tiles meet without kinks and a color set's channels are the same size. The narrow-angle camera needs none. Off shows each frame as the lens drew it. Needs Calibrate." },
+      hint: "The wide-angle camera's lens bends the picture a little toward its corners, by up to 3 pixels. Each of its filters also focuses at a slightly different length, so the same scene is up to a pixel bigger in one filter than in another. As in the camera team's calibration (CISSCAL), every wide-angle frame is redrawn onto one straight grid, at the same focal length for every filter. Mosaic tiles then meet without kinks, and the channels of a color set are the same size. The narrow-angle camera needs no correction. Off shows each frame as it came through the lens. Needs Calibrate." },
     { key: "processing.align", step: "align", label: "Align",
-      hint: "A color set's channels, taken seconds or minutes apart, are moved onto one another, and a mosaic's filters onto each other's tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
+      hint: "The channels of a color set were taken seconds or minutes apart. They are moved onto one another, and in a mosaic each filter's tiles are moved onto the other filters' tiles. Off lays them over one another as the camera pointed, so moving bodies show colored fringes." },
     { key: "processing.blend", step: "blend", label: "Blend mosaic seams",
       hint: "Where two mosaic tiles meet, their pictures fade into each other and the mosaic stays solid, with its soft edge only along its outside. Off draws each tile with its own soft edge, as before, which leaves a faint dark line along the seams and a notch where a seam meets the mosaic's edge." },
     { key: "processing.level", step: "level", label: "Level mosaic seams",
-      hint: "Evens out the brightness where mosaic tiles overlap, smoothly across each tile, as the planetary mosaic tools do (a gentle brightness field per tile, solved together so no tile's step shows at a seam). Works with Blend mosaic seams on; off blends the tiles as they are." },
+      hint: "Evens out the brightness where mosaic tiles overlap, smoothly across each tile, as planetary mosaic software does. Each tile gets a gentle brightness correction, and all the tiles are solved together so no step in brightness shows at a seam. Works with Blend mosaic seams on. Off blends the tiles as they are." },
     { key: "processing.surface", step: "surface", label: "Mosaic surface at one moment",
-      hint: "A mosaic's panels are taken minutes apart, and the moon turns and Cassini moves in between, so the same crater sits 8 to 18 pixels apart in neighboring panels and doubles or steps at their seam. On, each panel's surface is redrawn as it was at the middle of the pass, from SPICE's shape, spin and Cassini's position; the limb, the sky and the rings stay where they are. Off shows each panel as it was taken." },
+      hint: "The panels of a mosaic were taken minutes apart, and in between the moon turned and Cassini moved. So the same crater can sit 8 to 18 pixels apart in neighboring panels, and it shows twice, or with a step, at their seam. On redraws each panel's surface as it was at the middle of the pass, using the body's shape and spin from SPICE and Cassini's position. The limb, the sky and the rings stay where they are. Off shows each panel as it was taken." },
     { key: "processing.panels", step: "panels", label: "Line up mosaic panels",
-      hint: "SPICE places each mosaic panel from where Cassini was said to point, 3 to 5 pixels off and differently for each panel. On, each panel is matched to the panels taken before it where they overlap (by what the pictures show) and moved by the few pixels it is off (12 at most), all its filters together. Panels with nothing to match on stay where SPICE puts them. Needs Align." }
+      hint: "SPICE places each mosaic panel from the recorded pointing, which is 3 to 5 pixels off, by a different amount for each panel. On matches each panel to the earlier panels where they overlap, by what the pictures show, and moves it by the few pixels it is off (12 at most), with all its filters together. Panels with nothing to match stay where SPICE puts them. Needs Align." }
   ];
   for (const st of window.cassiniSteps) D({ key: st.key, section: "Processing", label: st.label, type: "toggle", value: true, hint: st.hint });
   D({ key: "cameras.composites", section: "Processing", label: "Color composites", type: "toggle", value: true,
       hint: "Once a filter set is complete, show its color picture. Off shows every frame on its own." });
   D({ key: "cameras.balancedColor", section: "Processing", label: "Balanced color", type: "toggle", value: true,
-      hint: "A gentler color stretch: black sits just above the sky's noise so grain and scan lines stay dark, white sits at the bright part of the body but never stretches dim pictures far, bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
+      hint: "A gentler color stretch. Black is set just above the sky's noise, so grain and scan lines stay dark. White is set at the bright part of the body, but dim pictures are never stretched far. Bright edges roll off instead of clipping, and mosaic tiles are evened out without changing the mosaic's overall level. Off shows the earlier stretch." });
   D({ key: "cameras.colors", section: "Processing", label: "Filter colors", type: "choice", value: "natural",
       options: [["natural", "Natural color"], ["eye", "Natural color (emulated)"], ["false", "False color"], ["raw", "Raw filters"]],
-      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see, shows sets taken through a methane filter as Natural color (emulated) does, and balances other false color sets (ultraviolet, infrared) so the planet comes out gray and only its differences between filters show as color. Where a set took more than three filters, the three nearest red, green and blue are used. Natural color (emulated) shows false color sets too as an eye would have seen them: the body in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray), with what the filters show as its brightness and, where they reach both sides of the visible, as its shades. Methane bands give no color. It is worked out on this computer, in movie passes for now (with Steady movies on this computer); still pictures and mosaics keep Natural color. False color balances every false color set, methane ones too, as Natural color did before November 2026: the cloud heights a methane filter sees show as color. Raw filters draws each filter straight as a channel. Needs Balanced color." });
+      hint: "Natural color turns red, green and blue filter sets into the colors an eye would see. It shows sets taken through a methane filter the way Natural color (emulated) does. Other false color sets (ultraviolet, infrared) are balanced so the planet comes out gray, and only the differences between filters show as color. Where a set has more than three filters, the three nearest to red, green and blue are used. Natural color (emulated) also shows false color sets as an eye would have seen them: the body is drawn in its own color (Saturn and Jupiter cream, Titan orange, the icy moons gray). What the filters show becomes its brightness and, where the filters reach both sides of the visible range, its shades. Methane bands give no color. Your computer works this out, for now only in movie passes (with Steady movies on this computer); still pictures and mosaics keep Natural color. False color balances every false color set, including methane sets, as Natural color did before November 2026, so the cloud heights seen through a methane filter show as color. Raw filters draws each filter directly as a channel. Needs Balanced color." });
   D({ key: "cameras.autoCenter", section: "Processing", label: "Auto center", type: "toggle", value: true,
-      hint: "Every picture is turned a whole quarter (0, 90, 180 or 270 degrees, so it stays square) to bring north toward the top, by SPICE, the same for the whole pass. A moon or a planet whose whole disk fits goes in the middle, even where a picture caught only its edge, at one size for the whole pass, so the body holds still from picture to picture. Sky pictures with no body in them stay as the camera took them. Each camera window's settings button (the slider icon in its title bar) can turn it on or off for that window." });
+      hint: "Using SPICE, every picture is turned by a whole quarter turn (0, 90, 180 or 270 degrees, so it stays square) to bring north toward the top, the same way for the whole pass. If a moon's or planet's whole disk fits in the picture, the body is placed in the middle at one size for the whole pass, even when a picture shows only its edge, so it holds still from picture to picture. Sky pictures with no body in them stay as the camera took them. You can turn it on or off for one window with that window's settings button (the slider icon in its title bar)." });
   // where a centred picture's frame does not reach (Auto center keeps the body in the middle however much of the
   // view the frame leaves empty): the camera windows', the Movie Editor's and a film's background
   D({ key: "cameras.background", section: "Processing", label: "Background", type: "choice", menu: true, value: "#000000",
       options: [["#000000", "Black"], ["#1c1c1c", "Dark gray"], ["#555555", "Gray"], ["#0d1a33", "Midnight blue"], ["#ffffff", "White"]],
-      hint: "What shows where a picture's frame does not reach, as when Auto center keeps a body in the middle that the camera caught at its edge. Black by default." });
+      hint: "The color shown where a picture's frame does not reach. This happens, for example, when the camera caught a body at its edge and Auto center moves the body to the middle. Black by default." });
   window.cassiniBackground = () => S.get("cameras.background") || "#000000";
   S.on("cameras.background", v => document.documentElement.style.setProperty("--cam-bg", v || "#000000"));
   // HDR stills (frame_server hdr=1: an AVIF made from the picture and its recovery map, calibration.hdr_capture): asked
   // for only on a screen that says it shows HDR, so every other screen gets the same pictures at the same addresses
   D({ key: "cameras.hdr", section: "Processing", label: "HDR highlights", type: "choice", value: "auto",
       options: [["auto", "Auto"], ["off", "Off"]],
-      hint: "On a screen that shows HDR (an iPhone, a recent Mac, an HDR monitor), color pictures and processed frames come as HDR pictures: the bright parts the usual picture rolls off at white (a lit ring, a bright limb, glare the camera saturated) shine brighter than white, with their detail, while the rest looks as before. Other screens, and pictures not made in HDR yet, show the usual picture. Off always shows the usual picture." });
+      hint: "On a screen that can show HDR (an iPhone, a recent Mac, an HDR monitor), color pictures and processed frames are shown as HDR pictures. The brightest parts, which the usual picture flattens to white (a lit ring, a bright limb, glare that saturated the camera), shine brighter than white and keep their detail. The rest looks as before. Other screens, and pictures not yet made in HDR, show the usual picture. Off always shows the usual picture." });
   D({ key: "cameras.hdrGlow", section: "Processing", label: "Highlight glow", type: "range", value: 100, min: 0, max: 100, step: 10, unit: "%",
       hint: "How far above white the HDR highlights may go (with HDR highlights on): 0% shows them at white like the usual picture, 100% as bright as the screen allows. Needs a browser that supports it (Safari 26, Chrome 136 or newer)." });
   const hdrScreen = () => { try { return window.matchMedia("(dynamic-range: high)").matches; } catch (e) { return false; } };
@@ -2857,19 +2857,19 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   });
   // right under Auto center (as in each camera window's settings menu): how a movie pass is steadied
   D({ key: "movies.stabilize", section: "Processing", label: "Image stabilization", type: "toggle", value: false,
-      hint: "SPICE places each frame of a movie pass from where Cassini was said to point, and that is a few pixels off, differently from frame to frame, so a moon or Jupiter's clouds can wobble. On, each frame is matched to the frame before it by what the pictures show (the pipeline's own alignment, with SPICE's place as the starting guess), and held to SPICE over a longer stretch so the body stays where it is. Feature tracks (a cloud followed across Saturn) are always steadied. Off shows every frame where SPICE puts it." });
+      hint: "SPICE places each frame of a movie pass from the recorded pointing. That is a few pixels off, by a different amount in each frame, so a moon or Jupiter's clouds can wobble. On matches each frame to the frame before it by what the pictures show, with the pipeline's own alignment, starting from the SPICE position. Over a longer stretch the frames are held to SPICE, so the body stays where it is. Feature tracks (a cloud followed across Saturn) are always steadied. Off shows every frame where SPICE puts it." });
   D({ key: "movies.stabilizeSmooth", section: "Processing", label: "Stabilization smoothing", type: "range", value: 12, min: 4, max: 60, step: 4, unit: "frames",
-      hint: "How long the pictures are believed over SPICE (with Image stabilization on). Low takes out only the frame-to-frame wobble and follows SPICE closely; high also holds slow drifts still, trusting the frame-to-frame matching over that many frames." });
+      hint: "Over how many frames the picture matching is trusted more than SPICE (with Image stabilization on). Low removes only the wobble between frames and follows SPICE closely. High also holds slow drifts still, trusting the matching over that many frames." });
   D({ key: "movies.stabilizeLocal", section: "Processing", label: "Steady movies on this computer", type: "toggle", value: true,
-      hint: "Image stabilization and exposure normalization worked out by this computer, at any smoothing: it moves and brightens the frame the server already has, instead of the server drawing every frame again for each setting. True-color frames and a trail too; false-color sets, feature tracks and passes whose view follows the frames are still drawn by the server, and exports are always made by the server. Off asks the server to draw every frame again for each setting, which is slower and is not offered when many people are watching." });
+      hint: "Your computer does the Image stabilization and Even exposure, at any smoothing. It moves and brightens the frames the server has already made, so the server does not have to draw every frame again for each setting. This also covers true-color frames and trails. The server still draws false-color sets, feature tracks and passes whose view follows the frames, and it always makes exports. Off asks the server to draw every frame again for each setting, which is slower and is not offered when many people are watching." });
   D({ key: "movies.exposure", section: "Processing", label: "Even exposure", type: "toggle", value: true, was: [false],
-      hint: "A movie pass is drawn on one brightness scale, so a frame whose exposure the calibration did not fully even out, or one lit by stray light, flashes or jumps in brightness. On, each picture's brightness is measured against the picture before it, a frame or two far brighter or darker than their neighbours are brought to their level, and other jumps are spread over several frames, one gain for the whole picture so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame as the pass's scale draws it." });
+      hint: "A movie pass is drawn on one brightness scale. So when the calibration did not fully even out a frame's exposure, or stray light lit a frame, that frame flashes or jumps in brightness. On measures each picture's brightness against the picture before it. A frame or two that are far brighter or darker than their neighbors are brought to their level, and other jumps are spread over several frames. Each picture gets one gain for the whole picture, so a color picture keeps its color. Slow changes stay, and every frame keeps its data, only scaled. Off shows every frame on the pass's brightness scale." });
   D({ key: "movies.exposureSmooth", section: "Processing", label: "Even exposure over", type: "range", value: 8, min: 2, max: 30, step: 2, unit: "frames",
-      hint: "How many frames a flash or jump in brightness is evened over (with Even exposure on). Low keeps quick real changes; high evens the movie out more. The same as each camera window's Even exposure slider." });
+      hint: "Over how many frames a flash or jump in brightness is evened out (with Even exposure on). Low keeps quick real changes; high evens the movie out more. The same as each camera window's Even exposure slider." });
   D({ key: "movies.colorSmooth", section: "Processing", label: "Color smoothing", type: "toggle", value: true,
-      hint: "A run of color pictures mostly shares one set of filters, but now and then Cassini swapped one filter for another (a blue filter in place of a continuum one), and that picture comes out in other colors: peach and blue among green. On, every color picture's colors are moved toward the palette of the pictures round it in the same camera window (the most common one, so the odd one out never sets it), worked out by this computer. Only the balance between the colors moves: each pixel keeps its brightness (that is Even exposure's), and a run of one palette is left almost as it is." });
+      hint: "In a run of color pictures, most use the same set of filters. Now and then Cassini swapped one filter for another (a blue filter in place of a continuum one), and that picture comes out in other colors: peach and blue among green. On moves every color picture's colors toward the most common palette of the pictures around it in the same camera window, so the odd one out never sets the palette. Your computer works this out. Only the balance between the colors changes: each pixel keeps its brightness (Even exposure handles brightness), and a run with one palette is left almost as it is." });
   D({ key: "movies.colorSmoothStrength", section: "Processing", label: "Color smoothing strength", type: "range", value: 100, min: 10, max: 100, step: 10, unit: "%",
-      hint: "How far an odd picture's colors are moved toward its neighbours' palette (with Color smoothing on). 100% matches them; lower keeps more of the picture's own colors." });
+      hint: "How far an odd picture's colors are moved toward its neighbors' palette (with Color smoothing on). 100% matches them; lower keeps more of the picture's own colors." });
   D({ key: "cameras.mosaics", section: "Processing", label: "Mosaics in camera windows", type: "toggle", value: true,
       hint: "When Cassini steps a camera across a body, the window builds the mosaic tile by tile. Off shows every frame on its own, at face value. How a pass plays (mosaic, movie, mosaic movie) is under Cameras > Mosaic passes." });
   // what the frame server's picture routes are asked to add for them: nothing, the earlier stretch, or raw filters;
@@ -2906,7 +2906,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   cls("cameras.steady", "s-steady", true);
   D({ key: "cameras.passes", section: "Cameras", label: "Mosaic passes", type: "choice", value: "auto",
       options: [["auto", "Auto"], ["mosaic", "Always mosaic"], ["movie", "Always movie"], ["mosaic_movie", "Always mosaic movie"]],
-      hint: "How a pass of pictures plays: Auto builds the passes that step across a body as mosaics, rolls the ones that go round the same places again and again as mosaic movies, and plays movies and stares as frames. The others force one way for every pass. A camera window's settings button changes it for the pass it is showing." });
+      hint: "How a pass of pictures plays. Auto shows passes that step across a body as mosaics, passes that cover the same places again and again as mosaic movies, and movies and stares as single frames. The other choices use one way for every pass. A camera window's settings button changes it for the pass that window is showing." });
   D({ key: "cameras.fullRes", section: "Cameras", label: "Full resolution in full view", type: "toggle", value: true,
       hint: "A picture in full view (double-click it, F or the title bar button) always loads at the camera's full resolution, playing or paused, with a button to save it. Other windows show each picture at its true resolution, or smaller only when the window or screen is too small to show more." });
   D({ key: "cameras.drill", section: "Cameras", label: "Open channels in place", type: "toggle", value: true,
@@ -2915,7 +2915,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
       options: [["mosaic", "As in the mosaic"], ["own", "On its own"]],
       hint: "Hover a mosaic to outline a frame (arrow keys step to the others) and click to open it. As in the mosaic shows that spot of the mosaic, larger: the same levels, seams and colors. On its own shows the frames as a picture of their own, on their own scale. The switch by a held frame's breadcrumb changes it." });
   D({ key: "cameras.newestTile", section: "Cameras", label: "Mark the newest tile", type: "toggle", value: true,
-      hint: "While a mosaic or a mosaic movie builds, a faint line goes round the tile Cassini just took. It moves with each new tile and fades when none follows. On screen only: saved pictures and films never have it." });
+      hint: "While a mosaic or a mosaic movie builds, a faint line goes around the tile Cassini just took. It moves with each new tile and fades when no new tile comes. On screen only: saved pictures and films never have it." });
   D({ key: "cameras.stale", section: "Cameras", label: "Clear a quiet camera after", type: "range", value: 6, min: 1, max: 48, step: 1, unit: "h",
       hint: "A camera that has taken nothing for this long shows Idle instead of its last picture (an important picture stays longer, below)." });
   D({ key: "cameras.lingerColor", section: "Cameras", label: "Color pictures stay longer", type: "range", value: 1.5, min: 1, max: 4, step: 0.25, format: v => `${v}×`,
@@ -2957,7 +2957,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   const OLD_STARTS = [["2005-01-14T09:30:00", "Huygens lands"], ["2004-07-01T00:00:00", "Saturn arrival"]];
   D({ key: "playback.start", section: "Playback", label: "Start time", type: "choice", menu: true, value: "random", reload: true, was: ["2006-09-15T14:28:00"],
       options: [["random", "A famous moment, at random"], ...LANDINGS.map(l => [l.t, l.label]), ...OLD_STARTS],
-      hint: "The moment Cassini OS opens on. At random, each visit lands on one of the famous moments in this list, at its own speed. A shared link still opens on its own moment." });
+      hint: "The moment Cassini OS opens on. With the random choice, each visit opens on one of the famous moments in this list, at that moment's speed. A shared link still opens on the moment it links to." });
   // a visit with no moment of its own: put the landing's moment in the address, as a shared link would, so the viewer,
   // the links and the cutscenes all start from it (no view: the view stays the Settings one, as a bare visit's did). A pinned start from the old list keeps its old way (time only).
   (function land() {
@@ -2992,7 +2992,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   D({ key: "playback.autoplay", section: "Playback", label: "Play when Cassini OS opens", type: "toggle", value: true,
       hint: "Off opens paused at the starting moment." });
   D({ key: "playback.builtOnly", section: "Playback", label: "Only years with pictures built", type: "toggle", value: true, reload: true,
-      hint: "When the picture cache holds only some years (a test build of one year), the timeline, Moments and Highlights keep to them. Off shows the whole mission, and pictures outside them are made as they are asked for." });
+      hint: "When pictures are built for only some years (for example, a test build of one year), the timeline, Moments and Highlights show only those years. Off shows the whole mission, and pictures outside those years are made when they are needed." });
   // the playback speed scale, shared by the dock's speed slider, this setting and the clock's read-out: mission
   // seconds per second, from real time to a month a second, on a log scale that lands on round values
   const SP = window.cassiniSpeed = {
@@ -3035,12 +3035,12 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
       hint: "Draw the cameras' fields of view when looking at a body too. Off shows them only while the view is on Cassini." });
   // the viewer's picture footprints (updateFootprints) read view.footprints and view.footprintCount
   D({ key: "view.footprints", section: "View", label: "Picture footprints", type: "toggle", value: false,
-      hint: "Outline on each body where Cassini's last pictures landed: every frame's field of view from the pointing data, laid on the surface and turning with it, the newest in warm white and older ones fading. Narrow-angle frames are the small blue squares, wide-angle the large grey-blue ones." });
+      hint: "Outlines on each body where Cassini's last pictures landed: every frame's field of view from the pointing data, laid on the surface and turning with it. The newest is warm white and older ones fade. Narrow-angle frames are the small blue squares, wide-angle frames the large gray-blue ones." });
   D({ key: "view.footprintCount", section: "View", label: "Footprints of the last", type: "range", log: true, value: 50, min: 1, max: 1000,
       stops: [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
       hint: "How many of the latest pictures leave a footprint. Only pictures that land on a body count." });
   D({ key: "view.footprintPictures", section: "View", label: "Pictures in the footprints", type: "toggle", value: false,
-      hint: "With Picture footprints on, the newest footprints show the pictures themselves, laid on the body where the camera saw them: the frame server's processed frame (as in the camera windows, not centered), stretched over the footprint ray by ray, so each part of the picture sits where it looked. Newest on top; older ones fade." });
+      hint: "With Picture footprints on, the newest footprints show the pictures themselves, laid on the body where the camera saw them. Each is the frame server's processed frame (as in the camera windows, not centered), stretched over the footprint ray by ray, so each part of the picture sits on the place it shows. Newest on top; older ones fade." });
   D({ key: "view.footprintPictureCount", section: "View", label: "Pictures laid down", type: "range", log: true, value: 20, min: 1, max: 100,
       stops: [1, 2, 3, 5, 10, 20, 30, 50, 100], format: v => `${v} ${+v === 1 ? "picture" : "pictures"}`,
       hint: "How many of the newest footprints show their picture. Each one is a picture to load, so more is slower." });
@@ -3056,11 +3056,11 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
       hint: "How long the view takes to swing back to the camera's pointing once a spin ends." });
   D({ key: "view.textures", section: "View", label: "Surface maps", type: "choice", value: "2k", reload: true,
       options: [["0", "Off"], ["1k", "1k"], ["2k", "2k"], ["4k", "4k"]],
-      hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still wins." });
+      hint: "Map size for Saturn and the moons. 4k is sharper and slower to load; Off keeps the plain painted look. A ?tex= link still takes priority." });
   // the viewer reads view.sky when it builds the scene and follows view.skyBrightness live
   D({ key: "view.sky", section: "View", label: "Star sky", type: "choice", value: "auto", reload: true,
       options: [["auto", "Auto"], ["0", "Off"], ["2k", "2k"], ["4k", "4k"], ["8k", "8k"]],
-      hint: "The real night sky (<button class='credit' data-about='star-sky'>NASA's Deep Star Maps</button>: Hipparcos, Tycho-2 and Gaia stars and the Milky Way), placed where Cassini saw it. Auto picks 8k on a desktop and 4k on a phone; 8k is the sharpest and takes the most memory (11 MB to load), 2k is the lightest but soft. Off keeps the old painted dots. A ?sky= link still wins." });
+      hint: "The real night sky (<button class='credit' data-about='star-sky'>NASA's Deep Star Maps</button>: Hipparcos, Tycho-2 and Gaia stars and the Milky Way), placed where Cassini saw it. Auto picks 8k on a desktop and 4k on a phone. 8k is the sharpest and takes the most memory (11 MB to load); 2k is the lightest but soft. Off keeps the old painted dots. A ?sky= link still takes priority." });
   D({ key: "view.skyBrightness", section: "View", label: "Star brightness", type: "range", value: 1, min: 0, max: 2.5, step: 0.05,
       format: v => `${Math.round(v * 100)}%`, hint: "How bright the stars and the Milky Way are drawn." });
   // the viewer reads view.atmospheres (makeAtmosphere)
@@ -3083,7 +3083,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
       hint: "A mosaic pass shows once it is finished: the camera window keeps the picture from before the pass and puts up the whole mosaic at its last frame, and movie mode steps straight to it. Off shows the mosaic building tile by tile." });
   // movie passes in the camera and body windows (head-quiet.html cameraFeed reads these)
   D({ key: "movies.steady", section: "Movie", label: "Steady movie passes", type: "toggle", value: true,
-      hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), every frame is centered by SPICE, north toward the top, on one brightness scale and one size for the whole pass, so the body holds still and the picture does not pump. Off shows each frame as it is." });
+      hint: "When a pass plays as a movie in a camera or body window (a stare, a ring or storm movie), SPICE centers every frame, with north toward the top, on one brightness scale and at one size for the whole pass. The body holds still and the brightness does not pulse. Off shows each frame as it is." });
   D({ key: "movies.filmstrip", section: "Movie", label: "Filmstrip", type: "toggle", value: true,
       hint: "Under a window playing a movie pass: every frame of the pass along a strip, with the frames around the one shown. Click or drag along it to move through the pass." });
   cls("movies.filmstrip", "s-nofilmstrip", false);
@@ -3092,9 +3092,9 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   // a film's own stabilization (film-steady.html), the Movie Editor's Framing by default
   D({ key: "movies.filmSteady", section: "Movie", label: "Additional stabilization", type: "range", value: 0, min: 0, max: 60, step: 2,
       format: v => (+v ? `${v} pictures` : "Off"),
-      hint: "For the Movie Editor and saved movies: Auto center puts each picture's body where SPICE says it is, and on a small moon in the narrow-angle camera that can be off by a good part of the moon, differently from picture to picture, so the movie wobbles. On, this computer matches each picture of the movie to the one before it by what the two show (the pipeline's own alignment) and takes the wobble out, keeping slow motion over this many pictures. Higher holds the body stiller; the Movie Editor's Framing sets it for each movie." });
+      hint: "For the Movie Editor and saved movies. Auto center puts each picture's body where SPICE says it is. For a small moon in the narrow-angle camera, that can be off by a good part of the moon's size, by a different amount in each picture, so the movie wobbles. On, your computer matches each picture to the one before it by what the two show (with the pipeline's own alignment) and removes the wobble, keeping slow motion over this many pictures. Higher holds the body stiller. The Movie Editor's Framing slider sets it for each movie." });
   D({ key: "movies.filmSteadyAuto", section: "Movie", label: "Steady small bodies by themselves", type: "toggle", value: true,
-      hint: "With Additional stabilization Off, a movie of a small body (under a tenth of the frame across, as Atlas or Pan in the narrow-angle camera, where SPICE's few pixels of error are a good part of the body) is steadied anyway, over 12 pictures. The Movie Editor's Framing slider still sets it for each movie, Off included." });
+      hint: "With Additional stabilization off, a movie of a small body is steadied anyway, over 12 pictures. A small body is under a tenth of the frame across, as Atlas or Pan in the narrow-angle camera, where SPICE's few pixels of error are a good part of the body. The Movie Editor's Framing slider still sets it for each movie, including Off." });
   D({ key: "movies.laps", section: "Movie", label: "Mosaic movies keep", type: "range", value: 1, min: 1, max: 6, step: 1, unit: "laps",
       hint: "A mosaic movie (the camera going over the same mosaic again and again, as on the approach to Jupiter) plays as a mosaic that never empties: each new tile replaces its own earlier copy. 1 is a time-lapse; more keeps that many copies of each tile, older ones under the newest." });
   // how often a mosaic movie's picture changes (head-quiet.html complete and cameraFeed, export.py whole=)
@@ -3104,7 +3104,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
   // a mosaic movie's older tiles fade (obs_mosaic.rolling_layout fade=, persist=): Rolling rather than Time-lapse
   D({ key: "movies.fade", section: "Movie", label: "Older tiles fade over", type: "range", value: 0, min: 0, max: 120, step: 4,
       format: v => v ? `${v} frames` : "Off",
-      hint: "In a mosaic movie, each tile dims as the camera moves on, so the mosaic shows where the camera is now and where it was a moment ago: the newest tile is full brightness and a tile this many frames older has faded down to the level below. Off is a time-lapse: every place's newest tile stays at full brightness until the camera comes back to it." });
+      hint: "In a mosaic movie, each tile dims as the camera moves on, so the mosaic shows where the camera is now and where it was a moment ago. The newest tile is at full brightness, and a tile this many frames older has faded down to the level below. Off is a time-lapse: every place's newest tile stays at full brightness until the camera comes back to it." });
   D({ key: "movies.persist", section: "Movie", label: "Faded tiles keep", type: "range", value: 35, min: 0, max: 100, step: 5,
       format: v => `${v}%`,
       hint: "How bright an old tile stays once it has faded (with Older tiles fade over on). 0% leaves only the tiles taken in the last frames; 100% is no fade at all." });
@@ -3121,7 +3121,7 @@ window.addEventListener("keydown", e => { if (window.cassiniKeyGate) window.cass
 (function () {
   const S = window.cassiniSettings;
   S.define({ key: "playback.pauseHidden", section: "Playback", label: "Pause in the background", type: "toggle", value: true,
-    hint: "While the tab is hidden or the browser is minimized, everything stops: the clock, the 3D view, picture requests and sound. It carries on where it stopped when you come back." });
+    hint: "While the tab is hidden or the browser is minimized, everything stops: the clock, the 3D view, picture requests and sound. When you come back, it picks up where it stopped." });
   S.define({ key: "playback.pauseBlur", section: "Playback", label: "Also when the window loses focus", type: "toggle", value: true,
     hint: "Pause while you work in another window too, even if Cassini OS is still on screen. Off keeps it playing on a second screen." });
 
@@ -5659,7 +5659,7 @@ function targetLabel(k) {
   // windows back. Settings > Cameras: cameras.closedOff, cameras.momentsReopen.
   const CAMWIN = { N: "imgcard", W: "wacard" }, CAMWORD = { N: "narrow-angle", W: "wide-angle" };
   S.define({ key: "cameras.closedOff", section: "Cameras", label: "A closed camera window turns its camera off", type: "toggle", value: true,
-    hint: "With only one of the two camera windows open, the other camera's pictures are not loaded or processed, the timeline shows the open camera's frames only, and playback and movie mode go by its pictures alone." });
+    hint: "When only one of the two camera windows is open, the other camera's pictures are not loaded or processed. The timeline shows only the open camera's frames, and playback and movie mode follow only its pictures." });
   S.define({ key: "cameras.momentsReopen", section: "Cameras", label: "Moments open both camera windows", type: "toggle", value: true,
     hint: "Jumping to a Moment brings back a camera window that is closed or minimized." });
   const camOpen = c => { const w = $(CAMWIN[c]); return !!w && !w.hidden && !w.dataset.min; };
@@ -5954,7 +5954,7 @@ function targetLabel(k) {
     ["movies.exposure", "movies.exposureSmooth", "Even exposure", 2, 30, 2],
     ["movies.colorSmooth", "movies.colorSmoothStrength", "Even color", 10, 100, 10]];
   // the note under a row's label while it is on: its smoothing in frames, or color smoothing's strength
-  const steadyNote = (key, v) => key === "movies.colorSmooth" ? `${v}% toward the pictures round it` : `smoothed over ${v} frames`;
+  const steadyNote = (key, v) => key === "movies.colorSmooth" ? `${v}% toward the pictures around it` : `smoothed over ${v} frames`;
   function winMenu(win, card) {
     const bar = win.querySelector(".titlebar");
     let btn = bar.querySelector(".winopt");
@@ -6181,7 +6181,7 @@ function targetLabel(k) {
     function orbitOpen(on) {
       if (!orbitPop) {
         orbitPop = document.createElement("div"); orbitPop.className = "orbitpop"; orbitPop.hidden = true;
-        orbitPop.innerHTML = '<div class="orbitbig"></div><span class="orbitnote">Seen from above the rings, the Sun up. Distances from Saturn on a square-root scale.</span>';
+        orbitPop.innerHTML = '<div class="orbitbig"></div><span class="orbitnote">Seen from above the rings, with the Sun toward the top. Distances from Saturn are on a square-root scale.</span>';
         for (const t of ["click", "dblclick", "pointerdown"]) orbitPop.addEventListener(t, e => { e.stopPropagation(); if (t === "click") orbitOpen(false); });
         well.appendChild(orbitPop);
       }
@@ -7141,7 +7141,7 @@ function targetLabel(k) {
     // frames open from it like any other mosaic's.
     const openM = document.createElement("button");
     openM.className = "openmosaic"; openM.hidden = true; openM.textContent = "Open its mosaic";
-    openM.title = "Hold this window on the whole mosaic of the pass this frame is in (Esc goes back)";
+    openM.title = "Show the whole mosaic of this frame's pass in this window (Esc goes back)";
     for (const t of ["dblclick", "pointerdown"]) openM.addEventListener(t, e => e.stopPropagation());
     openM.addEventListener("click", e => { e.stopPropagation(); unfocus(e); openMosaic(); });
     well.appendChild(openM);
@@ -7173,7 +7173,7 @@ function targetLabel(k) {
     // whole mosaic, and the clock stops before the camera's next picture.
     const finishB = document.createElement("button");
     finishB.className = "finishmosaic"; finishB.hidden = true; finishB.textContent = "Finish mosaic";
-    finishB.title = "Jump to the moment this pass's last tile is taken: the whole mosaic, before the next picture";
+    finishB.title = "Jump to the moment the last tile of this pass is taken, to see the whole mosaic before the next picture";
     for (const t of ["dblclick", "pointerdown"]) finishB.addEventListener(t, e => e.stopPropagation());
     finishB.addEventListener("click", e => { e.stopPropagation(); unfocus(e); finishMosaic(); });
     well.appendChild(finishB);
@@ -7847,11 +7847,11 @@ function targetLabel(k) {
   if (SETTINGS) {
     document.querySelectorAll("#menubar [data-rate]").forEach(li => li.remove());
     maxRate = +SETTINGS.define({ key: "playback.maxImageRate", section: "Playback", label: "Maximum images per second",
-      hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new pictures a second. Only frames that change the picture count: a color set counts once, at its last filter. 0 = no limit.",
+      hint: "When Cassini takes a burst of pictures, the timeline slows down so each camera window shows at most this many new pictures a second. Only frames that change the picture count; a color set counts once, at its last filter. 0 = no limit.",
       type: "range", value: RATE_DEFAULT, was: [5], min: 0, max: 24, step: 1, unit: "images/s" }) || 0;
     SETTINGS.on("playback.maxImageRate", v => { maxRate = +v || 0; });
     SETTINGS.define({ key: "playback.burstFloor", section: "Playback", label: "Bursts slow playback to no less than",
-      hint: "However many pictures a burst has, the timeline keeps at least this share of the chosen speed, so a faster speed always plays faster (skipping pictures in long bursts). 100 % = never slow down.",
+      hint: "However many pictures a burst has, the timeline plays at no less than this share of the chosen speed, so a faster speed always plays faster (long bursts skip some pictures). 100 % = never slow down.",
       type: "range", value: FLOOR_DEFAULT * 100, min: 5, max: 100, step: 5, unit: "%" });
     SETTINGS.on("playback.burstFloor", v => { burstFloor = (+v || 0) / 100; });
   } else {
@@ -7869,8 +7869,8 @@ function targetLabel(k) {
   const BEHIND_DEFAULT = 2;
   let maxBehind = BEHIND_DEFAULT, paced = 1;
   if (SETTINGS) {
-    maxBehind = +SETTINGS.define({ key: "playback.maxBehind", section: "Playback", label: "Pictures a window may fall behind",
-      hint: "When the frame server cannot make pictures as fast as the timeline passes them (a mosaic movie nobody has watched yet), the timeline slows down in proportion so each camera window stays within this many frames of the clock. 0 = never slow down.",
+    maxBehind = +SETTINGS.define({ key: "playback.maxBehind", section: "Playback", label: "Most pictures a window can lag",
+      hint: "Sometimes the frame server cannot make pictures as fast as the timeline reaches them, for example in a mosaic movie that nobody has watched yet. Then the timeline slows down in proportion, so each camera window stays within this many frames of the clock. 0 = never slow down.",
       type: "range", value: BEHIND_DEFAULT, min: 0, max: 10, step: 1, unit: "frames" });
     if (!isFinite(maxBehind)) maxBehind = BEHIND_DEFAULT;
     SETTINGS.on("playback.maxBehind", v => { maxBehind = +v || 0; });
@@ -7900,7 +7900,7 @@ function targetLabel(k) {
   // pictures straight back. All the way right = always load.
   if (SETTINGS) SETTINGS.define({ key: "playback.picturesUpTo", section: "Playback", label: "Load pictures up to", type: "range", log: true,
       value: 86400, min: 60, max: cassiniSpeed.max, stops: cassiniSpeed.stops.filter(v => v >= 60), format: v => v >= cassiniSpeed.max ? "any speed" : cassiniSpeed.label(v),
-      hint: "Faster than this, the camera windows stop loading pictures (no frame server keeps up) and the timeline plays at the full speed; they show the picture of the moment again as soon as you slow down, pause or scrub. The time warp arrows and the speed slider's track are dimmer past this point. All the way right = always load." });
+      hint: "Above this speed, the camera windows stop loading pictures, because no frame server can keep up, and the timeline plays at full speed. The windows show the current picture again as soon as you slow down, pause or scrub. The time warp arrows and the speed slider's track are dimmer past this point. All the way right = always load." });
   function picturesCap() { return +S.get("playback.picturesUpTo") || 86400; }
   function tooFast() {
     const cap = picturesCap();
@@ -8115,7 +8115,7 @@ function targetLabel(k) {
       const b = w.querySelector(".flagbtn"); if (b) { b.classList.add("done"); setTimeout(() => b.classList.remove("done"), 2500); }
       say(`Flagged · ${res.count} so far`, res.name);
     } catch (e) {
-      say(e.message === "404" || e.message === "501" ? "This frame server can't save flags yet (it needs restarting on the new version)" : "Could not save the flag: the frame server did not answer");
+      say(e.message === "404" || e.message === "501" ? "This frame server can't save flags yet (it needs to be restarted with the new version)" : "Could not save the flag: the frame server did not answer");
     }
   }
 
@@ -8156,7 +8156,7 @@ function targetLabel(k) {
 
   if (S) {
     S.define({ key: "interface.flags", section: "Interface", label: "Flag button on picture windows", type: "toggle", value: true,
-      hint: "A flag in each picture window's title bar (or R) saves the picture as shown, with its frames and the mission time, to the frame server's flagged-pictures folder, so odd pictures can be looked into later." });
+      hint: "A flag button in each picture window's title bar (or the R key) saves the picture as shown, with its frames and the mission time, to a folder of flagged pictures on the frame server, so odd pictures can be checked later." });
     S.on("interface.flags", v => document.body.classList.toggle("noflags", !v));
     S.define({ key: "interface.flagged", section: "Interface", label: "Flagged pictures", type: "action", button: "Open",
       hint: "Every flagged picture on one page, newest first, with a link back to its moment.", run: () => window.open(`${FRAMES}/flags/`, "_blank", "noopener") });
@@ -8322,13 +8322,13 @@ function targetLabel(k) {
     // a new key, so the per-body windows start off for everyone again, also where cameras.bodyWindows was saved on:
     // the two camera windows are the default (Sam 2026-10-28)
     B.on = !!S.define({ key: "cameras.bodyWindowsOptIn", section: "Cameras", label: "Extra windows for each body", type: "toggle", value: false,
-      hint: "Off: one narrow-angle and one wide-angle window. On: each target Cassini images gets its own narrow-angle and wide-angle windows instead, up to the number below for each camera." });
+      hint: "Off: one narrow-angle and one wide-angle window. On: each body that Cassini takes pictures of gets its own narrow-angle and wide-angle windows instead, up to the number below for each camera." });
     B.perCam = +S.define({ key: "cameras.bodyWindowsPerCamera", section: "Cameras", label: "Windows per camera", type: "range", value: 2, min: 1, max: 4, step: 1,
-      hint: "The most body windows each camera has up at once: the target it has just imaged, and the ones before it. A newer target takes an older window's place." });
-    B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows before they make way", type: "range", value: 4, min: 1, max: 12, step: 1,
-      hint: "Up to this many body windows stay up however long their cameras go quiet. With more, the least relevant close first." });
+      hint: "The most body windows open at once for each camera: one for the body the camera just took pictures of, and others for the bodies before it. A window for a newer body replaces an older one." });
+    B.room = +S.define({ key: "cameras.bodyWindowRoom", section: "Cameras", label: "Body windows kept open", type: "range", value: 4, min: 1, max: 12, step: 1,
+      hint: "Up to this many body windows stay open, however long their cameras take no pictures. When there are more, the least relevant ones close first." });
     B.linger = +S.define({ key: "cameras.bodyWindowLinger", section: "Cameras", label: "Body window stays for at least", type: "range", value: 30, min: 5, max: 120, step: 5, unit: "s",
-      hint: "Seconds of playback a single frame stays up when the screen is busy, shortened as more windows crowd in. Color pictures and mosaics stay longer (the two settings below)." });
+      hint: "How many seconds of playback a single frame stays open when the screen is busy. The time gets shorter as more windows open. Color pictures and mosaics stay longer (the two settings below)." });
     B.max = +S.define({ key: "cameras.bodyWindowMax", section: "Cameras", label: "Most bodies with windows at once", type: "range", value: 4, min: 1, max: 8, step: 1 });
   }
   if (q !== null) B.on = q !== "0";
@@ -8610,7 +8610,7 @@ function targetLabel(k) {
     const st = (h.stacked || []).filter(n => n > 1);
     return [h.centred ? "centered, north up" : h.frame_offset ? "close-up, placed on the body, north up" : "not centered",
             st.length ? `stacked ${st.join("+")}` : "", h.calibrated ? "calibrated" : "",
-            (h.aligned || []).some(a => /^not aligned|^failed/.test(a)) ? (h.grey ? "channels not aligned, drawn grey" : "channels not aligned") : "",
+            (h.aligned || []).some(a => /^not aligned|^failed/.test(a)) ? (h.grey ? "channels not aligned, drawn gray" : "channels not aligned") : "",
             h.mosaic > 1 ? `mosaic of ${h.mosaic}` : ""].filter(Boolean).join(" · ");
   }
   function show(i) {
@@ -8883,21 +8883,21 @@ function targetLabel(k) {
   if (!S || !AC) return;
   const D = d => S.define(Object.assign({ section: "Sound" }, d));
   D({ key: "sound.on", label: "Sound", type: "toggle", value: true,
-      hint: "A chime for each picture that arrives, after the Huygens descent movie. Browsers start it at your first click or key press. The speaker by the play button, the one in the menu bar, or S mutes it." });
+      hint: "A chime plays for each picture that arrives, inspired by the Huygens descent movie. Browsers start the sound at your first click or key press. To mute it, use the speaker by the play button, the one in the menu bar, or the S key." });
   D({ key: "sound.voice", label: "Instrument", type: "choice", menu: true, value: "bell",
       options: [["bell", "Bell (default)"], ["glass", "Glass"], ["crystal", "Crystal"], ["wood", "Wood"], ["pluck", "Pluck"], ["sine", "Soft sine"], ["night", "Night bell"]],
       hint: "The synthesized voice that plays the notes for arriving pictures, color sets and mosaics. Every voice follows the same pitches and rules." });
   D({ key: "sound.volume", label: "Volume", type: "range", value: 70, min: 0, max: 100, step: 1, unit: "%" });
   D({ key: "sound.chimes", label: "Picture chimes", type: "range", value: 80, min: 0, max: 100, step: 1, unit: "%",
-      hint: "Pitch from the filter (blue high, red and infrared low) and the target's size; the narrow-angle camera rings an octave above the wide-angle one." });
+      hint: "The pitch comes from the filter (blue high, red and infrared low) and the target's size. The narrow-angle camera plays an octave above the wide-angle one." });
   D({ key: "sound.chords", label: "Color set chords", type: "range", value: 60, min: 0, max: 100, step: 1, unit: "%",
-      hint: "When a color picture is complete, its channels' notes together." });
+      hint: "When a color picture is complete, its channels' notes play together." });
   D({ key: "sound.mosaic", label: "Mosaic tiles", type: "range", value: 50, min: 0, max: 100, step: 1, unit: "%",
       hint: "A high note that climbs with each new tile of a mosaic, and a chord when it is finished." });
   D({ key: "sound.hum", label: "Spacecraft tones", type: "range", value: 25, min: 0, max: 100, step: 1, unit: "%",
-      hint: "Two quiet tones: one rises and wavers while Cassini turns, the other rises as it nears its target." });
+      hint: "Two quiet tones: one rises and wavers while Cassini turns, and the other rises as Cassini nears its target." });
   D({ key: "sound.crescendo", label: "Flyby crescendo", type: "range", value: 85, min: 0, max: 100, step: 1, unit: "%",
-      hint: "The closer Cassini is to its target (for its size), the bigger the music: louder, brighter chimes, a swelling chord and a quickening pulse." });
+      hint: "The closer Cassini is to its target (relative to the target's size), the bigger the music: louder, brighter chimes, a swelling chord and a quickening pulse." });
   D({ key: "sound.length", label: "Note length", type: "range", value: 1.4, min: 0.2, max: 4, step: 0.1, unit: "s",
       hint: "How long a chime rings at 10 min/s. Faster playback shortens it." });
   // (a new key, so a browser that saved the old, heavier echo setting starts from the lighter default)
@@ -9366,22 +9366,22 @@ function targetLabel(k) {
   if (S) {
     const D = d => S.define(Object.assign({ section: "Export" }, d));
     D({ key: "export.adaptive", label: "Adaptive frame rate", type: "toggle", value: true,
-        hint: "Pictures stay on screen for their real gap to the next one, sped up: bursts flip fast, quiet spells linger (1/30 to 1/2 s each)." });
+        hint: "Each picture stays on screen for its real time gap to the next one, sped up. Pictures in a burst go by quickly, and pictures before a quiet spell stay longer (1/30 to 1/2 s each)." });
     D({ key: "export.fps", label: "Fixed frame rate", type: "range", value: 12, min: 2, max: 30, step: 1, unit: "fps",
         hint: "Pictures per second when the frame rate is not adaptive." });
     // (the sizes the picker offers, SIZES: a size kept here before it went, 768 or 1536, is not one of them and reads as 1024)
     D({ key: "export.size", label: "Picture size", type: "choice", value: 1024, options: [[512, "512 px"], [1024, "1024 px"], [2048, "Up to 2048 px"]],
-        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Up to 2048, mosaics are drawn up to that size, each only as big as its pass has detail for." });
+        hint: "Pixels per camera in an exported film; 1024 is a full Cassini frame. Up to 2048, mosaics are drawn up to that size, but each only as big as its pass has detail for." });
     D({ key: "export.full", label: "Mosaics at full resolution", type: "toggle", value: false,
-        hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel its frames took (up to 4096 px a side) instead of fitting 1024. Extra work on the frame server, made only when asked for: pre-process the stretch first." });
-    D({ key: "export.sound", label: "Sound", type: "toggle", value: false, was: [true], hint: "Exported films carry the picture sounds, set as in Settings > Sound." });
+        hint: "Picture size Full: a mosaic or mosaic movie keeps every pixel of its frames (up to 4096 px a side) instead of fitting into 1024. This is extra work for the frame server, so it is made only when you ask for it: pre-process the stretch first." });
+    D({ key: "export.sound", label: "Sound", type: "toggle", value: false, was: [true], hint: "Exported films include the picture sounds, as set in Settings > Sound." });
     D({ key: "export.boomerang", label: "Boomerang", type: "toggle", value: false,
         hint: "The film plays forward, then back to its first picture: twice as long, good for a movie of a few frames. Suggested when a film would last under a second." });
     D({ key: "export.hdr", label: "HDR film", type: "toggle", value: false,
-        hint: "The film as HDR video (HEVC, HDR10): the bright parts the usual film rolls off at white (lit rings, bright limbs, glare) shine brighter than white on an HDR screen (an iPhone, a recent Mac or TV). Made by the frame server; plays as the usual film's brightness on other screens only where the player tone maps it, so keep it off for films meant for anywhere." });
+        hint: "The film as HDR video (HEVC, HDR10). On an HDR screen (an iPhone, a recent Mac or TV), the brightest parts, which the usual film flattens to white (lit rings, bright limbs, glare), shine brighter than white. The frame server makes it. On other screens it looks as bright as the usual film only where the player tone maps it, so keep it off for films meant to play anywhere." });
     D({ key: "export.caption", label: "Captions", type: "toggle", value: true, hint: "A strip under each camera with the time, target, filters and kind of picture." });
     D({ key: "export.local", label: "Make films on this computer", type: "toggle", value: true,
-        hint: "The film is put together and encoded by this browser from the pictures the frame server already has (and the movie steps worked out here), so making it costs the server nothing but the pictures. Off, or at sizes above 1024, Mosaics at full resolution or in a browser that cannot encode video, the frame server makes it." });
+        hint: "This browser puts the film together and encodes it, from the pictures the frame server already has and the movie steps worked out here. The server only has to provide the pictures. When this is off, at sizes above 1024, with Mosaics at full resolution, or in a browser that cannot encode video, the frame server makes the film." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const setOpt = (k, v) => { if (S) S.set(k, v); };
@@ -9582,7 +9582,7 @@ function targetLabel(k) {
       await steadied({ done: false });
       const FS = window.cassiniFilmSteady, body = FS && FS.body ? FS.body() : "";
       const r = await fetch(`${FRAMES}/export?${params()}`, { method: "POST", ...(body ? { body, headers: { "Content-Type": "application/x-www-form-urlencoded" } } : {}) }), job = await r.json();
-      if (!r.ok) return setState(job.error || "The server refused the export.", 0);
+      if (!r.ok) return setState(job.error || "The server did not accept the export.", 0);
       X.job = job;
       if (opt("export.sound", false) && !job.audio && job.state !== "failed") soundtrack(job.id, plan);
       follow(job);
@@ -10199,10 +10199,10 @@ function targetLabel(k) {
   const most = () => { const v = +opt("segment.maxFrames", MOST_NONE) || MOST_NONE; return v >= MOST_NONE ? 0 : v; };
   if (S) {
     // the most frames one stretch makes ahead (prebuild.py SEGMENT_MAX: the server may set its own ceiling over this)
-    S.define({ key: "segment.maxFrames", section: "Playback", label: "Make ahead up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
+    S.define({ key: "segment.maxFrames", section: "Playback", label: "Make in advance up to", type: "range", value: MOST_NONE, min: 5000, max: MOST_NONE, step: 5000,
       format: v => v >= MOST_NONE ? "No limit" : `${v.toLocaleString()} frames`,
-      hint: "The most frames of a stretch opened in the Movie Editor that are made ahead while it opens (a busy day near Saturn has about 1,500). A long stretch takes a while: the editor shows how long is left, can open before it is done, and what is made stays made. A public site may set its own limit." });
-    S.define({ key: "segment.hint", section: "Playback", label: "Suggest making a stretch ahead when movie mode waits", type: "toggle", value: true,
+      hint: "The most frames of a stretch that are made in advance while it opens in the Movie Editor (a busy day near Saturn has about 1,500). A long stretch takes a while. The editor shows how long is left and can open before it is done, and pictures already made are kept. A public site may set its own limit." });
+    S.define({ key: "segment.hint", section: "Playback", label: "Suggest making a stretch in advance when movie mode waits", type: "toggle", value: true,
       hint: "A quiet note when movie mode spends most of its time waiting for pictures to be made." });
   }
   const bar = $("segbar"), hint = $("seghint");
@@ -10319,9 +10319,9 @@ function targetLabel(k) {
       try {
         const r = await fetch(`${FRAMES}/prebuild?${params(a, b)}&most=${most()}`, { method: "POST" }), j = await r.json().catch(() => ({}));
         if (me.gone) return;
-        if (!r.ok) { tell({ state: "failed", error: j.error || "The frame server cannot make that ahead.", done: 0, total: 0 }); if (J === me) J = null; return; }
+        if (!r.ok) { tell({ state: "failed", error: j.error || "The frame server cannot make that stretch in advance.", done: 0, total: 0 }); if (J === me) J = null; return; }
         follow(j);
-      } catch (err) { if (!me.gone) { tell({ state: "failed", error: `No frame server at ${FRAMES} that makes pictures ahead.`, unsupported: true, done: 0, total: 0 }); if (J === me) J = null; } }
+      } catch (err) { if (!me.gone) { tell({ state: "failed", error: `No frame server at ${FRAMES} that makes pictures in advance.`, unsupported: true, done: 0, total: 0 }); if (J === me) J = null; } }
     })();
     return me;
   }
@@ -10330,7 +10330,7 @@ function targetLabel(k) {
   const TITLE = document.title;
   function titled() {
     const j = J && J.job, busy = j && BUSY.test(j.state);
-    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% made ahead · ${TITLE}` : TITLE;
+    document.title = busy && j.total ? `${Math.floor(100 * j.done / j.total)}% made in advance · ${TITLE}` : TITLE;
   }
 
   // ---- the timeline: how far the stretch is made, a line along its foot ----
@@ -10360,7 +10360,7 @@ function targetLabel(k) {
   const away = $("awaynote"), awayText = away && away.textContent;
   document.addEventListener("cassini:away", e => {
     const busy = J && J.job && BUSY.test(J.job.state);
-    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the stretch in the Movie Editor keeps being made ahead` : awayText;
+    if (away) away.textContent = e.detail.away && busy ? `${awayText} · the pictures for the Movie Editor are still being made` : awayText;
     if (!e.detail.away) titled();
   });
 
@@ -10405,10 +10405,10 @@ function targetLabel(k) {
     hint: "Saved pictures and films are kept on this device, in the browser. Off: only how each was made is kept, and the frame server makes it again when you open it (needs the server)." });
   const keepFiles = () => !S || S.get("gallery.keepFiles") !== false;
   if (S) S.define({ key: "gallery.exportMeta", section: "Gallery", label: "Export with metadata", type: "toggle", value: false,
-    hint: "Export Library also writes how each item was made and its thumbnail (gallery.json), so Import can bring the gallery back. Off: just the pictures and films." });
+    hint: "Export Library also saves how each item was made, and its thumbnail (gallery.json), so Import can restore the gallery. Off: just the pictures and films." });
   const withMeta = () => !!(S && S.get("gallery.exportMeta"));
   if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit graphic on saved pictures", type: "toggle", value: false,
-    hint: "A downloaded or shared picture gets a small card in its corner: Cassini's orbit at that moment, the line to what the camera looked at, the date and the distance. The same box is in a picture's save menu and by the gallery's Download." });
+    hint: "A downloaded or shared picture gets a small card in its corner: Cassini's orbit at that moment, a line to what the camera looked at, the date and the distance. The same checkbox is in a picture's save menu and next to the gallery's Download." });
   // a picture handed out (downloaded, shared) with the orbit graphic in its corner, when that is on: at the moment of
   // its first frame (or the moment it was saved), looking at that frame's target (cassiniOrbit.inset, orbit.html)
   const graphicOn = () => !!(S && S.get("gallery.orbitInset") && window.cassiniOrbit);
@@ -10591,7 +10591,7 @@ function targetLabel(k) {
       return item;
     } catch (e) {
       console.warn("gallery", e);
-      toast(/quota/i.test(String(e && e.name)) ? "The gallery is full: this browser gave it no more room" : "Could not save to the gallery");
+      toast(/quota/i.test(String(e && e.name)) ? "The gallery is full: this browser has no more storage space for it" : "Could not save to the gallery");
       return null;
     } finally { busy.delete(key); }
   }
@@ -10666,7 +10666,7 @@ function targetLabel(k) {
   function revoke() { G.urls.forEach(u => URL.revokeObjectURL(u)); G.urls = []; }
   const objUrl = b => { const u = URL.createObjectURL(b); G.urls.push(u); return u; };
   async function refresh() {
-    try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser keeps no storage for the gallery here"; }
+    try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser has no storage for the gallery on this site"; }
     if (G.cur || G.shared) return;
     revoke();
     const list = G.items.filter(i => G.filter === "all" || i.kind === G.filter);
@@ -10823,7 +10823,7 @@ function targetLabel(k) {
         const bmp = await createImageBitmap(f), c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d").drawImage(bmp, 0, 0);
         const png = await new Promise(r => c.toBlob(r, "image/png"));
         await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]); toast("Picture copied");
-      } catch (err) { toast("This browser would not copy the picture"); }
+      } catch (err) { toast("This browser could not copy the picture"); }
     } });
     rows.push("-");
     rows.push({ icon: ICON.reddit, label: "Reddit", href: `https://www.reddit.com/submit?url=${e(url)}&title=${e(text)}` });
@@ -10951,7 +10951,7 @@ function targetLabel(k) {
   async function importLibrary(file) {
     try {
       const files = await unzip(file), j = JSON.parse(await (files.get("gallery.json") || new Blob(["{}"])).text());
-      if (!j.items) { toast(files.size ? "That zip has only pictures: export with Include metadata to make one Import can read" : "That file is not an exported gallery"); return; }
+      if (!j.items) { toast(files.size ? "That zip has only pictures. Export with Include metadata to make a zip that Import can read" : "That file is not an exported gallery"); return; }
       const have = new Set((await allItems()).map(i => i.id)); let n = 0;
       for (const m of j.items) {
         if (!m.id || have.has(m.id) || !Array.isArray(m.moment)) continue;
@@ -11068,7 +11068,7 @@ function targetLabel(k) {
   const cv = lens.querySelector("canvas"), ctx = cv.getContext("2d"), tag = lens.querySelector(".lzt");
   if (S) {
     S.define({ key: "loupe.on", section: "Zoom lens", label: "Zoom lens", type: "toggle", value: true,
-      hint: "Move the pointer onto a picture and a lens shows the area under it magnified, from the picture's full resolution version. It follows the pointer; the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
+      hint: "Move the pointer onto a picture, and a lens shows the area under it magnified, from the full-resolution picture. The lens follows the pointer, and the scroll wheel over it changes the magnification. On a phone, press and hold on a picture." });
     S.define({ key: "loupe.zoom", section: "Zoom lens", label: "Magnification", type: "range", value: 3, min: 1.5, max: 32, step: 0.5, format: v => `${v}×`,
       hint: "How much bigger the lens shows the picture than the window does. Past 12× is for mosaics, whose native pixels are many times smaller than the window shows them." });
     S.define({ key: "loupe.size", section: "Zoom lens", label: "Lens size", type: "range", value: 380, min: 160, max: 720, step: 20, unit: "px",
@@ -11081,9 +11081,9 @@ function targetLabel(k) {
       options: [["on", "On the pointer"], ["beside", "Beside the pointer"]],
       hint: "On the pointer, the lens is centered where the pointer is; beside it, the lens sits up and to the right, so the picture under the pointer stays in sight. On a phone it always sits above the finger." });
     S.define({ key: "loupe.native", section: "Zoom lens", label: "Native resolution in mosaics", type: "toggle", value: true,
-      hint: "A mosaic is shown smaller than its frames were taken. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
+      hint: "A mosaic is shown at a smaller scale than its frames were taken at. When the lens magnifies past the picture's pixels, it loads the part under it at the frames' own resolution, a moment after the pointer stops." });
     S.define({ key: "loupe.mosaicFull", section: "Zoom lens", label: "On mosaics in full view", type: "toggle", value: false,
-      hint: "In full view a mosaic is shown big enough to look at its seams, so the lens stays away there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
+      hint: "In full view, a mosaic is shown big enough to look at its seams, so the lens is off there. The magnifying glass in the picture's top right corner turns it on and off, the same as this switch." });
   }
   const opt = (k, d) => (S && S.get(k) !== undefined ? S.get(k) : d);
   const HOLD = 450, MOVE = 10;   // a press and hold on a phone: how long, and how far the finger may wander
@@ -11803,7 +11803,7 @@ void main() {
     $("stumoshide").disabled = !q; $("stumoshide").textContent = q && m.hide.has(q.n) ? "Show" : "Hide";
     $("stumosback").disabled = !q || !(m.moves[q.n] && (m.moves[q.n][0] || m.moves[q.n][1]));
     $("stumosall").disabled = !Object.keys(m.moves).length && !m.hide.size;
-    $("stumosnote").textContent = m.busy ? "The frame server is putting the mosaic together…" : Object.keys(m.moves).length || m.hide.size ? `${Object.keys(m.moves).length} moved, ${m.hide.size} hidden. Reset the mosaic brings back the frame server's own.` : "";
+    $("stumosnote").textContent = m.busy ? "The frame server is putting the mosaic together…" : Object.keys(m.moves).length || m.hide.size ? `${Object.keys(m.moves).length} moved, ${m.hide.size} hidden. Reset the mosaic restores the frame server's version.` : "";
   }
   // made again by the frame server, then the edit goes on as before
   let mosT = 0, mosAsk = 0;
@@ -11923,7 +11923,7 @@ void main() {
   async function open(opts = {}) {
     show();
     if (!opts.blob && !opts.url) { sync(); $("stuempty").hidden = !!source(); draw(); return; }
-    if (!R) { $("stuempty").textContent = "This browser has no WebGL, which the studio draws with."; $("stuempty").hidden = false; return; }
+    if (!R) { $("stuempty").textContent = "Studio needs WebGL, and this browser does not have it."; $("stuempty").hidden = false; return; }
     unload(); $("stuempty").hidden = true; wait("Opening…");
     st.item = opts.item || null; st.target = opts.target || null; st.from = opts.from || null; st.look = typeof opts.look === "function" ? opts.look : null; st.lookLabel = opts.lookLabel || "";
     st.p = opts.edit ? (typeof opts.edit === "string" ? decode(opts.edit) : clone(opts.edit)) : clone(DEF);
@@ -11984,7 +11984,7 @@ void main() {
   let cancelled = false;
   async function movieBlob(progress) {
     if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error("this browser cannot record films");
-    const mime = MIME.find(m => MediaRecorder.isTypeSupported(m)); if (!mime) throw new Error("this browser records no film format");
+    const mime = MIME.find(m => MediaRecorder.isTypeSupported(m)); if (!mime) throw new Error("this browser cannot record any film format");
     st.video.pause();
     const v = document.createElement("video"); v.playsInline = true; v.preload = "auto"; v.src = st.url;
     const c = document.createElement("canvas"), hold = document.createElement("div");
@@ -12287,7 +12287,7 @@ void main() {
     if (!el) return;
     if (document.activeElement !== el || !el.matches(":active")) el.value = v;
     $("mestabv").textContent = v ? `${autoNow() ? "Auto · " : ""}${v} pictures` : "Off";
-    note.textContent = !FS ? "" : !v ? "Off. For when SPICE's centering wobbles, as on a small moon in the NAC: slide it up to steady the movie by what the pictures show."
+    note.textContent = !FS ? "" : !v ? "Off. Use it when SPICE's centering wobbles, as on a small moon in the NAC: slide it up to steady the movie by what the pictures show."
       : SD.error || (SD.phase === "fetch" ? `Steadying: getting pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
         : SD.phase === "match" ? `Steadying: matching pictures, ${SD.done.toLocaleString()} of ${SD.total.toLocaleString()}…`
           : SD.measured && SD.smooth === v ? steadyText() : "Steadying…");
@@ -13283,7 +13283,7 @@ void main() {
       : j.state === "planning" ? "Finding every picture in the stretch…"
       : j.state === "finishing" ? "Finishing the last mosaic tiles…"
       : j.state === "waiting" ? `On hold: the frame server is busy with another job · ${of}`
-      : short ? `Making pictures ahead · ${j.total ? Math.floor(100 * j.done / j.total) : 0}%${left}` : `Making the pictures ahead · ${of}${left}`;
+      : short ? `Making pictures in advance · ${j.total ? Math.floor(100 * j.done / j.total) : 0}%${left}` : `Making the pictures in advance · ${of}${left}`;
   }
   function loadUi() {
     if (!L) return;
@@ -13296,11 +13296,11 @@ void main() {
     const secs = t => { const v = (performance.now() - t) / 1000; return v < 2 ? "" : ` · ${fmtDur(v)}`; };
     plan.textContent = !L.plan && listText() ? listText() + secs(L.planAt) : !L.plan ? `Listing ${L.expect ? `the ${L.expect.toLocaleString()} frames` : "the frames"}: the frame server works out the picture each one shows${secs(L.planAt)}` : ME.error ? ME.error : ME.frames.length ? `${ME.frames.length.toLocaleString()} frame${ME.frames.length === 1 ? "" : "s"} listed${L.planTook >= 2 ? ` in ${fmtDur(L.planTook)}` : ""}` : "No frames in this stretch";
     mk.className = !j ? "on" : BUSY.test(j.state) ? "on" : j.state === "done" ? "ok" : j.unsupported ? "" : "warn";
-    mk.textContent = !j ? "Making the pictures ahead"
+    mk.textContent = !j ? "Making the pictures in advance"
       : BUSY.test(j.state) ? jobText(j) + (j.state === "planning" || j.state === "queued" ? secs(L.makeAt || L.planAt) : "")
-      : j.state === "done" ? (j.took != null && j.took < 1 && j.total ? `Every picture made already (${j.total.toLocaleString()})` : `${(j.total || 0).toLocaleString()} pictures made ahead${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`)
+      : j.state === "done" ? (j.took != null && j.took < 1 && j.total ? `Every picture made already (${j.total.toLocaleString()})` : `${(j.total || 0).toLocaleString()} pictures made in advance${j.took ? ` in ${fmtDur(j.took)}` : ""}${j.errors ? ` (${j.errors} could not be made)` : ""}`)
       : j.state === "stopped" ? "Stopped; the rest are made as they are shown"
-      : j.unsupported ? "Pictures are made as they are shown" : (j.error || "Could not make the pictures ahead") + "; they are made as they are shown";
+      : j.unsupported ? "Pictures are made as they are shown" : (j.error || "Could not make the pictures in advance") + "; they are made as they are shown";
     // the bar: the listing's own count while it lists (when the server gives one), then the pictures made
     const g = ME.listing, frac = !L.plan ? (g && g.total && g.step === "frames" ? Math.min(1, g.done / g.total) : null)
       : j && j.total && BUSY.test(j.state) ? j.done / j.total : j && j.state === "done" ? 1 : null, bar = $("mlbar");
@@ -13958,7 +13958,7 @@ void main() {
     <div class="mrow mx"><span class="mlab">Show</span><div id="mtypes" role="group" aria-label="Types shown"></div></div>
     <div class="mrow mx mlenrow"><span class="mlab" title="Keep the entries that last at least this long">At least</span><input id="mlen" type="range" min="0" max="${LENS.length - 1}" step="1" aria-label="Longer than"><span id="mlenv"></span></div>
     <div class="mrow mx mone"><div class="mpot"><button class="sw" id="mpot" role="switch" aria-checked="false" aria-label="Potential moments"></button>
-      <span title="Finds, transits and closest views the searches turned up that nobody has picked yet">Potential finds and transits too</span></div></div>`;
+      <span title="Finds, transits and closest views from the automatic searches that nobody has picked yet">Potential finds and transits too</span></div></div>`;
   win.insertBefore(bar, $("mlist"));
   for (const [k, l] of SORTS) {
     const b = document.createElement("button"); b.dataset.sort = k; b.textContent = l;
@@ -14120,7 +14120,7 @@ void main() {
       : n === picks.length && !V.movies && !V.potential ? `${fmtInt(n)} moments, ${ms} milestone${ms === 1 ? "" : "s"}` : `${fmtInt(n)} shown`)
       + (window.cassiniSlice && cassiniSlice.spans ? ` · ${cassiniSlice.label} only` : "")
       + (V.movies || V.potential ? ` · ${fmtInt(pot)} potential in all` : "");
-    foot.title = "Potential moments: the movie catalog and the finds and transits nobody has picked yet (Potential movies, and the switch above)";
+    foot.title = "Potential moments: the movie catalog and the finds and transits that nobody has picked yet (Potential movies, and the switch above)";
   }
 
   // the list's entries arrive with the viewer's picks (buildUi -> studyMoments); the chrome's own part still runs first
@@ -14638,7 +14638,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"db337b762e8c";
+  const BUILD = /*BUILD*/"2894b9102f02";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -14838,7 +14838,7 @@ void main() {
     { id: "cameras", at: ["#imgcard", "#wacard"], title: "Cassini's cameras",
       text: p => `These windows show the pictures Cassini took at this moment: the <b>narrow-angle</b> camera for close detail and the <b>wide-angle</b> for the wider scene. ${p ? "Tap" : "Double-click"} a picture to see it full size.` },
     { id: "bodies", at: ["#appdock", "#focusrow"], title: "Moons and planets",
-      text: p => `${p ? "Tap" : "Click"} a moon or planet here to see the mission from its side: only its pictures, its moments and its imaging sessions. Cassini brings you back.` },
+      text: p => `${p ? "Tap" : "Click"} a moon or planet here to see the mission from its side: only its pictures, its moments and its imaging sessions. ${p ? "Tap" : "Click"} Cassini to come back.` },
     { id: "moments", at: ["#moments", "#phmom", '#appdock [data-key="app:moments"]'], title: "Moments",
       text: p => `The mission's big moments, in order. ${p ? "Tap" : "Click"} one to jump there${p ? "" : `, or step through them from the Go menu (${key("[")} and ${key("]")})`}. <b>Highlights</b> in the dock plays the best pictures as a reel.` },
     { id: "settings", at: ["#sgear"], title: "Make it yours",
@@ -17524,7 +17524,7 @@ function frame(now) {
 // ---------- loading screen: wireframe Cassini and mission facts while data loads ----------
 (function () {
   const $ = id => document.getElementById(id);
-  const FACTS = [{"text": "Cassini was the biggest spacecraft ever sent to another planet: 6.7 m tall, about two stories, and 5.6 metric tons at launch.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini was too heavy to fly straight to Saturn. It spent nearly seven years getting there, slingshotting past Venus twice, then Earth, then Jupiter, to pick up speed.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini was the first spacecraft ever to orbit Saturn. To get captured, it fired its main engine for 96 minutes on arrival in July 2004.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini had no solar panels. Three nuclear generators turned the heat of decaying plutonium-238 into electricity.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "Cassini spent 13 years orbiting Saturn, nearly half a Saturn year, long enough to watch the seasons change.", "source": "https://science.nasa.gov/mission/cassini/about-the-mission/"}, {"text": "In January 2005 the Huygens probe parachuted onto Titan. It is still the only landing ever made on a world in the outer solar system.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "After landing on Titan, Huygens ran on batteries and kept sending data for another 72 minutes.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The small moon Enceladus is spraying water vapor and ice into space from warm cracks at its south pole. Cassini caught it in the act in 2005.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Titan has lakes and seas on its surface, but they are liquid methane and other hydrocarbons, not water. Cassini mapped them by radar through the haze.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Saturn's north pole is ringed by a hexagon: a six-sided jet stream wider than the whole Earth.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "On 19 July 2013 Cassini hid in Saturn's shadow and photographed Earth as a tiny dot beyond the rings, while people back home were invited to wave at Saturn.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Every picture in the camera windows comes from one of Cassini's two cameras: the narrow-angle telephoto (NAC) and the wide-angle (WAC).", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Giovanni Cassini found the big dark gap in Saturn's rings that still bears his name. Christiaan Huygens discovered Titan in 1655. The spacecraft and its probe are named after them.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini found new moons hiding in and near the rings, among them Methone, Pallene, Daphnis, Anthe and Aegaeon.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "In its last five months Cassini dived 22 times through the gap between Saturn and its rings, where no spacecraft had ever been.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini's ending was on purpose: it was steered into Saturn so it could never crash into Enceladus or Titan and contaminate them.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini kept sending science during its final plunge, for as long as its thrusters could keep the antenna pointed at Earth. The last signal reached Australia on 15 September 2017.", "source": "https://www.jpl.nasa.gov/news/nasas-cassini-spacecraft-ends-its-historic-exploration-of-saturn"}];
+  const FACTS = [{"text": "Cassini was the biggest spacecraft ever sent to another planet: 6.7 m tall, about two stories, and 5.6 metric tons at launch.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini was too heavy to fly straight to Saturn. It spent nearly seven years getting there, flying past Venus twice, then Earth, then Jupiter, to pick up speed from each.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Cassini was the first spacecraft ever to orbit Saturn. To be captured by Saturn's gravity, it fired its main engine for 96 minutes when it arrived in July 2004.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Cassini had no solar panels. Three nuclear generators turned the heat of decaying plutonium-238 into electricity.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/"}, {"text": "Cassini spent 13 years orbiting Saturn, nearly half a Saturn year, long enough to watch the seasons change.", "source": "https://science.nasa.gov/mission/cassini/about-the-mission/"}, {"text": "In January 2005 the Huygens probe parachuted onto Titan. It is still the only landing ever made on a world in the outer solar system.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "After landing on Titan, Huygens ran on batteries and kept sending data for another 72 minutes.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "The small moon Enceladus is spraying water vapor and ice into space from warm cracks at its south pole. Cassini discovered these jets in 2005.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "Titan has lakes and seas on its surface, but they are liquid methane and other hydrocarbons, not water. Cassini mapped them by radar through the haze.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "Saturn's north pole is ringed by a hexagon: a six-sided jet stream wider than the whole Earth.", "source": "https://science.nasa.gov/mission/cassini/the-journey/timeline/"}, {"text": "On 19 July 2013 Cassini hid in Saturn's shadow and photographed Earth as a tiny dot beyond the rings, while people back home were invited to wave at Saturn.", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Every picture in the camera windows comes from one of Cassini's two cameras: the narrow-angle telephoto (NAC) and the wide-angle (WAC).", "source": "https://science.nasa.gov/mission/cassini/spacecraft/cassini-orbiter/imaging-science-subsystem/"}, {"text": "Giovanni Cassini found the big dark gap in Saturn's rings that still bears his name. Christiaan Huygens discovered Titan in 1655. The spacecraft and its probe are named after them.", "source": "https://www.esa.int/Science_Exploration/Space_Science/Cassini-Huygens/Cassini-Huygens_factsheet2"}, {"text": "Cassini found new moons in and near the rings, among them Methone, Pallene, Daphnis, Anthe and Aegaeon.", "source": "https://science.nasa.gov/mission/cassini-huygens/"}, {"text": "In its last five months Cassini dived 22 times through the gap between Saturn and its rings, where no spacecraft had ever been.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini's ending was on purpose: it was steered into Saturn so it could never crash into Enceladus or Titan and contaminate them.", "source": "https://science.nasa.gov/mission/cassini/grand-finale/overview/"}, {"text": "Cassini kept sending science data during its final plunge, for as long as its thrusters could keep the antenna pointed at Earth. The last signal reached Australia on 15 September 2017.", "source": "https://www.jpl.nasa.gov/news/nasas-cassini-spacecraft-ends-its-historic-exploration-of-saturn"}];
   const SHOW_AFTER = 300, MIN_SHOWN = 700, TIP_EVERY = 8000;
   const root = $("loadscreen"), cv = root.querySelector("canvas"), status = root.querySelector(".ls-status"), tip = root.querySelector(".ls-tip");
   const slow = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -18501,7 +18501,7 @@ window.huygensModels = (() => {
   // the descent, quieter and sadder as the struggle grows: mission seconds from loss of signal, how long, the line
   const DESCENT = [
     [-58, 10, `<b>September 15, 2017 · Saturn</b>After thirteen years in orbit, Cassini dives into the planet it came to study.`],
-    [-46.5, 10, `Its fuel nearly gone, it was sent in on purpose, so it could never fall onto the moons it found might hold life.`],
+    [-46.5, 10, `Its fuel nearly gone, it was sent in on purpose. Cassini had found that some of Saturn's moons might hold life, and it must never fall onto one of them.`],
     [-35, 10, `Nothing is stored anymore. Every reading goes straight home, live, through the dish pointed at Earth.`],
     [-23.5, 11, `The air thickens. Its thrusters fire harder and harder to hold that dish on Earth.`],
     [-11, 10, `It keeps sending. To the very last second, it keeps sending.`],
@@ -18512,7 +18512,7 @@ window.huygensModels = (() => {
   const RECAP = images => [
     [FLARE, 6.5, `Moments later, Cassini burned up like a meteor, and became part of Saturn.`, "", null],
     [10, 7, `<b>Received on Earth</b>Its last signal crossed the solar system for 83 minutes. At 11:55:46 UTC, the antennas in Canberra, Australia, heard it fall silent.`, "", [4, 5, 7]],
-    [17.5, 6.5, `<b>The last data</b>Eight instruments reported to the end. Its mass spectrometer tasted Saturn's air directly, the first and only time anything has.`, "", [3, 5, 7]],
+    [17.5, 6.5, `<b>The last data</b>Eight instruments reported to the end. Its mass spectrometer sampled Saturn's air directly, the first and only time anything has.`, "", [3, 5, 7]],
     [24.5, 7.5, `<b>1997 &ndash; 2017</b>Twenty years in space. Thirteen at Saturn. 294 orbits. ${fmtInt(NASA_IMAGES)} pictures.${images ? `<small>${fmtInt(images)} of them play in this replay.</small>` : ""}`, "big", [1, 3, 5, 6]],
     [32.5, 8, `<b>What it found</b><ul><li>An ocean under the ice of Enceladus, spraying into space</li><li>Seas and lakes of liquid methane on Titan, and Huygens on its surface</li><li>A six-sided jet stream circling Saturn's north pole</li><li>Moonlets stirring propellers in the rings, and new moons</li></ul>`, "", [0, 2, 3, 5]],
     [41, 7.5, `Cassini turned points of light into worlds. Much of what we know about Saturn and its moons, we know because it went and looked.`, "big", [0, 3, 5, 7, 8]],
@@ -19112,7 +19112,7 @@ window.huygensModels = (() => {
   // header and in About's sources; as a fifth line of the burn it left each of them under four and a half seconds)
   const steer = D.steering.total_deg;
   const LINES = [
-    [-Infinity, `<b>July 1, 2004 · Saturn</b>After nearly seven years in space, Cassini arrives, ${Math.round((T_IGN - T_CROSS) / 60) + 1} minutes before the burn that has to catch it.`],
+    [-Infinity, `<b>July 1, 2004 · Saturn</b>After nearly seven years in space, Cassini arrives, ${Math.round((T_IGN - T_CROSS) / 60) + 1} minutes before the engine burn that must put it into orbit.`],
     [T_CROSS - T_IGN - 15, `<b>${hhmm(T_CROSS).slice(0, 5)} UTC · The ring plane</b>It crosses through ${D.ring_crossing.where}, its dish turned forward as a shield against dust.`],
     [T_CROSS - T_IGN + 200, `Then it turns end for end, to point its main engine the way it is going.`],
     [0, `<b>${hhmm(T_IGN).slice(0, 5)} UTC · Main engine on</b>To be caught by Saturn's gravity it has to brake, for ${Math.round(D.burn_minutes.value)} minutes.`],
@@ -19121,7 +19121,7 @@ window.huygensModels = (() => {
     [T_CA - T_IGN - 60, `<b>Closest approach</b>${fmtInt(D.closest_approach.above_clouds_km)} km above Saturn's clouds, closer than it would come again until the Grand Finale.`],
     [BURN, `<b>${hhmm(T_OFF).slice(0, 5)} UTC · Engine off</b>${Math.round(D.delta_v_ms.value)} meters per second slower, and about ${fmtInt(D.propellant_kg.value)} kg of propellant lighter.`],
   ];
-  const LAST = `<b>In orbit</b>Saturn has caught it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
+  const LAST = `<b>In orbit</b>Saturn's gravity has captured it. Cassini is the first spacecraft ever to orbit Saturn, and this is the first of its 294 orbits.`;
   // screen seconds after shutdown: the cut to Saturn, the last line (the shutdown's own line stays up across the cut
   // until then, long enough to read), how long the last line stays
   const CUT = 3, LAST_AT = 4.8, LAST_FOR = 5.2;
@@ -19449,8 +19449,8 @@ window.huygensModels = (() => {
   // the captions: screen seconds in, how long, the line, a class, a chord under it (steps on the scale, see sound.html).
   // About 17 characters a second of reading for the two long ones; the short last one needs less
   const CAPS = [
-    [2.6, 7.6, `<b>October 15, 1997 · 42 minutes after launch</b>The Centaur upper stage lets go. Cassini is on its own, and ten minutes later a dish near Canberra, Australia, hears its first signal.`, "", [0, 2, 4]],
-    [11, 8, `<b>The road to Saturn</b>Too heavy to fly straight there, it plans to borrow speed from the planets on the way.`
+    [2.6, 7.6, `<b>October 15, 1997 · 42 minutes after launch</b>The Centaur upper stage lets go. Cassini is on its own, and ten minutes later an antenna near Canberra, Australia, picks up its first signal.`, "", [0, 2, 4]],
+    [11, 8, `<b>The road to Saturn</b>It is too heavy to fly straight there, so it will borrow speed from the planets on the way.`
       + `<div class="lx-road"><span>Venus<small>Apr 1998</small></span><span>Venus<small>Jun 1999</small></span><span>Earth<small>Aug 1999</small></span><span>Jupiter<small>Dec 2000</small></span><span>Saturn<small>Jul 2004</small></span></div>`, "road", [1, 3, 5]],
     [19.8, 3.4, `<b>3.4 billion kilometers · 6 years, 8 months</b>Next stop: Venus.`, "big", [0, 2, 4, 7]],
   ];
@@ -19600,11 +19600,11 @@ window.huygensModels = (() => {
     [LEAD + 0.2, 4.3, `Pyrotechnic devices fire, and springs push the probe out on rollers. The whole release takes 0.15 seconds.`, "", null],
     [LEAD + 4.7, 5.6, `It leaves at ${Math.round(SPEED * 100)} centimeters a second, spinning ${DATA.spin_rpm} times a minute so it holds steady all the way to Titan.`, "", [1, 3, 5]],
     // what the attitude record shows next (only said when it does: recoil below)
-    [LEAD + 10.6, 999, `The push leaves Cassini turning slowly the other way, until its thrusters wake and steady it.`, "", [0, 3, 5], "recoil"],
+    [LEAD + 10.6, 999, `The push leaves Cassini turning slowly the other way, until its thrusters switch on and steady it.`, "", [0, 3, 5], "recoil"],
   ];
   // the far part
   const FAR_CAPS = [
-    [PULL + 1, 6.3, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens sleeps now. A timer wakes it about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
+    [PULL + 1, 6.3, `<b>${DATA.mass_kg} kg · 20 days to Titan</b>Huygens is switched off now. A timer turns it on about five hours before it reaches Titan's air.`, "", [1, 3, 5]],
     [PULL + 7.6, 6.1, `No one saw it live. Cassini recorded the release, then turned to Earth: the news took 1 hour 8 minutes to arrive.`, "", [2, 4, 7]],
     [PULL + 14, 99, `<b>Next · January 14, 2005</b>Huygens falls through Titan's haze and lands.<div class="btns"><button type="button" data-hr="stay">Stay with Huygens</button><button type="button" data-hr="landing">Watch the landing</button><button type="button" data-hr="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
   ];
@@ -20103,21 +20103,21 @@ window.huygensModels = (() => {
     const P = DATA.pictures;
     const down = screenAt(EV.landing);
     return [
-      [1.5, 6.5, `<b>January 14, 2005 · ${utc(N.E).slice(0, 5)} UTC</b>After twenty days asleep, Huygens hits Titan's air 1,270 km up, at ${N.vEntry.toFixed(1)} km/s.`, "", [0, 2, 4]],
+      [1.5, 6.5, `<b>January 14, 2005 · ${utc(N.E).slice(0, 5)} UTC</b>After twenty days switched off, Huygens hits Titan's air 1,270 km up, at ${N.vEntry.toFixed(1)} km/s.`, "", [0, 2, 4]],
       [8.5, 5, `Its heat shield takes the blow. Titan's air slows it to ${Math.round(N.vT0 / 10) * 10} m/s in under five minutes, at up to ${N.peak.toFixed(0)} g.`, "", null],
       [14, 6.5, `${utc(T0).slice(0, 5)} UTC · A ${CH.pilot.toFixed(1)} m pilot chute fires out and pulls the back cover away. The back cover pulls out the ${CH.main} m main parachute.`, "", [0, 4, 7]],
-      [21.5, 4.5, `Half a minute later the heat shield drops away, and the instruments meet Titan's air.`, "", null],
-      [26.5, 3.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts talking to Cassini. Its camera takes pictures as it turns.`, "", [2, 4, 7]],
-      [30, 4, `At 111 km the main chute lets go. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
+      [21.5, 4.5, `Half a minute later the heat shield drops away, and the instruments are open to Titan's air.`, "", null],
+      [26.5, 3.5, `${utc(T0 + EV.data).slice(0, 5)} UTC · Huygens starts sending data to Cassini. Its camera takes pictures as the probe turns.`, "", [2, 4, 7]],
+      [30, 4, `At 111 km the main chute is released. A ${CH.drogue.toFixed(0)} m drogue carries it the rest of the way, for more than two hours.`, "", null],
       [35.5, 4.5, `Cassini, ${fmtInt(Math.round(N.cassiniKm / 1000) * 1000)} km away, has its dish on Titan, recording everything Huygens sends.`, "", [0, 3, 5]],
-      [40, 4.3, `Earth heard it too. At 10:25 UTC the Green Bank telescope caught Huygens's faint carrier, ${lt} minutes after it left.`, "", null],
-      [47.5, 5.5, `Under the haze its camera maps the ground it falls toward. Each outline is where one picture fell.`, "", [1, 3, 5]],
+      [40, 4.3, `Radio telescopes on Earth picked it up too. At 10:25 UTC the Green Bank telescope detected Huygens's faint carrier signal, ${lt} minutes after it left the probe.`, "", null],
+      [47.5, 5.5, `Below the haze, its camera maps the ground beneath it. Each outline shows the area of one picture.`, "", [1, 3, 5]],
       [53.6, 4.8, `${utc(T0 + EV.lamp).slice(0, 5)} UTC · A lamp switches on, to light the ground for the last pictures.`, "", null],
       [down, 5.2, `<b>${utc(N.L)} UTC · Touchdown</b>At ${N.vLand.toFixed(1)} m/s, about walking pace. The first landing in the outer solar system.`, "big", [0, 2, 4, 7, 9]],
-      [down + 5.2, 72.9 - down - 5.2, `Huygens keeps talking from the ground: ${DATA.surface_k} K, ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
-      [73.3, 4.5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · The landing site sinks below Titan's edge as Cassini sees it, and the link ends.`, "", [2, 4, 5]],
+      [down + 5.2, 72.9 - down - 5.2, `Huygens keeps sending data from the ground: ${DATA.surface_k} K, with ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
+      [73.3, 4.5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · Seen from Cassini, the landing site sinks below Titan's edge, and the link ends.`, "", [2, 4, 5]],
       [77.8, 4.2, `Cassini turns its dish to Earth and plays the recording back, more than once to be safe.`, "", null],
-      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never listened on one of the two channels, so ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
+      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never recorded one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
       [88.3, 99, `<b>Huygens on Titan · January 14, 2005</b>Its pictures are the landing-site map under the probe.<div class="btns"><button type="button" data-hl="stay">Stay with Huygens</button><button type="button" data-hl="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
     ];
   }
@@ -20970,11 +20970,11 @@ window.huygensModels = (() => {
 (function () {
   const S = window.cassiniSettings, $ = id => document.getElementById(id);
   let on = S.define({ key: "view.activity", section: "View", label: "What Cassini is doing", type: "toggle", value: true,
-    hint: "A thin strip along the top of the timeline and a line in the menu bar: sending data to Earth, radio signal through the rings, radar, rolling, or pointed at a body. Worked out from the recorded pointing." });
+    hint: "A thin strip along the top of the timeline and a line in the menu bar show what Cassini is doing: sending data to Earth, sending a radio signal through the rings, using its radar, rolling, or pointing at a body. Worked out from the recorded pointing." });
   let beamOn = S.define({ key: "view.radioBeam", section: "View", label: "Radio beam", type: "toggle", value: true,
     hint: "A faint beam from Cassini's dish while it points at Earth or at a body." });
   let earthOn = S.define({ key: "view.earthMarker", section: "View", label: "Earth's marker while the dish is on it", type: "toggle", value: true,
-    hint: "Earth is too far away to be on stage at Saturn. While Cassini's dish points at it, Earth gets its marker and tag like any other body, so you can see where the beam is going." });
+    hint: "Earth is too far away to see from Saturn. While Cassini's dish points at Earth, Earth gets a marker and a label like any other body, so you can see where the beam is going." });
   const redraw = () => { if (window.cassiniPerf) cassiniPerf.invalidate(); };
   // (the settings' handlers are at the end of this script: cassiniSettings.on() calls a handler at once with the saved
   // value, and a handler must not run before the variables it reaches exist)
@@ -21151,8 +21151,8 @@ window.huygensModels = (() => {
     const B = a.body ? name(a.body) : "";
     switch (a.kind) {
       case KINDS.DOWN: return [`<b>Dish on Earth</b> · data takes ${fmtDur(lt)} to arrive`, "Cassini's high-gain dish points at Earth: it is sending what it recorded to the Deep Space Network."];
-      case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish is on Earth with the rings in between: the radio signal crosses them, and how it fades maps the rings (a radio occultation)."]
-        : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish is on Earth with ${B} in between: the radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
+      case KINDS.OCC: return a.body === "RINGS" ? [`<b>Radio through the rings</b> · ${fmtDur(lt)} to Earth`, "The dish points at Earth, with the rings in between. The radio signal crosses the rings, and the way it fades maps them (a radio occultation)."]
+        : [`<b>Behind ${B}</b> · radio signal ${a.body === "TITAN" ? "in its air" : "blocked"}`, `The dish points at Earth, with ${B} in between. The radio signal passes through its atmosphere until it is cut off (a radio occultation).`];
       case KINDS.DISH: return a.body === "TITAN" && et > HUYGENS[0] && et < HUYGENS[1]
         ? [`<b>Dish on Titan</b> · receiving Huygens`, "Cassini's dish points at Titan to record everything the Huygens probe sends on its way down."]
         : [`<b>Dish on ${B}</b> · radar or radio science`, `Cassini's dish points at ${B}: the radar and the radio science experiments use it as their antenna, so the cameras look elsewhere.`];
@@ -21476,7 +21476,7 @@ window.huygensModels = (() => {
       // a table built for some years only says nothing about the others
       const y = index.years, span = y.length > 1 ? `${y[0]} to ${y[y.length - 1]}` : `${y[0]}`;
       html = `<b>${titleCase(moon)}</b> · seen so far is worked out for ${span} only`;
-      tip = `This site's table of what Cassini had photographed was built for ${span}. Outside those years the moons are drawn as the whole map.`;
+      tip = `This site's record of what Cassini had photographed covers only ${span}. Outside those years, the moons are drawn with their whole map.`;
     }
     if (html !== shown) {
       host.innerHTML = shown = html;
@@ -21612,27 +21612,27 @@ window.huygensModels = (() => {
   const MODES = [["live", "Live, 10 years ago"], ["60", "1 min/s"], ["600", "10 min/s"], ["3600", "1 h/s"], ["pictures", "Every picture"], ["highlights", "Highlights"]];
   const D = d => S.define(Object.assign({ section: "Ambient" }, d));
   D({ key: "ambient.mode", label: "Mode", type: "choice", value: "live", options: MODES,
-    hint: "Live runs in real time, ten years behind today. The faster modes catch more pictures; Every picture skips the quiet hours; Highlights plays the highlight reel over and over." });
+    hint: "Live runs in real time, ten years behind today. The faster modes show more pictures. Every picture skips the quiet hours. Highlights plays the highlight reel over and over." });
   D({ key: "ambient.sizeLive", label: "Picture size, live", type: "range", value: 46, min: 20, max: 90, step: 1, unit: "%",
     hint: "Height of each camera panel as a share of the screen in real time, when pictures are rare." });
   D({ key: "ambient.sizeFast", label: "Picture size, fast", type: "range", value: 32, min: 15, max: 90, step: 1, unit: "%",
-    hint: "The same when pictures come fast (1 h/s, every picture, highlights); the speeds between are in between." });
+    hint: "The same, when pictures come fast (1 h/s, Every picture, Highlights). Speeds in between get sizes in between." });
   D({ key: "ambient.pace", label: "Every picture: seconds each", type: "range", value: 4, min: 1, max: 30, step: 1, unit: "s",
     hint: "How long each picture stays up in Every picture mode." });
   D({ key: "ambient.drift", label: "Camera drift", type: "range", value: 6, min: 0, max: 30, step: 1, unit: "°/min",
     hint: "How fast the view swings slowly around Cassini. 0 holds it still." });
   D({ key: "ambient.framing", label: "Framing", type: "choice", value: "both",
     options: [["both", "Cassini and its subject"], ["past", "Past Cassini, at the subject"]],
-    hint: "Cassini and its subject: the camera stands off to the side so the spacecraft and the body it looks at (its near edge, for a big one) are both in the picture; close to a big body that puts the camera between them, looking back at Cassini with the body's edge beside it. Past Cassini: the earlier view over the spacecraft's shoulder, at the subject." });
+    hint: "Cassini and its subject: the camera stands off to the side, so the spacecraft and the body it is looking at (the body's near edge, for a big one) are both in the picture. Close to a big body, this puts the camera between them, looking back at Cassini with the body's edge beside it. Past Cassini: the earlier view over the spacecraft's shoulder, toward the subject." });
   D({ key: "ambient.spacing", label: "Spacing", type: "range", value: 22, min: 6, max: 40, step: 1, unit: "°",
-    hint: "How far apart Cassini and its subject's near edge sit on screen, Cassini and its subject framing. Kept inside the screen." });
+    hint: "With Cassini and its subject framing, how far apart Cassini and the near edge of its subject are on screen. Both stay inside the screen." });
   D({ key: "ambient.captions", label: "Caption", type: "toggle", value: true, hint: "What Cassini is looking at, the date and the time to the next picture, at the top of the screen." });
   D({ key: "ambient.timeline", label: "Timeline", type: "toggle", value: true,
-    hint: "A thin line along the top: the pictures of the last stretch and the ones coming, with the next few bodies named." });
+    hint: "A thin line along the top showing the pictures from the last stretch and the ones coming next, with the names of the next few bodies." });
   D({ key: "ambient.cones", label: "Camera cones", type: "toggle", value: true,
     hint: "The narrow-angle and wide-angle cameras' field of view, drawn from Cassini while it takes pictures: fainter than in Cassini OS, fading in and out and turning smoothly." });
   D({ key: "ambient.calmSound", label: "Calm sound", type: "toggle", value: true,
-    hint: "Softer, slower chimes with more echo, a quiet bed under them and no flyby pulse. Off plays the sound as in Cassini OS." });
+    hint: "Softer, slower chimes with more echo, a quiet background tone under them, and no flyby pulse. Off plays the sound as in Cassini OS." });
   D({ key: "ambient.fps", label: "Frame rate", type: "range", value: 30, min: 10, max: 60, step: 5, unit: "fps",
     hint: "The 3D view is drawn at most this often. A slow drift looks the same at 30 as at 60, for half the work." });
   D({ key: "ambient.start", label: "Ambient mode", type: "action", button: "Start", run: () => { S.close(); start(); } });

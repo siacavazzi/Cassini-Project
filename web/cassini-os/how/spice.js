@@ -37,7 +37,7 @@
     document.querySelectorAll(".kcanvas").forEach((c) => {
       const p = document.createElement("p");
       p.className = "small";
-      p.textContent = "This drawing could not load its data.";
+      p.textContent = "The data for this drawing could not be loaded.";
       c.replaceWith(p);
     });
   });

@@ -98,11 +98,11 @@
     UV1: [264, "uv", "Ultraviolet 1", "Ultraviolet, invisible to the eye. Small haze particles (aerosols) scatter ultraviolet strongly, so hazes high in Titan's and Saturn's atmospheres stand out. Only the narrow-angle camera can see ultraviolet: its mirrors and a special coating on its sensor let it reach down to 200 nm."],
     UV2: [306, "uv", "Ultraviolet 2", "Ultraviolet, for hazes (aerosols) and color in the ultraviolet."],
     UV3: [343, "uv", "Ultraviolet 3", "Near ultraviolet, for hazes (aerosols), color and, with the polarizers, polarization. Common in false color sets of Titan and Saturn's moons."],
-    MT1: [619, "methane", "Methane 1 (weak)", "Centered on a weak methane absorption band. Methane gas soaks up light at this color, so the deeper the light has to travel, the darker it gets: clouds look bright only if they sit high. Comparing the three methane bands shows how high clouds and haze are (vertical sounding), mainly for Titan's atmosphere."],
+    MT1: [619, "methane", "Methane 1 (weak)", "Centered on a weak methane absorption band. Methane gas absorbs light at this color, so the deeper the light has to travel, the darker it gets: clouds look bright only if they sit high. Comparing the three methane bands shows how high clouds and haze are (vertical sounding), mainly for Titan's atmosphere."],
     MT2: [727, "methane", "Methane 2 (medium)", "A medium-strength methane band. Light reaches less deep here than in MT1, so it picks out higher clouds. Used for cloud heights on Saturn, Jupiter and Titan."],
     MT3: [889, "methane", "Methane 3 (strong)", "The strongest methane band: almost all light from deep down is absorbed, so only the highest hazes and clouds show. Saturn's and Jupiter's high hazes glow in it."],
     CB1: [619, "continuum", "Continuum 1", "The 'control' for MT1: the same part of the spectrum just outside the methane band, so the difference between the two shows the methane absorption. It is two-lobed, with a pass band on each side of the methane band."],
-    CB2: [750, "continuum", "Continuum 2", "The control for MT2, just beside its methane band. It sees the main visible cloud deck. Jupiter's color portrait used it in place of red."],
+    CB2: [750, "continuum", "Continuum 2", "The control for MT2, just beside its methane band. It shows the main visible cloud deck. Jupiter's color portrait used it in place of red."],
     CB3: [938, "continuum", "Continuum 3", "The control for MT3, and the camera's best look through Titan's haze: at this near-infrared color the haze is thin enough to see surface features below."],
     HAL: [656, "special", "H-alpha", "A very narrow filter at the red glow of hydrogen (H-alpha), for catching lightning on Saturn's night side."],
     IR1: [750, "ir", "Infrared 1", "Broadband near-infrared color."],
@@ -208,7 +208,7 @@
       $$("button", chips).forEach((b, j) => b.setAttribute("aria-pressed", i === j));
       const r = RAW[i];
       $("#raw-img").src = `img/raw-${r.id}.jpg`;
-      $("#raw-cap").textContent = `${r.cap}, ${r.id} · the PNG copy the pipeline starts from`;
+      $("#raw-cap").textContent = `${r.cap}, ${r.id} · the PNG copy that the pipeline starts from`;
       $("#raw-note").textContent = r.note;
     }
     pick(0);

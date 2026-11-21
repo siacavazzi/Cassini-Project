@@ -96,7 +96,7 @@ body.phone #tourhint button { padding: 6px 11px; }
     { id: "cameras", at: ["#imgcard", "#wacard"], title: "Cassini's cameras",
       text: p => `These windows show the pictures Cassini took at this moment: the <b>narrow-angle</b> camera for close detail and the <b>wide-angle</b> for the wider scene. ${p ? "Tap" : "Double-click"} a picture to see it full size.` },
     { id: "bodies", at: ["#appdock", "#focusrow"], title: "Moons and planets",
-      text: p => `${p ? "Tap" : "Click"} a moon or planet here to see the mission from its side: only its pictures, its moments and its imaging sessions. Cassini brings you back.` },
+      text: p => `${p ? "Tap" : "Click"} a moon or planet here to see the mission from its side: only its pictures, its moments and its imaging sessions. ${p ? "Tap" : "Click"} Cassini to come back.` },
     { id: "moments", at: ["#moments", "#phmom", '#appdock [data-key="app:moments"]'], title: "Moments",
       text: p => `The mission's big moments, in order. ${p ? "Tap" : "Click"} one to jump there${p ? "" : `, or step through them from the Go menu (${key("[")} and ${key("]")})`}. <b>Highlights</b> in the dock plays the best pictures as a reel.` },
     { id: "settings", at: ["#sgear"], title: "Make it yours",

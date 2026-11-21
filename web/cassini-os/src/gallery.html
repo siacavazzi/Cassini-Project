@@ -111,7 +111,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     <div class="galseg" id="galfilter"><button data-v="all" aria-pressed="true">All</button><button data-v="picture" aria-pressed="false">Pictures</button><button data-v="movie" aria-pressed="false">Movies</button></div>
     <span id="galsum"></span><span class="sp"></span>
     <button class="galbtn" id="galexport" title="Save every picture (JPEG) and film (MP4) in the gallery as one .zip file">Export Library</button>
-    <label class="galchk" title="Also put in how each item was made and its thumbnail (gallery.json), so Import can bring the whole gallery back"><input type="checkbox" id="galmeta"> Include metadata</label>
+    <label class="galchk" title="Also include how each item was made, and its thumbnail (gallery.json), so Import can restore the whole gallery"><input type="checkbox" id="galmeta"> Include metadata</label>
     <button class="galbtn" id="galimport" title="Add the items of a gallery .zip exported with its metadata">Import</button>
     <input type="file" id="galfile" accept=".zip,application/zip" hidden>
   </div>
@@ -154,10 +154,10 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
     hint: "Saved pictures and films are kept on this device, in the browser. Off: only how each was made is kept, and the frame server makes it again when you open it (needs the server)." });
   const keepFiles = () => !S || S.get("gallery.keepFiles") !== false;
   if (S) S.define({ key: "gallery.exportMeta", section: "Gallery", label: "Export with metadata", type: "toggle", value: false,
-    hint: "Export Library also writes how each item was made and its thumbnail (gallery.json), so Import can bring the gallery back. Off: just the pictures and films." });
+    hint: "Export Library also saves how each item was made, and its thumbnail (gallery.json), so Import can restore the gallery. Off: just the pictures and films." });
   const withMeta = () => !!(S && S.get("gallery.exportMeta"));
   if (S) S.define({ key: "gallery.orbitInset", section: "Gallery", label: "Orbit graphic on saved pictures", type: "toggle", value: false,
-    hint: "A downloaded or shared picture gets a small card in its corner: Cassini's orbit at that moment, the line to what the camera looked at, the date and the distance. The same box is in a picture's save menu and by the gallery's Download." });
+    hint: "A downloaded or shared picture gets a small card in its corner: Cassini's orbit at that moment, a line to what the camera looked at, the date and the distance. The same checkbox is in a picture's save menu and next to the gallery's Download." });
   // a picture handed out (downloaded, shared) with the orbit graphic in its corner, when that is on: at the moment of
   // its first frame (or the moment it was saved), looking at that frame's target (cassiniOrbit.inset, orbit.html)
   const graphicOn = () => !!(S && S.get("gallery.orbitInset") && window.cassiniOrbit);
@@ -340,7 +340,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
       return item;
     } catch (e) {
       console.warn("gallery", e);
-      toast(/quota/i.test(String(e && e.name)) ? "The gallery is full: this browser gave it no more room" : "Could not save to the gallery");
+      toast(/quota/i.test(String(e && e.name)) ? "The gallery is full: this browser has no more storage space for it" : "Could not save to the gallery");
       return null;
     } finally { busy.delete(key); }
   }
@@ -415,7 +415,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   function revoke() { G.urls.forEach(u => URL.revokeObjectURL(u)); G.urls = []; }
   const objUrl = b => { const u = URL.createObjectURL(b); G.urls.push(u); return u; };
   async function refresh() {
-    try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser keeps no storage for the gallery here"; }
+    try { G.items = await allItems(); } catch (e) { G.items = []; $("galsum").textContent = "This browser has no storage for the gallery on this site"; }
     if (G.cur || G.shared) return;
     revoke();
     const list = G.items.filter(i => G.filter === "all" || i.kind === G.filter);
@@ -572,7 +572,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
         const bmp = await createImageBitmap(f), c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d").drawImage(bmp, 0, 0);
         const png = await new Promise(r => c.toBlob(r, "image/png"));
         await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]); toast("Picture copied");
-      } catch (err) { toast("This browser would not copy the picture"); }
+      } catch (err) { toast("This browser could not copy the picture"); }
     } });
     rows.push("-");
     rows.push({ icon: ICON.reddit, label: "Reddit", href: `https://www.reddit.com/submit?url=${e(url)}&title=${e(text)}` });
@@ -700,7 +700,7 @@ body.phone #galtoast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--app
   async function importLibrary(file) {
     try {
       const files = await unzip(file), j = JSON.parse(await (files.get("gallery.json") || new Blob(["{}"])).text());
-      if (!j.items) { toast(files.size ? "That zip has only pictures: export with Include metadata to make one Import can read" : "That file is not an exported gallery"); return; }
+      if (!j.items) { toast(files.size ? "That zip has only pictures. Export with Include metadata to make a zip that Import can read" : "That file is not an exported gallery"); return; }
       const have = new Set((await allItems()).map(i => i.id)); let n = 0;
       for (const m of j.items) {
         if (!m.id || have.has(m.id) || !Array.isArray(m.moment)) continue;
