@@ -726,10 +726,7 @@ def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, und
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
         below = acc_alpha[sl]
         a = feathered * below + own * (1 - below)
-        if gamma is not None:
-            color = _corrected(color, gain, gamma)
-        else:
-            color = color * gain.astype(np.float32)
+        color = _gained(color, gain, gamma)
         if offset.any():
             # in full from offset_ramp levels up, fading to none at black, so what is black stays
             # black (lifting it shows the compression blocks of a dark sky or night side)
@@ -1076,13 +1073,33 @@ def _toned(color, gain, offset, gamma):
         return color
     if color.shape[2] == 1:
         gain, offset = gain[:1], offset[:1]
-    if gamma is not None:
-        color = _corrected(color, gain, gamma)
-    else:
-        color = color * gain.astype(np.float32)
+    color = _gained(color, gain, gamma)
     if offset.any():
         color += offset.astype(np.float32) * np.minimum(color * np.float32(1 / offset_ramp), 1)
     return color
+
+
+def _gained(color, gain, gamma):
+    """A frame's levels with its gain applied (_corrected on linear brightness with gamma, else on the levels), a
+    clipped level (CLIPPED) kept where the gain would take it under: what was over white is still over it, so a gain
+    under 1 does not draw it as a tint (ringsFA's saturated block went from white to 255/255/247 when blue's gain fell
+    to 0.97, PR 611 review)"""
+    if gamma is not None:
+        out = _corrected(color, gain, gamma)
+    else:
+        out = color * gain.astype(np.float32)
+    return keep_clipped(out, color)
+
+
+CLIPPED = 255   # _gained: a level this high was clipped at white
+
+
+def keep_clipped(out, color):
+    """out with each channel that was clipped in color (CLIPPED) kept at least where it was"""
+    hit = color >= CLIPPED
+    if hit.any():
+        out = np.where(hit, np.maximum(out, np.float32(CLIPPED)), out).astype(np.float32)
+    return out
 
 
 """
@@ -1137,14 +1154,14 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     fields = [None] * len(infos)
     if level and decided is not None:
         fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
-        toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
+        toned = [t if fl is None else keep_clipped(t * fl, t) for t, fl in zip(toned, fields)]
     elif level and sum(info is not None for info in infos) > 1:
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
         found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                         [None if info is None else info[4] for info in infos],
                         None if pin is None else range(len(infos))[pin],
                         max(info[5] for info in infos if info is not None) * GAP_REACH)
-        toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
+        toned = [t if lv is None else keep_clipped(t * _field(lv, b), t) for t, lv, b in zip(toned, found, boxes)]
         if _watch is not None:
             fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
         for d, lv in zip(decisions, found):
