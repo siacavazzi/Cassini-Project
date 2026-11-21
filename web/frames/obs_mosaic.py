@@ -8454,7 +8454,7 @@ STEADY_REACH = image_correction.FIT_REACH   # px: the furthest a stabilized tile
                       # is 3 to 5 px off, 27 to 30 at worst between a set's filters); a match further off followed
                       # something else that moves, another moon crossing the frame (Sam 2026-11-04)
 STEADY_PAD = 4        # px round another body's disk left out of a stabilization match (steady_chain)
-STEADY_SEEN_PAD = 8   # px round a small target's disk where a stabilization match looks for it in both pictures (_shift_onto)
+STEADY_SEEN_PAD = 24   # px round a small target's disk where a stabilization match looks for it in both pictures (_shift_onto)
 STEADY_SEEN_LEVEL = 16   # display levels (LIT_LEVEL): ... and what is lit there
 STEADY_SEEN_LEAST = 3    # px: ... this many of them (a hot pixel is one); fewer in either picture, the whole of both is matched
 STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STEADY_PAD round it) and a small target's
