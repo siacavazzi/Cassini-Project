@@ -14638,7 +14638,7 @@ void main() {
   window.cassiniAbout = { open, addTab, esc, close: () => show(false), credits: CREDITS };
 
   // ---- which version this is: this page's build id (build.py writes it), and what the frame server says it serves ----
-  const BUILD = /*BUILD*/"2894b9102f02";
+  const BUILD = /*BUILD*/"039dda5d2604";
   const FRAMES = (() => {                       // the frame server, chosen as the camera window chooses it
     const q = new URLSearchParams(location.search).get("frames");
     if (q) return q.replace(/\/$/, "");
@@ -18501,7 +18501,7 @@ window.huygensModels = (() => {
   // the descent, quieter and sadder as the struggle grows: mission seconds from loss of signal, how long, the line
   const DESCENT = [
     [-58, 10, `<b>September 15, 2017 · Saturn</b>After thirteen years in orbit, Cassini dives into the planet it came to study.`],
-    [-46.5, 10, `Its fuel nearly gone, it was sent in on purpose. Cassini had found that some of Saturn's moons might hold life, and it must never fall onto one of them.`],
+    [-46.5, 10, `Its fuel nearly gone, it was sent in on purpose. Cassini had found that some of Saturn's moons might hold life, and it could never be allowed to fall onto one of them.`],
     [-35, 10, `Nothing is stored anymore. Every reading goes straight home, live, through the dish pointed at Earth.`],
     [-23.5, 11, `The air thickens. Its thrusters fire harder and harder to hold that dish on Earth.`],
     [-11, 10, `It keeps sending. To the very last second, it keeps sending.`],
@@ -20117,7 +20117,7 @@ window.huygensModels = (() => {
       [down + 5.2, 72.9 - down - 5.2, `Huygens keeps sending data from the ground: ${DATA.surface_k} K, with ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
       [73.3, 4.5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · Seen from Cassini, the landing site sinks below Titan's edge, and the link ends.`, "", [2, 4, 5]],
       [77.8, 4.2, `Cassini turns its dish to Earth and plays the recording back, more than once to be safe.`, "", null],
-      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never recorded one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
+      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never received one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
       [88.3, 99, `<b>Huygens on Titan · January 14, 2005</b>Its pictures are the landing-site map under the probe.<div class="btns"><button type="button" data-hl="stay">Stay with Huygens</button><button type="button" data-hl="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
     ];
   }

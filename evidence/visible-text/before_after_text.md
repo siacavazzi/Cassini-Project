@@ -232,7 +232,7 @@
 | `Under the haze its camera maps the ground it falls toward. Each outline is where one picture fell | `Below the haze, its camera maps the ground beneath it. Each outline shows the area of one picture |
 | `Huygens keeps talking from the ground: ${DATA.surface_k} K, i | `Huygens keeps sending data from the ground: ${DATA.surface_k} K, with i |
 | UTC · The landing site sinks below Titan's edge as Cassini sees it, and the link | UTC · Seen from Cassini, the landing site sinks below Titan's edge, and the link |
-| Only half came home: Cassini never listened on one of the two channels, so ${P.received} of ${P.planned} pictures arrived. | Only half came home: Cassini never recorded one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived. |
+| Only half came home: Cassini never listened on one of the two channels, so ${P.received} of ${P.planned} pictures arrived. | Only half came home: Cassini never received one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived. |
 
 ## web/cassini-os/src/huygens-release.html
 
@@ -299,7 +299,7 @@
 
 | Before | After |
 |---|---|
-| a few bad frames were left out, as the app's Movie Editor does. | a few bad frames were left out with the app's Movie Editor. |
+| a few bad frames were left out, as the app's Movie Editor does. | a few bad frames were left out, the same way the app's Movie Editor leaves them out. |
 | The tiny moon Daphnis raising waves in the edge of the gap it clears through the A ring. | The tiny moon Daphnis raises waves along the edge of the gap that it clears in the A ring. |
 | while the wide-angle camera window plays the pictures it took on the way in. | while the wide-angle camera window plays the pictures that the camera took on the way in. |
 | so brightness means what it should. | so each pixel's brightness matches the scene. |
@@ -315,7 +315,7 @@
 
 | Before | After |
 |---|---|
-| Its fuel nearly gone, it was sent in on purpose, so it could never fall onto the moons it found might hold life. | Its fuel nearly gone, it was sent in on purpose. Cassini had found that some of Saturn's moons might hold life, and it must never fall onto one of them. |
+| Its fuel nearly gone, it was sent in on purpose, so it could never fall onto the moons it found might hold life. | Its fuel nearly gone, it was sent in on purpose. Cassini had found that some of Saturn's moons might hold life, and it could never be allowed to fall onto one of them. |
 
 ## web/cassini-os/src/huygens-landing.html
 

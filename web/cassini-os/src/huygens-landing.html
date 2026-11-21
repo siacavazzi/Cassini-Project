@@ -186,7 +186,7 @@ body.phone #hland .cs-read { font-size: 9.5px; bottom: 9vh; white-space: normal;
       [down + 5.2, 72.9 - down - 5.2, `Huygens keeps sending data from the ground: ${DATA.surface_k} K, with ice pebbles all around. Cassini listens for another ${surfaceMin} minutes.`, "", null],
       [73.3, 4.5, `${utc(T0 + EV.link_end).slice(0, 5)} UTC · Seen from Cassini, the landing site sinks below Titan's edge, and the link ends.`, "", [2, 4, 5]],
       [77.8, 4.2, `Cassini turns its dish to Earth and plays the recording back, more than once to be safe.`, "", null],
-      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never recorded one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
+      [82, 5.6, `${DATA.esoc_first_data_utc.slice(11, 16)} UTC · ${lt} minutes later the first data reach ESA in Darmstadt. Only half came home: Cassini never received one of the two radio channels, so only ${P.received} of ${P.planned} pictures arrived.`, "", [0, 2, 4]],
       [88.3, 99, `<b>Huygens on Titan · January 14, 2005</b>Its pictures are the landing-site map under the probe.<div class="btns"><button type="button" data-hl="stay">Stay with Huygens</button><button type="button" data-hl="back">Back to Cassini</button></div><small>Sources: ${SOURCES}</small>`, "big", [0, 2, 4, 7, 9]],
     ];
   }
