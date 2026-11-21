@@ -2583,6 +2583,7 @@ runs through it when the darkest pixels' top (the cut) is within SKY_SPLIT times
 frame that is noise and stars alone (_noise_only): a faint ring band under one bright ring keeps its cut.
 """
 SKY_CUT = 0.05     # of the 99.9th percentile
+SKY_OFFSET_MOST = 0.25   # ... above the frame's floor, when that floor (an offset left in the sky) is under this share of the top
 SKY_NOISE = 4.0    # the sky's noise times this above its level is sky too, where the cut runs through the noise ...
 SKY_SPLIT = 2.0    # ... (the cut within this many times the noise of the dark pixels' median)
 SKY_FLAT = 0.4     # ... and only on a frame of noise alone: blurred, it varies by at most this times the noise ...
@@ -2605,7 +2606,13 @@ def _noise_only(iof, middle, noise):
 def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
-        cut = SKY_CUT * float(np.percentile(iof, 99.9))
+        top, floor = (float(v) for v in np.percentile(iof, (99.9, 1)))
+        # measured from the frame's floor when the sky has an offset left in it (its 1st percentile over 0 and under
+        # SKY_OFFSET_MOST of the top), as a movie's dark sky is (obs_mosaic._dark_sky): a 2000 s MT3 frame past the dark
+        # model's 1200 s grid kept a flat 0.0058 I/F over its sky, above 5% of its top, so none of it counted as sky and
+        # the whole storm composite was drawn on a dull gray (ISS_196SA_STORMW014_RIDER W1756377010_1, R83/G76/B64)
+        floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
+        cut = floor + SKY_CUT * (top - floor)
         dark = iof[iof < cut]
         if dark.size >= 1000:
             low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
