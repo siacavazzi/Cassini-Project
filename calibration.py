@@ -1142,10 +1142,11 @@ GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
                      # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
-GLOW_FINE = (0.04, 0.12)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
+GLOW_FINE = (0.07, 0.15)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
                      # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
                      # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
-                     # under 0.04, rings over 0.15)
+                     # under 0.04, rings over 0.15; measured net of the camera's banding and noise, the faint sky round a distant
+                     # moon still measures 0.06-0.065 on its leftover pattern, so the blend starts at 0.07: spot check 11-21)
 FINE_NOISE = 0.4     # fine_structure(net): white noise of this spread puts about 0.31 of it (0.4 with 8-bit steps) in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
