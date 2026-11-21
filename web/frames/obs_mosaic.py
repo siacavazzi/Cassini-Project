@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: a mosaic's per-filter tile gains are the log solve (obs_mosaic.held_level: the plain solve sank every gain to its limit and matched nothing; Dione 139DI REGMAP001's step) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -6354,6 +6354,10 @@ def seams(u, p, tiles, rect, ref, cache):
 
 
 GROW_FROM = 16   # tiles of one filter: a mosaic with more is the one before it with the new tile drawn over it
+WHOLE_MOST = 120   # ... in the balanced look, up to this many: every tile's seams solved together (held_level). Grown, each
+                   # new tile was matched only to the picture under it, at most 6 levels and its gain's limit, so wherever
+                   # the tiles drawn after the first 16 met them a step stayed: Dione 139DI REGMAP001 (27 tiles a filter),
+                   # a step halfway down the moon and a darker green band in its lower third, gone when solved whole
 
 
 def _filter_path(u, f, count, rect, cache, solved_on=""):
@@ -6486,7 +6490,8 @@ def grows(mine):
     Smiled, 195RI HIPHASEC001, kept its GRN repeat's clipped rings on top, a lime patch by Saturn's limb). The
     high-phase ring passes that take such repeats compose their filter mosaics whole instead (2 passes of 1,313 in
     2004 and early 2005)."""
-    return len(mine) > GROW_FROM and not any(t.get("fill") or t.get("long") for t in mine)
+    return (len(mine) > (GROW_FROM if calibration.look() != "balanced" else WHOLE_MOST)
+            and not any(t.get("fill") or t.get("long") for t in mine))
 
 
 def _grown(u, p, f, mine, rect, cache, tag=""):
