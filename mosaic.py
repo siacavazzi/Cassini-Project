@@ -1080,10 +1080,11 @@ def _toned(color, gain, offset, gamma):
 
 
 def _gained(color, gain, gamma):
-    """A frame's levels with its gain applied (_corrected on linear brightness with gamma, else on the levels), a
-    clipped level (CLIPPED) kept where the gain would take it under: what was over white is still over it, so a gain
-    under 1 does not draw it as a tint (ringsFA's saturated block went from white to 255/255/247 when blue's gain fell
-    to 0.97, PR 611 review)"""
+    """A frame's levels with its gain applied (_corrected on linear brightness with gamma, else on the levels), a pixel
+    clipped in every band (CLIPPED: over white, its colour unknown) kept neutral, every band the mean of what the gains
+    make of it: one band's gain under the others' drew it as a tint (ringsFA's saturated block went from white to
+    255/255/247 when blue's gain fell to 0.97, PR 611 review). Kept white instead it stood as a hard-edged plateau over
+    the light round it, which the gain does take down (the Enceladus south pole crescent, 236 round 255)"""
     if gamma is not None:
         out = _corrected(color, gain, gamma)
     else:
@@ -1095,12 +1096,14 @@ CLIPPED = 255   # _gained: a level this high was clipped at white
 
 
 def keep_clipped(out, color):
-    """out with each channel that was clipped in color (a frame's own levels, CLIPPED) kept at white or over. Only ever
-    the frame's own levels: a level a gain over 1 took past white is not clipped, and holding it there kept the seam
-    leveling from bringing it down (ringmosaic04 and the Enceladus south pole map 8% and 32% clipped)"""
-    hit = color >= CLIPPED
+    """out with each pixel clipped in every band of color (a frame's own levels, CLIPPED) made neutral: every band the
+    mean of out's bands there"""
+    if color.ndim != 3 or color.shape[2] != 3:
+        return out
+    hit = (color >= CLIPPED).all(axis=2)
     if hit.any():
-        out = np.where(hit, np.maximum(out, np.float32(CLIPPED)), out).astype(np.float32)
+        out = np.array(out, np.float32)
+        out[hit] = out[hit].mean(axis=1, keepdims=True)
     return out
 
 
@@ -1156,14 +1159,14 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     fields = [None] * len(infos)
     if level and decided is not None:
         fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
-        toned = [t if fl is None else keep_clipped(t * fl, info[1]) for t, fl, info in zip(toned, fields, infos)]
+        toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
     elif level and sum(info is not None for info in infos) > 1:
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
         found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                         [None if info is None else info[4] for info in infos],
                         None if pin is None else range(len(infos))[pin],
                         max(info[5] for info in infos if info is not None) * GAP_REACH)
-        toned = [t if lv is None else keep_clipped(t * _field(lv, b), info[1]) for t, lv, b, info in zip(toned, found, boxes, infos)]
+        toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
         if _watch is not None:
             fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
         for d, lv in zip(decisions, found):
