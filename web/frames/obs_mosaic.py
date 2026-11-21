@@ -5332,12 +5332,12 @@ def derotated_tiles(u, cache, p, tiles):
     """A still's or mosaic's tiles (layout) with each pointing's filters redrawn as at the time of its first tile (the
     one C8 registers the others to, _pointing_root), as a movie's colour set is as at its newest channel's (derotated):
     a clouded body's clouds turn between the filters while its limb stays put, and the colour planes made of them drew
-    every cloud fringed. Not a pointing one of whose filters was placed by matching its clouds (cloud_placed), one
-    with a tile whose rings were redrawn as at the pass's epoch (ring_redraw: a ring mosaic, whose disk is a corner of
-    it; derotated, its panels' registration moved and the whole 2004 ring mosaic COMPHIDRK001 shifted, a black rim
-    along its edge), and not a tile taken more than DEROTATE_SPAN after its pointing's first (a repeat of the pointing,
-    not its colour set)."""
-    if not derotates(u):
+    every cloud fringed. Not a pointing one of whose filters was placed by matching its clouds (cloud_placed), not a
+    ring mosaic (ring_redraw), and not a tile taken more than DEROTATE_SPAN after its pointing's first (a repeat of
+    the pointing, not its colour set)."""
+    if not derotates(u) or ring_redraw(u):
+        # (nor a pass whose rings are redrawn as at its epoch, a ring mosaic: its disk is a corner of it, often
+        # saturated, and redrawn it came out tinted, COMPHIDRK001's white disk pink, its lit limb moved)
         return tiles
     roots, by_n = {}, {t["n"]: t for t in tiles}
     for t in tiles:
@@ -5350,7 +5350,7 @@ def derotated_tiles(u, cache, p, tiles):
     for t in tiles:
         r = by_n.get(roots.get(t["n"]))
         if r is None or r["n"] == t["n"] or not r.get("id") or abs((t.get("t") or 0) - (r.get("t") or 0)) > DEROTATE_SPAN \
-                or any(q.get("pic") for q in sets[r["n"]]) or any(cloud_placed(u, cache, p, q) for q in sets[r["n"]]):
+                or any(cloud_placed(u, cache, p, q) for q in sets[r["n"]]):
             out.append(t)
             continue
         got = derotated(u, cache, p, t, r["id"])
