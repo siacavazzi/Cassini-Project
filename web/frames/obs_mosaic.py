@@ -113,6 +113,7 @@ CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep,
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
+WHITE_EACH = 99.0    # pass_scale: a movie's white is at least each frame's this percentile (less its black)
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
 LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
@@ -3132,6 +3133,21 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     if calibration.look() == "balanced":
         blacks = undrawn_blacks(blacks, drawn, {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), UNDRAWN_TOP))
                                                 for f, iofs in by.items()})
+    # a movie's white at least each of its frames' WHITE_EACH percentile, so no frame clips over (100 - WHITE_EACH)% of
+    # itself: the pass's percentile is over all its frames pooled, and a movie that brightens as it goes (a stare on
+    # Saturn's night side as the ring-shine grows, 289SA AURSTARE001: its median rose tenfold) had its last frames' aurora
+    # clipped flat over 3% of the picture. Not from a frame exposed LONG_EXPOSURE times the pass's median (its runs of long
+    # exposures have their own white, _long_white) or one the camera saturated over OVER_LEAST of it (its own white is
+    # the camera's limit, not the scene's)
+    if u.get("movie") and white > 0:
+        exps = [g[2] for g in read_all if g is not None and g[2]]
+        mid = float(np.median(exps)) if exps else None
+        for fr, g in zip(frames, read_all):
+            if g is None or fr[2] not in blacks or sat_share.get(fr[1], 0.0) >= OVER_LEAST:
+                continue
+            if mid and g[2] and g[2] >= LONG_EXPOSURE * mid:
+                continue
+            white = max(white, float(np.percentile(g[0], WHITE_EACH)) - blacks[fr[2]])
     # a ring pass's white has headroom (RING_HEADROOM): since CISSCAL's hot pixel and cosmic ray repair (#153) its 99.9th
     # percentile is the brightest real ringlet, not a defect over it, and the rings drew ~15% brighter than before (124RI,
     # 239RI, 111RI movies: lit median 175 of 255 before, 202 after; 180 at 1.4). Moons' passes are not brighter than
