@@ -34,16 +34,16 @@ The picture drawn (one uint8 image per channel); floor=False: without the floor 
 soft=False: with a toe an eighth of the margin wide (both about as before)
 """
 def draw(iofs, floor=True, soft=True):
-    keep = cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE
+    keep = cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE, cal.FLAT_SHARE
     if not floor:
-        cal.FLOOR_SHARE, cal.GLOW_IOF = 0.0, (1e-30, 2e-30)
+        cal.FLOOR_SHARE, cal.GLOW_IOF, cal.FLAT_SHARE = 0.0, (1e-30, 2e-30), 0.0
     if not soft:
         cal.TOE = 0.0
     try:
         channels, margin, mix = cal.load_linear([Label() for _ in iofs], [None] * len(iofs), [i.astype(np.float32) for i in iofs])
         return [t[..., 0] for t in cal.tone(channels, margin, mix)]
     finally:
-        cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE = keep
+        cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE, cal.FLAT_SHARE = keep
 
 
 def pct(p, *q):
@@ -56,7 +56,7 @@ smooth = (np.sin(xx / 70) * np.cos(yy / 90) + 1) / 2         # slow structure, 0
 haze = 0.17 + 0.02 * smooth + rng.normal(0, 0.0003, (H, H))
 before, after = draw([haze], floor=False)[0], draw([haze])[0]
 print("haze p1/p10/p50/p99: before", pct(before, 1, 10, 50, 99), "after", pct(after, 1, 10, 50, 99))
-assert np.percentile(before, 10) > 230                        # today: near-white
+assert np.percentile(before, 10) > 230                        # without a floor black (nor _flat_black's): near-white
 # spread out a little, but no further than FLOOR_GAIN (#193's 0.8 floor share took this to a median of 210 and Titan's
 # real haze to 2.4x its contrast: compression blocks and 8-bit steps, "pushing the data way too far", Sam 11-08)
 assert np.percentile(after, 50) < np.percentile(before, 50) - 4 and np.percentile(after, 1) > 150
@@ -170,7 +170,9 @@ edge = night & np.isin(xx, np.flatnonzero((share > 0.2) & (share < 0.8)))
 print("night side twilight p50: before", int(np.median(before[twilight])), "after", int(np.median(after[twilight])),
       "| black pixels where it meets the cut: before %.2f after %.2f" % ((before[edge] == 0).mean(), (after[edge] == 0).mean()),
       "| real sky p99:", int(np.percentile(after[real_sky], 99)))
-assert np.median(after[twilight]) > np.median(before[twilight]) + 5          # the twilight shows
+# the twilight shows (since the black sits over the sky's grain, not its 98th percentile, it shows without the toe too:
+# 21 of 255 before the toe and 22 with it; the toe's work here is the fade at the cut, below)
+assert np.median(after[twilight]) >= np.median(before[twilight]) and np.median(after[twilight]) > 15
 assert edge.any() and (after[edge] == 0).mean() < 0.1         # the salt and pepper cut is a fade
 assert np.percentile(after[real_sky], 99) < 12                # the real sky's noise stays dark
 

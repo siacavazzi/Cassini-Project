@@ -61,7 +61,12 @@
   {"name": "saturn07-deck2", "kind": "composite", "frame": "N1565242114_1", "group": "hard", "watch": "low-contrast cloud deck close-up shows its cloud structure, not a plain peach square (regression 11-20)"},
   {"name": "titan08-mt1", "kind": "still", "frame": "N1578275934_1", "group": "hard", "watch": "Titan MT1 close-up shows its haze and clouds, not a white square; compression blocks not pushed (regression 11-20)"},
   {"name": "rings08-bright", "kind": "still", "frame": "N1585900002_1", "group": "hard", "watch": "B ring close-up not washed out to white; Cassini division strip keeps its ringlets (regression 11-20)"},
-  {"name": "mimas04-movie", "kind": "pass", "frame": "N1466584338_1", "group": "hard", "watch": "Mimas 2004 (000OT TIMIIA001) colour movie: its glare-lit sky not magenta, the set's channels raised by one share of their sky"},
+  {"name": "mimas04-movie", "kind": "pass", "frame": "N1466584338_1", "group": "hard", "watch": "Mimas 2004 (000OT TIMIIA001) colour movie: glare and Mimas itself magenta (GRN near 0 even on the moon: not a black level); Full black sky"},
+  {"name": "saturn07-fullblack-movie", "kind": "pass", "frame": "N1551253524_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "saturn08w-fullblack-movie", "kind": "pass", "frame": "W1602057697_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "saturn13-fullblack-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "saturn08-fullblack-movie", "kind": "pass", "frame": "N1601603945_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
+  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"},
   {"name": "dione139-mosaic", "kind": "pass", "frame": "N1665974059_1", "group": "hard", "watch": "Dione 2010 colour map (139DI REGMAP001): no brightness step across the moon between tile rows, no green band"},
   {"name": "titan059-mosaic", "kind": "pass", "frame": "N1582413047_1", "group": "hard", "watch": "Titan 2008 CB3/MT1 map (059TI GLOBMAP001): tiles of one brightness and tint"}
  ]
