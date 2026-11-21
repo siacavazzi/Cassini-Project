@@ -169,3 +169,12 @@ stare_fp = om.frames_boxes(frames((0, 0), (10, -5)), Z)
 fp = (*stare_fp[:, :2].min(0), *stare_fp[:, 2:].max(0))
 assert max(fp[2] - fp[0], fp[3] - fp[1]) == F + 10
 print("ok")
+
+# (D) the body in a corner of every frame (127HE ROTCOLR003's best Helene): a square round it keeping the frames is
+# mostly empty, so the view is the footprint's, the body where the frames show it
+corner = [(470, 470), (480, 460)]
+fp = box(*corner)
+assert om.centre_half(fp, 60, seen(*corner)) is None
+assert om.movie_rect(fp, t, radius=60, centre=True, seen=seen(*corner)) == om.movie_rect(fp, t)
+assert om.covered(seen((0, 0)), F / 2) > 0.8
+print("a body in the frames' corner is not centred: ok")

@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -109,6 +109,7 @@ MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to 
                      # follows the frame: each picture the frame as Cassini took it (follow_view)
 MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint when the geometry cache has none of its frames (pass_boxes)
 CENTRE_MARGIN = 0.2  # of the body's diameter, round its disk in a movie centred on it
+CENTRE_FILL = 0.5    # of a view centred on the body that its frames' footprint must cover, or the pass is not centred
 CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep, or the pass is not centred (centre_half)
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
@@ -9166,7 +9167,13 @@ def centre_half(fp, radius, seen):
     inside = kept(seen, wide)
     if not (inside.mean() >= CENTRE_KEEP and inside.any(1).all()):
         return None
-    return fitted_half(seen, around / 2, wide)
+    half = fitted_half(seen, around / 2, wide)
+    # (a body at its frames' edge: the square round it that keeps the frames is mostly empty, the pictures in one
+    # corner of it (127HE ROTCOLR003's best Helene, 28% of the view). Under CENTRE_FILL of the square holding
+    # pictures (covered), the view is the footprint's, the body where the frames show it)
+    if covered(seen, half) < CENTRE_FILL:
+        return None
+    return half
 
 
 def fitted_half(seen, least, most):
@@ -9191,6 +9198,17 @@ def fitted_half(seen, least, most):
 _g = (np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5
 SEEN_DISK = (np.add.outer(_g ** 2, _g ** 2) <= 0.25).ravel()   # a frame's seen points within the circle across it
 del _g
+
+
+def covered(seen, half, grid=64):
+    """The share of the square of half side half round the body's centre that the frames (seen, pass_seen: each
+    frame's points, its outline their hull) cover, on a grid x grid raster of it."""
+    cover = np.zeros((grid, grid), np.uint8)
+    k = grid / (2 * half)
+    for pts in seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2):
+        hull = cv2.convexHull(np.round((pts + half) * k * 16).astype(np.int32))
+        cv2.fillConvexPoly(cover, hull, 1, shift=4)
+    return float(cover.mean())
 
 
 def kept(seen, half):
