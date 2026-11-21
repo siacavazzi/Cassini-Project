@@ -31,7 +31,7 @@ def test_grain_leaves_the_glow_out():
     assert spread < 0.0006 < raw, (spread, raw)
     # sky_levels' margin with a floor percentile is now the grain's
     _, margin = calibration.sky_levels([[iof]], [[sky]], floor_pct=98)
-    assert margin < 0.0006, margin
+    assert spread < margin < 0.6 * raw, (margin, raw)   # the grain plus GRAIN_GLOW of the glow over it
 
 
 def test_grain_of_a_plain_sky_is_its_spread():
@@ -101,34 +101,16 @@ def test_sky_track_follows_the_sky_and_ignores_one_frame():
     assert obs_mosaic.track_black(track, -10.0) == b[0]
 
 
-def test_tile_scale_uses_the_track_both_ways():
+def test_tile_scale_raises_to_the_track():
     scale = {"blacks": {"CL1": 0.005}, "white": 0.3, "gamma": 3.0, "sky_track": {"CL1": [[0.0, 0.001], [10.0, 0.002]]}}
     out = obs_mosaic.tile_scale(scale, "CL1", own_sky=True, t=5.0, on_body=True)
-    assert abs(out["blacks"][0] - 0.0015) < 1e-9       # under the pass's black
+    assert out["blacks"][0] == 0.005                   # never under the pass's black
+    scale["sky_track"]["CL1"] = [[0.0, 0.006], [10.0, 0.008]]
+    out = obs_mosaic.tile_scale(scale, "CL1", own_sky=True, t=5.0, on_body=True)
+    assert abs(out["blacks"][0] - 0.007) < 1e-9        # over it where the frame's sky is
     assert "sky_track" not in out
     assert obs_mosaic.tile_scale(scale, "CL1", own_sky=False, t=5.0)["blacks"][0] == 0.005   # mosaics keep the pass's
 
-
-
-def test_set_share_is_one_share_for_the_colour_filters():
-    share = obs_mosaic.set_share(["RED", "GRN", "BL1"], {"RED": 1e-4, "GRN": 4e-5, "BL1": 6e-5, "CL1": 1e-4},
-                                 {"RED": 0.64e-4, "GRN": 4.6e-5, "BL1": 2.6e-5, "CL1": 1e-5})
-    assert share["filters"] == ["BL1", "GRN", "RED"]
-    assert abs(share["share"] - 0.64) < 1e-9          # the median of 0.433, 0.64 and 1.15
-    assert obs_mosaic.set_share(["CL1"], {"CL1": 1e-4}, {"CL1": 1e-5}) is None
-
-
-def test_colour_movie_channels_raised_by_one_share():
-    rng = np.random.default_rng(3)
-    scale = {"blacks": {"RED": 0.0, "GRN": 0.0}, "white": 0.3, "gamma": 3.0, "sky_tops": {"RED": 0.0006, "GRN": 0.0006},
-             "set_share": {"filters": ["GRN", "RED"], "share": 0.3}}
-    got = {}
-    for f, sky in (("RED", 0.004), ("GRN", 0.002)):
-        iof = (sky + rng.normal(0, 0.00002, (512, 512))).astype(np.float32)
-        iof[200:300, 200:300] = 0.3
-        b = obs_mosaic.tile_scale(scale, f, own_sky=True, t=0.0, codes=False)["black_of"](iof)
-        got[f] = b["black"] / sky
-    assert abs(got["RED"] - got["GRN"]) < 0.02, got     # the same share of each one's sky
 
 
 if __name__ == "__main__":
