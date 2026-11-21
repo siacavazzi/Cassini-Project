@@ -6388,8 +6388,14 @@ def held_level(frames):
     """The seams' (gains, offsets) of frames on one calibrated scale, none pinned (mosaic.seams' pin None), for
     mosaic.compose's corrections. Pinned to none, the gains all sink together toward their limit as overlaps come
     in (the data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is held
-    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last."""
-    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
+    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last.
+    The gains are the log solve (mosaic.match_gains anchored: each pair's ratio, every log gain pulled gently toward
+    0). The plain solve's pull toward 1 is too weak for a whole mosaic: every gain sank to the limit (1 / 1.1) and
+    stopped there, all the same, so once their mean was taken out every tile kept a gain of 1, nothing was matched,
+    and the offsets alone (at most 6 levels each) took the steps: Dione 139DI REGMAP001's 27 tiles a filter, all
+    at 0.909 before their mean was taken out, half of their offsets at +6 and half at -6, a step of 12 levels across
+    the moon and a green band where one filter's step was not another's."""
+    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap, anchored=True)
     gains = gains / np.exp(np.log(gains).mean(axis=0))
     return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap)
 
