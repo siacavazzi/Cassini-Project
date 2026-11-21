@@ -2622,7 +2622,6 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     out.pop("sky_track", None)
-    out.pop("set_share", None)
     track = (scale.get("sky_track") or {}).get(f)
     if own_sky and track and t is not None:
         # a movie frame's black follows the pass's sky as it changes (sky_track), down as well as up, on the pass's one
@@ -2643,8 +2642,6 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     # own, every other frame keeps the pass's)
     glow_only = top is None and disk is None and not on_body
     black = out["blacks"][0]
-    share = scale.get("set_share") or {}
-    share = share.get("share") if f in share.get("filters", ()) else None
 
     def black_of(iof, valid=None):
         # the frame's sky as pass_scale finds it, at the size it measures on
@@ -2763,9 +2760,6 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         own = float(np.percentile(fine, SKY_TOP_PCT) - np.median(fine)) if fine.size > 100 else 0.0
         # (a pass with no dark sky has no height of its own: the frame's noise margin, as a single picture's)
         raised = level + max(margin if top is None else top, own, spread)
-        if share and level > 0 and not (glow or veiled):
-            # a colour set's channel: the set's one share of its own sky (set_share), at least its noise margin
-            raised = level + max(share * level, margin)
         # and never at or over the frame's lit median (its pixels over the sky): a black there draws the frame black
         # (a veiled or glowing frame's lit pixels are its veil or glow: the sky, which is what goes black)
         lit = q[q >= top_of_sky]
@@ -2791,28 +2785,11 @@ TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter
                    # neighbours (an odd number), so one frame's stray light or lost lines do not set the frames round it
 
 
-SHARE_LEAST = 2      # set_share: the colour filters with a sky level of their own that a colour set needs for one share
-
-
-def set_share(drawn, levels, tops):
-    """(pass_scale) How far a colour movie's blacks sit over their sky, as one share of each channel's own sky level for
-    every filter of its colour set: {"filters": [...], "share": the median of the drawn filters' heights over their pass
-    sky levels (tops / levels)}, or None (a grey movie, or under SHARE_LEAST drawn filters with a sky level over 0).
-    Each channel raised by its own height over its own sky (tile_scale's black_of) is raised by a different share of it,
-    and a sky lit by a reddish glare then lost its green most: Mimas 2004 (000OT TIMIIA001), BL1 1.44, RED 1.64 and GRN
-    2.15 times its sky, the glare drawn magenta (the movie thread, 11-20). On one share the glare keeps its colour."""
-    mine = [f for f in (drawn or []) if f in levels and f in tops and levels[f] > 0]
-    if len(set(mine)) < SHARE_LEAST:
-        return None
-    return {"filters": sorted(set(mine)), "share": float(np.median([tops[f] / levels[f] for f in mine]))}
-
-
-def sky_track(qs, masks, ts, top, share=None):
+def sky_track(qs, masks, ts, top):
     """(pass_scale) A movie's black through time for one filter, [[t, black]...] in time order: each sampled frame's
     own dark sky level (qs: its quarter size I/F, masks: its dark sky, ts: its time; calibration.sky_levels, pixels far
     under the sky, a line lost in downlink, left out as tile_scale's black_of leaves them) plus top (the band's
-    height over its sky, pass_scale's), or for a colour set's filter its set's share of that level (set_share), at
-    least the frame's noise margin, the median of TRACK_WINDOW neighbours. Sam (11-19): Full's blacks crushed or
+    height over its sky, pass_scale's), the median of TRACK_WINDOW neighbours. Sam (11-19): Full's blacks crushed or
     gray where the pass's one black sat over or under a frame's sky: the 2017 F ring movies' scattered light, 270RC
     PLATDARK's IR3 black under its sky (negative, set with its lost columns). [] when under three frames have sky."""
     got = []
@@ -2825,10 +2802,7 @@ def sky_track(qs, masks, ts, top, share=None):
         ok = m & (q >= median - max(0.05 * float(np.percentile(q, 99.9)), SKY_OUTLIER * noise))
         if ok.mean() <= SKY_MIN:
             continue
-        (level,), margin = calibration.sky_levels([[q]], [[ok]])
-        if share:
-            got.append((t, level + max(share * level, margin)))
-            continue
+        (level,), _ = calibration.sky_levels([[q]], [[ok]])
         # and no lower than the frame's own black as a still (Processed: calibration._balanced_scale, its sky level, the
         # grain over it and the floor black), so Full keeps the black sky Processed has: the 2004 ring movie and 2007-13
         # Saturn movies lost 30-60 points of it at Full, their faint ring light and scattered light drawn gray over the
@@ -3067,7 +3041,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # body clipped white. White at least the DISK_WHITE percentile of its disk, as a body against the sky has (a
         # body over most of the frames already sets their 99.5th percentile: left as it is)
         white = max(white, max(float(np.percentile(on[f] - blacks[f], DISK_WHITE)) for f in on))
-    toe, track, share = None, None, None
+    toe, track = None, None
     if calibration.look() == "balanced":
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
@@ -3101,23 +3075,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
             if u.get("movie") and not u.get("mosaic"):
-                share = set_share(drawn, dict(zip(by, levels)), tops)
-                track = {f: sky_track(by[f], masks[f], times[f], tops[f], share and f in share["filters"] and share["share"])
-                         for f in by}
+                track = {f: sky_track(by[f], masks[f], times[f], tops[f]) for f in by}
                 track = {f: v for f, v in track.items() if v}
-        if share is None and u.get("movie") and not u.get("mosaic"):
-            # a pass where some filter has no dark sky (a narrow band's frames lit all over) has no sky heights, but its
-            # colour set's filters can still share one: measured on those filters' own sky (Mimas 2004, 000OT
-            # TIMIIA001: UV1 and IR4 have none, and its RED, GRN and BL1 frames' blacks went up by different shares)
-            mine = [f for f in (drawn or []) if f in by
-                    and sum(int(m.sum()) for m in masks[f]) > SKY_MIN * sum(m.size for m in masks[f])]
-            if len(mine) >= SHARE_LEAST:
-                own_levels, own_margin = calibration.sky_levels([by[f] for f in mine], [masks[f] for f in mine])
-                heights = {}
-                for f in mine:
-                    v = _sky_fine(by[f], masks[f])
-                    heights[f] = max(own_margin, float(np.percentile(v, SKY_TOP_PCT) - np.median(v)) if v.size > 100 else 0.0)
-                share = set_share(mine, dict(zip(mine, own_levels)), heights)
     if calibration.look() == "balanced":
         blacks = undrawn_blacks(blacks, drawn, {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), UNDRAWN_TOP))
                                                 for f, iofs in by.items()})
@@ -3162,8 +3121,6 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
            "detail": bool(filled and not small)}
     if track:
         out["sky_track"] = track
-    if share:
-        out["set_share"] = share
     if sat_white:
         out["sat_white"] = sat_white
         out["headroom"] = saturn_look(u)["headroom"]
