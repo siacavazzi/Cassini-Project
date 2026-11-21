@@ -6737,6 +6737,20 @@ RING_DISK = 1.0    # ... round a circle this share of the disk's (equatorial) ra
                    # rim inside the equatorial limb: 235SA SATSTARE001)
 
 
+def clipped_white(rgba):
+    """A colour picture (RGBA) white where it comes out clipped: at white in one band and within WHITE_SLACK of it in
+    the others. A mosaic's per-filter gains a little apart leave a block every filter saturated a few levels off
+    white in one band, and the mix and ring_white take it past white in the others: ringsFA's block came out
+    255/255/247, cream, when the solved blue gain was 0.97 (PR 611 review)."""
+    rgb = rgba[..., :3]
+    white = (rgb.max(axis=2) >= 255) & (rgb.min(axis=2) >= 255 - WHITE_SLACK)
+    if not white.any():
+        return rgba
+    rgba = np.array(rgba)
+    rgba[..., :3][white] = 255
+    return rgba
+
+
 def ring_white(rgba, scale):
     """A picture on a Saturn look scale (its "headroom": white that many times the pass's own) with everything off the
     body's disk ("disk": x, y, radius px; movie_disk) back on the pass's own white, as it was drawn before the look:
@@ -7241,7 +7255,7 @@ def _despiked(planes, gamma):
 
 
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
-WHITE_SLACK = 10   # (colour_picture) a pixel mixed to white in one band and within this of it in every other is white
+WHITE_SLACK = 10   # (clipped_white) a pixel at white in one band and within this of it in every other is white
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
 
 
@@ -7848,13 +7862,6 @@ def colour_picture(u, p, colour, planes, away=None):
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
     if scale.get("chroma"):
         rgb = chroma(rgb, scale["chroma"])
-    # white where the colour comes out clipped: at white in one band and within WHITE_SLACK of it in the others, as
-    # a mosaic's per-filter gains a little apart leave a block the mix takes past white (ringsFA's, mixed to
-    # 255/255/247 when the solved blue gain came out 0.97: a cream block)
-    white = (rgb.max(axis=2) >= 255) & (rgb.min(axis=2) >= 255 - WHITE_SLACK)
-    if white.any():
-        rgb = np.array(rgb)
-        rgb[white] = 255
     # only where every filter has the picture: past one filter's edge the others alone are a coloured rim
     rgb = (rgb * (alpha[..., None] / np.float32(255)) + 0.5).astype(np.uint8)
     return np.dstack([rgb, alpha])
@@ -7922,6 +7929,8 @@ def so_far(u, n, cache, made=None, out=OUT):
     hdr = _mosaic_map(u, p, tiles, rect, used, base, rgba.shape, cache) if HDR_ON else None
     on_disk = movie_disk(p["display_scale"], rect, p["k"], RADIUS.get(u["key"][0], 0) / (u["z"] * IFOV[u["key"][2]]))
     rgba = ring_white(rgba, on_disk)
+    if len(used) > 1:
+        rgba = clipped_white(rgba)
     if sharpens(p["display_scale"]):
         rgba = detail(rgba, DETAIL_SIGMA * FRAME * p["k"], on_disk)
     _last_canvas.made = (key, rgba, hdr, used, bool(base))
