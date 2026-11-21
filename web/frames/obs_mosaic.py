@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v152", "raw": "obs-v135", "eye": "obs-v152-eye", "false": "obs-v152-false", "classic": "obs-v121-classic"}  # v152/v135/v121: a clouded body's colour set as at one time: each channel redrawn as SPICE turns the body to the set's time (derotation: Saturn's 2011 storm fringes); v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -5240,6 +5240,35 @@ def derotates(u):
     return clouded(u) and calibration.step("surface") and _sky_views(u) is not None
 
 
+_cloud_placed_seen = {}
+
+
+def cloud_placed(u, cache, p, t):
+    """True when colour channel t (a tile report) was put where its clouds match another filter's: C8 moved it (a
+    "shift" not from the limb, _register) and its picture shows no lit limb (limb_place) to have checked the move on.
+    Such a match already took in the body's turn between the two frames (a close-up on Saturn's disk), so the set is
+    not derotated as well: its clouds would move twice. Kept per tile."""
+    reg = t.get("registered") or {}
+    if "shift" not in reg or str(reg.get("how", "")).startswith("limb"):
+        return False
+    key = (tuple(u["key"]), t.get("n"))
+    with _lock:
+        got = _cloud_placed_seen.get(key)
+    if got is None:
+        disk = _disk_geometry(u)
+        src = os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png")
+        got = True
+        if disk is not None and os.path.exists(src):
+            with _lock:
+                image = _made_pictures.get(src)
+            if image is None:
+                image = np.asarray(Image.open(src).convert("RGBA"))
+            got = limb_place(disk, t, image) is None
+        with _lock:
+            _cloud_placed_seen[key] = got
+    return got
+
+
 def derotated(u, cache, p, t, ref):
     """Colour channel t (a tile report, placed) redrawn as at the time of frame ref, the set's: a clouded body turns
     between the filters' exposures, a minute or two apart, and its clouds with it, while its limb stays put on the
@@ -5248,11 +5277,13 @@ def derotated(u, cache, p, t, ref):
     body between the two times (reproject.sky_field, warp_sky, as surface_pictures redraws a mosaic's panels); the
     sky, the rings, the night side and the limb's edge stay where they are. t as it is when SPICE cannot say, the
     move is under DEROTATE_LEAST or the redrawing would distort it (SURFACE_STRETCH); otherwise t with "src" (the
-    redrawn picture, kept under DEROTATE_DIR) and its "box"."""
+    redrawn picture, kept under DEROTATE_DIR) and its "box". A tile its layout gave another picture (t["pic"], its
+    rings redrawn as at the pass's epoch, ring_redraw) is derotated from that one, its box t["box"]. Saturn's rings in
+    front of its disk keep their place (reproject.disk_field)."""
     if "offset" not in t or t.get("id") == ref or not derotates(u):
         return t
     there = _tiles(u, cache, p["display_scale"])
-    path = os.path.join(there, DEROTATE_DIR, f"{t['n']}-{ref}.png")
+    path = os.path.join(there, DEROTATE_DIR, f"{t['n']}-{ref}{'-r' if t.get('pic') else ''}.png")
     if os.path.exists(path + SURFACE_BOX):
         with open(path + SURFACE_BOX) as fh:
             box = json.load(fh).get("box")
@@ -5260,7 +5291,7 @@ def derotated(u, cache, p, t, ref):
     import reproject as rp
     view = _sky_views(u)
     epoch, v = view(ref), view(t["id"])
-    src = os.path.join(there, f"{t['n']}.png")
+    src = t.get("pic") or os.path.join(there, f"{t['n']}.png")
     if epoch is None or v is None or not os.path.exists(src):
         return t
     with _lock:
@@ -5269,7 +5300,8 @@ def derotated(u, cache, p, t, ref):
         image = np.asarray(Image.open(src).convert("RGBA"))
     km_px = IFOV[u["key"][2]] * u["z"]
     with _spice_lock:
-        dx, dy, weight = surface_field(rp, epoch, v, image.shape[:2], t, km_px, view_turn(u))
+        dx, dy, weight = surface_field(rp, epoch, v, image.shape[:2], t, km_px, view_turn(u),
+                                       rp.disk_field if u["key"][0] in RING_BODIES else rp.sky_field)
     r = SURFACE_REACH // SURFACE_STEP
     inner = weight[r:-r, r:-r] > 0
     most = float(max(np.abs(dx[r:-r, r:-r][inner]).max(), np.abs(dy[r:-r, r:-r][inner]).max())) if inner.any() else 0.0
@@ -5283,6 +5315,36 @@ def derotated(u, cache, p, t, ref):
     with open(path + SURFACE_BOX, "w") as fh:
         json.dump({"box": box, "most": round(most, 2)}, fh)
     return dict(t, src=path, box=box) if box else t
+
+
+DEROTATE_SPAN = 600   # s: (derotated_tiles) a tile further than this in time from its pointing's first is not one colour set with it
+
+
+def derotated_tiles(u, cache, p, tiles):
+    """A still's or mosaic's tiles (layout) with each pointing's filters redrawn as at the time of its first tile (the
+    one C8 registers the others to, _pointing_root), as a movie's colour set is as at its newest channel's (derotated):
+    a clouded body's clouds turn between the filters while its limb stays put, and the colour planes made of them drew
+    every cloud fringed. Not a pointing one of whose filters was placed by matching its clouds (cloud_placed), and not
+    a tile taken more than DEROTATE_SPAN after its pointing's first (a repeat of the pointing, not its colour set)."""
+    if not derotates(u):
+        return tiles
+    roots, by_n = {}, {t["n"]: t for t in tiles}
+    for t in tiles:
+        if "offset" in t:
+            roots[t["n"]] = _pointing_root(u, t["n"], roots)
+    sets = {}
+    for n, r in roots.items():
+        sets.setdefault(r, []).append(by_n[n])
+    out = []
+    for t in tiles:
+        r = by_n.get(roots.get(t["n"]))
+        if r is None or r["n"] == t["n"] or not r.get("id") or abs((t.get("t") or 0) - (r.get("t") or 0)) > DEROTATE_SPAN \
+                or any(cloud_placed(u, cache, p, q) for q in sets[r["n"]]):
+            out.append(t)
+            continue
+        got = derotated(u, cache, p, t, r["id"])
+        out.append(dict(t, pic=got["src"], box=got["box"]) if "src" in got else t)
+    return out
 
 
 def surface_pictures(u, cache, p, tiles):
@@ -7174,6 +7236,8 @@ def layout(u, n, cache):
         at = {"ring_at": u["frames"][len(u["frames"]) // 2][1]} if rung else {}
         tiles = [dict(t, pic=surfaced[t["n"]], box=surface_box(surfaced[t["n"]], t), **at) if t["n"] in surfaced else t
                  for t in tiles]
+    # a clouded body's filters of one pointing as at one time (derotated_tiles)
+    tiles = derotated_tiles(u, cache, p, tiles)
     # a ringed body's tiles registered on their rings each (ring_places), before panel registration: those it moved
     # keep that place, and their pointings' panel moves are not added
     rung = ring_moves(u, cache, p, tiles)
@@ -10650,7 +10714,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         if derotates(u) and len(newest) > 1:
             # (the set's channels redrawn as at its newest channel's time: one time for the set, whichever frame shows it)
             ref = max((q for q in newest.values() if q.get("id")), key=lambda q: q.get("t") or 0, default={}).get("id")
-            if ref:
+            if ref and not any(cloud_placed(u, cache, p, q) for q in newest.values() if "offset" in q):
                 newest = {f: derotated(u, cache, p, q, ref) for f, q in newest.items()}
         used = want
     if used:
