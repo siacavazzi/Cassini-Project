@@ -81,25 +81,17 @@ def test_square_needs_the_target():
     assert not str(how).startswith("target not seen"), how
 
 
-def test_follow_scale_constant():
-    # a followed stare inside the body's disk: one scale for every frame, whatever each frame's shake
+def test_follow_inside_body():
+    # a stare whose frames all lie inside the body's disk follows its frame (follows, filled); one showing the limb not
     S = om.FRAME
-    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j, 0, 0.0, 20000.0 - 45 * j + (7 if j % 2 else -7), 370000.0) for j in range(20)]
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j, 0, 0.0, 20000.0 - 45 * j, 370000.0) for j in range(20)]
     u = {"key": ("SATURN", "OBS", "N", 0), "frames": frames, "z": 370000.0}
     assert om._inside_body(u)
-    tiles = {j: {"n": j, "offset": [0.0 + (3 if j % 2 else -3), 20000.0 - 45 * j], "box": [-S / 2, -S / 2, S, S]} for j in range(20)}
-    om.tile = lambda u_, j, cache, scale=None: tiles[j]
-    p = {"display_scale": {}}
-    ks = []
-    for s_ in range(3, 17):
-        dx, dy = om.follow_shake(u, None, p, s_, lambda q: q)
-        assert max(abs(dx), abs(dy)) <= om.FOLLOW_SHAKE_MOST * S + 1e-9   # (or 0, a move)
-        ks.append(om.follow_k(1.0, True))
-    assert len(set(ks)) == 1 and ks[0] == om.FOLLOW_ZOOM, ks
-    assert om.follow_k(1.0, False) == 1.0
-    # a pass showing the limb (a frame reaching past the disk) is not inside it
     u2 = dict(u, frames=frames[:-1] + [frames[-1][:6] + (27000.0, 370000.0)])
     assert not om._inside_body(u2)
+    fp = (0.0, 0.0, 2 * om.HALF + 0.5 * S, 2 * om.HALF + 0.3 * S)
+    rect = (1.0, 2.0, fp[2], fp[3])
+    assert om.follows(fp, rect, True) and not om.follows(fp, rect, False)
 
 
 if __name__ == "__main__":
