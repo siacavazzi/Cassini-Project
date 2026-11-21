@@ -9015,7 +9015,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
-            "apart": SET_APART, "own": [by_pictures(hows.get(n)) for n in ns] if (hows := steady_hows(u, cache, p)) is not None else None,
+            "apart": SET_APART, "own": [by_pictures(hows.get(n)) and not _ring(u) for n in ns]
+            if (hows := steady_hows(u, cache, p)) is not None else None,
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
@@ -10580,8 +10581,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         sheld = steady_held(u, cache, p) if places and not track else {}
         anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
         hows = steady_hows(u, cache, p) if places and not track else {}
+        # (none in a pass of the rings themselves (_ring): its frames slide along ringlets that repeat, and a match
+        # there is no channel's own place. 2015's ring scan, rx-saturn15-movie2, its channels each at its own match:
+        # a stronger magenta rim on the A ring's outer edge, blue 1.4 px off green)
         mine = {q["n"] for q in bases.values() if "offset" in q and q.get("n") in (places or {})
-                and by_pictures(hows.get(q["n"]))}
+                and by_pictures(hows.get(q["n"]))} if not _ring(u) else set()
         move = {q["n"]: (places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})}
         if mine:
