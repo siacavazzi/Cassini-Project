@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3786,6 +3786,13 @@ def _limb_register(u, q, ref, out, crop):
     if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
         e = l0[0] - lq[0]
         v = (-e * l0[1][0], -e * l0[1][1])
+        if "spice_offset" in out and abs(e) > abs(off) + LIMB_REGISTER:
+            # (the limb further off at SPICE's place than at the match: it measures the filter's own haze height, not
+            # its place, and the match stands. 236TI M30R2CLD155's BL1, its limb 5 px out in Titan's blue haze, went
+            # back to SPICE's place 13 px from GRN: a blue rim on one side, yellow on the other)
+            reg = dict(reg, limb_off=round(off, 2), limb_at_spice=round(e, 2))
+            out["registered"] = reg
+            return
         if abs(e) <= LIMB_REGISTER:
             # (SPICE's place where the limbs agree there: JPL's corrected pointing, within a filter's haze of the
             # reference's; moved onto the reference's limb, the filter would take on the reference's haze height)
@@ -10541,17 +10548,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         own_gain = {}
         bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
         to_white = one_white(list(bases.values()), p["display_scale"])
-        # (the set's one move: the median of its channels' own stabilization moves, so one channel the pictures could
-        # not match, or matched along the ring, moves none of them on its own)
-        # (from each channel's place as steady_places holds it: SPICE's, or the pictures' where seen_places took
-        # them; the page's table has those as its "spice")
-        sheld = steady_held(u, cache, p) if places and not track else {}
-        anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
         # (a channel the pictures placed keeps that place: each filter's frame on the target where it was taken, the
         # camera's drift between the exposures out (003SA 3X3MOVIEA003's ring edges doubled 2 to 3 px when the set
         # moved as one block). A channel they did not place (held on the smoothed path, or along the rings by their
         # profiles) moves with the ones they did, by the median of their moves, keeping its place against them as
         # SPICE has it: on its own it came apart from them, 257DA DAPHNIS001's blue-violet fringe, #602/#606)
+        # (from each channel's place as steady_places holds it: SPICE's after the channels' registration (C8), or the
+        # pictures' where seen_places took them; the page's table has those as its "spice")
+        sheld = steady_held(u, cache, p) if places and not track else {}
+        anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
         hows = steady_hows(u, cache, p) if places and not track else {}
         mine = {q["n"] for q in bases.values() if "offset" in q and q.get("n") in (places or {})
                 and by_pictures(hows.get(q["n"]))}
@@ -10568,11 +10573,9 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                             gamma=base.get("gamma", gamma))
             newest[f] = at(base)
             if set_shift is not None and "offset" in base:
-                # (a colour set's channels moved together, by the median of their own stabilization moves: each keeps its
-                # place against the others as SPICE has it (the channels' registration). Each at its own stabilized place, a
-                # channel the pictures could not match went on along the smoothed path while the others followed
-                # their matches, and the channels came apart: 257DA DAPHNIS001's blue-violet fringe along the
-                # Keeler gap's edge, #602)
+                # (a channel the pictures did not place moved with the channels they did, keeping its place against
+                # them as the channels' registration has it: on the smoothed path alone it came apart from them,
+                # 257DA DAPHNIS001's blue-violet fringe along the Keeler gap's edge, #602)
                 if base.get("n") not in mine:
                     newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
             own_gain[f] = base.get("gain")

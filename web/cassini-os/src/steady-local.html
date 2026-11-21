@@ -45,7 +45,7 @@
     // (set: a colour set's channels (tile indices), as movie_frame places them: a channel the pictures placed (the
     // table's "own", obs_mosaic.by_pictures) at its own stabilized place; the others moved by the median of those
     // channels' stabilization moves (of every channel's, when the pictures placed none), each keeping its place
-    // against them as SPICE has it)
+    // against them as the channels' registration has it)
     function shift(t, pl, a, base, set) {
       if (!pl) return [0, 0];
       let to = pl[a];
