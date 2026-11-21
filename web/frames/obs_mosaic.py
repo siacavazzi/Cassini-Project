@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v153", "raw": "obs-v136", "eye": "obs-v153-eye", "false": "obs-v153-false", "classic": "obs-v122-classic"}  # v153/v136/v122: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2279,6 +2279,18 @@ def over_grey(colour, grey, k, gamma=2.2, gain=...):
 # the bands, flat green and magenta blocks on Saturn's night side. There the gray base (its own frames, matched to the
 # colour round it, over_grey) shows instead
 MIX_SPAN = sets_passes.SET_GAP   # s: frames on top taken further apart than this mix visits (a camera set's own count as one)
+SLOW_MIX_SPAN = {"TITAN": 4 * 3600}   # s: on these bodies, whose clouds change little in hours, a colour picture
+# mixes visits taken up to this far apart (mix_span): Titan 059TI GLOBMAP001 (2008, an MT1 and two CB3 at each of 26
+# pointings over 3.4 h) drew the gray base, tinted to match the colour round it, wherever one pointing's MT1 sat under
+# the next one's CB3, and those patches read as tiles of another colour (a pale block at upper left, a gray one over
+# the dark terrain). Still a mosaic's gray base wherever no colour lies (mixes keeps MIX_SPAN for that).
+
+
+def mix_span(u):
+    """How far apart (s) the visits a colour picture of pass u mixes may be before the gray base is drawn there."""
+    return max(MIX_SPAN, SLOW_MIX_SPAN.get(u["key"][0], 0))
+
+
 MIX_LEAST = 0.15   # of a frame: a mixed patch narrower than this keeps its colour (a seam's strip where one filter of the newer visit reaches less far: 195RI, up to a tenth of a frame)
 
 
@@ -2536,17 +2548,17 @@ def set_time(u, n):
     return u["_set_time"].get(n, u["frames"][n][3])
 
 
-def set_mask(times, k):
+def set_mask(times, k, span=MIX_SPAN):
     """Where a colour picture mixes visits (bool, canvas pixels): every colour filter has a frame on top there
-    (times: set_times of each) and the first and last were taken more than MIX_SPAN apart, less patches narrower
-    than MIX_LEAST of a frame (at k canvas px per reference px). None when nowhere."""
+    (times: set_times of each) and the first and last were taken more than span (MIX_SPAN; mix_span for the pass)
+    apart, less patches narrower than MIX_LEAST of a frame (at k canvas px per reference px). None when nowhere."""
     stack = np.stack(times)
     every = ~np.isnan(stack).any(axis=0)
     if not every.any():
         return None
     with np.errstate(invalid="ignore"):
         spread = np.nanmax(stack, axis=0) - np.nanmin(stack, axis=0)
-    mixed = (every & (spread > MIX_SPAN)).astype(np.uint8)
+    mixed = (every & (spread > span)).astype(np.uint8)
     r = max(1, round(MIX_LEAST * FRAME * k / 2))
     mixed = cv2.morphologyEx(mixed, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
     return mixed.astype(bool) if mixed.any() else None
@@ -7894,7 +7906,7 @@ def so_far(u, n, cache, made=None, out=OUT):
             if mixes(u, p, tiles, colour):
                 shape = rgba.shape[:2]
                 rgba = unmixed(rgba, set_mask([set_times(shape, placed_tiles(u, p, _mine(u, p, visit_tiles(u, tiles, colour), f), rect, cache))
-                                               for f in colour], p["k"]), grey)
+                                               for f in colour], p["k"], mix_span(u)), grey)
             rgba = over_grey(rgba, grey, p["k"], p["display_scale"]["gamma"])
     elif base:
         rgba = filter_mosaic(u, p, LUM, tiles, rect, cache, None, tag)
