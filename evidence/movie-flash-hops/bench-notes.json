@@ -1,0 +1,11 @@
+{
+ "methone-movie": "tinted frames' brightness now matched on the lit moon, not on sky noise (the Jupiter W_10 bug): the moon is drawn ~12% brighter (lit median 74 -> 84), and the core where the clear frames themselves saturated (294 px clipped on the frame's own scale) now shows white; before, the sky-noise match drew the whole moon darker",
+ "enceladus15-movie": "WHITE_EACH / tint match on lit pixels; small uniform change on the lit side",
+ "telesto-movie": "tint match on lit pixels; at most 10 levels",
+ "daphnis17-movie": "unfit frames hold their own moment, not their filter's frame a cycle back: odd_frame 111 -> 2.6 (fixed); a frame at a new view keeps playing as it is",
+ "titan127-movie": "tint hue read on Titan's disk; at most 15 levels",
+ "impact293-movie": "held band frames with no gray frame near show the frame before them (MT3 frame 7): odd_frame 18.0 -> 15.8; WHITE_EACH 99.5",
+ "daphnis257n1-movie": "tint hue on the body; at most 8 levels",
+ "fring039-movie": "WHITE_EACH: the A ring keeps tone where it neared white",
+ "titancloud264-movie": "WHITE_EACH: the brightening movie's bright cloud patch keeps texture"
+}
