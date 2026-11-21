@@ -49,8 +49,15 @@
     function shift(t, pl, a, base, set) {
       if (!pl) return [0, 0];
       let to = pl[a];
-      if (set && set.length > 1 && !(t.own && t.own[a])) {
-        const mine = t.own ? set.filter(b => t.own[b]) : [], by = mine.length ? mine : set;
+      // (a channel the pictures placed further than the table's "apart" (obs_mosaic.SET_APART) from the others'
+      // median move follows the set as one they did not place)
+      let mine = set && t.own ? set.filter(b => t.own[b]) : [];
+      if (set && set.length > 1 && mine.length) {
+        const mx0 = npMedian(mine.map(b => pl[b][0] - t.spice[b][0])), my0 = npMedian(mine.map(b => pl[b][1] - t.spice[b][1]));
+        mine = mine.filter(b => Math.hypot(pl[b][0] - t.spice[b][0] - mx0, pl[b][1] - t.spice[b][1] - my0) <= t.apart);
+      }
+      if (set && set.length > 1 && !mine.includes(a)) {
+        const by = mine.length ? mine : set;
         const mx = npMedian(by.map(b => pl[b][0] - t.spice[b][0])), my = npMedian(by.map(b => pl[b][1] - t.spice[b][1]));
         to = [t.spice[a][0] + mx, t.spice[a][1] + my];
       }

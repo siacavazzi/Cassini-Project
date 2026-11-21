@@ -109,6 +109,7 @@ MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to 
                      # follows the frame: each picture the frame as Cassini took it (follow_view)
 MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint when the geometry cache has none of its frames (pass_boxes)
 CENTRE_MARGIN = 0.2  # of the body's diameter, round its disk in a movie centred on it
+SET_APART = 4.0      # px: the farthest a colour set's channel the pictures placed may move from the others' median move
 CENTRE_FILL = 0.5    # of a view centred on the body that its frames' footprint must cover, or the pass is not centred
 CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep, or the pass is not centred (centre_half)
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
@@ -8153,7 +8154,8 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     edges between its lit and dark only (edge_shift: its limb, terminator, ring edges), which stay put on the sky,
     and never on its clouds, which turn and drift with the planet (Jupiter's 11 px a frame in C24JU 1X2NITE008: the
     chain followed them and the movie slid, snapping back to SPICE where the chain broke); a pair with no such edge
-    in common is no link. ({n: [x, y]}, how)."""
+    in common is no link; a pair of two filters a few minutes apart at one pointing is linked as the channels'
+    registration placed them. ({n: [x, y]}, how)."""
     import scipy.sparse as sps
     import scipy.sparse.linalg as spla
     tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
@@ -8201,6 +8203,14 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
+        if edges and by[j]["filter"] != t["filter"]:
+            # (two filters' frames a few minutes apart at one pointing: as the channels' registration (C8) places them
+            # against each other, the clouds' drift between them a fraction of a pixel; their limbs are not compared,
+            # a limb's height differing with the filter. Without these links each filter was its own chain, each held
+            # to SPICE on its own, and a colour set's channels came apart by SPICE's scatter between them)
+            if abs((t.get("t") or 0) - (by[j].get("t") or 0)) > REGISTER_GAP or math.hypot(*rel) > SAME_PLACE * FRAME:
+                return pr, None, "other filter"
+            return pr, rel, "registered"
         if edges:
             shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
             how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else f"edges: {seen}"
@@ -9006,7 +9016,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
-            "own": [by_pictures(hows.get(n)) for n in ns] if (hows := steady_hows(u, cache, p)) is not None else None,
+            "apart": SET_APART, "own": [by_pictures(hows.get(n)) for n in ns] if (hows := steady_hows(u, cache, p)) is not None else None,
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
@@ -10560,9 +10570,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         hows = steady_hows(u, cache, p) if places and not track else {}
         mine = {q["n"] for q in bases.values() if "offset" in q and q.get("n") in (places or {})
                 and by_pictures(hows.get(q["n"]))}
-        moves = [(places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
-                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})
-                 and (q["n"] in mine or not mine)]
+        move = {q["n"]: (places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
+                for q in bases.values() if "offset" in q and q.get("n") in (places or {})}
+        if mine:
+            # (a channel whose own match moved it further from the others' than the camera drifts between exposures
+            # (SET_APART) slid along the scene, not with the camera: it follows the set. 257DA DAPHNIS001's UV3
+            # matched 12 px along the Keeler gap from GRN and IR1, a blue-violet fringe on its edge)
+            mid = np.median(np.array([move[m] for m in mine]), axis=0)
+            mine = {m for m in mine if math.hypot(move[m][0] - mid[0], move[m][1] - mid[1]) <= SET_APART}
+        moves = [move[m] for m in (mine or move)]
         set_shift = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) \
             if places and not track and len(bases) > 1 and moves else None
         for f, j in got.items():
