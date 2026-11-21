@@ -1134,7 +1134,8 @@ FLOOR_BORDER = 4     # ... and none of it within this many px (of 1024) of the f
                      # on many frames (N1492367324_1, Titan's even haze: columns 1022-1023), and the 3x3 median keeps them
 FLAT_EVEN = (0.4, 0.6)   # _flat_black: a picture with no sky whose floor is over FLAT_EVEN[0] of its top is low-contrast,
 FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
-FLAT_NOISE = 100         # no more than 1 / FLAT_NOISE of the range from black to top (2.5 of 255 levels)
+FLAT_NOISE = 150         # no more than 1 / FLAT_NOISE of the range from black to top (1.7 of 255 levels: at 100 the
+                         # grain showed on near-featureless frames, Fable 11-21)
 FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
@@ -2905,8 +2906,11 @@ def sky_levels(images, masks, floor_pct=None):
         if floor_pct is not None:
             # the floor on the sky's grain only (sky_grain): its spread less its slow light
             grain = sky_grain(ims, ms)
-            floors.append(float(np.percentile(grain, floor_pct) - np.median(grain)) if grain.size >= GRAIN_LEAST
-                          else float(pcts[1] - median))
+            spread = float(pcts[1] - median)
+            if grain.size >= GRAIN_LEAST:
+                fine = float(np.percentile(grain, floor_pct) - np.median(grain))
+                spread = fine + GRAIN_GLOW * max(spread - fine, 0.0)
+            floors.append(spread)
     margin = NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
     if floor_pct is not None:
         margin = max(margin, max(floors))
@@ -2915,6 +2919,9 @@ def sky_levels(images, masks, floor_pct=None):
 
 GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
+GRAIN_GLOW = 0.35    # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
+                     # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still);
+                     # with a third of it the glow is fainter and narrower and still fades out, no hard rim
 
 
 """

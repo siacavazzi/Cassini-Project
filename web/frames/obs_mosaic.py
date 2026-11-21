@@ -2628,7 +2628,13 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         # frame's sky or its black as a still is over the pass's typical black, never under it (taken under it, the
         # 279EN plume movie's E ring glow came up as a gray square on some frames and not on the frames black_of raises,
         # and the movie strobed more: odd_frame 14.8 -> 19.9)
-        out["blacks"] = [max(track_black(track, t), out["blacks"][0])]
+        pass_black = out["blacks"][0]
+        out["blacks"] = [max(track_black(track, t), pass_black)]
+        # and the soft toe at least as wide as the raise, so faint light the raised black takes (ring glow, scattered
+        # light) rolls off into it instead of ending at a hard, scalloped edge (Fable, 11-21: saturn08 and the 2004
+        # ring movie's glow cut off at the black)
+        if out["blacks"][0] > pass_black:
+            out["toe"] = max(out.get("toe") or 0.0, out["blacks"][0] - pass_black)
         if seen is not None:
             seen["track_black"] = out["blacks"][0]
     long = scale.get("long")
@@ -2777,7 +2783,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             return None
         if seen is not None:
             seen["black"] = raised
-        return {"black": raised, "toe": scale.get("toe")}
+        return {"black": raised, "toe": out.get("toe")}
 
     out["black_of"] = black_of
     return out
