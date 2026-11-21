@@ -5277,7 +5277,8 @@ def derotated(u, cache, p, t, ref):
     if most >= DEROTATE_LEAST and rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r],
                                                    SURFACE_STEP) <= SURFACE_STRETCH:
         picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if box:
         Image.fromarray(picture).save(path, compress_level=1)
     with open(path + SURFACE_BOX, "w") as fh:
         json.dump({"box": box, "most": round(most, 2)}, fh)
