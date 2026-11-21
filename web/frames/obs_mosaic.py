@@ -5230,6 +5230,60 @@ def _surface_taken(u, cache, p, out_dir):
     return taken
 
 
+DEROTATE_DIR = "derotate1"   # (under a pass's tiles) colour channels redrawn as at their set's time (derotated)
+DEROTATE_LEAST = 0.5         # px: a channel whose surface moves less than this between its time and the set's is kept
+
+
+def derotates(u):
+    """True when pass u's colour sets are derotated: a clouded body (SURFACE_CLOUDED) SPICE has a spin and shape for,
+    with Settings > Processing's surface step on."""
+    return clouded(u) and calibration.step("surface") and _sky_views(u) is not None
+
+
+def derotated(u, cache, p, t, ref):
+    """Colour channel t (a tile report, placed) redrawn as at the time of frame ref, the set's: a clouded body turns
+    between the filters' exposures, a minute or two apart, and its clouds with it, while its limb stays put on the
+    sky, so channels lined up on the limb drew every cloud with a coloured fringe (Saturn's 2011 storm, 151SA
+    MIRMAP002: 9 to 10 px between BL1 and GRN at the disk's middle). The lit surface is moved as SPICE spins the
+    body between the two times (reproject.sky_field, warp_sky, as surface_pictures redraws a mosaic's panels); the
+    sky, the rings, the night side and the limb's edge stay where they are. t as it is when SPICE cannot say, the
+    move is under DEROTATE_LEAST or the redrawing would distort it (SURFACE_STRETCH); otherwise t with "src" (the
+    redrawn picture, kept under DEROTATE_DIR) and its "box"."""
+    if "offset" not in t or t.get("id") == ref or not derotates(u):
+        return t
+    there = _tiles(u, cache, p["display_scale"])
+    path = os.path.join(there, DEROTATE_DIR, f"{t['n']}-{ref}.png")
+    if os.path.exists(path + SURFACE_BOX):
+        with open(path + SURFACE_BOX) as fh:
+            box = json.load(fh).get("box")
+        return dict(t, src=path, box=box) if box and os.path.exists(path) else t
+    import reproject as rp
+    view = _sky_views(u)
+    epoch, v = view(ref), view(t["id"])
+    src = os.path.join(there, f"{t['n']}.png")
+    if epoch is None or v is None or not os.path.exists(src):
+        return t
+    with _lock:
+        image = _made_pictures.get(src)
+    if image is None:
+        image = np.asarray(Image.open(src).convert("RGBA"))
+    km_px = IFOV[u["key"][2]] * u["z"]
+    with _spice_lock:
+        dx, dy, weight = surface_field(rp, epoch, v, image.shape[:2], t, km_px, view_turn(u))
+    r = SURFACE_REACH // SURFACE_STEP
+    inner = weight[r:-r, r:-r] > 0
+    most = float(max(np.abs(dx[r:-r, r:-r][inner]).max(), np.abs(dy[r:-r, r:-r][inner]).max())) if inner.any() else 0.0
+    box = None
+    if most >= DEROTATE_LEAST and rp.field_stretch(dx[r:-r, r:-r], dy[r:-r, r:-r], weight[r:-r, r:-r],
+                                                   SURFACE_STEP) <= SURFACE_STRETCH:
+        picture, box = surface_redrawn(rp, image, t, dx, dy, weight)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        Image.fromarray(picture).save(path, compress_level=1)
+    with open(path + SURFACE_BOX, "w") as fh:
+        json.dump({"box": box, "most": round(most, 2)}, fh)
+    return dict(t, src=path, box=box) if box else t
+
+
 def surface_pictures(u, cache, p, tiles):
     """Surface reprojection of a mosaic's panels: {tile n: the path of its picture redrawn as at the pass's epoch}.
     A mosaic's panels are taken minutes apart, and the body turns and Cassini moves in between, so the surface under
@@ -8998,6 +9052,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
             server.append(m)
+        elif got and derotates(u):
+            server.append(m)   # (a clouded body's set, its channels redrawn as at one time: derotated, the server's)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
     dhow = p["display_scale"].get("detail_how") or {}
@@ -9802,7 +9858,7 @@ def _place(u, t, rect, k, W, H, cache, scale):
     x0, y0, x1, y1 = max(left, 0), max(top, 0), min(left + sw, W), min(top + sh, H)
     moved, drew = None, _hdr_drawn.get()
     if x0 < x1 and y0 < y1:
-        part = _shade(_part(os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
+        part = _shade(_part(t.get("src") or os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), sw, sh), t)
         if SUBPIXEL:
             whole = part
             part = _subpixel_at(part, t, rect, k, left, top)
@@ -9814,7 +9870,8 @@ def _place(u, t, rect, k, W, H, cache, scale):
         # (with the alpha drawn here when the tile was moved by that part of a pixel and nothing else: hdr_map moved the
         # whole tile again by it, a cubic resampling of four float planes, only to read where its alpha is over 0. A
         # plane is resampled on its own, so the alpha is the same whatever the tile's shade)
-        drew.append((t.get("filter"), os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh, frac, moved))
+        drew.append((t.get("filter"), t.get("src") or os.path.join(_tiles(u, cache, scale), f"{t['n']}.png"), left, top, sw, sh,
+                     frac, moved))
     return frame
 
 
@@ -10589,6 +10646,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 if base.get("n") not in mine:
                     newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
             own_gain[f] = base.get("gain")
+        if derotates(u) and len(newest) > 1:
+            # (the set's channels redrawn as at its newest channel's time: one time for the set, whichever frame shows it)
+            ref = max((q for q in newest.values() if q.get("id")), key=lambda q: q.get("t") or 0, default={}).get("id")
+            if ref:
+                newest = {f: derotated(u, cache, p, q, ref) for f, q in newest.items()}
         used = want
     if used:
         # (drawn without the frame's exposure gain, which is applied to the colour picture made of them: on each
