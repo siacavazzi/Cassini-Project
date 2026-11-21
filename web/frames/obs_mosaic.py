@@ -10523,10 +10523,11 @@ def _shown_of(u, p, n, not_shown, tile_of):
     if placed(s) and len({fr[2] for fr in frames}) > 1:
         held = s != n
         # (a held band's frame, a methane or UV band whose own gray is not the body's look, takes the gray frame within
-        # LUM_REACH, as a set's frames do: Titan 2016's MT3 frame, 330 s from its CB3, played its own dark haze)
+        # HOLD_REACH, as shown_of holds such a frame in a colour movie: Titan 2016's MT3 and UV1 frames, 5 and 11
+        # minutes from its CB3 frames, played their own dark haze)
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
                        lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames],
-                       LUM_REACH if held_band(frames[s][2]) else None)
+                       HOLD_REACH if held_band(frames[s][2]) else None)
         # (and a frame taken at another pointing than the colour sets beside it, which cover under HELD_COVER of its
         # place: C44SA APPRMOVM001's clear frames 670 px either side of Saturn, each drawn as a clipped white sliver of
         # the planet at the frame's edge between colour frames)
