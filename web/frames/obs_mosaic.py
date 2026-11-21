@@ -9032,7 +9032,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     fp = movie_footprint(u, cache, p)
     seen = pass_seen(u) if centre else None
     ns = sorted(chain)
-    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen), _on_body(p)):
+    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen), _inside_body(u)):
         return {"local": False}   # (a view following the frame: the server draws it, follow_view)
     held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
@@ -9081,7 +9081,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
                if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
-               if dhow.get("lit") and radius and not follows(fp, rect, _on_body(p)) else {}),
+               if dhow.get("lit") and radius and not follows(fp, rect, _inside_body(u)) else {}),
             **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2), "ringDisk": RING_DISK,
                 "shoulder": p["display_scale"].get("shoulder") or calibration.SHOULDER}
                if p["display_scale"].get("headroom") and isinstance(p["display_scale"].get("gamma", 2.2), (int, float)) else {})}
@@ -9374,11 +9374,21 @@ def follows(fp, rect, filled=False):
 FOLLOW_FILLED = 0.25   # of a frame (follows)
 
 
-def _on_body(p):
-    """(follows' filled) Whether the middles of most of a pass's frames are on its body's disk: its display scale's
-    "floor" (the share pass_scale measured) over FILLED. Not the scale's "filled", which also weighs the frames'
-    brightness: the night-side stare 289SA AURSTARE001, every frame on Saturn's disk, is not filled by it."""
-    return float((p.get("display_scale") or {}).get("floor") or 0.0) > FILLED
+def _inside_body(u):
+    """(follows' filled) Whether every placed frame of pass u lies wholly inside its body's disk (its middle's
+    distance from the body's centre, plus half its diagonal, under the body's radius, all on the frame's own scale):
+    no limb or ring edge in any frame to hold a still view against. 289SA AURSTARE001 stares at Saturn's night side
+    21,000 px from its centre, 27,000 px its radius; a Titan cloud movie (264TI) shows the limb, and keeps its view."""
+    km = RADIUS.get(str(u["key"][0]).upper(), 0)
+    placed = [fr for fr in u["frames"] if fr[7]]
+    if not km or not placed:
+        return False
+    for fr in placed:
+        if math.hypot(fr[5], fr[6]) + HALF >= km / (fr[7] * IFOV[u["key"][2]]):
+            return False
+    return True
+
+
 FOLLOW_SLACK = 2   # px: a following frame is drawn this much bigger than the picture and its middle cut out, so its
 #                    edges (placed to the nearest pixel, then turned) never show a part-transparent row (_unturn)
 
@@ -10655,7 +10665,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view); with a
     # rolling trail asked for, the window MOVIE_FIT frames across as before, so the frames before it show round it
     unturn = None
-    if not track and not trail and follows(fp, rect, _on_body(p)):
+    if not track and not trail and follows(fp, rect, _inside_body(u)):
         rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
         # (the view held on the frames' smoothed path, not on each frame: Cassini's own pointing jitter, a few px frame
         # to frame, comes out as it does in a still view; the picture zoomed in by as much, so no edge shows)
