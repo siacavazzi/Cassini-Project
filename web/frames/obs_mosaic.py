@@ -10473,7 +10473,14 @@ def _shown_of(u, p, n, not_shown, tile_of):
         held = s != n
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
                        lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
-        if colours and (held or (s == n and held_band(frames[n][2]))):
+        # (and a frame taken at another pointing than the colour sets beside it, which cover under HELD_COVER of its
+        # place: C44SA APPRMOVM001's clear frames 670 px either side of Saturn, each drawn as a clipped white sliver of
+        # the planet at the frame's edge between colour frames)
+        # (only between frames the set does cover: a run of frames the sets never take in plays as it is)
+        near_set = set_of(u, n, want, not_shown, placed) if colours and got is None and s == n else None
+        apart = bool(near_set) and any(0 <= m < len(frames) and placed(m) and set_cover(tile_of(m), [tile_of(j) for j in near_set.values()]) >= HELD_COVER
+                                       for m in (n - 1, n + 1))
+        if colours and (held or apart or (s == n and held_band(frames[n][2]))):
             # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
             # last whole frame is a cycle or more back (and step_frame's gray frame beside that one older still), and a
             # held band's frame with no gray frame near, whose own gray is not the body's look, show what the frame
