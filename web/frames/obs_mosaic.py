@@ -10682,6 +10682,10 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         dx, dy = follow_shake(u, cache, p, s, at) if inside else (0.0, 0.0)
         k = follow_k(k, inside)
         mx, my = follow_middle(t, rect, k)
+        if inside:
+            # (about the frame's own middle, its place, not its lit part's: the night side lights up through the
+            # stare, its lit crop grows, and a zoom about that crop's middle moved the picture with it)
+            mx, my = (t["offset"][0] - rect[0]) * k - 0.5, (t["offset"][1] - rect[1]) * k - 0.5
         mx, my = mx + dx * k, my + dy * k
         unturn = (turn, (mx, my), out, out)
         rep["follow"] = {"turn": round(turn, 2), **({"shake": [round(dx, 2), round(dy, 2)]} if dx or dy else {})}
