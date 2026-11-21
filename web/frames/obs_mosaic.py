@@ -8157,8 +8157,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     edges between its lit and dark only (edge_shift: its limb, terminator, ring edges), which stay put on the sky,
     and never on its clouds, which turn and drift with the planet (Jupiter's 11 px a frame in C24JU 1X2NITE008: the
     chain followed them and the movie slid, snapping back to SPICE where the chain broke); a pair with no such edge
-    in common is no link; a pair of two filters a few minutes apart at one pointing is linked as the channels'
-    registration placed them. ({n: [x, y]}, how)."""
+    in common is no link. ({n: [x, y]}, how)."""
     import scipy.sparse as sps
     import scipy.sparse.linalg as spla
     tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
@@ -8206,14 +8205,6 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
-        if edges and by[j]["filter"] != t["filter"]:
-            # (two filters' frames a few minutes apart at one pointing: as the channels' registration (C8) places them
-            # against each other, the clouds' drift between them a fraction of a pixel; their limbs are not compared,
-            # a limb's height differing with the filter. Without these links each filter was its own chain, each held
-            # to SPICE on its own, and a colour set's channels came apart by SPICE's scatter between them)
-            if abs((t.get("t") or 0) - (by[j].get("t") or 0)) > REGISTER_GAP or math.hypot(*rel) > SAME_PLACE * FRAME:
-                return pr, None, "other filter"
-            return pr, rel, "registered"
         if edges:
             shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
             how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else f"edges: {seen}"
