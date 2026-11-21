@@ -9029,7 +9029,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     fp = movie_footprint(u, cache, p)
     seen = pass_seen(u) if centre else None
     ns = sorted(chain)
-    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen)):
+    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen), p["display_scale"].get("filled", False)):
         return {"local": False}   # (a view following the frame: the server draws it, follow_view)
     held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
@@ -9078,7 +9078,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
                if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
-               if dhow.get("lit") and radius and not follows(fp, rect) else {}),
+               if dhow.get("lit") and radius and not follows(fp, rect, p["display_scale"].get("filled", False)) else {}),
             **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2), "ringDisk": RING_DISK,
                 "shoulder": p["display_scale"].get("shoulder") or calibration.SHOULDER}
                if p["display_scale"].get("headroom") and isinstance(p["display_scale"].get("gamma", 2.2), (int, float)) else {})}
@@ -9356,13 +9356,19 @@ def pass_boxes(u):
     return got
 
 
-def follows(fp, rect):
-    """True when a movie's view rect (movie_rect) follows the frame: its footprint fp is wider than MOVIE_FIT frames
-    and the view is not centred on the body."""
+def follows(fp, rect, filled=False):
+    """True when a movie's view rect (movie_rect) follows the frame: the view is not centred on the body, and its
+    footprint fp is wider than MOVIE_FIT frames, or its frames drift over more than FOLLOW_FILLED of a frame (past the
+    footprint's room round them, HALF each side) in a pass whose frames the body fills (filled:
+    the plan's display scale's), where no limb or ring edge holds a still view in place: 289SA AURSTARE001's night-side
+    stare drifts half a frame over Saturn's disk and played as a half-size frame sliding over a black canvas."""
     x0, y0, x1, y1 = fp
-    return max(x1 - x0, y1 - y0) > MOVIE_FIT * FRAME and not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
+    wide = max(x1 - x0, y1 - y0)
+    return (wide > MOVIE_FIT * FRAME or (filled and wide > 2 * HALF + FOLLOW_FILLED * FRAME)) and \
+        not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
 
 
+FOLLOW_FILLED = 0.25   # of a frame (follows)
 FOLLOW_SLACK = 2   # px: a following frame is drawn this much bigger than the picture and its middle cut out, so its
 #                    edges (placed to the nearest pixel, then turned) never show a part-transparent row (_unturn)
 
@@ -10608,7 +10614,7 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view); with a
     # rolling trail asked for, the window MOVIE_FIT frames across as before, so the frames before it show round it
     unturn = None
-    if not track and not trail and follows(fp, rect):
+    if not track and not trail and follows(fp, rect, p["display_scale"].get("filled", False)):
         rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
         unturn = (turn, follow_middle(t, rect, k), out, out)
         rep["follow"] = {"turn": round(turn, 2)}
