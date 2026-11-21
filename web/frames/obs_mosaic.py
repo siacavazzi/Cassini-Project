@@ -2906,9 +2906,22 @@ def small_body(u, frame):
 
 
 MOSAIC_SKY_MOST = 0.01   # mosaic_sky_most: a mosaic's sky tile's own black at most this share of the pass's white over its black
+MOSAIC_SKY_DISK = 0.1    # mosaic_sky_tile: ... and only a frame with at most this share of it on the body's disk (SPICE)
 
 
-def mosaic_sky_tile(u, scale, body, disk):
+def disk_share(u, frame):
+    """The share of frame (1024 px, its middle at the body's centre less (x, y), on_disk's numbers) that is on pass u's
+    body's disk where SPICE puts it, on a 64 x 64 grid; 0 without a radius or a distance."""
+    *_, x, y, z = frame
+    km = RADIUS.get(u["key"][0])
+    if not (z and km):
+        return 0.0
+    r = km / (z * IFOV[u["key"][2]])
+    g = (np.arange(64) + 0.5) * 16 - 512
+    return float(np.mean(np.hypot(g[None, :] - x, g[:, None] - y) < r))
+
+
+def mosaic_sky_tile(u, scale, body, disk, frame=None):
     """True when a still mosaic's tile takes its own sky's black (tile_scale's own_sky): a frame of an airless body's
     mosaic (no rings, no clouds) whose middle is off the body's disk (body: on_disk), in a pass with dark sky (its
     "sky_tops"). Such a frame is sky with at most a limb in it, and what the calibration leaves in a sky differs from
@@ -2916,9 +2929,12 @@ def mosaic_sky_tile(u, scale, body, disk):
     0.0015 to 0.22 s over 75 minutes, has its clear frames' sky at -0.0003 I/F (1.5 s, on the disk) to +0.0004 (the
     sky frames below it), the pass's black at 0.00011; with white at 0.055 the sky frames drew at 20 to 40 of 255 on
     black, gray squares with a step wherever one ended. Each such tile's black goes to its own sky (as a movie frame's,
-    or a small body's), at most mosaic_sky_most over the pass's, so the limb or plume in it moves by under that."""
+    or a small body's), at most mosaic_sky_most over the pass's, so the limb or plume in it moves by under that. A
+    frame with more than MOSAIC_SKY_DISK of it on the disk (frame: the pass's frame, disk_share) keeps the pass's black:
+    a night side lit by Saturn is darker than 5% of the lit limb, so it would count as that frame's sky and go under
+    black (Mimas 167MI, its tiles' middles off the disk: the Saturn-lit half went black)."""
     return bool(u.get("mosaic") and not u.get("movie") and not disk and not body and not _ring(u) and not clouded(u)
-                and (scale or {}).get("sky_tops"))
+                and (scale or {}).get("sky_tops") and (frame is None or disk_share(u, frame) <= MOSAIC_SKY_DISK))
 
 
 def mosaic_sky_most(scale):
@@ -3374,7 +3390,7 @@ def _tile_made(u, n, cache, scale, base):
     try:
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
             body = on_disk(u, u["frames"][n])
-            sky_tile = mosaic_sky_tile(u, scale, body, disk)
+            sky_tile = mosaic_sky_tile(u, scale, body, disk, u["frames"][n])
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk or sky_tile), seen, disk,
                                                                                            body, exposure, t,
                                                                                            not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N",
