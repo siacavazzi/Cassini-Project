@@ -10340,7 +10340,7 @@ def _set_shown(u, n, want, not_shown, placed, covers=None):
     return got, True
 
 
-def step_frame(filters, s, grey, whole, near, times=None):
+def step_frame(filters, s, grey, whole, near, times=None, reach=None):
     """The frame shown for frame s (held_of's) in a movie playing its grey filter (pure, ported to the page through
     the steady table's "step"): s when it is the grey filter's; else, in a run of at most STEP_RUN frames of other
     filters, the grey filter's last whole frame before the run (whole(j): placed, shown), else its first after it,
@@ -10359,7 +10359,7 @@ def step_frame(filters, s, grey, whole, near, times=None):
     after = (j for j in range(b + 1, len(filters)) if filters[j] == grey and whole(j))
     for j in (next(before, None), next(after, None)):
         # (times: the frames' times; a gray frame taken over HOLD_AGE from s is not s's moment, s plays itself)
-        if j is not None and near(j) and (times is None or abs(times[j] - times[s]) <= HOLD_AGE):
+        if j is not None and near(j) and (times is None or abs(times[j] - times[s]) <= (HOLD_AGE if reach is None else reach)):
             return j
     return s
 
@@ -10522,8 +10522,11 @@ def _shown_of(u, p, n, not_shown, tile_of):
             return s, got, False, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
         held = s != n
+        # (a held band's frame, a methane or UV band whose own gray is not the body's look, takes the gray frame within
+        # LUM_REACH, as a set's frames do: Titan 2016's MT3 frame, 330 s from its CB3, played its own dark haze)
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
-                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
+                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames],
+                       LUM_REACH if held_band(frames[s][2]) else None)
         # (and a frame taken at another pointing than the colour sets beside it, which cover under HELD_COVER of its
         # place: C44SA APPRMOVM001's clear frames 670 px either side of Saturn, each drawn as a clipped white sliver of
         # the planet at the frame's edge between colour frames)
