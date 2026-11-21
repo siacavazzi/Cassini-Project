@@ -181,14 +181,47 @@ def channel_offset(rgba, side=128, patches=4):
             if resp >= 0.08:
                 got[c].append((dx, dy))
     off = [float(np.hypot(*np.median(np.array(v), axis=0))) for v in got.values() if v]
-    return max(off) if off else None
+    drift = channel_drift(rgba)
+    return max(off + ([drift] if drift is not None else [])) if off or drift is not None else None
+
+
+def channel_drift(rgba):
+    """How far (px) red or blue sits from green by the colour along the picture's edges, whichever is further: each
+    channel (scaled to green's level over the lit picture) less green, fitted over the sharpest edges as a step along
+    green's gradient (a channel d px off reads as -d . grad(green)). A body's own colour and an even glow round it
+    cancel round its outline; a channel offset adds up all along it, signed, whichever way it lies, also where only
+    part of a channel is off (a colour mixed from several filters, one of them 12 px off: 241TI's blue, rz-titan16
+    on #606, which edge matching read as 0.5 px). Clipped pixels are left out. Titan's haze on a crescent's outer
+    limb reads 1.5 to 3 px: a limb colour on one side only."""
+    import cv2
+    import numpy as np
+    a = rgba.astype(np.float32)
+    rgb = a[..., :3]
+    lit = cv2.erode((a[..., 3] > 0).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+    sm = [cv2.GaussianBlur(rgb[..., c], (0, 0), 1.0) for c in range(3)]
+    g = sm[1]
+    gx, gy = cv2.Sobel(g, cv2.CV_32F, 1, 0) / 8, cv2.Sobel(g, cv2.CV_32F, 0, 1) / 8
+    mag = np.hypot(gx, gy)
+    ok = lit & (rgb.max(axis=2) < 250) & (g > 3)
+    if ok.sum() < 500:
+        return None
+    edge = ok & (mag >= np.percentile(mag[ok], 97)) & (mag > 2)
+    if edge.sum() < 50:
+        return None
+    out = []
+    for c in (0, 2):
+        k = float(np.median(sm[c][ok])) / max(float(np.median(g[ok])), 1e-3)
+        d = sm[c] / max(k, 1e-3) - g
+        sol = np.linalg.lstsq(np.stack([gx[edge], gy[edge]], 1), d[edge], rcond=None)[0]
+        out.append(float(np.hypot(*sol)))
+    return max(out)
 
 
 @check("channel_registration", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.25,
        about="a colour movie's channels do not line up: a coloured fringe along edges (257DA DAPHNIS001, #602)")
 def channel_registration(p, limit=0.7):
     """The 90th percentile, over a colour movie's frames, of how far its red or blue channel sits from its green
-    (channel_offset, px): 0.1 to 0.55 px in a set that lines up (no fringe to the eye, 11-20 Fable 5.2); 0.76 px on fine storm clouds is one (rz-saturn11-movie3)."""
+    (channel_offset: the larger of the edges' own match and the colour along them, channel_drift; px): 0.1 to 0.55 px in a set that lines up (no fringe to the eye, 11-20 Fable 5.2); 0.76 px on fine storm clouds is one (rz-saturn11-movie3)."""
     import numpy as np
     vals = {}
     for f in p.frames():
