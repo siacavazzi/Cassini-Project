@@ -72,6 +72,9 @@
   {"name": "saturn08w-fullblack-movie", "kind": "pass", "frame": "W1602057697_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
   {"name": "saturn13-fullblack-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
   {"name": "saturn08-fullblack-movie", "kind": "pass", "frame": "N1601603945_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
-  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"}
+  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"},
+  {"name": "saturn16-uv2-movie", "kind": "pass", "frame": "N1835156927_1", "group": "hard", "watch": "Saturn 2016 ring movie playing its gray filter: its UV2 frame (29) played its own dark look between clear frames (odd_frame 21); takes the gray frame (held band, HOLD_REACH)"},
+  {"name": "titan16-methane-movie", "kind": "pass", "frame": "N1855129601_1", "group": "hard", "watch": "Titan 2016 movie playing CB3: its MT3 and UV1 frames played their own dark haze (odd_frame 9.7); take the CB3 frame (held band, HOLD_REACH)"},
+  {"name": "skathi11-veil-movie", "kind": "pass", "frame": "N1680197448_1", "group": "hard", "watch": "Skathi 2011 speck movie: a 460 s full-resolution frame among 220 s summed ones every few dozen frames, a gray veil flash (odd_frame 57); held (veiled_frame)"}
  ]
 }
