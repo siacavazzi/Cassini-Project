@@ -3028,6 +3028,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     inside = [math.hypot(x, y) < radius / z for *_, x, y, z in frames if z]
     floor = float(np.mean(inside)) if inside else 0.0
     filled = floor > FILLED
+    if filled and max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for iofs in by.values()) \
+            < calibration.GLOW_IOF[0]:
+        # the body's disk fills the frames but nothing in them is as bright as a sunlit surface (GLOW_IOF): its night
+        # side (an aurora stare, 182SA AURSTARE001: 4e-5 I/F at its 99.5th percentile). Stretched from its 1st to its
+        # 99.5th percentile as a lit surface, its noise and offset filled the range and every frame came out near white
+        # (median 217 of 255; spot check 11-21). It is drawn as sky is: black at its sky, the aurora and stars over it
+        filled = False
     gamma = 3.0
     if filled and calibration.look() == "balanced":
         # The classic gamma 1.5 (a steeper curve lifts the dark end's noise and steps into view). True colour: one black and white for the filters drawn, so the colour is what they saw
