@@ -1136,17 +1136,19 @@ FLAT_EVEN = (0.4, 0.6)   # _flat_black: a picture with no sky whose floor is ove
 FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
 FLAT_NOISE = 150         # no more than 1 / FLAT_NOISE of the range from black to top (1.7 of 255 levels: at 100 the
                          # grain showed on near-featureless frames, Fable 11-21)
+FLAT_DARK_SHARE = 0.02   # ... and only when what is that dark is a thin line, at most this share of the picture
 FLAT_DARK = 0.25         # ... and the darkest features' light kept unless they are under this share of its top
 FLAT_PCT = 2             # ... the floor here: the FLAT_PCT percentile, so a narrow dark line does not count as its floor
 GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (I/F) is under GLOW_IOF[0] is lit sky (a plume's
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
                      # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
-GLOW_FINE = (0.04, 0.12)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
+GLOW_FINE = (0.07, 0.15)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
                      # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
                      # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
-                     # under 0.04, rings over 0.15)
-FINE_NOISE = 0.33    # fine_structure(net): white noise of this spread puts 0.33 of it in the 90th percentile of its 1.5 px detail
+                     # under 0.04, rings over 0.15; measured net of the camera's banding and noise, the faint sky round a distant
+                     # moon still measures 0.06-0.065 on its leftover pattern, so the blend starts at 0.07: spot check 11-21)
+FINE_NOISE = 0.4     # fine_structure(net): white noise of this spread puts about 0.31 of it (0.4 with 8-bit steps) in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
                      # fades out smoothly instead of being cut off with a ragged edge; from twice this (a floor black,
@@ -2782,8 +2784,11 @@ def fine_structure(lum, net=False):
         lum = np.ascontiguousarray(lum, dtype=np.float32)
         middle = float(np.median(lum))
         lum = lum - np.median(lum, axis=1, keepdims=True) - np.median(lum, axis=0, keepdims=True) + np.float32(2 * middle)
-        steps = np.abs(np.diff(lum, axis=1))
-        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2)
+        # the noise from neighbouring pixels' differences, as their spread up to the 95th percentile (a sky stored in
+        # 8 bits steps by whole codes: most differences are 0 and their median says nothing; edges and stars past it)
+        steps = np.abs(np.diff(lum, axis=1)).ravel()
+        steps = steps[steps <= np.percentile(steps, 95)]
+        noise = float(np.sqrt(np.mean(steps * steps))) / math.sqrt(2) if steps.size else 0.0
     detail = np.abs(cv2.GaussianBlur(lum, (0, 0), 1.5) - cv2.GaussianBlur(lum, (0, 0), 8))
     top = float(np.percentile(detail, 90))
     if net:
@@ -2861,7 +2866,9 @@ def _flat_black(lum, lit, dark, top, black):
     if floor <= 0 or top <= 0:
         return black
     flat = min(max((floor / top - FLAT_EVEN[0]) / (FLAT_EVEN[1] - FLAT_EVEN[0]), 0.0), 1.0)
-    if flat <= 0:
+    if flat <= 0 or float(np.mean(dark[lit] < FLAT_DARK * top)) > FLAT_DARK_SHARE:
+        # (and not a picture with dark parts of its own over FLAT_DARK_SHARE of it: rings with dark bands between them,
+        # equinox-shadow-still, whose faint ringlets went black; only a thin dark line is let go black)
         return black
     steps = np.abs(np.diff(lum, axis=1))[lit[:, 1:] & lit[:, :-1]]
     if steps.size < GRAIN_LEAST:
@@ -2940,9 +2947,9 @@ def sky_levels(images, masks, floor_pct=None):
 
 GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
-GRAIN_GLOW = 0.35    # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
-                     # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still);
-                     # with a third of it the glow is fainter and narrower and still fades out, no hard rim
+GRAIN_GLOW = 0.5     # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
+                     # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still), and Titan's
+                     # scattered light as a lifted rectangle the size of the frame in a colour set (titan04-composite); with half of it the glow is fainter and narrower and still fades out, no hard rim
 
 
 """
