@@ -7241,7 +7241,7 @@ def _despiked(planes, gamma):
 
 
 CLIP_FROM = 240   # (colour_picture) a band this bright and up is taken as clipped, wholly so at 255
-WHITE_SLACK = 10   # (colour_picture) a pixel at white in one band and within this of it in every other is clipped white
+WHITE_SLACK = 10   # (colour_picture) a pixel mixed to white in one band and within this of it in every other is white
 CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a clipped band its colour is read from
 
 
@@ -7809,10 +7809,6 @@ def colour_picture(u, p, colour, planes, away=None):
     if isinstance(mix, calibration.FalseMix) and typical:
         mix.typical = typical if isinstance(typical, list) else [typical[f] for f in colour]
     alpha = np.min([a[..., 3] for a in planes], axis=0)
-    # white where every band clipped: at white in one band and within WHITE_SLACK of it in the others, as a mosaic's
-    # per-filter gains leave a block every filter saturated (ringsFA's, 255/255/247 when the solved blue gain came
-    # out 0.97, mixed into a cream block)
-    white = (rgb.max(axis=2) >= 255) & (rgb.min(axis=2) >= 255 - WHITE_SLACK)
     clipped = [(rgb[..., i] >= CLIP_FROM) & (alpha > 0) for i in range(3)]
     if any(c.any() for c in clipped) and not all(np.array_equal(clipped[0], c) for c in clipped[1:]):
         # a band clipped where another is not (the camera saturated in it, or it is past the scale's white): filled
@@ -7852,6 +7848,10 @@ def colour_picture(u, p, colour, planes, away=None):
         rgb = calibration.mix_display(rgb, mix, scale["gamma"])
     if scale.get("chroma"):
         rgb = chroma(rgb, scale["chroma"])
+    # white where the colour comes out clipped: at white in one band and within WHITE_SLACK of it in the others, as
+    # a mosaic's per-filter gains a little apart leave a block the mix takes past white (ringsFA's, mixed to
+    # 255/255/247 when the solved blue gain came out 0.97: a cream block)
+    white = (rgb.max(axis=2) >= 255) & (rgb.min(axis=2) >= 255 - WHITE_SLACK)
     if white.any():
         rgb = np.array(rgb)
         rgb[white] = 255
