@@ -7298,6 +7298,7 @@ CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a 
 TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
 TINT_LIT_LEVEL = 16  # display levels (LIT_LEVEL): the bright end above is measured over pixels this bright in the frame or
 #                      the set, not over the overlap's sky
+TINT_TOP_PCT = 99.5  # (tinted_frame) a brightness match takes the frame's lit pixels up to this percentile no further than white
 TINT_HUE_LEAST = 16  # lit pixels: fewer than LUM_MATCH_MIN give no brightness match; this many still give the set's hue
 TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame eases over to the set's own picture (the
 #                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
@@ -7436,15 +7437,6 @@ def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
     top_y = float(np.percentile(y[up], 99)) if up.any() else 0.0
     top_g = float(np.percentile(g[up], 99)) if up.any() else 0.0
     lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g) if top_y > 0 and top_g > 0 else np.zeros_like(both)
-    if body is not None:
-        # body: the target's disk on the picture (movie_frame). The set's hue is the body's, measured on it, not on the
-        # glare or stray light round it: each channel's own sky black takes a different share of a veil off (Mimas 2004,
-        # 000OT TIMIIA001: the glare drew red 27, green 1, blue 5), so its hue is no colour of anything. A body under
-        # LUM_MATCH_MIN pixels of the picture (speck: its channels a few px apart, each a dot) gives the frame no hue at
-        # all: drawn in gray, its brightness matched to the set's as before (on all that is lit: Methone's core, clipped
-        # on the frame's own scale, came out flat white when left unmatched)
-        if not speck:
-            lit = lit & body
     if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
@@ -7454,9 +7446,26 @@ def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
         match = 1.0
         hue = (np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0) if lit.sum() >= TINT_HUE_LEAST
                else np.ones(3, np.float32))
+    if body is not None and not speck:
+        # body: the target's disk on the picture (movie_frame). The set's mean hue is the body's, measured on it, not on
+        # the glare or stray light round it: each channel's own sky black takes a different share of a veil off (Mimas
+        # 2004, 000OT TIMIIA001: the glare drew red 27, green 1, blue 5), so its hue is no colour of anything. (The
+        # brightness match stays on all that is lit: on the body alone Methone's 166ME frames were brought up to clip.)
+        on = lit & body
+        if on.sum() >= TINT_HUE_LEAST:
+            hue = np.median(rgb[on] / np.maximum(y[on], 1e-6)[:, None], axis=0)
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within TINT_MATCH)
     match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
+    if match > 1.0 and up.any():
+        # (and never past where the frame's own lit top, TINT_TOP_PCT of it, reaches white: on a small body the set's
+        # brightness is its few lit pixels, and Methone's 166ME clear frames were brought up 1.4 times, the moon's core
+        # flat white over 3% of the picture)
+        top = float(np.percentile(g[up], TINT_TOP_PCT))
+        if top > 0:
+            match = max(1.0, min(match, 1.0 / top))
+    # speck: a target under LUM_MATCH_MIN pixels of the picture (its channels a few px apart, each a dot) gives the frame
+    # no hue at all: drawn in gray, its brightness matched as any other
     if speck:
         hue = np.ones(3, np.float32)
     own = rgb / np.maximum(y, 1e-6)[..., None]
