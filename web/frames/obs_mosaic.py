@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -8131,7 +8131,7 @@ def _smoothed_path(x0):
     return out
 
 
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None):
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -8141,7 +8141,11 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     are held by several paths. As _chain, no place ends further than the guide's reach from the tile's own SPICE place:
     a tile the solve put past it (a run of frames another moon pulled along together) keeps SPICE's place and its links
     are left out. The pictures are read a window at a time (STEADY_WINDOW tiles and the links before them), so a movie
-    of hundreds of tiles never holds them all. ({n: [x, y]}, how)."""
+    of hundreds of tiles never holds them all. edges: a clouded body's (SURFACE_CLOUDED) tiles are matched on the
+    edges between its lit and dark only (edge_shift: its limb, terminator, ring edges), which stay put on the sky,
+    and never on its clouds, which turn and drift with the planet (Jupiter's 11 px a frame in C24JU 1X2NITE008: the
+    chain followed them and the movie slid, snapping back to SPICE where the chain broke); a pair with no such edge
+    in common is no link. ({n: [x, y]}, how)."""
     import scipy.sparse as sps
     import scipy.sparse.linalg as spla
     tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
@@ -8189,10 +8193,17 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
-        shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
-                                 around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
+        if edges:
+            shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
+            how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else f"edges: {seen}"
+        else:
+            shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
+                                     around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is not None and math.hypot(*shift) <= believed:
             d = (rel[0] - shift[0], rel[1] - shift[1])
+            if edges and (seen or {}).get("normal"):
+                # (one straight edge says only how far across it: along it, the smoothed path's step)
+                d = along_path(d, rel, j, n, seen)
         elif ring is not None and not getattr(ring, "first", False):
             # (frames of the rings the pictures cannot be matched on, the ringlets repeating along the ring: their
             # radial profiles on SPICE's ring plane, matched across the rings only (ring_pair_shift), and along the
@@ -8368,7 +8379,10 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady8: another body's disk drawn by its shape toward the target (other_bodies, _limb_toward), and one only
     # over the square's sky round a small target left out of the match, not the match (STEADY_HIDDEN): Enceladus
     # setting behind Saturn (293EN ENCSET001) kept SPICE's jumps on 34 of its 48 frames
-    STEADY_FILE = f"steady8k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady9: a clouded body's frames (SURFACE_CLOUDED) matched on the edges between its lit and dark only
+    # (edge_shift, as its mosaics' pointings are), not on its clouds, which turn and drift: Jupiter's clouds moved
+    # 11 px a frame in C24JU 1X2NITE008 and the chain followed them, the movie snapping back where it broke
+    STEADY_FILE = f"steady9k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -8439,7 +8453,7 @@ def steady_chain(u, cache, p=None):
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made))
+                                        steady_rings(u, made), edges=clouded(u))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
