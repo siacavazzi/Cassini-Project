@@ -2694,12 +2694,12 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         veiled = glow = False
 
         def short(m):
-            # too little dark sky to measure: under SKY_MIN of the frame, or for a mosaic's tile with the disk across
-            # most of it, under MOSAIC_SKY_PX pixels off the disk (a sliver of sky still measures its offset: Enceladus
-            # 144EN's clear and colour frames of the disk, 3-4% sky, were the gray rectangle round it)
-            if most is not None and off_disk is not None:
-                return int(m.sum()) < MOSAIC_SKY_PX
+            # too little dark sky to measure (under SKY_MIN of the frame). A mosaic's tile with the disk across most of
+            # it keeps that rule too: measured on the sliver of sky beside the disk, 144EN's IR3 and BL1 tiles of the disk
+            # rose 0.0002 I/F over the pass's black and its clear tile did not, and the night side where only those two
+            # cover it (the top of the disk, beside the crescent) went 23 levels darker in a patch (Fable, 11-21)
             return m.mean() <= SKY_MIN
+
         if speck and disk is not None and disk[2] < SPECK_PX:
             # a body from beyond Saturn's system under a pixel across (Earth from Saturn, SPECKS): the frame is all sky,
             # and a dark sky found under 5% of its brightest is still the veil's lower part, whose line bands and other
@@ -2912,7 +2912,6 @@ def small_body(u, frame):
     return (x, y, radius) if radius < SMALL_BODY * FRAME else None
 
 
-MOSAIC_SKY_PX = 1000   # tile_scale: the fewest pixels of a mosaic tile's quarter-size picture off the disk that measure its sky
 MOSAIC_SKY_MOST = 0.01   # mosaic_sky_most: a mosaic's sky tile's own black at most this share of the pass's white over its black
 
 
