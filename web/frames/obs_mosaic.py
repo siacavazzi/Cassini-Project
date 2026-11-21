@@ -9431,8 +9431,8 @@ def follow_k(k, inside):
 
 def follow_shake(u, cache, p, s, at):
     """(dx, dy), reference px: how far the smoothed path of a following movie's frames (their places as drawn, at(),
-    a line fitted with Gaussian weights over FOLLOW_SMOOTH frames) is from frame s's own place, held within
-    FOLLOW_SHAKE_MOST of a frame; (0, 0) with too few frames placed. 289SA AURSTARE001 following its frames played Cassini's pointing jitter, 6 px p90."""
+    a line fitted with Gaussian weights over FOLLOW_SMOOTH frames) is from frame s's own place; (0, 0) past
+    FOLLOW_SHAKE_MOST of a frame (what FOLLOW_ZOOM covers) or with too few frames placed. 289SA AURSTARE001 following its frames played Cassini's pointing jitter, 6 px p90."""
     frames = u["frames"]
     xs = []
     for j in range(max(0, s - 3 * FOLLOW_SMOOTH), min(len(frames), s + 3 * FOLLOW_SMOOTH + 1)):
@@ -9451,8 +9451,9 @@ def follow_shake(u, cache, p, s, at):
     mx, my = coef[0]
     dx, dy = float(mx - me[0]), float(my - me[1])
     side = FRAME * (frames[s][7] / u["z"] if frames[s][7] and u.get("z") else 1.0)
-    cap = FOLLOW_SHAKE_MOST * side   # (held to what FOLLOW_ZOOM covers, so no edge shows)
-    return float(np.clip(dx, -cap, cap)), float(np.clip(dy, -cap, cap))
+    if max(abs(dx), abs(dy)) > FOLLOW_SHAKE_MOST * side:
+        return 0.0, 0.0   # (more than FOLLOW_ZOOM covers is a move of the view, not a shake: left as it is)
+    return dx, dy
 
 
 def _drawn_turn(path):

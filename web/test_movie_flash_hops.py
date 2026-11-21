@@ -93,7 +93,7 @@ def test_follow_scale_constant():
     ks = []
     for s_ in range(3, 17):
         dx, dy = om.follow_shake(u, None, p, s_, lambda q: q)
-        assert max(abs(dx), abs(dy)) <= om.FOLLOW_SHAKE_MOST * S + 1e-9
+        assert max(abs(dx), abs(dy)) <= om.FOLLOW_SHAKE_MOST * S + 1e-9   # (or 0, a move)
         ks.append(om.follow_k(1.0, True))
     assert len(set(ks)) == 1 and ks[0] == om.FOLLOW_ZOOM, ks
     assert om.follow_k(1.0, False) == 1.0
