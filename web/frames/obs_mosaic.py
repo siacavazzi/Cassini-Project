@@ -9420,12 +9420,19 @@ def follow_view(u, s, t, out, pic=None):
 
 FOLLOW_SMOOTH = 3      # frames: (follow_shake) sigma of the path a following view is held on
 FOLLOW_SHAKE_MOST = 0.03   # of the frame's side: the most a following view is held off its frame (more is a move)
+FOLLOW_ZOOM = 1.0 + 2.0 * FOLLOW_SHAKE_MOST   # a following stare drawn this much bigger, every frame, so no edge shows
+
+
+def follow_k(k, inside):
+    """A following view's scale k for a stare inside its body's disk: FOLLOW_ZOOM times, the same for every frame of
+    the pass (a zoom by each frame's own shake made the picture breathe 1 to 6% frame to frame)."""
+    return k * FOLLOW_ZOOM if inside else k
 
 
 def follow_shake(u, cache, p, s, at):
     """(dx, dy), reference px: how far the smoothed path of a following movie's frames (their places as drawn, at(),
-    a line fitted with Gaussian weights over FOLLOW_SMOOTH frames) is from frame s's own place; (0, 0) past FOLLOW_SHAKE_MOST of a frame, or
-    with too few frames placed. 289SA AURSTARE001 following its frames played Cassini's pointing jitter, 6 px p90."""
+    a line fitted with Gaussian weights over FOLLOW_SMOOTH frames) is from frame s's own place, held within
+    FOLLOW_SHAKE_MOST of a frame; (0, 0) with too few frames placed. 289SA AURSTARE001 following its frames played Cassini's pointing jitter, 6 px p90."""
     frames = u["frames"]
     xs = []
     for j in range(max(0, s - 3 * FOLLOW_SMOOTH), min(len(frames), s + 3 * FOLLOW_SMOOTH + 1)):
@@ -9444,9 +9451,8 @@ def follow_shake(u, cache, p, s, at):
     mx, my = coef[0]
     dx, dy = float(mx - me[0]), float(my - me[1])
     side = FRAME * (frames[s][7] / u["z"] if frames[s][7] and u.get("z") else 1.0)
-    if max(abs(dx), abs(dy)) > FOLLOW_SHAKE_MOST * side:
-        return 0.0, 0.0
-    return dx, dy
+    cap = FOLLOW_SHAKE_MOST * side   # (held to what FOLLOW_ZOOM covers, so no edge shows)
+    return float(np.clip(dx, -cap, cap)), float(np.clip(dy, -cap, cap))
 
 
 def _drawn_turn(path):
@@ -10669,15 +10675,13 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
         # (the view held on the frames' smoothed path, not on each frame: Cassini's own pointing jitter, a few px frame
         # to frame, comes out as it does in a still view; the picture zoomed in by as much, so no edge shows)
-        # (only a stare inside the body's disk: the creeping ring and limb movies keep their views as they were)
-        dx, dy = follow_shake(u, cache, p, s, at) if _inside_body(u) else (0.0, 0.0)
+        # (only a stare inside the body's disk: the creeping ring and limb movies keep their views as they were. One
+        # zoom for the whole pass, FOLLOW_ZOOM, so the picture's scale holds from frame to frame)
+        inside = _inside_body(u)
+        dx, dy = follow_shake(u, cache, p, s, at) if inside else (0.0, 0.0)
+        k = follow_k(k, inside)
         mx, my = follow_middle(t, rect, k)
-        if dx or dy:
-            side = rect[2]
-            zoom = 1.0 + 2.0 * max(abs(dx), abs(dy)) / max(side, 1.0)
-            k *= zoom
-            mx, my = follow_middle(t, rect, k)
-            mx, my = mx + dx * k, my + dy * k
+        mx, my = mx + dx * k, my + dy * k
         unturn = (turn, (mx, my), out, out)
         rep["follow"] = {"turn": round(turn, 2), **({"shake": [round(dx, 2), round(dy, 2)]} if dx or dy else {})}
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
