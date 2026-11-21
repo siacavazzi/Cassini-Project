@@ -1442,8 +1442,7 @@ body had turned at the reference frame's time, in its own pixels: every place of
 point with SPICE (the body's shape and spin; Cassini, the camera and the sun as they were: reproject.spin_field) and
 looked up where the frame saw that point (reproject.warp_sky, as obs_mosaic redraws a mosaic's panels and a movie's
 colour sets). The sky, the limb, the night side and Saturn's rings in front of its disk stay as taken, so the lining
-up after finds the limb, the clouds and SPICE's place in agreement. Only the bodies whose clouds are what is seen
-(obs_mosaic.SURFACE_CLOUDED); a channel whose disk moves under DEROTATE_LEAST, or whose redrawing would stretch it past
+up after finds the limb, the clouds and SPICE's place in agreement. Only the giant planets (obs_mosaic.DEROTATE_BODIES); a channel whose disk moves under DEROTATE_LEAST, or whose redrawing would stretch it past
 obs_mosaic.SURFACE_STRETCH, stays as taken, as does every channel of a set SPICE cannot follow (no geometry, another
 body, across New Year) or with Settings > Processing's surface step off.
 """
@@ -1482,13 +1481,13 @@ def _derotation_fields(lbls, ref, shape):
     import reproject as rp
     if len(lbls) < 2 or not cal.step("surface"):
         return None
-    if str(lbls[ref].info.get("TARGET_NAME", "")).replace('"', "").strip().upper() not in om.SURFACE_CLOUDED:
+    if str(lbls[ref].info.get("TARGET_NAME", "")).replace('"', "").strip().upper() not in om.DEROTATE_BODIES:
         return None
     if _spice_locs(lbls) is None:   # (sets each label's geometry from the geometry cache)
         return None
     geoms = [getattr(lbl, "geometry", None) for lbl in lbls]
     if any(not g or "et" not in g for g in geoms) or len({str(g["target"]).upper() for g in geoms}) != 1 \
-            or str(geoms[ref]["target"]).upper() not in om.SURFACE_CLOUDED \
+            or str(geoms[ref]["target"]).upper() not in om.DEROTATE_BODIES \
             or len({str(lbl.info["IMAGE_TIME"])[:4] for lbl in lbls}) != 1:
         return None
     h, w = shape

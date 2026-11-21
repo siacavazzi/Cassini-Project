@@ -5236,10 +5236,16 @@ DEROTATE_DIR = "derotate1"   # (under a pass's tiles) colour channels redrawn as
 DEROTATE_LEAST = 0.5         # px: a channel whose surface moves less than this between its time and the set's is kept
 
 
+# the bodies whose colour sets are derotated: the giant planets, whose clouds turn with them (a Saturn day is 10.7
+# hours, its disk's middle moves tens of px between filters on a close frame). Not Titan: its haze does not turn with
+# its slow surface, and a turn of under a pixel only resampled its pictures (titan17-composite, titancloud264-movie)
+DEROTATE_BODIES = frozenset({"SATURN", "JUPITER"})
+
+
 def derotates(u):
-    """True when pass u's colour sets are derotated: a clouded body (SURFACE_CLOUDED) SPICE has a spin and shape for,
+    """True when pass u's colour sets are derotated: a giant planet (DEROTATE_BODIES) SPICE has a spin and shape for,
     with Settings > Processing's surface step on."""
-    return clouded(u) and calibration.step("surface") and _sky_views(u) is not None
+    return u["key"][0] in DEROTATE_BODIES and calibration.step("surface") and _sky_views(u) is not None
 
 
 _cloud_placed_seen = {}
@@ -5326,8 +5332,11 @@ def derotated_tiles(u, cache, p, tiles):
     """A still's or mosaic's tiles (layout) with each pointing's filters redrawn as at the time of its first tile (the
     one C8 registers the others to, _pointing_root), as a movie's colour set is as at its newest channel's (derotated):
     a clouded body's clouds turn between the filters while its limb stays put, and the colour planes made of them drew
-    every cloud fringed. Not a pointing one of whose filters was placed by matching its clouds (cloud_placed), and not
-    a tile taken more than DEROTATE_SPAN after its pointing's first (a repeat of the pointing, not its colour set)."""
+    every cloud fringed. Not a pointing one of whose filters was placed by matching its clouds (cloud_placed), one
+    with a tile whose rings were redrawn as at the pass's epoch (ring_redraw: a ring mosaic, whose disk is a corner of
+    it; derotated, its panels' registration moved and the whole 2004 ring mosaic COMPHIDRK001 shifted, a black rim
+    along its edge), and not a tile taken more than DEROTATE_SPAN after its pointing's first (a repeat of the pointing,
+    not its colour set)."""
     if not derotates(u):
         return tiles
     roots, by_n = {}, {t["n"]: t for t in tiles}
@@ -5341,7 +5350,7 @@ def derotated_tiles(u, cache, p, tiles):
     for t in tiles:
         r = by_n.get(roots.get(t["n"]))
         if r is None or r["n"] == t["n"] or not r.get("id") or abs((t.get("t") or 0) - (r.get("t") or 0)) > DEROTATE_SPAN \
-                or any(cloud_placed(u, cache, p, q) for q in sets[r["n"]]):
+                or any(q.get("pic") for q in sets[r["n"]]) or any(cloud_placed(u, cache, p, q) for q in sets[r["n"]]):
             out.append(t)
             continue
         got = derotated(u, cache, p, t, r["id"])
