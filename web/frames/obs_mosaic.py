@@ -87,7 +87,7 @@ import label_handler  # noqa: E402
 # without the lead (_register_match): Telesto's clear frames, 77 px off by SPICE, no longer stay there as a gray ghost
 # obs-v135/v118/v104: an empty sky's whole noise taken for sky where the sky test's cut ran through it (calibration._sky): black, not a gray floor with line stripes (numbered past #552, the lit-sky pass and #558)
 # obs-v136/v119/v105: a grey filter's exposure bracket draws its short frames under the long one at their place (bracket_shorts), not by dim_under's overlap ratio: 036RI DRING001's soft band and seam since #491 (numbered past #552, the lit-sky pass, #558 and #559)
-# obs-v141/v124/v110: sky smoothing's slope guard on every frame (calibration.SKY_GLOW_MOVE): no black gap and grainy halo outside Saturn's limb; obs-v134/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
+# obs-v141/v124/v110: sky smoothing's slope guard on every frame (calibration.SKY_GLOW_MOVE): no black gap and grainy halo outside Saturn's limb; obs-v135/v117/v103: a limb whose outlines' correlation peak falls short matched where the outlines differ least, a near-straight one placed along itself at SPICE's offset (image_correction.limb_shift; 200TI's CB2/RED/BL1 set and W1640522624_1 in colour again)
 # (numbered past #552's obs-v132 and the lit-sky pass's obs-v133)
 # obs-v142/v125/v111 (numbered past #574): image matching without OpenCV's half-pixel phase correlation bias (image_correction.phase_correlate),
 # and a moon found in the pictures only where its outline is (color_image.FIND_OUTLINE; 279EN PLUME001's plume)
@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v152", "raw": "obs-v135", "eye": "obs-v152-eye", "false": "obs-v152-false", "classic": "obs-v121-classic"}  # v152/v135/v121: a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -6354,6 +6354,10 @@ def seams(u, p, tiles, rect, ref, cache):
 
 
 GROW_FROM = 16   # tiles of one filter: a mosaic with more is the one before it with the new tile drawn over it
+WHOLE_MOST = 120   # ... in the balanced look, up to this many: every tile's seams solved together (held_level). Grown, each
+                   # new tile was matched only to the picture under it, at most 6 levels and its gain's limit, so wherever
+                   # the tiles drawn after the first 16 met them a step stayed: Dione 139DI REGMAP001 (27 tiles a filter),
+                   # a step halfway down the moon and a darker green band in its lower third, gone when solved whole
 
 
 def _filter_path(u, f, count, rect, cache, solved_on=""):
@@ -6391,8 +6395,14 @@ def held_level(frames):
     """The seams' (gains, offsets) of frames on one calibrated scale, none pinned (mosaic.seams' pin None), for
     mosaic.compose's corrections. Pinned to none, the gains all sink together toward their limit as overlaps come
     in (the data asks only that they agree), so a mosaic dimmed about 9% while it filled: their mean log is held
-    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last."""
-    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap)
+    at 0 instead, so the pass keeps the level its scale gave it from the first tile to the last.
+    The gains are the log solve (mosaic.match_gains anchored: each pair's ratio, every log gain pulled gently toward
+    0). The plain solve's pull toward 1 is too weak for a whole mosaic: every gain sank to the limit (1 / 1.1) and
+    stopped there, all the same, so once their mean was taken out every tile kept a gain of 1, nothing was matched,
+    and the offsets alone (at most 6 levels each) took the steps: Dione 139DI REGMAP001's 27 tiles a filter, all
+    at 0.909 before their mean was taken out, half of their offsets at +6 and half at -6, a step of 12 levels across
+    the moon and a green band where one filter's step was not another's."""
+    gains = mosaic.match_gains(frames, mosaic.calibrated_gain, None, mosaic.calibrated_overlap, anchored=True)
     gains = gains / np.exp(np.log(gains).mean(axis=0))
     return gains, mosaic.match_offsets(frames, gains, None, mosaic.calibrated_overlap)
 
@@ -6480,7 +6490,8 @@ def grows(mine):
     Smiled, 195RI HIPHASEC001, kept its GRN repeat's clipped rings on top, a lime patch by Saturn's limb). The
     high-phase ring passes that take such repeats compose their filter mosaics whole instead (2 passes of 1,313 in
     2004 and early 2005)."""
-    return len(mine) > GROW_FROM and not any(t.get("fill") or t.get("long") for t in mine)
+    return (len(mine) > (GROW_FROM if calibration.look() != "balanced" else WHOLE_MOST)
+            and not any(t.get("fill") or t.get("long") for t in mine))
 
 
 def _grown(u, p, f, mine, rect, cache, tag=""):

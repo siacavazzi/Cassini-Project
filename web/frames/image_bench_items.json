@@ -66,6 +66,8 @@
   {"name": "saturn08w-fullblack-movie", "kind": "pass", "frame": "W1602057697_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
   {"name": "saturn13-fullblack-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
   {"name": "saturn08-fullblack-movie", "kind": "pass", "frame": "N1601603945_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
-  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"}
+  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"},
+  {"name": "dione139-mosaic", "kind": "pass", "frame": "N1665974059_1", "group": "hard", "watch": "Dione 2010 colour map (139DI REGMAP001): no brightness step across the moon between tile rows, no green band"},
+  {"name": "titan059-mosaic", "kind": "pass", "frame": "N1582413047_1", "group": "hard", "watch": "Titan 2008 CB3/MT1 map (059TI GLOBMAP001): tiles of one brightness and tint"}
  ]
 }
