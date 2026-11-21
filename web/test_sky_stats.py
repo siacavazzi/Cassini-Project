@@ -100,7 +100,13 @@ def levels_separate(images, masks, floor_pct=None):
         levels.append(min(float(median), float(np.percentile(v, 20)) + 0.84 * noise))
         noises.append(noise)
         if floor_pct is not None:
-            floors.append(float(np.percentile(v, floor_pct) - median))
+            # the floor on the sky's grain plus GRAIN_GLOW of its slow light (calibration.sky_grain, gentler blacks)
+            spread = float(np.percentile(v, floor_pct) - median)
+            grain = cal.sky_grain(ims, ms)
+            if grain.size >= cal.GRAIN_LEAST:
+                fine = float(np.percentile(grain, floor_pct) - np.median(grain))
+                spread = fine + cal.GRAIN_GLOW * max(spread - fine, 0.0)
+            floors.append(spread)
     margin = cal.NOISE_MARGIN * math.sqrt(sum(n * n for n in noises) / len(noises))
     if floor_pct is not None:
         margin = max(margin, max(floors))

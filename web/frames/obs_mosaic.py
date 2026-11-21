@@ -2637,7 +2637,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         # light) rolls off into it instead of ending at a hard, scalloped edge (Fable, 11-21: saturn08 and the 2004
         # ring movie's glow cut off at the black)
         if out["blacks"][0] > pass_black:
-            out["toe"] = max(out.get("toe") or 0.0, out["blacks"][0] - pass_black)
+            out["toe"] = max(out.get("toe") or 0.0, TRACK_TOE * (out["blacks"][0] - pass_black))
         if seen is not None:
             seen["track_black"] = out["blacks"][0]
     long = scale.get("long")
@@ -2806,6 +2806,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     return out
 
 
+TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
+TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
 TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
                    # neighbours (an odd number), so one frame's stray light or lost lines do not set the frames round it
 
@@ -2836,7 +2838,12 @@ def sky_track(qs, masks, ts, top):
         # (its sky black alone, not the floor black a still takes off a lit part: with it, a dim ring band between
         # bright rings went solid black, 2008 W1602057697_1's movie, lit share 33% -> 10%; Fable 11-21)
         (still,), still_margin, _, measured = calibration._balanced_scale([clean], floor=False)
-        got.append((t, max(level + top, still + still_margin if measured else level + top)))
+        black = level + top
+        if measured and still + still_margin > black:
+            # a quarter of the way up (TRACK_STILL; half and all the way lost faint light): all the way, the F ring's arc, a ring's faint sheet and the plume's outer
+            # glow went black at Full (review 11-21, Sam's "go more conservative")
+            black += TRACK_STILL * (still + still_margin - black)
+        got.append((t, black))
     if len(got) < 3:
         return []
     got.sort(key=lambda g: g[0])
@@ -3069,6 +3076,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     inside = [math.hypot(x, y) < radius / z for *_, x, y, z in frames if z]
     floor = float(np.mean(inside)) if inside else 0.0
     filled = floor > FILLED
+    if filled and max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for iofs in by.values()) \
+            < calibration.GLOW_IOF[0]:
+        # the body's disk fills the frames but nothing in them is as bright as a sunlit surface (GLOW_IOF): its night
+        # side (an aurora stare, 182SA AURSTARE001: 4e-5 I/F at its 99.5th percentile). Stretched from its 1st to its
+        # 99.5th percentile as a lit surface, its noise and offset filled the range and every frame came out near white
+        # (median 217 of 255; spot check 11-21). It is drawn as sky is: black at its sky, the aurora and stars over it
+        filled = False
     gamma = 3.0
     if filled and calibration.look() == "balanced":
         # The classic gamma 1.5 (a steeper curve lifts the dark end's noise and steps into view). True colour: one black and white for the filters drawn, so the colour is what they saw
