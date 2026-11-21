@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -8299,12 +8299,17 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         if not changed:
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
-    linked = {}
+    linked, by_picture = {}, set()
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
+        if not str(how).startswith("rings"):
+            by_picture |= {j, n}
+    # (a tile whose every link is a ring profile's, across the rings only, its place along them SPICE's smoothed step:
+    # "along the rings", so a colour set does not take that place as the pictures' own, movie_frame)
     hows = {n: ("held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
-                else f"linked to {sorted(linked[n])}" if n in linked else "first" if n == order[0] else "linked from later tiles")
+                else (f"linked to {sorted(linked[n])}" + ("" if n in by_picture else " along the rings")) if n in linked
+                else "first" if n == order[0] else "linked from later tiles")
             for n in order}
     return places, hows
 
@@ -8471,6 +8476,23 @@ def steady_held(u, cache, p=None):
         with open(path) as fh:
             held = {int(n): xy for n, xy in (json.load(fh).get("held") or {}).items()}
     return held
+
+
+def steady_hows(u, cache, p=None):
+    """{tile n: how}: how pass u's stabilization chain placed each tile (steady_chain's kept "how")."""
+    p = p or plan(u, cache)
+    steady_chain(u, cache, p)
+    path = os.path.join(folder(u, cache), STEADY_FILE)
+    if not os.path.exists(path):
+        return {}
+    with open(path) as fh:
+        return {int(n): str(h) for n, h in (json.load(fh).get("how") or {}).items()}
+
+
+def by_pictures(how):
+    """Whether a tile's stabilized place is the pictures' own: matched to other tiles on the pictures (not only by ring
+    profiles across the rings, and not held on SPICE's smoothed path for want of a match)."""
+    return how is not None and (how == "first" or how.startswith("linked")) and not how.endswith("along the rings")
 
 
 def seen_places(u, made, pic, there):
@@ -8976,6 +8998,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
+            "own": [by_pictures(hows.get(n)) for n in ns] if (hows := steady_hows(u, cache, p)) is not None else None,
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
@@ -10506,8 +10529,17 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         # them; the page's table has those as its "spice")
         sheld = steady_held(u, cache, p) if places and not track else {}
         anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
+        # (a channel the pictures placed keeps that place: each filter's frame on the target where it was taken, the
+        # camera's drift between the exposures out (003SA 3X3MOVIEA003's ring edges doubled 2 to 3 px when the set
+        # moved as one block). A channel they did not place (held on the smoothed path, or along the rings by their
+        # profiles) moves with the ones they did, by the median of their moves, keeping its place against them as
+        # SPICE has it: on its own it came apart from them, 257DA DAPHNIS001's blue-violet fringe, #602/#606)
+        hows = steady_hows(u, cache, p) if places and not track else {}
+        mine = {q["n"] for q in bases.values() if "offset" in q and q.get("n") in (places or {})
+                and by_pictures(hows.get(q["n"]))}
         moves = [(places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
-                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})]
+                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})
+                 and (q["n"] in mine or not mine)]
         set_shift = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) \
             if places and not track and len(bases) > 1 and moves else None
         for f, j in got.items():
@@ -10523,7 +10555,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                 # channel the pictures could not match went on along the smoothed path while the others followed
                 # their matches, and the channels came apart: 257DA DAPHNIS001's blue-violet fringe along the
                 # Keeler gap's edge, #602)
-                newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
+                if base.get("n") not in mine:
+                    newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
             own_gain[f] = base.get("gain")
         used = want
     if used:
