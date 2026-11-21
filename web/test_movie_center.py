@@ -177,4 +177,6 @@ fp = box(*corner)
 assert om.centre_half(fp, 60, seen(*corner)) is None
 assert om.movie_rect(fp, t, radius=60, centre=True, seen=seen(*corner)) == om.movie_rect(fp, t)
 assert om.covered(seen((0, 0)), F / 2) > 0.8
+# (the body wholly on a frame, near its edge, as the 1999 Moon: centred still)
+assert om.centre_half(box((300, 0)), 60, seen((300, 0))) is not None
 print("a body in the frames' corner is not centred: ok")

@@ -9300,10 +9300,11 @@ def centre_half(fp, radius, seen):
     if not (inside.mean() >= CENTRE_KEEP and inside.any(1).all()):
         return None
     half = fitted_half(seen, around / 2, wide)
-    # (a body at its frames' edge: the square round it that keeps the frames is mostly empty, the pictures in one
-    # corner of it (127HE ROTCOLR003's best Helene, 28% of the view). Under CENTRE_FILL of the square holding
-    # pictures (covered), the view is the footprint's, the body where the frames show it)
-    if covered(seen, half) < CENTRE_FILL:
+    # (a body the frames cut, at their edge: the square round it that keeps the frames is mostly empty, the pictures
+    # in one corner of it (127HE ROTCOLR003's best Helene, 28% of the view). Under CENTRE_FILL of the square holding
+    # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame
+    # stays centred however little of the square the frames fill: the 1999 Moon near its frame's edge)
+    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius):
         return None
     return half
 
@@ -9341,6 +9342,17 @@ def covered(seen, half, grid=64):
         hull = cv2.convexHull(np.round((pts + half) * k * 16).astype(np.int32))
         cv2.fillConvexPoly(cover, hull, 1, shift=4)
     return float(cover.mean())
+
+
+def disk_inside(seen, radius):
+    """Whether the body's whole disk (radius, about its centre) is on one of the frames (seen, pass_seen: each
+    frame's points, its outline their hull)."""
+    rim = [(radius * math.cos(a), radius * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 16, endpoint=False)]
+    for pts in seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2):
+        hull = cv2.convexHull(pts.astype(np.float32))
+        if all(cv2.pointPolygonTest(hull, (float(x), float(y)), False) >= 0 for x, y in rim):
+            return True
+    return False
 
 
 def kept(seen, half):
