@@ -10432,6 +10432,14 @@ def _shown_of(u, p, n, not_shown, tile_of):
     hidden = (lambda j: not_shown(j) or over_exposed(tile_of(j))) if colours else not_shown
     whole = holds(tile_of, hidden)
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
+    if colours and s != n and abs(frames[n][3] - frames[s][3]) > HOLD_AGE:
+        # a frame not fit to show whose own filter's last whole frame was taken more than HOLD_AGE before it, a cycle
+        # or more back, holds the newest whole frame before it of any filter instead, when that one is its moment
+        # (within HOLD_AGE): 101SA AURORA003 W's unfit MT3 frame held one 22 minutes back and Saturn jumped to that
+        # frame's size and place for one frame, then back
+        last = next((j for j in range(n - 1, -1, -1) if whole(j)), None)
+        if last is not None and frames[n][3] - frames[last][3] <= HOLD_AGE:
+            s = last
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got, tint = set_shown(u, n, want, not_shown, placed, covers)
