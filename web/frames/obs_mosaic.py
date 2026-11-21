@@ -3585,6 +3585,7 @@ def _colour_filters(u):
 # (which SPICE's shape model puts a pixel or two off on a cratered moon) Dione's 2010 mapping mosaic and Iapetus'
 # drew doubled crater rims (the image benchmark, #506)
 LIMB_REGISTER = 2.0      # px
+LIMB_HAZY = frozenset({"TITAN"})   # bodies whose haze puts each filter's limb at its own height, many px apart
 LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
 
 
@@ -3790,9 +3791,10 @@ def _limb_register(u, q, ref, out, crop):
     if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
         e = l0[0] - lq[0]
         v = (-e * l0[1][0], -e * l0[1][1])
-        if "spice_offset" in out and abs(e) > abs(off) + LIMB_REGISTER:
-            # (the limb further off at SPICE's place than at the match: it measures the filter's own haze height, not
-            # its place, and the match stands. 236TI M30R2CLD155's BL1, its limb 5 px out in Titan's blue haze, went
+        if u["key"][0] in LIMB_HAZY and "spice_offset" in out and abs(e) > abs(off) + LIMB_REGISTER:
+            # (a hazy body's limb (LIMB_HAZY) further off at SPICE's place than at the match: it measures the filter's
+            # own haze height, not its place, and the match stands. Only Titan: on Saturn's ring mosaics the matches
+            # this let stand moved the panels and cut 4% of 2004 RINGMOSAIC's rings off its edges (image bench). 236TI M30R2CLD155's BL1, its limb 5 px out in Titan's blue haze, went
             # back to SPICE's place 13 px from GRN: a blue rim on one side, yellow on the other)
             reg = dict(reg, limb_off=round(off, 2), limb_at_spice=round(e, 2))
             out["registered"] = reg
