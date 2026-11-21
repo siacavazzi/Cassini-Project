@@ -9401,6 +9401,37 @@ def follow_view(u, s, t, out, pic=None):
     return (cx - big / 2, cy - big / 2, big, big), (out + FOLLOW_SLACK) / side, turn
 
 
+FOLLOW_SMOOTH = 3      # frames: (follow_shake) sigma of the path a following view is held on
+FOLLOW_SHAKE_MOST = 0.03   # of the frame's side: the most a following view is held off its frame (more is a move)
+
+
+def follow_shake(u, cache, p, s, at):
+    """(dx, dy), reference px: how far the smoothed path of a following movie's frames (their places as drawn, at(),
+    a line fitted with Gaussian weights over FOLLOW_SMOOTH frames) is from frame s's own place; (0, 0) past FOLLOW_SHAKE_MOST of a frame, or
+    with too few frames placed. 289SA AURSTARE001 following its frames played Cassini's pointing jitter, 6 px p90."""
+    frames = u["frames"]
+    xs = []
+    for j in range(max(0, s - 3 * FOLLOW_SMOOTH), min(len(frames), s + 3 * FOLLOW_SMOOTH + 1)):
+        q = tile(u, j, cache, p["display_scale"])
+        if "offset" in q:
+            xs.append((j, at(q)["offset"]))
+    me = next((xy for j, xy in xs if j == s), None)
+    if me is None or len(xs) < 3:
+        return 0.0, 0.0
+    # (a straight line through them, weighted by a Gaussian round s: a stare that drifts steadily is on its own path)
+    js = np.array([j - s for j, _ in xs], float)
+    w = np.exp(-0.5 * (js / FOLLOW_SMOOTH) ** 2)
+    pts = np.array([xy for _, xy in xs], float)
+    A = np.stack([np.ones_like(js), js], 1) * np.sqrt(w)[:, None]
+    coef = np.linalg.lstsq(A, pts * np.sqrt(w)[:, None], rcond=None)[0]
+    mx, my = coef[0]
+    dx, dy = float(mx - me[0]), float(my - me[1])
+    side = FRAME * (frames[s][7] / u["z"] if frames[s][7] and u.get("z") else 1.0)
+    if max(abs(dx), abs(dy)) > FOLLOW_SHAKE_MOST * side:
+        return 0.0, 0.0
+    return dx, dy
+
+
 def _drawn_turn(path):
     """The turn (degrees, within 45 of none) a tile's picture at path was drawn with: the angle of the smallest
     rectangle round its drawn part. 0.0 when it cannot be read."""
@@ -10619,8 +10650,18 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     unturn = None
     if not track and not trail and follows(fp, rect, p["display_scale"].get("filled", False)):
         rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
-        unturn = (turn, follow_middle(t, rect, k), out, out)
-        rep["follow"] = {"turn": round(turn, 2)}
+        # (the view held on the frames' smoothed path, not on each frame: Cassini's own pointing jitter, a few px frame
+        # to frame, comes out as it does in a still view; the picture zoomed in by as much, so no edge shows)
+        dx, dy = follow_shake(u, cache, p, s, at)
+        mx, my = follow_middle(t, rect, k)
+        if dx or dy:
+            side = rect[2]
+            zoom = 1.0 + 2.0 * max(abs(dx), abs(dy)) / max(side, 1.0)
+            k *= zoom
+            mx, my = follow_middle(t, rect, k)
+            mx, my = mx + dx * k, my + dy * k
+        unturn = (turn, (mx, my), out, out)
+        rep["follow"] = {"turn": round(turn, 2), **({"shake": [round(dx, 2), round(dy, 2)]} if dx or dy else {})}
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the colour set's, the trail
     used, newest = None, {}
