@@ -10669,7 +10669,8 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
         # (the view held on the frames' smoothed path, not on each frame: Cassini's own pointing jitter, a few px frame
         # to frame, comes out as it does in a still view; the picture zoomed in by as much, so no edge shows)
-        dx, dy = follow_shake(u, cache, p, s, at)
+        # (only a stare inside the body's disk: the creeping ring and limb movies keep their views as they were)
+        dx, dy = follow_shake(u, cache, p, s, at) if _inside_body(u) else (0.0, 0.0)
         mx, my = follow_middle(t, rect, k)
         if dx or dy:
             side = rect[2]
