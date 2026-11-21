@@ -1,10 +1,10 @@
-# Image benchmark: 7c3e9f7f638c against 457e8ccc4fb3
+# Image benchmark: 9e98d79839a9 against 3f85fc7394f7
 
-**NEEDS EYES**. 74 items: 58 identical, 16 changed (9 outside the target), 0 not built.
+**NEEDS EYES**. 79 items: 60 identical, 19 changed (12 outside the target), 0 not built.
 
 - target items with a measure worse (look at them): mimas04-movie, aurstare289-movie, wind170-movie, albiorix129-movie, aurora101-movie, approach04-movie
 
-Built in 55 min (base) and 55 min (candidate). Targets: albiorix129-movie, approach04-movie, aurora101-movie, aurstare289-movie, jupiter-tint-movie, mimas04-movie, wind170-movie.
+Built in 48 min (base) and 43 min (candidate). Targets: albiorix129-movie, approach04-movie, aurora101-movie, aurstare289-movie, jupiter-tint-movie, mimas04-movie, wind170-movie.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -45,19 +45,19 @@ Built in 55 min (base) and 55 min (candidate). Targets: albiorix129-movie, appro
 | enceladus-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | mimas-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | storm-composite | plain | identical | 0/1 | 0.00% |  |  |  |
-| methone-movie | plain | changed | 30/30 | 1.62% | 80 | evened000.webp: clipped 0.00% -> 3.40%; evened000.webp: lit area's centre moved 11 px | tinted frames' brightness now matched on the lit moon, not on sky noise (the Jupiter W_10 bug): the moon is drawn ~12% brighter (lit median 74 -> 84), and the core where the clear frames themselves saturated (294 px clipped on the frame's own scale) now shows white; before, the sky-noise match drew the whole moon darker |
+| methone-movie | plain | changed | 30/30 | 1.64% | 85 | evened000.webp: clipped 0.00% -> 3.83%; evened000.webp: lit area's centre moved 11 px | tinted frames' brightness now matched on the lit moon, not on sky noise (the Jupiter W_10 bug): the moon is drawn ~12% brighter (lit median 74 -> 84), and the core where the clear frames themselves saturated (294 px clipped on the frame's own scale) now shows white; before, the sky-noise match drew the whole moon darker |
 | hexagon-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | dione-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
-| enceladus15-movie | plain | changed | 74/74 | 9.81% | 49 | evened018.webp: clipped 0.03% -> 0.40% | WHITE_EACH / tint match on lit pixels; small uniform change on the lit side |
-| telesto-movie | plain | changed | 12/36 | 0.00% | 10 |  | tint match on lit pixels; at most 10 levels |
-| daphnis17-movie | plain | changed | 37/64 | 89.42% | 255 | evened008.webp: 25.35% of the base's light now black; evened008.webp: lit area's centre moved 74 px; evened008.webp: lit share 89.6% -> 66.5% | unfit frames hold their own moment, not their filter's frame a cycle back: odd_frame 111 -> 2.6 (fixed); a frame at a new view keeps playing as it is |
+| enceladus15-movie | plain | changed | 74/74 | 9.40% | 38 | evened018.webp: clipped 0.00% -> 0.74% | WHITE_EACH / tint match on lit pixels; small uniform change on the lit side |
+| telesto-movie | plain | changed | 12/36 | 0.00% | 11 |  | tint match on lit pixels; at most 10 levels |
+| daphnis17-movie | plain | changed | 37/64 | 88.95% | 255 | evened008.webp: 37.67% of the base's light now black; evened008.webp: lit area's centre moved 79 px; evened008.webp: lit share 84.7% -> 55.3% | unfit frames hold their own moment, not their filter's frame a cycle back: odd_frame 111 -> 2.6 (fixed); a frame at a new view keeps playing as it is |
 | pan17-movie | plain | identical | 0/38 | 0.00% |  |  |  |
 | titan-cloud-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | earth-fb-still | plain | identical | 0/1 | 0.00% |  |  |  |
 | enceladus15-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | titan17-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | tossup-ring-108ri | hard | identical | 0/62 | 0.00% |  |  |  |
-| titan127-movie | hard | changed | 108/108 | 0.07% | 15 | evened024.webp: clipped 0.79% -> 1.30% | tint hue read on Titan's disk; at most 15 levels |
+| titan127-movie | hard | changed | 108/108 | 0.07% | 14 | evened002.webp: clipped 0.35% -> 0.58% | tint hue read on Titan's disk; at most 15 levels |
 | june2004-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | saturn-limb-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | enceladus-eye-composite | hard | identical | 0/1 | 0.00% |  |  |  |
@@ -69,46 +69,54 @@ Built in 55 min (base) and 55 min (candidate). Targets: albiorix129-movie, appro
 | titan08-mt1 | hard | identical | 0/1 | 0.00% |  |  |  |
 | rings08-bright | hard | identical | 0/1 | 0.00% |  |  |  |
 | mimas04-movie | target | changed | 46/46 | 50.05% | 232 | evened000.webp: detail 2.1289 -> 2.916 (+37%); evened000.webp: lit area's centre moved 51 px |  |
-| aurstare289-movie | target | changed | 88/88 | 99.79% | 255 | evened000.webp: lit area's centre moved 32 px; evened001.webp: clipped 0.00% -> 0.41%; evened001.webp: 28.37% of the base's light now black; evened001.webp: detail 0.2765 -> 0.6547 (+137%); evened001.webp: lit share 99.7% -> 64.4%; evened042.webp: the candidate makes no such picture |  |
-| jupiter-tint-movie | target | changed | 40/40 | 0.48% | 108 |  |  |
-| wind170-movie | target | changed | 32/32 | 88.72% | 255 | evened014.webp: 0.77% of the base's light now black; evened014.webp: lit area's centre moved 85 px |  |
-| albiorix129-movie | target | changed | 39/39 | 12.68% | 255 | frame000.webp: clipped 0.48% -> 0.95%; frame000.webp: 96.86% of the base's light now black; frame000.webp: lit area's centre moved 25 px |  |
-| aurora101-movie | target | changed | 84/84 | 0.00% |  | evened000.webp: detail 0.1459 -> 0.1719 (+18%); evened008.webp: lit area's centre moved 157 px; evened008.webp: lit share 64.0% -> 39.8% |  |
-| approach04-movie | target | changed | 124/140 | 87.38% | 255 | evened026.webp: lit area's centre moved 115 px; evened030.webp: 13.96% of the base's light now black |  |
+| aurstare289-movie | target | changed | 88/88 | 99.95% | 255 | evened000.webp: 94.68% of the base's light now black; evened000.webp: detail 0.0265 -> 1.4495 (+5370%); evened000.webp: lit area's centre moved 364 px; evened000.webp: lit share 99.9% -> 3.8%; evened001.webp: clipped 0.00% -> 0.50%; evened042.webp: the candidate makes no such picture |  |
+| jupiter-tint-movie | target | changed | 40/40 | 0.44% | 103 |  |  |
+| wind170-movie | target | changed | 32/32 | 87.59% | 255 | evened014.webp: 1.64% of the base's light now black; evened014.webp: lit area's centre moved 86 px |  |
+| albiorix129-movie | target | changed | 39/39 | 13.23% | 255 | frame000.webp: clipped 0.93% -> 1.35%; frame000.webp: 96.47% of the base's light now black; frame000.webp: lit area's centre moved 29 px |  |
+| aurora101-movie | target | changed | 84/84 | 86.60% | 255 | evened008.webp: 0.22% of the base's light now black; evened008.webp: lit area's centre moved 150 px; evened008.webp: lit share 64.0% -> 39.7%; evened009.webp: detail 0.1475 -> 0.1994 (+35%) |  |
+| approach04-movie | target | changed | 124/140 | 87.40% | 255 | evened026.webp: 0.93% of the base's light now black; evened026.webp: lit area's centre moved 115 px |  |
+| saturn07-fullblack-movie | hard | changed | 144/144 | 20.74% | 255 |  | #609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged |
+| saturn08w-fullblack-movie | hard | changed | 16/16 | 0.00% | 98 |  | #609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged |
+| saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
+| saturn08-fullblack-movie | hard | changed | 84/84 | 1.71% | 178 |  | #609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged |
+| pan09-banding-movie | hard | identical | 0/16 | 0.00% |  |  |  |
 | fring274-movie | hard | identical | 0/172 | 0.00% |  |  |  |
 | npole0908-mosaicmovie | hard | identical | 0/1 | 0.00% |  |  |  |
 | encset293-movie | hard | identical | 0/48 | 0.00% |  |  |  |
 | daphnis257n1-movie | hard | changed | 4/34 | 0.00% | 8 |  | tint hue on the body; at most 8 levels |
-| fring039-movie | hard | changed | 144/144 | 20.97% | 252 |  | WHITE_EACH: the A ring keeps tone where it neared white |
+| fring039-movie | hard | changed | 144/144 | 20.74% | 255 |  | WHITE_EACH: the A ring keeps tone where it neared white |
 | fring183-movie | hard | identical | 0/61 | 0.00% |  |  |  |
-| titancloud264-movie | hard | changed | 104/104 | 26.21% | 225 | evened000.webp: detail 0.0352 -> 0.0448 (+27%); evened002.webp: clipped 3.33% -> 3.78% | WHITE_EACH: the brightening movie's bright cloud patch keeps texture |
+| titancloud264-movie | hard | changed | 104/104 | 1.80% | 227 | evened002.webp: clipped 2.61% -> 4.92%; evened014.webp: detail 0.0524 -> 0.0656 (+25%) | WHITE_EACH: the brightening movie's bright cloud patch keeps texture |
 
 Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of the place that changed most).
 
 ## Checks
 
-1 regressions, 5 fixed, 15 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+0 regressions, 8 fixed, 16 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
-| plume279-movie | full_black | known | 24.88 | 24.88 (limit 20.0) | black sky lost at Full: up to 25 points (40% of frame287.webp black at Processed, 15% at Full; 1 of 16 frames over 20) |
-| plume279-movie | odd_frame | known | 19.895 | 19.895 (limit 4.0) | worst 19.9 at frame282.webp (102 of 286 frames over 4.0) |
-| ringmovie04-movie | full_banding | known | 1.089 | 1.089 (limit 1.0) | Full sky banding up to 1.09 levels where Processed has black sky (2 of 16 frames over 1.0) |
-| ringmovie04-movie | full_black | known | 53.56 | 53.56 (limit 20.0) | black sky lost at Full: up to 54 points (73% of frame020.webp black at Processed, 19% at Full; 16 of 16 frames over 20) |
-| ringmovie04-movie | pointing_jitter | known | 13.3474 | 13.3474 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 13.3 px, largest 22.7 px (32 pairs) |
-| methone-movie | odd_frame | known | 4.1312 | 4.0155 (limit 4.0) | worst 4.0 at frame010.webp (1 of 1 frames over 4.0) |
-| daphnis17-movie | odd_frame | fixed | 111.3119 | 2.6479 (limit 4.0) | worst 2.6 at frame007.webp (0 of 7 frames over 4.0) |
+| plume279-movie | full_black | known | 24.85 | 24.85 (limit 20.0) | black sky lost at Full: up to 25 points (40% of frame287.webp black at Processed, 15% at Full; 1 of 16 frames over 20) |
+| plume279-movie | odd_frame | known | 13.9092 | 13.9092 (limit 4.0) | worst 13.9 at frame088.webp (100 of 286 frames over 4.0) |
+| ringmovie04-movie | pointing_jitter | known | 15.2414 | 15.2414 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 15.2 px, largest 19.1 px (36 pairs) |
+| saturn05-movie | channel_registration | known | 10.572 | 10.572 (limit 4.0) | colour along edges past the picture's own: p90 10.57 levels, largest 11.10 (27 colour frames) |
+| methone-movie | odd_frame | fixed | 4.1083 | 3.9439 (limit 4.0) | worst 3.9 at frame010.webp (0 of 1 frames over 4.0) |
+| daphnis17-movie | odd_frame | fixed | 118.1757 | 2.7082 (limit 4.0) | worst 2.7 at frame007.webp (0 of 7 frames over 4.0) |
 | impact293-movie | odd_frame | known | 18.0219 | 17.108 (limit 4.0) | worst 17.1 at frame007.webp (1 of 2 frames over 4.0) |
 | mimas04-movie | channel_registration | fixed | 48.81 | 3.96 (limit 4.0) | colour along edges past the picture's own: p90 3.96 levels, largest 5.90 (23 colour frames) |
 | mimas04-movie | odd_frame | known | 4.3576 | 5.3286 (limit 4.0) | worst 5.3 at frame018.webp (1 of 9 frames over 4.0) |
-| aurstare289-movie | full_banding | REGRESSION | 0.704 | 1.066 (limit 1.0) | Full sky banding up to 1.07 levels where Processed has black sky (7 of 16 frames over 1.0) |
-| aurstare289-movie | full_black | known | 73.04 | 73.07 (limit 20.0) | black sky lost at Full: up to 73 points (73% of frame008.webp black at Processed, 0% at Full; 16 of 16 frames over 20) |
-| jupiter-tint-movie | channel_registration | fixed | 7.43 | -7.6 (limit 4.0) | colour along edges past the picture's own: p90 -7.60 levels, largest -7.60 (20 colour frames) |
-| wind170-movie | pointing_jitter | known | 65.4582 | 55.3578 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 55.4 px, largest 74.2 px (14 pairs) |
-| albiorix129-movie | pointing_jitter | fixed | 13.6272 | 0.945 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 0.9 px, largest 1.5 px (38 pairs) |
-| aurora101-movie | channel_registration | known | 7.92 | 8.3 (limit 4.0) | colour along edges past the picture's own: p90 8.30 levels, largest 8.30 (42 colour frames) |
-| aurora101-movie | odd_frame | fixed | 92.9708 | 1.0521 (limit 4.0) | worst 1.1 at frame011.webp (0 of 6 frames over 4.0) |
-| approach04-movie | odd_frame | known | 44.1209 | 24.254 (limit 4.0) | worst 24.3 at frame027.webp (1 of 12 frames over 4.0) |
-| fring274-movie | full_black | known | 32.88 | 32.88 (limit 20.0) | black sky lost at Full: up to 33 points (51% of frame103.webp black at Processed, 19% at Full; 10 of 16 frames over 20) |
-| fring274-movie | pointing_jitter | known | 5.83 | 5.83 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.8 px, largest 136.4 px (158 pairs) |
-| fring039-movie | full_black | known | 41.41 | 41.1 (limit 20.0) | black sky lost at Full: up to 41 points (71% of frame029.webp black at Processed, 30% at Full; 9 of 16 frames over 20) |
+| aurstare289-movie | full_banding | known | 2.429 | 2.759 (limit 1.0) | Full sky banding up to 2.76 levels where Processed has black sky (9 of 16 frames over 1.0) |
+| aurstare289-movie | full_black | known | 69.14 | 69.35 (limit 20.0) | black sky lost at Full: up to 69 points (71% of frame022.webp black at Processed, 1% at Full; 11 of 16 frames over 20) |
+| jupiter-tint-movie | channel_registration | fixed | 7.35 | -7.73 (limit 4.0) | colour along edges past the picture's own: p90 -7.73 levels, largest -7.73 (20 colour frames) |
+| jupiter-tint-movie | odd_frame | fixed | 5.0647 | 0.7654 (limit 4.0) | worst 0.8 at frame014.webp (0 of 5 frames over 4.0) |
+| wind170-movie | odd_frame | fixed | 5.8505 | 1.1318 (limit 4.0) | worst 1.1 at frame008.webp (0 of 2 frames over 4.0) |
+| wind170-movie | pointing_jitter | known | 14.97 | 14.633 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 14.6 px, largest 75.1 px (13 pairs) |
+| albiorix129-movie | pointing_jitter | fixed | 18.3826 | 1.0978 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 1.1 px, largest 2.9 px (37 pairs) |
+| aurora101-movie | channel_registration | known | 8.94 | 9.2 (limit 4.0) | colour along edges past the picture's own: p90 9.20 levels, largest 9.92 (42 colour frames) |
+| aurora101-movie | odd_frame | fixed | 87.996 | 0.9877 (limit 4.0) | worst 1.0 at frame011.webp (0 of 6 frames over 4.0) |
+| approach04-movie | odd_frame | known | 43.9003 | 27.4303 (limit 4.0) | worst 27.4 at frame027.webp (1 of 12 frames over 4.0) |
+| saturn07-fullblack-movie | full_black | known | 24.14 | 23.46 (limit 20.0) | black sky lost at Full: up to 23 points (77% of frame029.webp black at Processed, 53% at Full; 10 of 16 frames over 20) |
+| pan09-banding-movie | full_banding | known | 7.141 | 7.141 (limit 1.0) | Full sky banding up to 7.14 levels where Processed has black sky (5 of 5 frames over 1.0) |
+| fring274-movie | full_black | known | 22.09 | 22.09 (limit 20.0) | black sky lost at Full: up to 22 points (58% of frame000.webp black at Processed, 36% at Full; 4 of 16 frames over 20) |
+| fring274-movie | pointing_jitter | known | 5.8858 | 5.8858 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.9 px, largest 137.6 px (152 pairs) |
+| fring039-movie | full_black | known | 24.14 | 23.46 (limit 20.0) | black sky lost at Full: up to 23 points (77% of frame029.webp black at Processed, 53% at Full; 10 of 16 frames over 20) |
