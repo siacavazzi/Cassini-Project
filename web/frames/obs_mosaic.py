@@ -10492,13 +10492,20 @@ def _shown_of(u, p, n, not_shown, tile_of):
         # own set is still to come or never comes, plays as it is: 257DA DAPHNIS001's GRN frame at its next view)
         cover_of = lambda m, got: placed(m) and set_cover(tile_of(m), [tile_of(j) for j in got.values()]) >= HELD_COVER
 
-        def covered_after():
-            for m in range(n + 1, min(len(frames), n + 1 + STEP_RUN)):
+        def covered_before():
+            for m in range(n - 1, max(-1, n - 1 - STEP_RUN), -1):
                 got_m = set_of(u, m, want, not_shown, placed)
                 if got_m and cover_of(m, got_m):
                     return True
             return False
-        apart = bool(near_set) and n > 0 and cover_of(n - 1, near_set) and covered_after()
+
+        def covered_after():
+            for m in range(n + 1, min(len(frames), n + 1 + STEP_RUN)):
+                # (the set frame m shows, the next one when it is the one that covers m: set_shown)
+                if set_shown(u, m, want, not_shown, placed, lambda got, m=m: cover_of(m, got))[0]:
+                    return True
+            return False
+        apart = bool(near_set) and covered_before() and covered_after()
         if colours and (held or apart or (s == n and held_band(frames[n][2]))):
             # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
             # last whole frame is a cycle or more back (and step_frame's gray frame beside that one older still), and a
