@@ -1108,7 +1108,8 @@ STREAK = 7           # balanced composites: in the sky, one-channel streaks (a c
 STREAK_BODY = 2000    # _clean_streaks: a patch of this many pixels not sky is a body, and the sky within 2 STREAK px of it is left
 NIGHT_TARGETS = ("SATURN",)   # night_black: the bodies whose night side ringshine lights
 NIGHT_LIT = 0.25      # ... of white (over 15 px): the lit crescent; a frame whose crescent covers at most NIGHT_LIT_MOST
-NIGHT_LIT_MOST = 0.3  # ... of it,
+NIGHT_LIT_MOST = 0.3  # ... of it, and at least NIGHT_LIT_LEAST (a frame with no crescent in it, nearly dark all over, keeps
+NIGHT_LIT_LEAST = 0.01   # its faint glow and stars: W1738173795, its black at its median, went to pure black),
 NIGHT_DIM = 0.1       # ... and whose dim part (under this of white) covers at least NIGHT_DIM_LEAST of it, is a night side
 NIGHT_DIM_LEAST = 0.5
 NIGHT_CODES = {"SA": "SATURN"}   # night_target: an observation's target code (ISS_196SA_STORMW014_RIDER) for its body
@@ -1139,7 +1140,8 @@ def night_black(lum, infos):
         return 0.0
     local = cv2.blur(np.asarray(lum, np.float32), (15, 15))
     dim = local < NIGHT_DIM
-    if (local >= NIGHT_LIT).mean() > NIGHT_LIT_MOST or dim.mean() < NIGHT_DIM_LEAST:
+    lit = float((local >= NIGHT_LIT).mean())
+    if not NIGHT_LIT_LEAST <= lit <= NIGHT_LIT_MOST or dim.mean() < NIGHT_DIM_LEAST:
         return 0.0
     return max(0.0, float(np.median(local[dim])) * (1 - NIGHT_KEEP))
 
