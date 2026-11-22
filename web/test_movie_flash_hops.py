@@ -94,6 +94,21 @@ def test_follow_inside_body():
     assert om.follows(fp, rect, True) and not om.follows(fp, rect, False)
 
 
+def test_veiled_frame_same_view():
+    # a lone frame lit all over among its filter's dark ones at the same view is veiled (Skathi 2011); at another view
+    # (101SA AURORA003's wider clear frame) it is that view's first picture, not a veil
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j) for j in range(5)]
+    tile = lambda lit, x=0.0, w=1024.0: {"offset": [x, 0.0], "box": [-w / 2, -w / 2, w, w], "lit": lit}
+    tiles = [tile(0.01), tile(0.02), tile(0.8), tile(0.01), tile(0.02)]
+    assert om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[2] = tile(0.8, x=900.0)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[2] = tile(0.8, w=2048.0)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[2], tiles[3] = tile(0.8), tile(0.3)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+
+
 if __name__ == "__main__":
     for name, f in list(globals().items()):
         if name.startswith("test_"):

@@ -10394,16 +10394,32 @@ def veiled_frame(frames, n, tile_of):
     its filter lit over VEIL_CLEAR or less: a lone frame of another kind among them, whose sky did not calibrate to the
     others' (Skathi 2011: one 460 s full-resolution frame among 220 s summed ones, its dark current a gray veil 64 levels
     over a black sky, a flash every few dozen frames). A pass that brightens steadily has a lit frame on one side, so its
-    frames are never veiled by this rule."""
+    frames are never veiled by this rule, nor is a frame at another view than those frames (its box's middle half its
+    size or more from theirs): 101SA AURORA003 W's clear frame at the movie's next, wider view takes in the lit planet
+    the frames before it did not, and is that view's first picture."""
     me = tile_of(n).get("lit")
     if me is None or me < VEIL_LIT:
         return False
     f = frames[n][2]
+    placed = lambda t: (t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1], t["box"][2], t["box"][3]) \
+        if "box" in t and "offset" in t else None
+    box = placed(tile_of(n))
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
         j = next((j for j in js if frames[j][2] == f and "offset" in tile_of(j)), None)
         if j is None or tile_of(j).get("lit", 0.0) > VEIL_CLEAR:
             return False
+        other = placed(tile_of(j))
+        if box is None or other is None or _box_apart(box, other):
+            return False
     return True
+
+
+def _box_apart(a, b):
+    """(veiled_frame) Whether boxes a and b ([x, y, w, h]) show other views: their middles half their size or more
+    apart, or one over 1.5 times the other's size."""
+    size = max(a[2], a[3], b[2], b[3])
+    ca, cb = (a[0] + a[2] / 2, a[1] + a[3] / 2), (b[0] + b[2] / 2, b[1] + b[3] / 2)
+    return math.hypot(ca[0] - cb[0], ca[1] - cb[1]) >= size / 2 or max(a[2], b[2]) > 1.5 * min(a[2], b[2])
 
 
 def unfit(frames, n, tile_of):
@@ -10697,7 +10713,13 @@ def step_frame(filters, s, grey, whole, near, times=None, reach=None):
         return s
     before = (j for j in range(a - 1, -1, -1) if filters[j] == grey and whole(j))
     after = (j for j in range(b + 1, len(filters)) if filters[j] == grey and whole(j))
-    for j in (next(before, None), next(after, None)):
+    pick = [next(before, None), next(after, None)]
+    if reach is not None and times is not None:
+        # (a held band reaching further, HOLD_REACH: the gray frame nearest it in time, before or after; Titan 2016's
+        # UV1 and UV2 frames took the CB3 frame 1,700-2,200 s before them over the one 70-600 s after, and the moon
+        # jumped back to where it was half an hour earlier)
+        pick.sort(key=lambda j: float("inf") if j is None else abs(times[j] - times[s]))
+    for j in pick:
         # (times: the frames' times; a gray frame taken over HOLD_AGE from s is not s's moment, s plays itself)
         if j is not None and near(j) and (times is None or abs(times[j] - times[s]) <= (HOLD_AGE if reach is None else reach)):
             return j
