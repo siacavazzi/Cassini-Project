@@ -83,6 +83,7 @@
   {"name": "skathi11-veil-movie", "kind": "pass", "frame": "N1680197448_1", "group": "hard", "watch": "Skathi 2011 speck movie: a 460 s full-resolution frame among 220 s summed ones every few dozen frames, a gray veil flash (odd_frame 57); held (veiled_frame)"},
   {"name": "dione139-mosaic", "kind": "pass", "frame": "N1665974059_1", "group": "hard", "watch": "Dione 2010 colour map (139DI REGMAP001): no brightness step across the moon between tile rows, no green band"},
   {"name": "titan059-mosaic", "kind": "pass", "frame": "N1582413047_1", "group": "hard", "watch": "Titan 2008 CB3/MT1 map (059TI GLOBMAP001): tiles of one brightness and tint"},
-  {"name": "enceladus144-mosaic", "kind": "pass", "frame": "N1675140861_1", "group": "hard", "watch": "Enceladus 2011 plume map (144EN PLMHPHR002): no gray squares under the plume, the jets over black sky"}
+  {"name": "enceladus144-mosaic", "kind": "pass", "frame": "N1675140861_1", "group": "hard", "watch": "Enceladus 2011 plume map (144EN PLMHPHR002): no gray squares under the plume, the jets over black sky"},
+  {"name": "rx-saturn14-movie", "kind": "pass", "frame": "N1792225807_1", "group": "hard", "watch": "Saturn 2014 ring colour scan (209RI RDCOLSCNM001): unfit UV2/UV1 frames 34-35 must not hold the blurred UV3 frame 33 (it played three times); spot 11-22 regression"}
  ]
 }
