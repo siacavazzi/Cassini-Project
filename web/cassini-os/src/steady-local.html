@@ -42,13 +42,23 @@
     // pre-built frames are drawn at that smoothing), from its places at that smoothing (base)
     // numpy.median of a list of numbers
     const npMedian = v => { const s = [...v].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-    // (set: a colour set's channels (tile indices): every channel moved by the median of their own stabilization moves,
-    // each keeping its place against the others as SPICE has it, as movie_frame moves a set's channels together)
+    // (set: a colour set's channels (tile indices), as movie_frame places them: a channel the pictures placed (the
+    // table's "own", obs_mosaic.by_pictures) at its own stabilized place; the others moved by the median of those
+    // channels' stabilization moves (of every channel's, when the pictures placed none), each keeping its place
+    // against them as the channels' registration has it)
     function shift(t, pl, a, base, set) {
       if (!pl) return [0, 0];
       let to = pl[a];
-      if (set && set.length > 1) {
-        const mx = npMedian(set.map(b => pl[b][0] - t.spice[b][0])), my = npMedian(set.map(b => pl[b][1] - t.spice[b][1]));
+      // (a channel the pictures placed further than the table's "apart" (obs_mosaic.SET_APART) from the others'
+      // median move follows the set as one they did not place)
+      let mine = set && t.own ? set.filter(b => t.own[b]) : [];
+      if (set && set.length > 1 && mine.length) {
+        const mx0 = npMedian(mine.map(b => pl[b][0] - t.spice[b][0])), my0 = npMedian(mine.map(b => pl[b][1] - t.spice[b][1]));
+        mine = mine.filter(b => Math.hypot(pl[b][0] - t.spice[b][0] - mx0, pl[b][1] - t.spice[b][1] - my0) <= t.apart);
+      }
+      if (set && set.length > 1 && !mine.includes(a)) {
+        const by = mine.length ? mine : set;
+        const mx = npMedian(by.map(b => pl[b][0] - t.spice[b][0])), my = npMedian(by.map(b => pl[b][1] - t.spice[b][1]));
         to = [t.spice[a][0] + mx, t.spice[a][1] + my];
       }
       const s = corner(t, a, base ? base[a] : t.spice[a]), p = corner(t, a, to);
