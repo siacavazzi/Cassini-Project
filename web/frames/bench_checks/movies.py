@@ -4,19 +4,46 @@ agree (odd_frame: a doubled limb, a flash, a jump to another place and back).
 """
 from bench_checks import Result, check, luminance
 
+import re
+
+BROKE = re.compile(r"^[A-Z]\w*(Error|Exception|Missing)\b")   # a frame report's why that names an exception
 SAME = 2          # levels: two pictures within this everywhere are one picture (an encoder's rounding)
 
 
 def played(p):
     """The frames the film plays, in order: a frame whose picture key (the commit's own obs_mosaic.movie_shown, kept at
-    build time) is the frame before it's is held, not played again. A commit without that rule played every frame
-    (and so did a result built without the hook)."""
+    build time, one per frame of the pass) is the key of the frame played before it is held, not played again. Each
+    file frameNNN.webp is frame NNN of the pass, so the keys are lined up by that number. A commit without that rule
+    played every frame (and so did a result built without the hook). Raises (the check's "error") when frames of the
+    pass were not made: the result is broken (11-20 spot check: frames LeanFrameMissing without CASSINI_ORIGINALS,
+    17 of Janus 2006's 35 written, and every hold counted as a repeat)."""
     frames = p.frames()
     got = p.collected("repeat_frames") or {}
     keys = got.get("keys")
-    if not keys or len(keys) != len(frames):
+    if not keys:
         return frames, False
-    out = [f for j, f in enumerate(frames) if j == 0 or keys[j] is None or keys[j] != keys[j - 1]]
+    at = {int(f[len("frame"):len("frame") + 3]): f for f in frames}
+    reports = getattr(p, "reports", None) or {}
+    broken = []
+    for j in range(len(keys)):
+        if j in at:
+            continue
+        rep = reports.get(f"frame{j:03d}.webp") or {}
+        why = str(rep.get("error") or rep.get("why") or "")
+        # (a frame SPICE cannot place has no picture in any commit; one whose making broke, an exception's name in its
+        # report, leaves the result broken)
+        if rep.get("error") or BROKE.match(why):
+            broken.append((j, why))
+    if broken:
+        j, why = broken[0]
+        raise RuntimeError(f"{len(broken)} of the pass's {len(keys)} frames were not made (first: frame {j}: {why[:120]}); "
+                           "rebuild the item")
+    out, last = [], None
+    for j in sorted(at):
+        k = keys[j] if j < len(keys) else None
+        if not out or k is None or k != last:
+            out.append(at[j])
+        last = k
     return out, True
 
 
