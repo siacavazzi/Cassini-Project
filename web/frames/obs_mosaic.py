@@ -8477,6 +8477,9 @@ def _smoothed_path(x0):
     return out
 
 
+_chain_stats = {}   # (the last chain solve's link statistics, _chain_links; steady_chain keeps them)
+
+
 def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
@@ -8648,6 +8651,11 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         if not changed:
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
+    # (how well the pictures agree with themselves: every link's disagreement with the solved places, px)
+    allres = [math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1]) for (j, n), d, _ in got]
+    _chain_stats.update(links=len(got), kept=len(keep), lone=len(lone), held=len(held), tiles=N,
+                        res_med=round(float(np.median(allres)), 2) if allres else None,
+                        res_p90=round(float(np.percentile(allres, 90)), 2) if allres else None)
     linked, by_picture = {}, set()
     for k in keep:
         (j, n), _, how = got[k]
@@ -8820,7 +8828,8 @@ def steady_chain(u, cache, p=None):
                                         steady_rings(u, made), edges=clouded(u))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
-        return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
+        return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why,
+                              "links": dict(_chain_stats)}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 
 
