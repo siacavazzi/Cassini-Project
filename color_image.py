@@ -458,10 +458,13 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
         gain = derotation_gain(fields, linear[0] if linear is not None else imgs)
         if gain < DEROTATE_GAIN:
             fields = None
+        else:
+            # (nor a channel whose clouds already match as taken: derotation_helps)
+            fields = derotation_helps(fields, linear[0] if linear is not None else imgs, ref)
     if fields:
         # (a mask redrawn valid where it draws at least half from valid pixels: over 0.99, each lone lost pixel's
         # Lanczos lobes grew it into a 7 px hole, and the holes near an edge were read as a strip to cut)
-        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.5, m, f[3])
+        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.5, m, _looked_past(f, m))
                  for f, m in zip(fields, masks)]
         if linear is not None:
             linear = (derotated(fields, linear[0]),) + tuple(linear[1:])
@@ -1554,37 +1557,42 @@ def _derotation_fields(lbls, ref, shape):
     return out if any(f is not None for f in out) else None
 
 
-def _squared(new, old, reach):
+def _looked_past(f, old):
+    """Where a derotated channel's redrawing (field f, derotation_fields') drew from past old's bounds (its valid
+    pixels' box): the places whose lookup, filled in between the grid as warp_sky fills it, lands outside them."""
+    h, w = old.shape
+    ys, xs = np.nonzero(old)
+    if not len(ys):
+        return np.zeros_like(old)
+    fy, fx = np.meshgrid(np.arange(h, dtype=np.float32) / DEROTATE_STEP, np.arange(w, dtype=np.float32) / DEROTATE_STEP,
+                         indexing="ij")
+    fine = lambda a: cv2.remap(a, fx, fy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    sx, sy, wt = fine(f[0]), fine(f[1]), fine(f[2])
+    py, px = np.mgrid[0:h, 0:w].astype(np.float32)
+    x, y = px + sx, py + sy
+    return (wt > 0) & ((x < xs.min()) | (x > xs.max()) | (y < ys.min()) | (y > ys.max()))
+
+
+def _squared(new, old, past):
     """A derotated channel's valid pixels (new; old: before) cut to a rectangle where the redrawing drew from past the
-    frame's edge: the disk's motion changes along the edge, and Saturn's rings in front of it do not move, so the edge
-    it left came out slanted and stepped, with the ring's line poking past it into the black (Fable's blind checks of
-    saturn07-deck and the Jupiter portrait, 11-21). The pixels so lost are those of old not in new within reach (the
-    field's most move, px) of the old picture's bounds (a lost line inside the frame, moved a little, is not one); the
-    rectangle is old's bounds, each side cut just past the lost pixels within reach of it that are still inside, the
-    side with most of them first: straight sides, and nothing cut past what the redrawing lost but the corners of
-    those lines."""
-    lost = old & ~new
+    frame's edge (past, _looked_past): the disk's motion changes along the edge, and Saturn's rings in front of it do
+    not move, so the edge it left came out slanted and stepped, with the ring's line poking past it into the black
+    (Fable's blind checks of saturn07-deck and the Jupiter portrait, 11-21). Only those pixels are cut for: a picture's
+    own lost lines, moved a little with it, stay holes as they were, and are no strip (a dropped line near the bottom
+    of adj-rz-saturn10-composite-yr cut 41 rows, 11-22). The rectangle is old's bounds, each side cut just past the
+    past pixels still inside it, the side with most of them first: straight sides, a strip's corners its own. With the
+    field eased toward the edges (_eased_at_edges) nothing looks past them, and nothing is cut."""
+    lost = old & past
     if not lost.any() or not old.any():
         return new
     ys, xs = np.nonzero(old)
     top, bottom, left, right = int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
-    r = int(math.ceil(reach)) + 2
-    # (only what is lost along the frame's edge: the lost pixels joined to old's bounds; a lone lost pixel near the
-    # edge, a hot pixel or a dropped one moved with the picture, is no strip)
-    count, label = cv2.connectedComponents(lost.astype(np.uint8), connectivity=8)
-    rim = np.zeros_like(lost)
-    rim[top:top + 2, :] = rim[bottom - 2:bottom, :] = rim[:, left:left + 2] = rim[:, right - 2:right] = True
-    edge = np.unique(label[rim & lost])
-    lost = np.isin(label, edge[edge > 0])
-    if not lost.any():
-        return new
     by, bx = np.nonzero(lost)
     depth = np.stack([by - top, bottom - 1 - by, bx - left, right - 1 - bx])
-    # (the side with the most lost pixels within reach first, cut just past them; then the next side, over what is
-    # still inside: a strip's corners are its own side's, not the side beside it)
+    side = np.argmin(depth, axis=0)
     box = [top, bottom, left, right]
-    for k in sorted(range(4), key=lambda k: -int((depth[k] < r).sum())):
-        inside = (by >= box[0]) & (by < box[1]) & (bx >= box[2]) & (bx < box[3]) & (depth[k] < r)
+    for k in sorted(range(4), key=lambda k: -int((side == k).sum())):
+        inside = (by >= box[0]) & (by < box[1]) & (bx >= box[2]) & (bx < box[3]) & (side == k)
         if inside.any():
             c = int(depth[k][inside].max()) + 1
             box[k] = (box[k] + c) if k in (0, 2) else ((top, bottom, left, right)[k] - c)
@@ -1594,6 +1602,49 @@ def _squared(new, old, reach):
     out = np.zeros_like(new)
     out[top:bottom, left:right] = new[top:bottom, left:right]
     return out
+
+
+DEROTATE_NEAR = 6   # px: (derotation_helps) how far round the frames' own places their clouds are compared
+
+
+def _detail(plane):
+    im = (plane if plane.ndim == 2 else plane[..., 0]).astype(np.float32)
+    return cv2.GaussianBlur(im, (0, 0), 1.0) - cv2.GaussianBlur(im, (0, 0), 8)
+
+
+def _best_match(a, b, on):
+    """The best normalised correlation of b's detail against a's over on's box, within DEROTATE_NEAR px."""
+    ys, xs = np.nonzero(on)
+    n = DEROTATE_NEAR
+    if not len(ys) or ys.max() - ys.min() < 8 * n or xs.max() - xs.min() < 8 * n:
+        return 0.0
+    y0, y1, x0, x1 = ys.min() + n, ys.max() - n, xs.min() + n, xs.max() - n
+    tmpl = a[y0:y1, x0:x1]
+    area = b[y0 - n:y1 + n, x0 - n:x1 + n]
+    if tmpl.std() < 1e-9 or area.std() < 1e-9:
+        return 0.0
+    return float(cv2.matchTemplate(area, tmpl, cv2.TM_CCOEFF_NORMED).max())
+
+
+def derotation_helps(fields, planes, ref):
+    """fields with None for each channel whose clouds already match the reference's as taken better than redrawn:
+    the camera followed the clouds between the filters (a close-up on Saturn's disk, rz-saturn12-composite,
+    adj-rz-saturn10-composite-yr), so the frames show the same clouds at the same pixels, and turned to one time they
+    came out 40 px apart, which the lining up then took back with a 40 px shift of the channel: black strips along
+    two sides where it had nothing (11-22). Compared on the clouds' detail (1 to 8 px) over the channel's disk, each at
+    its best place within DEROTATE_NEAR px of where the frames put it."""
+    out = list(fields)
+    for j, f in enumerate(fields):
+        if f is None or planes[j] is None or planes[ref] is None:
+            continue
+        on = cv2.resize(f[2], planes[j].shape[1::-1], interpolation=cv2.INTER_NEAREST) > 0
+        a = _detail(planes[ref])
+        before = _best_match(a, _detail(planes[j]), on)
+        after = _best_match(a, _detail(derotated([f], [planes[j]])[0]), on)
+        if after <= before:
+            print(f"derotation: channel {j} kept as taken (its clouds match as taken {before:.2f}, redrawn {after:.2f})")
+            out[j] = None
+    return out if any(f is not None for f in out) else None
 
 
 DEROTATE_GAIN = 0.007   # (derotation_gain) the least a set's redrawing changes its clouds for it to be redrawn

@@ -8,6 +8,7 @@ import math
 import os
 import sys
 
+import cv2
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,25 +45,44 @@ def test_derotated_types_and_none():
 def test_squared_straight():
     old = np.ones((200, 300), bool)
     old[:, :2] = False                       # the frame's own trimmed edge
-    new = old.copy()
-    for x in range(300):                     # a slanted strip lost along the top, 10 to 19 rows deep
-        new[:10 + x // 30, x] = False
+    past = np.zeros_like(old)
+    for x in range(300):                     # a slanted strip along the top, 10 to 19 rows deep, drawn from past the edge
+        past[:10 + x // 30, x] = True
+    new = old & ~past
     new[5, 40:200] = True                    # a ring's line across it, not moved: it pokes into the strip
     new[120, 50:250] = False                 # a lost line inside the frame, moved: not the edge's
-    out = ci._squared(new, old, 20)
+    new[190, :] = False                      # and one near the bottom, across the whole frame: no strip either
+    out = ci._squared(new, old, past)
     rows = np.nonzero(out.any(axis=1))[0]
     assert rows[0] == 19, rows[0]           # cut straight, just past the strip's deepest line (row 18)
-    assert out[19:, 2:].sum() == new[19:, 2:].sum(), "nothing else is cut: the inner lost line stays as it was"
+    assert out[19:, 2:].sum() == new[19:, 2:].sum(), "nothing else is cut: the lost lines stay holes as they were"
     assert not out[:19].any(), "the ring's line is cut with the strip"
-    assert ci._squared(old, old, 20) is old, "nothing lost, nothing cut"
+    assert ci._squared(old, old, np.zeros_like(old)) is old, "nothing looked past, nothing cut"
 
 
 def test_squared_corners_belong_to_their_strip():
     old = np.ones((300, 300), bool)
-    new = old.copy()
-    new[:40, :] = False                      # a 40 px strip along the top, its corners too
-    out = ci._squared(new, old, 45)
+    past = np.zeros_like(old)
+    past[:40, :] = True                      # a 40 px strip along the top, its corners too
+    out = ci._squared(old & ~past, old, past)
     assert out[40:, :].all(), "the sides beside it are not cut for the strip's corners"
+
+
+def test_looked_past():
+    old = np.ones((64, 64), bool)
+    f = shift_field((64, 64), 5.0, 0.0)     # every place looks 5 px right
+    past = ci._looked_past(f, old)
+    assert past[:, -5:].all() and not past[:, :-5].any(), past.sum()
+
+
+def test_derotation_helps():
+    rng = np.random.default_rng(3)
+    clouds = cv2.GaussianBlur(rng.random((256, 256)).astype(np.float32), (0, 0), 2)
+    f = shift_field((256, 256), 9.0, 0.0)
+    tracked = [clouds, clouds.copy()]                     # the camera followed the clouds: the same at the same pixels
+    assert ci.derotation_helps([None, f], tracked, 0) is None, "redrawn they come apart: kept as taken"
+    turned = [clouds, np.roll(clouds, 9, axis=1)]         # the clouds 9 px on in the second frame, where the field looks
+    assert ci.derotation_helps([None, f], turned, 0)[1] is f, "redrawn they meet: derotated"
 
 
 def test_eased_at_edges():
