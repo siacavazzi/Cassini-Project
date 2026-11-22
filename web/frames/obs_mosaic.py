@@ -10827,8 +10827,10 @@ def _shown_of(u, p, n, not_shown, tile_of):
         # a frame not fit to show whose own filter's last whole frame was taken more than HOLD_AGE before it, a cycle
         # or more back, holds the newest whole frame before it of any filter instead, when that one is its moment
         # (within HOLD_AGE): 101SA AURORA003 W's unfit MT3 frame held one 22 minutes back and Saturn jumped to that
-        # frame's size and place for one frame, then back
-        last = next((j for j in range(n - 1, -1, -1) if whole(j)), None)
+        # frame's size and place for one frame, then back. Not a frame of a held band (held_band: UV, methane), another
+        # layer's soft look that is itself only shown when nothing else is: 209RI RDCOLSCNM001's UV2 and UV1 frames held
+        # the blurred UV3 frame before them, so it played three times in place of the sharp frames
+        last = next((j for j in range(n - 1, -1, -1) if whole(j) and not held_band(frames[j][2])), None)
         if last is not None and frames[n][3] - frames[last][3] <= HOLD_AGE:
             s = last
     if colours:
