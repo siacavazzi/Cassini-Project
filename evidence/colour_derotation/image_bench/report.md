@@ -1,10 +1,10 @@
-# Image benchmark: c83227e1858c against add88dfaedd9
+# Image benchmark: 936eb6fd30e3 against 28ade30fb90e
 
-**NEEDS EYES**. 73 items: 69 identical, 4 changed (0 outside the target), 0 not built.
+**NEEDS EYES**. 74 items: 70 identical, 4 changed (0 outside the target), 0 not built.
 
 - target items with a measure worse (look at them): jupiter-portrait-composite
 
-Built in 50 min (base) and 41 min (candidate). Targets: approach-movie, jupiter-portrait-composite, saturn05-movie, storm-composite.
+Built in 46 min (base) and 45 min (candidate). Targets: approach-movie, jupiter-portrait-composite, saturn05-movie, storm-composite.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -21,17 +21,17 @@ Built in 50 min (base) and 41 min (candidate). Targets: approach-movie, jupiter-
 | gring-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | plume279-movie | hard | identical | 0/288 | 0.00% |  |  |  |
 | plume-bloom-still | hard | identical | 0/1 | 0.00% |  |  |  |
-| approach-movie | target | changed | 96/96 | 0.02% | 25 |  | Derotated movie colour sets on the 2004 approach: 0.02% of pixels move over 8 levels. Fable: the same. |
+| approach-movie | target | changed | 96/96 | 0.02% | 23 |  | Derotated movie colour sets on the 2004 approach: 0.02% of pixels move over 8 levels. Fable: the same. |
 | ringmovie04-movie | hard | identical | 0/44 | 0.00% |  |  |  |
 | telesto-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | moon99-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | venus99-still | plain | identical | 0/1 | 0.00% |  |  |  |
 | masursky-still | plain | identical | 0/1 | 0.00% |  |  |  |
-| jupiter-portrait-composite | target | changed | 1/1 | 3.06% | 245 | composite.webp: detail 0.0258 -> 0.0355 (+38%) | Derotated: channels 11 to 13 px apart on the clouds; detail up 38% because the smear is gone (the flagged measure). Fable: far better. |
+| jupiter-portrait-composite | target | changed | 1/1 | 3.11% | 245 | composite.webp: detail 0.0277 -> 0.0355 (+28%) | Derotated: channels 11 to 13 px apart on the clouds; detail up 38% because the smear is gone (the flagged measure). Fable: far better. |
 | approach-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | phoebe-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | titan04-composite | plain | identical | 0/1 | 0.00% |  |  |  |
-| saturn05-movie | target | changed | 33/54 | 0.20% | 30 |  | Derotated movie colour sets (003SA 3X3MOVIEA002): moves under 1 px at this scale, up to 30 levels on cloud edges. Fable: the same. |
+| saturn05-movie | target | changed | 36/54 | 0.23% | 32 |  | Derotated movie colour sets (003SA 3X3MOVIEA002): moves under 1 px at this scale, up to 30 levels on cloud edges. Fable: the same. |
 | rhea-glocol-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | hyperion-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | rhea-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
@@ -74,6 +74,7 @@ Built in 50 min (base) and 41 min (candidate). Targets: approach-movie, jupiter-
 | saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
 | saturn08-fullblack-movie | hard | identical | 0/84 | 0.00% |  |  |  |
 | pan09-banding-movie | hard | identical | 0/16 | 0.00% |  |  |  |
+| enceladus144-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | fring274-movie | hard | identical | 0/172 | 0.00% |  |  |  |
 | npole0908-mosaicmovie | hard | identical | 0/1 | 0.00% |  |  |  |
 | encset293-movie | hard | identical | 0/48 | 0.00% |  |  |  |
@@ -86,20 +87,24 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 
 ## Checks
 
-0 regressions, 0 fixed, 13 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+0 regressions, 0 fixed, 17 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
-| plume279-movie | odd_frame | known | 13.3716 | 13.3716 (limit 4.0) | worst 13.4 at frame088.webp (100 of 286 frames over 4.0) |
-| ringmovie04-movie | pointing_jitter | known | 6.3032 | 6.3032 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.3 px, largest 8.3 px (32 pairs) |
+| plume279-movie | full_black | known | 24.85 | 24.85 (limit 20.0) | black sky lost at Full: up to 25 points (40% of frame287.webp black at Processed, 15% at Full; 1 of 16 frames over 20) |
+| plume279-movie | odd_frame | known | 14.0524 | 14.0524 (limit 4.0) | worst 14.1 at frame074.webp (100 of 286 frames over 4.0) |
+| ringmovie04-movie | full_black | known | 25.18 | 25.18 (limit 20.0) | black sky lost at Full: up to 25 points (82% of frame006.webp black at Processed, 57% at Full; 5 of 16 frames over 20) |
+| ringmovie04-movie | pointing_jitter | known | 6.3178 | 6.3178 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.3 px, largest 8.7 px (33 pairs) |
 | methone-movie | odd_frame | known | 4.0337 | 4.0337 (limit 4.0) | worst 4.0 at frame010.webp (1 of 1 frames over 4.0) |
-| daphnis17-movie | odd_frame | known | 118.0757 | 118.0757 (limit 4.0) | worst 118.1 at frame008.webp (2 of 9 frames over 4.0) |
+| daphnis17-movie | odd_frame | known | 118.1355 | 118.1355 (limit 4.0) | worst 118.1 at frame008.webp (2 of 9 frames over 4.0) |
 | impact293-movie | odd_frame | known | 18.0219 | 18.0219 (limit 4.0) | worst 18.0 at frame007.webp (1 of 2 frames over 4.0) |
 | mimas04-movie | channel_registration | known | 1.11 | 1.11 (limit 0.7) | red or blue channel off green: p90 1.11 px, largest 2.59 px (23 colour frames) |
 | mimas04-movie | odd_frame | known | 4.2752 | 4.2752 (limit 4.0) | worst 4.3 at frame018.webp (1 of 9 frames over 4.0) |
-| saturn07-fullblack-movie | full_black | known | 21.21 | 21.21 (limit 20.0) | black sky lost at Full: up to 21 points (72% of frame143.webp black at Processed, 51% at Full; 2 of 16 frames over 20) |
-| saturn08w-fullblack-movie | full_banding | known | 1.564 | 1.564 (limit 1.0) | Full sky banding up to 1.56 levels where Processed has black sky (1 of 16 frames over 1.0) |
-| pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (6 of 6 frames over 1.0) |
-| fring274-movie | pointing_jitter | known | 5.7963 | 5.7963 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.8 px, largest 136.5 px (154 pairs) |
-| fring039-movie | full_black | known | 21.21 | 21.21 (limit 20.0) | black sky lost at Full: up to 21 points (72% of frame143.webp black at Processed, 51% at Full; 2 of 16 frames over 20) |
-| titancloud264-movie | channel_registration | known | 1.489 | 1.489 (limit 0.7) | red or blue channel off green: p90 1.49 px, largest 1.50 px (52 colour frames) |
+| saturn07-fullblack-movie | full_black | known | 30.05 | 30.05 (limit 20.0) | black sky lost at Full: up to 30 points (78% of frame029.webp black at Processed, 48% at Full; 16 of 16 frames over 20) |
+| saturn08w-fullblack-movie | full_black | known | 22.01 | 22.01 (limit 20.0) | black sky lost at Full: up to 22 points (56% of frame002.webp black at Processed, 34% at Full; 2 of 16 frames over 20) |
+| saturn08-fullblack-movie | full_black | known | 21.9 | 21.9 (limit 20.0) | black sky lost at Full: up to 22 points (74% of frame025.webp black at Processed, 52% at Full; 3 of 16 frames over 20) |
+| pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (5 of 5 frames over 1.0) |
+| fring274-movie | full_black | known | 32.91 | 32.91 (limit 20.0) | black sky lost at Full: up to 33 points (64% of frame023.webp black at Processed, 31% at Full; 10 of 16 frames over 20) |
+| fring274-movie | pointing_jitter | known | 5.8112 | 5.8112 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.8 px, largest 136.4 px (151 pairs) |
+| fring039-movie | full_black | known | 30.05 | 30.05 (limit 20.0) | black sky lost at Full: up to 30 points (78% of frame029.webp black at Processed, 48% at Full; 16 of 16 frames over 20) |
+| titancloud264-movie | channel_registration | known | 1.469 | 1.469 (limit 0.7) | red or blue channel off green: p90 1.47 px, largest 1.50 px (52 colour frames) |
