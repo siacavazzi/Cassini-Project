@@ -726,10 +726,7 @@ def composite(frames, gains, offsets=None, gamma=None, level=True, pin=None, und
         sl = (slice(box[0] - y0, box[1] - y0), slice(box[2] - x0, box[3] - x0))
         below = acc_alpha[sl]
         a = feathered * below + own * (1 - below)
-        if gamma is not None:
-            color = _corrected(color, gain, gamma)
-        else:
-            color = color * gain.astype(np.float32)
+        color = _gained(color, gain, gamma)
         if offset.any():
             # in full from offset_ramp levels up, fading to none at black, so what is black stays
             # black (lifting it shows the compression blocks of a dark sky or night side)
@@ -1076,13 +1073,40 @@ def _toned(color, gain, offset, gamma):
         return color
     if color.shape[2] == 1:
         gain, offset = gain[:1], offset[:1]
-    if gamma is not None:
-        color = _corrected(color, gain, gamma)
-    else:
-        color = color * gain.astype(np.float32)
+    color = _gained(color, gain, gamma)
     if offset.any():
         color += offset.astype(np.float32) * np.minimum(color * np.float32(1 / offset_ramp), 1)
     return color
+
+
+def _gained(color, gain, gamma):
+    """A frame's levels with its gain applied (_corrected on linear brightness with gamma, else on the levels), a pixel
+    clipped in every band (CLIPPED: over white, its colour unknown) kept neutral, every band the mean of what the gains
+    make of it: one band's gain under the others' drew it as a tint (ringsFA's saturated block went from white to
+    255/255/247 when blue's gain fell to 0.97, PR 611 review). Kept white instead it stood as a hard-edged plateau over
+    the light round it, which the gain does take down (the Enceladus south pole crescent, 236 round 255)"""
+    if gamma is not None:
+        out = _corrected(color, gain, gamma)
+    else:
+        out = color * gain.astype(np.float32)
+    return keep_clipped(out, color)
+
+
+# _blended applies keep_clipped again after a frame's seam level field, which is per band too (ringsFA's block
+# was still 255/255/247 with the gains alone neutral, bench 11-21)
+CLIPPED = 255   # _gained: a level this high was clipped at white
+
+
+def keep_clipped(out, color):
+    """out with each pixel clipped in every band of color (a frame's own levels, CLIPPED) made neutral: every band the
+    mean of out's bands there"""
+    if color.ndim != 3 or color.shape[2] != 3:
+        return out
+    hit = (color >= CLIPPED).all(axis=2)
+    if hit.any():
+        out = np.array(out, np.float32)
+        out[hit] = out[hit].mean(axis=1, keepdims=True)
+    return out
 
 
 """
@@ -1137,14 +1161,14 @@ def _blended(out, infos, gains, offsets, gamma, area, level, pin=None, kept=None
     fields = [None] * len(infos)
     if level and decided is not None:
         fields = [None if info is None or d is None or d[0] is None else d[0](info[0]) for info, d in zip(infos, decided)]
-        toned = [t if fl is None else t * fl for t, fl in zip(toned, fields)]
+        toned = [t if fl is None else keep_clipped(t * fl, info[1]) for t, fl, info in zip(toned, fields, infos)]
     elif level and sum(info is not None for info in infos) > 1:
         boxes = [None if info is None else (info[0][0] - y0, info[0][1] - y0, info[0][2] - x0, info[0][3] - x0) for info in infos]
         found = _levels(boxes, toned, [None if info is None else (info[4] > 0).astype(np.float32) for info in infos],
                         [None if info is None else info[4] for info in infos],
                         None if pin is None else range(len(infos))[pin],
                         max(info[5] for info in infos if info is not None) * GAP_REACH)
-        toned = [t if lv is None else t * _field(lv, b) for t, lv, b in zip(toned, found, boxes)]
+        toned = [t if lv is None else keep_clipped(t * _field(lv, b), info[1]) for t, lv, b, info in zip(toned, found, boxes, infos)]
         if _watch is not None:
             fields = [None if lv is None else _field(lv, b) for lv, b in zip(found, boxes)]
         for d, lv in zip(decisions, found):
