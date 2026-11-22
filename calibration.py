@@ -2614,6 +2614,13 @@ def _sky(iofs):
         floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
         cut = floor + SKY_CUT * (top - floor)
         dark = iof[iof < cut]
+        if floor > 0 and dark.size >= 1000:
+            # only when what lies over that floor is a sky (its noise and stars alone, _noise_only): a frame a dark surface
+            # fills has no sky, and its darkest terrain went black (Iapetus' dark side, iapetus-composite, Fable 11-21)
+            low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
+            if not (middle > low and _noise_only(iof, middle, middle - low)):
+                cut = SKY_CUT * top
+                dark = iof[iof < cut]
         if dark.size >= 1000:
             low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
             noise = middle - low
@@ -2952,7 +2959,7 @@ def sky_levels(images, masks, floor_pct=None):
     return levels, margin
 
 
-GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
+GRAIN_SMOOTH = 65    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
 GRAIN_GLOW = 0.5     # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
                      # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still), and Titan's
