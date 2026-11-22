@@ -2703,9 +2703,14 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
             # tone centres its toe on a margin the size of the sky's noise, and on a glow black that size the toe drew
             # the sky's median a fifth of the way up (21 of 255): 25 distant-moon stills on a gray, banded sky (Calypso,
             # Polydeuces, Siarnaq, Telesto; spot check 11-22)
+            # (only where the glow black is most of it, a picture of lit sky: where the floor black of a lit surface is,
+            # the whole margin starts the toe late as before, and the sky round rz-enceladus15 stays at 0)
             black, lit_sky = _floor(iofs, levels, None, glow, parts=True)
-            levels = [level + floor * lit_sky for level in levels]
-            margin = max(margin, floor * black)
+            if lit_sky > black:
+                levels = [level + floor * lit_sky for level in levels]
+                margin = max(margin, floor * black)
+            else:
+                margin = max(margin, floor * (black + lit_sky))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
