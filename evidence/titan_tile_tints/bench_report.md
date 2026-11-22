@@ -1,9 +1,9 @@
-# Image benchmark: 4483f51e0c07 against 045e0aeda77b
+# Image benchmark: e6122dcc6bd8 against 9f30db6fc721
 
 **NEEDS EYES**. 75 items: 73 identical, 2 changed (1 outside the target), 0 not built.
 
 
-Built in 52 min (base) and 47 min (candidate). Targets: titan059-mosaic.
+Built in 43 min (base) and 51 min (candidate). Targets: titan059-mosaic.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -87,18 +87,16 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 
 ## Checks
 
-0 regressions, 0 fixed, 11 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+0 regressions, 0 fixed, 9 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
-| plume279-movie | odd_frame | known | 12.2141 | 12.2141 (limit 4.0) | worst 12.2 at frame250.webp (12 of 286 frames over 4.0) |
-| ringmovie04-movie | pointing_jitter | known | 13.8266 | 13.8266 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 13.8 px, largest 19.8 px (39 pairs) |
-| saturn05-movie | channel_registration | known | 10.236 | 10.236 (limit 4.0) | colour along edges past the picture's own: p90 10.24 levels, largest 10.74 (27 colour frames) |
-| daphnis17-movie | odd_frame | known | 118.1544 | 118.1544 (limit 4.0) | worst 118.2 at frame008.webp (2 of 9 frames over 4.0) |
+| plume279-movie | odd_frame | known | 12.1826 | 12.1826 (limit 4.0) | worst 12.2 at frame250.webp (12 of 286 frames over 4.0) |
+| ringmovie04-movie | pointing_jitter | known | 15.0089 | 15.0089 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 15.0 px, largest 18.9 px (37 pairs) |
+| saturn05-movie | channel_registration | known | 10.31 | 10.31 (limit 4.0) | colour along edges past the picture's own: p90 10.31 levels, largest 10.70 (27 colour frames) |
+| daphnis17-movie | odd_frame | known | 118.1355 | 118.1355 (limit 4.0) | worst 118.1 at frame008.webp (2 of 9 frames over 4.0) |
 | impact293-movie | odd_frame | known | 18.4491 | 18.4491 (limit 4.0) | worst 18.4 at frame007.webp (1 of 2 frames over 4.0) |
 | mimas04-movie | channel_registration | known | 54.34 | 54.34 (limit 4.0) | colour along edges past the picture's own: p90 54.34 levels, largest 54.34 (23 colour frames) |
 | mimas04-movie | full_black | known | 25.19 | 25.19 (limit 20.0) | black sky lost at Full: up to 25 points (98% of frame000.webp black at Processed, 73% at Full; 7 of 16 frames over 20) |
-| saturn07-fullblack-movie | full_black | known | 21.26 | 21.26 (limit 20.0) | black sky lost at Full: up to 21 points (72% of frame143.webp black at Processed, 51% at Full; 2 of 16 frames over 20) |
-| pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (6 of 6 frames over 1.0) |
-| fring274-movie | pointing_jitter | known | 6.0402 | 6.0402 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.0 px, largest 136.7 px (152 pairs) |
-| fring039-movie | full_black | known | 21.26 | 21.26 (limit 20.0) | black sky lost at Full: up to 21 points (72% of frame143.webp black at Processed, 51% at Full; 2 of 16 frames over 20) |
+| pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (5 of 5 frames over 1.0) |
+| fring274-movie | pointing_jitter | known | 7.3218 | 7.3218 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 7.3 px, largest 137.5 px (149 pairs) |
