@@ -16,6 +16,7 @@ import data_source as ds
 import numpy as np
 import mosaic as mo
 import cv2
+import math
 import datetime
 import multiprocessing
 import os
@@ -448,6 +449,26 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     # align to the middle frame in time so the largest offset is as small as possible
     order = sorted(range(len(lbls)), key=lambda j: lbls[j].info["IMAGE_TIME"])
     ref = order[len(order)//2]
+    # a clouded body's channels each redrawn as the body had turned at the reference's time (derotation_fields)
+    fields = derotation_fields(lbls, ref, (linear[0] if linear is not None else imgs)[ref].shape[:2]) \
+        if align and len(lbls) > 1 else None
+    gain = None
+    if fields:
+        # (not a set whose clouds the redrawing would hardly change: it only loses the strips at the frame's edges)
+        gain = derotation_gain(fields, linear[0] if linear is not None else imgs)
+        if gain < DEROTATE_GAIN:
+            fields = None
+    if fields:
+        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.99, m, f[3])
+                 for f, m in zip(fields, masks)]
+        if linear is not None:
+            linear = (derotated(fields, linear[0]),) + tuple(linear[1:])
+            if guide is not None:
+                guide = derotated(fields, guide)
+            if full is not None and len(lbls) > 1:
+                full = derotated(fields, full)
+        else:
+            imgs = derotated(fields, imgs)
     # where SPICE says each channel's target sits relative to the reference's, for when the frames' own match fails
     guess = spice_offsets(lbls, ref) if align and len(lbls) > 1 else None
     # the body grows or turns between the filters of a close flyby (the range or the camera's twist changes): each
@@ -548,6 +569,12 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     if warps and any(w is not None for w in warps):
         # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
         report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
+    if gain is not None:
+        # how much the redrawing changes the set's clouds (derotation_gain): under DEROTATE_GAIN, left as taken
+        report["derotation_gain"] = round(gain, 4)
+    if fields:
+        # each channel's most move (px) as its disk was redrawn as at the reference's time, None where it was not
+        report["derotated"] = [None if f is None else f[3] for f in fields]
     if not fill:
         report["filled"] = False
     if lost:
@@ -1417,6 +1444,170 @@ def _on_disk(lbl, loc):
 """
 A frame (or its mask as float32) scaled and turned about a point, warp = (x, y, scale, degrees) as spice_warps gives
 """
+"""
+A clouded body's colour set as at one time (derotation): Saturn and Jupiter turn between a set's filters, taken a minute
+or two apart, and their clouds with them while the limb stays put, so channels lined up on the limb draw every cloud
+with a coloured fringe, and channels placed by SPICE's centre the same (Saturn's 2011 storm, N1677429213_1's set: BL1's
+clouds 35 to 43 px from CB2's, measured 40). Before the channels are lined up, each one's lit disk is redrawn as the
+body had turned at the reference frame's time, in its own pixels: every place of its disk is followed to its surface
+point with SPICE (the body's shape and spin; Cassini, the camera and the sun as they were: reproject.spin_field) and
+looked up where the frame saw that point (reproject.warp_sky, as obs_mosaic redraws a mosaic's panels and a movie's
+colour sets). The sky, the limb, the night side and Saturn's rings in front of its disk stay as taken, so the lining
+up after finds the limb, the clouds and SPICE's place in agreement. Only the giant planets (obs_mosaic.DEROTATE_BODIES); a channel whose disk moves under DEROTATE_LEAST, or whose redrawing would stretch it past
+obs_mosaic.SURFACE_STRETCH, stays as taken, as does every channel of a set SPICE cannot follow (no geometry, another
+body, across New Year) or with Settings > Processing's surface step off.
+"""
+DEROTATE_STEP = 4      # px: the grid the motion is worked out on (a ring's edge across the disk is a step of it)
+DEROTATE_LEAST = 0.5   # px: a channel whose disk moves less than this is left as it is
+
+
+def _year_kernels(lbl):
+    """SPICE kernels loaded for the year frame lbl was taken in, as label.target_loc loads them; False when they can't
+    be (under spice_lock)."""
+    year = int(str(lbl.info["IMAGE_TIME"]).split("-")[0])
+    if getattr(lh, "cur_year", None) != year:
+        try:
+            ba.unload_kernels()
+            lh.cur_year = year
+            ba.load_kernels(year, year)
+        except Exception as e:   # noqa: BLE001
+            print(f"no kernels for {year}: {e}")
+            return False
+    return True
+
+
+def derotation_fields(lbls, ref, shape):
+    """For each channel of a set (frames of shape h x w, not yet lined up) whose body turns while it is taken: (dx, dy,
+    weight, most px) on DEROTATE_STEP's grid (reproject.spin_field, as at lbls[ref]'s time), or None where it is left as
+    taken (the reference, DEROTATE_LEAST, SURFACE_STRETCH); None for the whole set when it is not derotated."""
+    try:
+        return _derotation_fields(lbls, ref, shape)
+    except Exception as e:   # noqa: BLE001  (SPICE can't follow the set: its channels stay as taken; a year's kernels
+        # missing is data_source.KernelsMissing, a BaseException, which stops the build or render instead)
+        print(f"DEROTATION FAILED, channels as taken: {type(e).__name__}: {e}"[:200])
+        return None
+
+
+def _derotation_fields(lbls, ref, shape):
+    import obs_mosaic as om
+    import reproject as rp
+    if len(lbls) < 2 or not cal.step("surface"):
+        return None
+    if str(lbls[ref].info.get("TARGET_NAME", "")).replace('"', "").strip().upper() not in om.DEROTATE_BODIES:
+        return None
+    if _spice_locs(lbls) is None:   # (sets each label's geometry from the geometry cache)
+        return None
+    geoms = [getattr(lbl, "geometry", None) for lbl in lbls]
+    if any(not g or "et" not in g for g in geoms) or len({str(g["target"]).upper() for g in geoms}) != 1 \
+            or str(geoms[ref]["target"]).upper() not in om.DEROTATE_BODIES \
+            or len({str(lbl.info["IMAGE_TIME"])[:4] for lbl in lbls}) != 1:
+        return None
+    h, w = shape
+    gy, gx = np.mgrid[0:h + DEROTATE_STEP:DEROTATE_STEP, 0:w + DEROTATE_STEP:DEROTATE_STEP].astype(np.float64)
+    out = []
+    with spice_lock:
+        if not _year_kernels(lbls[ref]):
+            raise ds.KernelsMissing(f"no SPICE kernels for {lbls[ref].info['IMAGE_TIME']} (colour-set derotation)")
+        for j, g in enumerate(geoms):
+            if j == ref:
+                out.append(None)
+                continue
+            view, spun = rp.spice_view(g), rp.spice_view(g, spin_et=geoms[ref]["et"])
+            if view is None or spun is None:
+                out.append(None)
+                continue
+            dx, dy, weight = rp.spin_field(g, view, spun, gx, gy)
+            on = weight > 0
+            most = float(max(np.abs(dx[on]).max(), np.abs(dy[on]).max())) if on.any() else 0.0
+            stretch = rp.field_stretch(dx, dy, weight, DEROTATE_STEP)
+            if most < DEROTATE_LEAST or stretch > om.SURFACE_STRETCH:
+                if most >= DEROTATE_LEAST:
+                    print(f"derotation: {ba.frame_id(lbls[j])} kept as taken (stretch {stretch:.2f})")
+                out.append(None)
+                continue
+            out.append((dx, dy, weight, round(most, 2)))
+    return out if any(f is not None for f in out) else None
+
+
+def _squared(new, old, reach):
+    """A derotated channel's valid pixels (new; old: before) cut to a rectangle where the redrawing drew from past the
+    frame's edge: the disk's motion changes along the edge, and Saturn's rings in front of it do not move, so the edge
+    it left came out slanted and stepped, with the ring's line poking past it into the black (Fable's blind checks of
+    saturn07-deck and the Jupiter portrait, 11-21). The pixels so lost are those of old not in new within reach (the
+    field's most move, px) of the old picture's bounds (a lost line inside the frame, moved a little, is not one); the
+    rectangle is old's bounds, each side cut just past the lost pixels within reach of it that are still inside, the
+    side with most of them first: straight sides, and nothing cut past what the redrawing lost but the corners of
+    those lines."""
+    lost = old & ~new
+    if not lost.any() or not old.any():
+        return new
+    ys, xs = np.nonzero(old)
+    top, bottom, left, right = int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
+    r = int(math.ceil(reach)) + 2
+    by, bx = np.nonzero(lost)
+    depth = np.stack([by - top, bottom - 1 - by, bx - left, right - 1 - bx])
+    # (the side with the most lost pixels within reach first, cut just past them; then the next side, over what is
+    # still inside: a strip's corners are its own side's, not the side beside it)
+    box = [top, bottom, left, right]
+    for k in sorted(range(4), key=lambda k: -int((depth[k] < r).sum())):
+        inside = (by >= box[0]) & (by < box[1]) & (bx >= box[2]) & (bx < box[3]) & (depth[k] < r)
+        if inside.any():
+            c = int(depth[k][inside].max()) + 1
+            box[k] = (box[k] + c) if k in (0, 2) else ((top, bottom, left, right)[k] - c)
+    top, bottom, left, right = box
+    if bottom <= top or right <= left:
+        return new
+    out = np.zeros_like(new)
+    out[top:bottom, left:right] = new[top:bottom, left:right]
+    return out
+
+
+DEROTATE_GAIN = 0.007   # (derotation_gain) the least a set's redrawing changes its clouds for it to be redrawn
+
+
+def derotation_gain(fields, planes):
+    """How much a set's redrawing would change its clouds, the most of any channel with a field: over its lit disk,
+    the mean change of its cloud-scale detail (a band-pass, 1 to 8 px), against the disk's median light (how strong
+    the change is), times that change against the detail's own mean (how much the detail moves off itself rather than
+    along itself). A banded, featureless deck turns along its own bands, and redrawn it only lost a 20 px strip at the
+    frame's edge (saturn07-deck, 2007: 0.0036, deck2 0.0024); the 2004 approach set moves 1 to 2 px (0.0002), the
+    hexagon set 0.0040 (Fable: the same either way). The 2011 storm reads 0.0117 and Jupiter 2000 0.0209, both
+    clearly better redrawn (measured on the calibrated channels, 11-22)."""
+    most = 0.0
+    for f, plane in zip(fields, planes):
+        if f is None or plane is None:
+            continue
+        im = (plane if plane.ndim == 2 else plane[..., 0]).astype(np.float32)
+        detail = cv2.GaussianBlur(im, (0, 0), 1.0) - cv2.GaussianBlur(im, (0, 0), 8)
+        on = cv2.resize(f[2], im.shape[::-1], interpolation=cv2.INTER_NEAREST) > 0
+        if not on.any():
+            continue
+        lit = max(float(np.median(im[on])), 1e-9)
+        moved = derotated([f], [detail])[0]
+        change = float(np.abs(moved - detail)[on].mean())
+        most = max(most, (change / lit) * (change / max(float(np.abs(detail)[on].mean()), 1e-9)))
+    return most
+
+
+def derotated(fields, planes):
+    """planes (one per channel: a picture, float32 or uint8, or a mask as float32) redrawn as derotation_fields says,
+    each where it has a field; the others as they are."""
+    import reproject as rp
+    out = []
+    for f, plane in zip(fields, planes):
+        if f is None or plane is None:
+            out.append(plane)
+            continue
+        flat = plane.ndim == 2
+        # (two planes: cv2.remap gives one plane back without its third axis)
+        im = np.dstack([plane, plane]) if flat else plane
+        if im.dtype != np.uint8:
+            im = im.astype(np.float32)
+        got = rp.warp_sky(np.ascontiguousarray(im), f[0], f[1], f[2], DEROTATE_STEP)
+        out.append(got[..., 0] if flat else got)
+    return out
+
+
 def warp_frame(im, warp):
     x, y, scale, turn = warp
     M = cv2.getRotationMatrix2D((x, y), turn, scale)

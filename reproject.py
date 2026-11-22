@@ -39,14 +39,15 @@ Looks up, with SPICE, everything about one frame that doesn't depend on the pixe
   sun          unit vector towards the sun in the body-fixed frame
 Returns None if SPICE doesn't know the target's shape or orientation.
 """
-def spice_view(geometry):
+def spice_view(geometry, spin_et=None):
     import spiceypy as sp
     try:
         target = geometry["target"]
         et = geometry["et"]
         state, lt = sp.spkezr(target, et, "J2000", "LT+S", "CASSINI")
-        # the target's orientation when the light left it
-        j2000_to_body = np.array(sp.pxform("J2000", f"IAU_{target}", et - lt))
+        # the target's orientation when the light left it (spin_et: as it had turned at that time instead, all else at
+        # et: spin_field)
+        j2000_to_body = np.array(sp.pxform("J2000", f"IAU_{target}", (et if spin_et is None else spin_et) - lt))
         cam_to_j2000 = np.array(sp.pxform(geometry["camera"], "J2000", et))
         radii = np.array(sp.bodvrd(target, "RADII", 3)[1])
         # direction to the sun from the target, when the light left the target
@@ -367,6 +368,48 @@ def sky_field(epoch, view, x, y, km_px):
     return ((sx - x) * k).astype(np.float32), ((sy - y) * k).astype(np.float32), hit.astype(np.float32)
 
 
+def spin_field(geometry, view, spun, x, y):
+    """sky_field for one frame's own pixels x, y, the body's spin alone: where the frame (geometry, its spice_view
+    view) shows the surface point that lies at each place when the body has turned as at another time (spun: the
+    frame's spice_view with that time's spin, spice_view's spin_et), Cassini, the camera and the sun as they were. The
+    picture redrawn from there (warp_sky) shows the clouds as at that time over its own limb, sky and lighting, so a
+    colour set's channels redrawn so all show their body as it turned at one time (color_image.derotation_fields),
+    however they are lined up after. Tapered to none toward the limb and the terminator as sky_field is; Saturn's
+    rings in front of its disk are not the body (weight 0, no shift): they do not turn with its clouds.
+    (dx, dy, weight) as float32, weight 1 on the body."""
+    eye = np.eye(3)
+    points, hit = surface_points(geometry, spun, eye, x, y)
+    sx, sy, visible = canvas_points(geometry, view, eye, points)
+    normal = points / spun["radii"] ** 2
+    normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+    seen = spun["observer"] - points
+    mu = (normal * seen).sum(-1) / np.maximum(np.linalg.norm(seen, axis=-1), 1e-9)
+    mu0 = normal @ spun["sun"]
+    if str(geometry.get("target", "")).upper() == "SATURN":
+        # (ring_plane's test on the frame's own rays: the equator plane crossed before the disk, within the rings)
+        ray = pixel_to_ray(geometry, x, y) @ spun["cam_to_body"].T
+        o = spun["observer"]
+        dz = ray[..., 2]
+        t = np.where(np.abs(dz) > 1e-12, -o[2] / np.where(np.abs(dz) > 1e-12, dz, 1.0), -1.0)
+        crossing = o + t[..., None] * ray
+        radius = np.hypot(crossing[..., 0], crossing[..., 1])
+        t_disk = ((points - o) * ray).sum(-1) / np.maximum((ray * ray).sum(-1), 1e-12)
+        hit = hit & ~((t > 0) & (t < t_disk) & (radius >= RING_INNER) & (radius <= RING_OUTER))
+    k = np.clip(mu / LIMB_TAPER, 0, 1) * np.clip(mu0 / TERMINATOR_TAPER, 0, 1) * (hit & visible)
+    dx = np.where(hit, sx - x, 0) * k
+    dy = np.where(hit, sy - y, 0) * k
+    return dx.astype(np.float32), dy.astype(np.float32), hit.astype(np.float32)
+
+
+def disk_field(epoch, view, x, y, km_px):
+    """sky_field with Saturn's rings in front of its disk at the epoch (ring_plane) left out (weight 0, no shift):
+    they do not turn with its clouds (obs_mosaic.derotated, a colour set's channels as at one time)."""
+    dx, dy, weight = sky_field(epoch, view, x, y, km_px)
+    on = ring_plane(epoch, x, y, km_px)[1]
+    return np.where(on, 0, dx).astype(np.float32), np.where(on, 0, dy).astype(np.float32), \
+        np.where(on, 0, weight).astype(np.float32)
+
+
 def field_stretch(dx, dy, weight, step):
     """How much a field (sky_field, on a grid of step pixels) stretches or squeezes the picture it redraws: the
     largest change of its shift per pixel between neighboring grid points both on the body (0 for a shift the same
@@ -428,4 +471,6 @@ def warp_sky(image, dx, dy, weight, step):
     warped = cv2.remap(image, px + sx, py + sy, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_CONSTANT,
                        borderValue=(0, 0, 0, 0)).astype(np.float32)
     k = wt[..., None]
-    return np.clip(warped * k + image.astype(np.float32) * (1 - k), 0, 255).round().astype(np.uint8)
+    out = warped * k + image.astype(np.float32) * (1 - k)
+    # (a float picture, calibrated light: as it is, not put on 0-255; color_image.derotated)
+    return out if image.dtype == np.float32 else np.clip(out, 0, 255).round().astype(np.uint8)
