@@ -125,7 +125,8 @@ def test_tile_scale_raises_to_the_track():
     assert out["blacks"][0] == 0.005                   # never under the pass's black
     scale["sky_track"]["CL1"] = [[0.0, 0.006], [10.0, 0.008]]
     out = obs_mosaic.tile_scale(scale, "CL1", own_sky=True, t=5.0, on_body=True)
-    assert abs(out["blacks"][0] - 0.007) < 1e-9        # over it where the frame's sky is
+    assert abs(out["blacks"][0] - 0.006) < 1e-9        # over it where the frame's sky is, by TRACK_KEEP of the raise
+    assert abs(out["toe"] - 3 * 0.002) < 1e-9          # and the toe TRACK_TOE times the raise
     assert "sky_track" not in out
     assert obs_mosaic.tile_scale(scale, "CL1", own_sky=False, t=5.0)["blacks"][0] == 0.005   # mosaics keep the pass's
 
