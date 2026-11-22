@@ -132,6 +132,18 @@ def test_tile_scale_raises_to_the_track():
 
 
 
+def test_colour_movie_filters_raised_together():
+    scale = {"blacks": {"RED": 0.001, "GRN": 0.002}, "white": 0.3, "gamma": 3.0,
+             "sky_track": {"RED": [[0.0, 0.004], [10.0, 0.004]], "GRN": [[0.0, 0.003], [10.0, 0.003]]},
+             "track_set": ["GRN", "RED"]}
+    red = obs_mosaic.tile_scale(scale, "RED", own_sky=True, t=5.0, on_body=True)
+    grn = obs_mosaic.tile_scale(scale, "GRN", own_sky=True, t=5.0, on_body=True)
+    lift = min(0.004 - 0.001, 0.003 - 0.002)            # the least of the raises, for both
+    k = obs_mosaic.TRACK_KEEP
+    assert abs(red["blacks"][0] - (0.001 + k * lift)) < 1e-12 and abs(grn["blacks"][0] - (0.002 + k * lift)) < 1e-12
+    assert "track_set" not in red
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

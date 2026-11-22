@@ -99,7 +99,8 @@ def full_black(p, limit=20.0):
 
 
 @check("full_banding", kinds=("movie",), default=True, owner="processing-level thread",
-       about="vertical banding in the Full level's movie frame where the Processed frame's sky is black")
+       about="vertical banding in the Full level's movie frame where the Processed frame's sky is black",
+       judged_by_base=False)
 def full_banding(p, limit=1.0):
     """The worst column banding of the Full frame's sky, in levels of 255, on the played frames whose Processed sky is
     black (its median DARK or under): stripes there are the sky's fixed pattern lifted out of black. Frames whose
