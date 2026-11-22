@@ -2181,16 +2181,13 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         dark = sky & (local <= np.median(local[sky]))
         if dark.sum() > 100:
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
-    else:
-        # (on the brightness tone compares the margin with: after the mix, whose gains lift a faint band's whole picture)
-        seen = np.stack(two_bands(channels) if mix is not None else channels).astype(np.float32)
-        margin = max(margin, night_black((apply_mix(mix, seen) if mix is not None else seen).mean(axis=0), infos, margin))
     if len(channels) > 1 and (measured or false):
         # without sky (a body filling the frame) the grain is measured on the whole picture
         channels = _clean_spikes(channels, sky, false, summing=[summing_of(i) for i in infos])
         if measured:
             channels = _clean_streaks(channels, sky, false)
-    return channels, margin, mix
+    # (and, with no sky, the frames' labels, for tone's night side black: night_black)
+    return channels, margin, mix, (None if measured else infos)
 
 
 """
@@ -2287,7 +2284,7 @@ neutral white.
 still_look = contextvars.ContextVar("still_look", default=None)   # color_image.load_aligned: a Saturn picture's look
 
 
-def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None):
+def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None, night=None):
     every = None
     if saturated is not None and any(m is not None and m.any() for m in saturated):
         channels, every = fill_saturated(channels, saturated)
@@ -2298,6 +2295,11 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
     if mix is not None:
         x = apply_mix(mix, x)
     lum = x.mean(axis=0)
+    if night:
+        # a balanced picture with no sky: Saturn's night side's black (night_black: night, its frames' labels), on the
+        # brightness drawn here, after the mix and whatever the set was drawn from (a set drawn grey from one filter
+        # has no mix: W1738173795, its night side at 0.005 where its mixed bands read 0.04, went to pure black)
+        margin = max(margin, night_black(lum, night, margin))
     w = max(margin / 8, min(margin, TOE))
     # how far past the margin the toe starts: 0 for a sky's margin (centred on it), half its width for a floor black
     late = w / 2 * min(max(margin / TOE - 1, 0.0), 1.0) if TOE > 0 else w / 2

@@ -32,7 +32,7 @@ BANDS = ("RED", "GRN", "BL1")
 
 def draw(iofs, off_disk=None):
     """the set drawn (H x W x 3, RGB) without its channel mix, so only the black and the toe decide the sky's color"""
-    channels, margin, _ = cal.load_linear([Label(b) for b in BANDS], [None] * 3, [i.astype(np.float32) for i in iofs],
+    channels, margin, _, _ = cal.load_linear([Label(b) for b in BANDS], [None] * 3, [i.astype(np.float32) for i in iofs],
                                           off_disk=off_disk)
     return np.stack([t[..., 0] for t in cal.tone(channels, margin)], axis=-1).astype(int)
 
@@ -52,7 +52,7 @@ assert cal._sky([i.astype(np.float32) for i in iofs]).mean() < 0.02
 off = (xx - 300) ** 2 + (yy - 200) ** 2 >= (5 * 1.2 + 16) ** 2
 def sky_left(off_disk=None):
     """each channel's median over the sky once its level is off (linear, white = 1)"""
-    channels, _, _ = cal.load_linear([Label(b) for b in BANDS], [None] * 3, [i.astype(np.float32) for i in iofs],
+    channels, _, _, _ = cal.load_linear([Label(b) for b in BANDS], [None] * 3, [i.astype(np.float32) for i in iofs],
                                      off_disk=off_disk)
     return np.array([float(np.median(c[off])) for c in channels])
 

@@ -40,7 +40,7 @@ def draw(iofs, floor=True, soft=True):
     if not soft:
         cal.TOE = 0.0
     try:
-        channels, margin, mix = cal.load_linear([Label() for _ in iofs], [None] * len(iofs), [i.astype(np.float32) for i in iofs])
+        channels, margin, mix, _ = cal.load_linear([Label() for _ in iofs], [None] * len(iofs), [i.astype(np.float32) for i in iofs])
         return [t[..., 0] for t in cal.tone(channels, margin, mix)]
     finally:
         cal.FLOOR_SHARE, cal.GLOW_IOF, cal.TOE, cal.FLAT_SHARE = keep
@@ -183,7 +183,7 @@ cols = [(haze * k).astype(np.float32) for k in ratios]
 keep = cal.FLOOR_SHARE, cal.FLOOR_GAIN
 cal.FLOOR_SHARE, cal.FLOOR_GAIN = 0.8, 1e6
 try:
-    channels, margin, _ = cal.load_linear([Label() for _ in cols], [None] * 3, cols)
+    channels, margin, _, _ = cal.load_linear([Label() for _ in cols], [None] * 3, cols)
 finally:
     cal.FLOOR_SHARE, cal.FLOOR_GAIN = keep
 toned = [t[..., 0] for t in cal.tone(channels, margin)]       # without the channel mix, which changes color on purpose
@@ -198,7 +198,7 @@ real_imread, real_lut8 = cal.ds.imread, cal.ds.lut8
 cal.ds.imread, cal.ds.lut8 = (lambda path, flags=None: codes.copy()), (lambda: False)
 try:
     full = cal.saturated_masks([Label()])
-    channels, margin, mix = cal.load_linear([Label()], [None], [flat], floor=cal.saturated_floor(full[0].mean()))
+    channels, margin, mix, _ = cal.load_linear([Label()], [None], [flat], floor=cal.saturated_floor(full[0].mean()))
     share = cal.draw_saturated(channels, margin, full)
     toned = cal.tone(channels, margin, mix)[0][..., 0]
 finally:
@@ -216,7 +216,7 @@ try:
     full = cal.saturated_masks([Label()])
     pictures = []
     for floor in (1.0, cal.saturated_floor(full[0].mean())):
-        channels, margin, mix = cal.load_linear([Label()], [None], [edge], floor=floor)
+        channels, margin, mix, _ = cal.load_linear([Label()], [None], [edge], floor=floor)
         cal.draw_saturated(channels, margin, full)
         pictures.append(cal.tone(channels, margin, mix)[0][..., 0])
 finally:
