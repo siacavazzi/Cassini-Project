@@ -1,0 +1,4 @@
+{
+ "titan16-methane-movie": "target. pointing_jitter 5.1 -> 14.4 is the check matching unlike pictures, not a move: frames 9-11 (UV3, UV1, UV2) now show the CB3 frame nearest in time (frame 2's, frame 12's), and the move is measured from BL1 haze (frame 8) to CB3 surface. Fable on frames 5-12: Titan stays put (no jump over 2-3 px at 300 px), candidate better: main's dark, speckled UV1 frame 10 is gone.",
+ "pan17-movie": "held polarizer frames (P0/P60/P120 UV3, MT2) in this clear-playing movie take the clear frame nearest them in time (HOLD_REACH, before or after) instead of always the one before: frame 9 shows frame 10's, frames 14-15 the next clear frame's, so Pan is drawn where it was at that moment (lit centre 18 px along its own motion)"
+}
