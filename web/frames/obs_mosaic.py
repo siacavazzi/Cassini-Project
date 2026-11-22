@@ -2682,6 +2682,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     sky (a mosaic's sky tile: its night side lit by Saturn, darker than 5% of its lit limb, is not sky)."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     out.pop("sky_track", None)
+    out.pop("track_set", None)
     track = (scale.get("sky_track") or {}).get(f)
     if own_sky and track and t is not None:
         # a movie frame's black follows the pass's sky as it changes (sky_track), on the pass's one white: up where the
@@ -2690,6 +2691,10 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         # and the movie strobed more: odd_frame 14.8 -> 19.9)
         pass_black = out["blacks"][0]
         raised = max(track_black(track, t), pass_black)
+        group = scale.get("track_set") or []
+        if f in group:
+            lift = min(max(track_black(scale["sky_track"][g], t) - scale["blacks"].get(g, 0.0), 0.0) for g in group)
+            raised = pass_black + lift
         # half of the raise as black, the rest in the toe (TRACK_TOE times the raise wide): what is left of a ring's
         # sheet, an F ring's skirt, a plume's outer glow and faint stars fades out instead of clipping (review 11-22:
         # the Full movies cut harder than the stills)
@@ -3210,9 +3215,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
-            if u.get("movie") and not u.get("mosaic") and len(set(drawn or [])) < 2:
-                # (a grey movie's only: each filter of a colour movie followed its own sky by its own raise, and its
-                # colour moved with them, Janus 2010's frames 2-4 drawn pink, spot check 11-22)
+            if u.get("movie") and not u.get("mosaic"):
                 track = {f: sky_track(by[f], masks[f], times[f], tops[f]) for f in by}
                 track = {f: v for f, v in track.items() if v}
     if calibration.look() == "balanced":
@@ -3276,6 +3279,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
            "detail": bool(filled and not small)}
     if track:
         out["sky_track"] = track
+        if len(set(drawn or [])) > 1:
+            # a colour movie's drawn filters are raised together, by the least of their raises (track_black): each
+            # following its own sky by its own raise moved the colour, Janus 2010's frames 2-4 drawn pink; with no
+            # track at all a colour movie lost the gains #609 gave Enceladus 2010's plume movie (a yellow frame in its
+            # evened view, spot check 11-22)
+            out["track_set"] = sorted(f for f in set(drawn) if f in track)
     if sat_white:
         out["sat_white"] = sat_white
         out["headroom"] = saturn_look(u)["headroom"]
