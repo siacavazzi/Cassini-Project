@@ -71,6 +71,8 @@
   {"name": "night-washout-composite", "kind": "composite", "frame": "W1729024337_1", "group": "hard", "watch": "Saturn crescent with no sky: the night side was drawn washed-out gray; dim ringshine kept (taste call 31)"},
   {"name": "night-dark-composite", "kind": "composite", "frame": "W1738173795_1", "group": "hard", "watch": "Saturn night side already near black: keeps its faint glow and stars, never crushed (taste call 31 guard)"},
   {"name": "storm13-night-movie", "kind": "pass", "frame": "W1756377010_1", "group": "hard", "watch": "the 2013 storm crescent's pass as a movie: its night side as dim as the still's (taste call 31)"},
+  {"name": "dione139-mosaic", "kind": "pass", "frame": "N1665974059_1", "group": "hard", "watch": "Dione 2010 colour map (139DI REGMAP001): no brightness step across the moon between tile rows, no green band"},
+  {"name": "titan059-mosaic", "kind": "pass", "frame": "N1582413047_1", "group": "hard", "watch": "Titan 2008 CB3/MT1 map (059TI GLOBMAP001): tiles of one brightness and tint"},
   {"name": "enceladus144-mosaic", "kind": "pass", "frame": "N1675140861_1", "group": "hard", "watch": "Enceladus 2011 plume map (144EN PLMHPHR002): no gray squares under the plume, the jets over black sky"}
  ]
 }
