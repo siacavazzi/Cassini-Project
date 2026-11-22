@@ -1,5 +1,5 @@
 """A balanced picture of Saturn's night side with no sky takes its black from the night side, keeping NIGHT_KEEP of
-the ringshine (calibration.night_black, taste call 30: 196SA STORMW014's set drew its night side at a third of white).
+the ringshine (calibration.night_black, taste call 31: 196SA STORMW014's set drew its night side at a third of white).
 A sunlit disk with dark terrain (Iapetus), a frame mostly lit, and a body other than Saturn keep black at 0. Run:
 python web/test_night_black.py"""
 import os, sys
@@ -17,4 +17,6 @@ lit = np.full((300, 300), 0.6, np.float32); lit[:, :120] = 0.04   # a sunlit Sat
 assert c.night_black(lit, sat) == 0.0
 half = np.full((300, 300), 0.05, np.float32); half[:, 150:] = 0.9  # half lit: not a night side
 assert c.night_black(half, sat) == 0.0
+assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_196SA_STORMW014_RIDER"'}]) == b
+assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_196IA_X001_PRIME"'}]) == 0.0
 print("night black ok")
