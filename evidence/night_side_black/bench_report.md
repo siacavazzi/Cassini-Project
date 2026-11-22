@@ -1,9 +1,10 @@
-# Image benchmark: 2c84c10214b1 against 9f30db6fc721
+# Image benchmark: 1caaa0406a28 against 19a060406777
 
-**PASS (nothing changed)**. 75 items: 75 identical, 0 changed (0 outside the target), 0 not built.
+**NEEDS EYES**. 87 items: 85 identical, 2 changed (0 outside the target), 0 not built.
 
+- target items with a measure worse (look at them): storm13-night-composite, night-washout-composite
 
-Built in 43 min (base) and 44 min (candidate). Targets: none named.
+Built in 52 min (base) and 50 min (candidate). Targets: night-washout-composite, storm13-night-composite.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -30,7 +31,7 @@ Built in 43 min (base) and 44 min (candidate). Targets: none named.
 | approach-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | phoebe-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | titan04-composite | plain | identical | 0/1 | 0.00% |  |  |  |
-| saturn05-movie | plain | identical | 0/27 | 0.00% |  |  |  |
+| saturn05-movie | plain | identical | 0/54 | 0.00% |  |  |  |
 | rhea-glocol-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | hyperion-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
 | rhea-mosaic | plain | identical | 0/2 | 0.00% |  |  |  |
@@ -68,13 +69,25 @@ Built in 43 min (base) and 44 min (candidate). Targets: none named.
 | titan08-mt1 | hard | identical | 0/1 | 0.00% |  |  |  |
 | rings08-bright | hard | identical | 0/1 | 0.00% |  |  |  |
 | mimas04-movie | hard | identical | 0/46 | 0.00% |  |  |  |
+| aurstare289-movie | hard | identical | 0/84 | 0.00% |  |  |  |
+| jupiter-tint-movie | hard | identical | 0/40 | 0.00% |  |  |  |
+| wind170-movie | hard | identical | 0/32 | 0.00% |  |  |  |
+| albiorix129-movie | hard | identical | 0/39 | 0.00% |  |  |  |
+| aurora101-movie | hard | identical | 0/84 | 0.00% |  |  |  |
+| approach04-movie | hard | identical | 0/140 | 0.00% |  |  |  |
 | saturn07-fullblack-movie | hard | identical | 0/144 | 0.00% |  |  |  |
 | saturn08w-fullblack-movie | hard | identical | 0/16 | 0.00% |  |  |  |
 | saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
 | saturn08-fullblack-movie | hard | identical | 0/84 | 0.00% |  |  |  |
 | pan09-banding-movie | hard | identical | 0/16 | 0.00% |  |  |  |
+| himalia00-movie | hard | identical | 0/40 | 0.00% |  |  |  |
 | dione139-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | titan059-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| enceladus144-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
+| storm13-night-composite | target | changed | 1/1 | 98.53% | 49 | composite.webp: detail 0.0447 -> 0.0881 (+97%); composite.webp: lit area's centre moved 19 px | the target: the 2013 storm crescent's night side (no sky) goes from a lifted gray (median about 74 of 255) to a dim ringshine (about 45); the crescent, the storm and the ring shadows are unchanged; ringshine arcs kept (taste call 31, Fable: better) |
+| night-washout-composite | target | changed | 1/1 | 99.85% | 61 | composite.webp: detail 0.0606 -> 0.091 (+50%); composite.webp: lit area's centre moved 12 px | the target: the washed-out gray night side (median about 85) goes to a dim ringshine (about 44); the lit crescent unchanged (taste call 31, Fable: better) |
+| night-dark-composite | hard | identical | 0/1 | 0.00% |  |  | the guard: a night side already drawn near black (median 6) is identical; its faint glow and stars kept (NIGHT_LIFTED) |
+| storm13-night-movie | hard | identical | 0/10 | 0.00% |  |  | the storm crescent's movie: identical, its night side already black (the pass's black is set on the pass's sky), so movies need no change |
 | fring274-movie | hard | identical | 0/172 | 0.00% |  |  |  |
 | npole0908-mosaicmovie | hard | identical | 0/1 | 0.00% |  |  |  |
 | encset293-movie | hard | identical | 0/48 | 0.00% |  |  |  |
@@ -87,16 +100,29 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 
 ## Checks
 
-0 regressions, 0 fixed, 9 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+0 regressions, 0 fixed, 22 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
-| plume279-movie | odd_frame | known | 12.1826 | 12.1826 (limit 4.0) | worst 12.2 at frame250.webp (12 of 286 frames over 4.0) |
-| ringmovie04-movie | pointing_jitter | known | 15.0089 | 15.0089 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 15.0 px, largest 18.9 px (37 pairs) |
-| saturn05-movie | channel_registration | known | 10.31 | 10.31 (limit 4.0) | colour along edges past the picture's own: p90 10.31 levels, largest 10.70 (27 colour frames) |
-| daphnis17-movie | odd_frame | known | 118.1355 | 118.1355 (limit 4.0) | worst 118.1 at frame008.webp (2 of 9 frames over 4.0) |
-| impact293-movie | odd_frame | known | 18.4491 | 18.4491 (limit 4.0) | worst 18.4 at frame007.webp (1 of 2 frames over 4.0) |
-| mimas04-movie | channel_registration | known | 54.34 | 54.34 (limit 4.0) | colour along edges past the picture's own: p90 54.34 levels, largest 54.34 (23 colour frames) |
-| mimas04-movie | full_black | known | 25.19 | 25.19 (limit 20.0) | black sky lost at Full: up to 25 points (98% of frame000.webp black at Processed, 73% at Full; 7 of 16 frames over 20) |
+| plume279-movie | odd_frame | known | 12.1826 | 12.1826 (limit 4.0) | worst 12.2 at frame250.webp (10 of 286 frames over 4.0) |
+| ringmovie04-movie | full_black | known | 25.18 | 25.18 (limit 20.0) | black sky lost at Full: up to 25 points (82% of frame006.webp black at Processed, 57% at Full; 5 of 16 frames over 20) |
+| ringmovie04-movie | pointing_jitter | known | 6.3178 | 6.3178 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.3 px, largest 8.7 px (33 pairs) |
+| impact293-movie | odd_frame | known | 18.8217 | 18.8217 (limit 4.0) | worst 18.8 at frame007.webp (1 of 2 frames over 4.0) |
+| mimas04-movie | full_black | known | 31.78 | 31.78 (limit 20.0) | black sky lost at Full: up to 32 points (98% of frame000.webp black at Processed, 67% at Full; 7 of 16 frames over 20) |
+| mimas04-movie | odd_frame | known | 4.0996 | 4.0996 (limit 4.0) | worst 4.1 at frame014.webp (1 of 9 frames over 4.0) |
+| aurstare289-movie | full_banding | known | 2.948 | 2.948 (limit 1.0) | Full sky banding up to 2.95 levels where Processed has black sky (9 of 16 frames over 1.0) |
+| aurstare289-movie | full_black | known | 69.52 | 69.52 (limit 20.0) | black sky lost at Full: up to 70 points (71% of frame022.webp black at Processed, 1% at Full; 11 of 16 frames over 20) |
+| wind170-movie | pointing_jitter | known | 14.8407 | 14.8407 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 14.8 px, largest 76.2 px (13 pairs) |
+| approach04-movie | odd_frame | known | 20.1989 | 20.1989 (limit 4.0) | worst 20.2 at frame027.webp (1 of 12 frames over 4.0) |
+| saturn07-fullblack-movie | full_black | known | 29.14 | 29.14 (limit 20.0) | black sky lost at Full: up to 29 points (78% of frame029.webp black at Processed, 49% at Full; 16 of 16 frames over 20) |
+| saturn08w-fullblack-movie | full_black | known | 22.01 | 22.01 (limit 20.0) | black sky lost at Full: up to 22 points (56% of frame002.webp black at Processed, 34% at Full; 2 of 16 frames over 20) |
+| saturn08-fullblack-movie | full_black | known | 21.43 | 21.43 (limit 20.0) | black sky lost at Full: up to 21 points (74% of frame025.webp black at Processed, 52% at Full; 2 of 16 frames over 20) |
 | pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (5 of 5 frames over 1.0) |
-| fring274-movie | pointing_jitter | known | 7.3218 | 7.3218 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 7.3 px, largest 137.5 px (149 pairs) |
+| himalia00-movie | full_banding | known | 4.049 | 4.049 (limit 1.0) | Full sky banding up to 4.05 levels where Processed has black sky (3 of 10 frames over 1.0) |
+| himalia00-movie | full_black | known | 91.67 | 91.67 (limit 20.0) | black sky lost at Full: up to 92 points (94% of frame000.webp black at Processed, 3% at Full; 3 of 16 frames over 20) |
+| himalia00-movie | odd_frame | known | 40.8583 | 40.8583 (limit 4.0) | worst 40.9 at frame003.webp (2 of 14 frames over 4.0) |
+| night-dark-composite | gray_colour | known | 1.0 | 1.0 (limit 0.0) | 100% of 1 pictures gray (median chroma 0.000); the pipeline says: not aligned |
+| fring274-movie | full_black | known | 32.91 | 32.91 (limit 20.0) | black sky lost at Full: up to 33 points (64% of frame023.webp black at Processed, 31% at Full; 10 of 16 frames over 20) |
+| fring274-movie | pointing_jitter | known | 5.8112 | 5.8112 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.8 px, largest 136.4 px (151 pairs) |
+| fring039-movie | full_black | known | 29.14 | 29.14 (limit 20.0) | black sky lost at Full: up to 29 points (78% of frame029.webp black at Processed, 49% at Full; 16 of 16 frames over 20) |
+| titancloud264-movie | channel_registration | known | 1.34 | 1.34 (limit 0.7) | red or blue channel off green: p90 1.34 px, largest 1.38 px (52 colour frames) |
