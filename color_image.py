@@ -1482,16 +1482,10 @@ def derotation_fields(lbls, ref, shape):
     taken (the reference, DEROTATE_LEAST, SURFACE_STRETCH); None for the whole set when it is not derotated."""
     try:
         return _derotation_fields(lbls, ref, shape)
-    except KernelsMissing:
-        raise
-    except Exception as e:   # noqa: BLE001  (SPICE can't follow the set: its channels stay as taken)
+    except Exception as e:   # noqa: BLE001  (SPICE can't follow the set: its channels stay as taken; a year's kernels
+        # missing is data_source.KernelsMissing, a BaseException, which stops the build or render instead)
         print(f"DEROTATION FAILED, channels as taken: {type(e).__name__}: {e}"[:200])
         return None
-
-
-class KernelsMissing(RuntimeError):
-    """A year's SPICE kernels could not be loaded for derotation: never draw a giant planet's colour set without them
-    (it would be served fringed, as if it had been derotated)."""
 
 
 def _derotation_fields(lbls, ref, shape):
@@ -1513,7 +1507,7 @@ def _derotation_fields(lbls, ref, shape):
     out = []
     with spice_lock:
         if not _year_kernels(lbls[ref]):
-            raise KernelsMissing(f"no SPICE kernels for {lbls[ref].info['IMAGE_TIME']}")
+            raise ds.KernelsMissing(f"no SPICE kernels for {lbls[ref].info['IMAGE_TIME']} (colour-set derotation)")
         for j, g in enumerate(geoms):
             if j == ref:
                 out.append(None)

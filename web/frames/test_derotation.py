@@ -78,6 +78,25 @@ def test_only_giant_planets():
         assert ci.derotation_fields([Label(body), Label(body)], 0, (64, 64)) is None, body
 
 
+def test_missing_kernels_stop():
+    import data_source as ds
+    a, b = Label("SATURN"), Label("SATURN")
+    for lbl, et in ((a, 1.0), (b, 90.0)):
+        lbl.geometry = {"et": et, "target": "SATURN", "camera": "CASSINI_ISS_NAC", "center": 511.5, "scale": 5000.0}
+    keep = ci._spice_locs, ci._year_kernels
+    try:
+        ci._spice_locs = lambda lbls: [[0, 0, 1e6, 0]] * len(lbls)
+        ci._year_kernels = lambda lbl: False
+        try:
+            ci.derotation_fields([a, b], 0, (64, 64))
+        except ds.KernelsMissing:
+            pass
+        else:
+            raise AssertionError("a giant planet's set without its year's kernels must stop the work, not come out undrotated")
+    finally:
+        ci._spice_locs, ci._year_kernels = keep
+
+
 def test_derotated_tiles_skips():
     tiles = [{"n": 0, "id": "N1", "t": 0.0, "offset": [0, 0], "box": [0, 0, 8, 8]},
              {"n": 1, "id": "N2", "t": 90.0, "offset": [0, 0], "box": [0, 0, 8, 8]},
