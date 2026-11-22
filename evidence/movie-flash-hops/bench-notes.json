@@ -10,5 +10,8 @@
  "titancloud264-movie": "WHITE_EACH: the brightening movie's bright cloud patch keeps texture",
  "saturn07-fullblack-movie": "#609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged",
  "saturn08w-fullblack-movie": "#609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged",
- "saturn08-fullblack-movie": "#609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged"
+ "saturn08-fullblack-movie": "#609's full-black items: WHITE_EACH (no frame of the movie clips) and the tint/hold rules; full_black known on both (24.1 -> 23.5 on saturn07), Fable-judged",
+ "aurstare289-movie": "target. The stare brightens as it goes (its frames' floor rises from 0 to ~95 of 255 in the raw-calibrated tiles: night-side glow), so later frames are lighter; frame 0 is mid-gray vs frame 1 near-black in the tiles too (floor 34 vs 0). Before, a stray lit-limb frame set the white and hid this.",
+ "aurora101-movie": "target. Frame 8 (unfit MT3) now holds frame 7's picture (its own moment) instead of jumping ahead to frame 9's bigger view (W1611761878): the size change now happens at frame 9, when the new pointing's frames start; the narrower slice and black right third are that same view as frames 0-7",
+ "himalia00-movie": "new item guarding STEADY_SEEN_PAD: the moon's square is matched on the moon again (8 px pad lost it to SPICE's few-px error and the stars took over); frames placed on Himalia, pointing_jitter passes on both"
 }
