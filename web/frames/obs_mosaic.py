@@ -8495,6 +8495,9 @@ def steady_chain(u, cache, p=None):
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 
 
+MATCH_FLOOR = 0.01   # of the display white: the least light a registration or steadying match sees (common_floor)
+
+
 def tile_black(t, scale):
     """The black tile t was drawn from (its own sky's, a movie frame's tracked one, else its filter's on the display
     scale), in the scale's units; None when the scale has no numeric tone."""
@@ -8525,9 +8528,10 @@ def common_floor(scale):
 
     def pair(ta, a, tb, b):
         ba, bb = tile_black(ta, scale), tile_black(tb, scale)
-        if ba is None or bb is None or abs(ba - bb) <= 1e-9:
+        if ba is None or bb is None:
             return a, b
-        top = max(ba, bb)
+        # (at least MATCH_FLOOR of the white, whatever the blacks: the faint glow a lower black draws is never matched)
+        top = max(ba, bb, MATCH_FLOOR * white)
         return recut(a, ba, top), recut(b, bb, top)
     return pair
 
