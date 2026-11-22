@@ -68,7 +68,9 @@ glow = 0.0005 + 0.0004 * (yy / H) + rng.normal(0, 0.00002, (H, H))
 glow[440:, 200:320] += 0.004 * np.exp(-((xx[440:, 200:320] - 260) / 25) ** 2)   # the plume
 before, after = draw([glow], floor=False)[0], draw([glow])[0]
 print("lit sky top rows p50: before", int(np.median(before[:40])), "after", int(np.median(after[:40])))
-assert np.median(after[:40]) < np.median(before[:40]) - 40   # the sky's darkest part much darker
+# the sky's darkest part black (since _sky measures an offset sky from the frame's floor, this glow's darker part is
+# sky with or without the glow black: before 0 too)
+assert np.median(after[:40]) < 10 and np.median(after[:40]) <= np.median(before[:40])
 assert after[:440].max() > after[:40].max()                  # the glow's gradient is kept
 
 # ---- a star field with an even offset (light scattered in the camera, as dim as lit sky, GLOW_IOF) goes near black, the
