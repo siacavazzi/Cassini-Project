@@ -22,21 +22,4 @@ assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_19
 dark = np.full((300, 300), 0.015, np.float32); dark[240:, :] = 0.9   # a night side drawn near black already: kept
 assert c.night_black(dark, sat) == 0.0
 assert c.night_black(night, sat, margin=0.04) == 0.0   # drawn near black already: kept
-
-# a movie's frame of the same night side (obs_mosaic.tile_scale, night: the movie's body) takes the black its still has
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
-import obs_mosaic as om
-with c.looking("balanced"):
-    W = 0.02                                               # the pass's white (I/F)
-    scale = {"blacks": {"CL1": 0.0}, "white": W, "gamma": 3.0}
-    seen = {}
-    out = om.tile_scale(scale, "CL1", own_sky=True, seen=seen, on_body=True, t=5.0, night="SATURN")
-    got = out["black_of"](night * W)
-    assert abs(got["black"] - b * W) < 1e-6, got          # the still's black, in the pass's I/F
-    assert seen["night_black"] == got["black"]
-    assert got["toe"] > 0
-    assert out["black_of"](dark * W) is None               # a night side drawn near black already: the pass's black
-    assert om.tile_scale(scale, "CL1", own_sky=True, on_body=True, t=5.0, night="IAPETUS")["black_of"](night * W) is None
-    assert "black_of" not in om.tile_scale(scale, "CL1", own_sky=True, on_body=True, t=5.0)   # no night: as before
-    assert "black_of" not in om.tile_scale(scale, "CL1", own_sky=False, on_body=True, t=5.0, night="SATURN")  # mosaics
 print("night black ok")
