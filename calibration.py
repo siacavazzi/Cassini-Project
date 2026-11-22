@@ -2176,7 +2176,9 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         if dark.sum() > 100:
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
     else:
-        margin = max(margin, night_black(np.mean(channels, axis=0) if lum is None else lum, infos))
+        # (on the brightness tone compares the margin with: after the mix, whose gains lift a faint band's whole picture)
+        seen = np.stack(two_bands(channels) if mix is not None else channels).astype(np.float32)
+        margin = max(margin, night_black((apply_mix(mix, seen) if mix is not None else seen).mean(axis=0), infos))
     if len(channels) > 1 and (measured or false):
         # without sky (a body filling the frame) the grain is measured on the whole picture
         channels = _clean_spikes(channels, sky, false, summing=[summing_of(i) for i in infos])
