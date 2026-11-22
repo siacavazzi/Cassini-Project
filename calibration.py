@@ -1133,7 +1133,9 @@ FLOOR_BODY = 2e-4    # ... and a lit thing of at least this share of the picture
 FLOOR_BORDER = 4     # ... and none of it within this many px (of 1024) of the frame's edge: the CCD's last columns read dark
                      # on many frames (N1492367324_1, Titan's even haze: columns 1022-1023), and the 3x3 median keeps them
 FLAT_EVEN = (0.4, 0.6)   # _flat_black: a picture with no sky whose floor is over FLAT_EVEN[0] of its top is low-contrast,
-FLAT_SHARE = 0.8         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
+FLAT_SHARE = 0.0         # wholly from FLAT_EVEN[1]: its black up to FLAT_SHARE of its floor, while its pixel noise is
+                         # (0: off, no-sky pictures as main draws them, the conservative look; 0.8 spread the 2007 cloud
+                         # decks but greyed the hexagon and Titan close-ups and blacked the decks' ring line: taste call 32)
 FLAT_NOISE = 150         # no more than 1 / FLAT_NOISE of the range from black to top (1.7 of 255 levels: at 100 the
                          # grain showed on near-featureless frames, Fable 11-21)
 FLAT_DARK_SHARE = 0.02   # ... and only when what is that dark is a thin line, at most this share of the picture
@@ -1143,11 +1145,12 @@ GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
                      # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
-GLOW_FINE = (0.07, 0.15)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
+GLOW_FINE = (0.066, 0.1)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
                      # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
                      # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
                      # under 0.04, rings over 0.15; measured net of the camera's banding and noise, the faint sky round a distant
-                     # moon still measures 0.06-0.065 on its leftover pattern, so the blend starts at 0.07: spot check 11-21)
+                     # moon still measures 0.04-0.065 on its leftover pattern, the equinox shadow's faint ringlets 0.084 (about half its glow black, as main gave it): the
+                     # blend runs between them, spot check and Fable 11-21)
 FINE_NOISE = 0.4     # fine_structure(net): white noise of this spread puts about 0.31 of it (0.4 with 8-bit steps) in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
@@ -2945,7 +2948,7 @@ def sky_levels(images, masks, floor_pct=None):
     return levels, margin
 
 
-GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
+GRAIN_SMOOTH = 65    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
 GRAIN_GLOW = 0.5     # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
                      # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still), and Titan's
