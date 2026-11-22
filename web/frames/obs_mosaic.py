@@ -9507,7 +9507,7 @@ def movie_rect(fp, t, radius=0.0, centre=False, seen=None):
     return min(max(cx - w / 2, x0), x1 - w), min(max(cy - h / 2, y0), y1 - h), w, h
 
 
-def centre_half(fp, radius, seen):
+def centre_half(fp, radius, seen, fill=True):
     """Half the side of the square view centred on the body that movie_rect uses (reference pixels), or None when
     the body is not centred. It is centred when all three hold: its disk (radius) fits MOVIE_FIT frames with
     CENTRE_MARGIN round it; the body's centre is on at least one of the pass's frames (seen, pass_seen: the frames
@@ -9531,7 +9531,7 @@ def centre_half(fp, radius, seen):
     # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame,
     # with CENTRE_MARGIN round its disk, stays centred however little of the square the frames fill: the 1999 Moon near
     # its frame's edge; SPICE's mean radius of Helene fits its frame's corner bare, the moon itself does not)
-    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius * (1 + CENTRE_MARGIN)):
+    if fill and covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius * (1 + CENTRE_MARGIN)):
         return None
     return half
 
@@ -9962,7 +9962,9 @@ def centre_view(frame_id):
         turn = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
         seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, turn)) \
             if fp and radius else None
-        half = centre_half(fp, radius, seen) if fp and radius else None
+        # (a single picture keeps its body centred however little of the square it fills (fill=False): a movie's
+        # CENTRE_FILL put 214EN PLMHPMR001's Enceladus, at its frame's edge with the plume below, against the top)
+        half = centre_half(fp, radius, seen, fill=False) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
