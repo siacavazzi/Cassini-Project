@@ -1,0 +1,13 @@
+{
+ "approach-movie": "Colour movie, filters raised together on Full's track: change of at most 12 levels on planet and rings; sky black, colour unchanged (Fable: same).",
+ "approach04-movie": "Colour movie, filters raised together: at most 14 levels on Saturn; colour and black sky unchanged; odd_frame 20.20 -> 20.26 (Fable: same).",
+ "jupiter-tint-movie": "Colour movie, filters raised together: barely measurable change on Jupiter and a moon; no tint, sky black (Fable: same).",
+ "wind170-movie": "Colour movie, filters raised together: rings slightly brighter, teal tint in dark bands reduced to neutral, gaps black (Fable: better).",
+ "titan127-movie": "Colour movie, filters raised together: Titan colour and limb fade unchanged (Fable: same); one evened frame's clipped share 0.02% -> 1.15%.",
+ "aurstare289-movie": "Night-side pass on gamma 1.5: light-gray noise field drops to dark gray, aurora arcs stand out more (Fable: better).",
+ "aurora101-movie": "Night-side pass on gamma 1.5: lit Saturn and night side unchanged, differences at frame edges only (Fable: same).",
+ "saturn05-movie": "Thin lines on ring edges and frame border only; looks identical (Fable: same).",
+ "daphnis17-movie": "Rings, gap and Daphnis wave unchanged; differences along frame border and gap edges (Fable: same).",
+ "enceladus15-movie": "Crescent marginally changed (up to 13 levels); night side and sky black (Fable: same).",
+ "titancloud264-movie": "Cloud field and colour unchanged; small differences at dark cloud edges (Fable: same)."
+}
