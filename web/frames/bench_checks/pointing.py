@@ -83,6 +83,11 @@ def pointing_sources(p, limit=0):
     if not got or got.get("frames") is None:
         return Result(None, limit, True, "the build kept no pointing facts (collect hook missing)")
     n = got["on_spice"]
+    made = len(p.frames())
+    if made * 2 < got["frames"]:
+        # (a movie whose pictures could not be read, LeanFrameMissing without the 12-bit originals: its chain had
+        # nothing to place, so how it would be placed is not known; the build's own errors report the pictures)
+        return Result(None, limit, True, f"only {made} of {got['frames']} frames made: pointing not judged")
     if got.get("follows"):
         return Result(0, limit, True, f"the view follows the frames: each of {got['frames']} drawn as the camera took it, "
                                       "no pointing places it")
@@ -140,40 +145,87 @@ ITEMS = [
 ]
 
 
-def _fringe(rgba):
-    """How much more colourful a colour picture is along its sharpest edges than over its picture: the mean chroma
-    (max channel less min, levels) within 2 px of its top 3 % of brightness edges, less its median chroma, inside its
-    lit picture (none for a grey picture or too little lit). Channels that do not line up put colour along every edge
-    (257DA DAPHNIS001 after #602: -0.1 before, 6.0 with its blue channel 10 px off along the Keeler gap)."""
+def channel_offset(rgba, side=128, patches=4):
+    """How far (px) a colour picture's red or blue channel sits from its green, whichever is further: each channel's
+    edges (Sobel of a 1.2 px blur) phase-correlated with green's in the picture's `patches` busiest squares of `side`
+    px, the median move per channel. None for a grey picture or one without edges. It measures the offset itself, so
+    a body's own colour, a clipped channel's flat core or an overexposed glow (which read as colour along every edge,
+    11-20 spot: Jupiter 2000, Enceladus 2004, Rhea, Saturn; all within 0.4 px) do not count, and an offset reads at
+    its own size (a 1 px shift reads 0.8 to 1.1 px, 10 px reads 9.8)."""
     import cv2
     import numpy as np
     a = rgba.astype(np.float32)
     rgb = a[..., :3]
     if float(np.abs(rgb[..., 0] - rgb[..., 1]).max()) < 1 and float(np.abs(rgb[..., 2] - rgb[..., 1]).max()) < 1:
         return None
-    lit = a[..., 3] > 0
-    lum = rgb.mean(axis=2)
-    g = cv2.GaussianBlur(lum, (0, 0), 1.0)
-    G = np.hypot(cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1))
-    m = (cv2.erode(lit.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0) & (lum > 20)
-    if m.sum() < 1000:
+    lit = (a[..., 3] > 0).astype(np.float32)
+    edges = []
+    for c in range(3):
+        g = cv2.GaussianBlur(rgb[..., c] * lit, (0, 0), 1.2)
+        edges.append(np.hypot(cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1)))
+    h, w = lit.shape
+    if h < side or w < side:
         return None
-    edge = m & (G >= np.percentile(G[m], 97))
-    near = (cv2.dilate(edge.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0) & m
-    chroma = rgb.max(axis=2) - rgb.min(axis=2)
-    return float(chroma[near].mean() - np.median(chroma[m]))
+    busy = cv2.boxFilter(edges[1], -1, (side, side))
+    win = cv2.createHanningWindow((side, side), cv2.CV_32F)
+    got = {0: [], 2: []}
+    for _ in range(patches):
+        y, x = np.unravel_index(int(np.argmax(busy)), busy.shape)
+        y0, x0 = int(min(max(y - side // 2, 0), h - side)), int(min(max(x - side // 2, 0), w - side))
+        busy[max(0, y0 - side // 2):y0 + 3 * side // 2, max(0, x0 - side // 2):x0 + 3 * side // 2] = 0
+        ref = edges[1][y0:y0 + side, x0:x0 + side]
+        if ref.mean() < 0.5:
+            continue
+        for c in got:
+            (dx, dy), resp = cv2.phaseCorrelate(ref, edges[c][y0:y0 + side, x0:x0 + side], win)
+            if resp >= 0.08:
+                got[c].append((dx, dy))
+    off = [float(np.hypot(*np.median(np.array(v), axis=0))) for v in got.values() if v]
+    drift = channel_drift(rgba)
+    return max(off + ([drift] if drift is not None else [])) if off or drift is not None else None
+
+
+def channel_drift(rgba):
+    """How far (px) red or blue sits from green by the colour along the picture's edges, whichever is further: each
+    channel (scaled to green's level over the lit picture) less green, fitted over the sharpest edges as a step along
+    green's gradient (a channel d px off reads as -d . grad(green)). A body's own colour and an even glow round it
+    cancel round its outline; a channel offset adds up all along it, signed, whichever way it lies, also where only
+    part of a channel is off (a colour mixed from several filters, one of them 12 px off: 241TI's blue, rz-titan16
+    on #606, which edge matching read as 0.5 px). Clipped pixels are left out. Titan's haze on a crescent's outer
+    limb reads 1.5 to 3 px: a limb colour on one side only."""
+    import cv2
+    import numpy as np
+    a = rgba.astype(np.float32)
+    rgb = a[..., :3]
+    lit = cv2.erode((a[..., 3] > 0).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+    sm = [cv2.GaussianBlur(rgb[..., c], (0, 0), 1.0) for c in range(3)]
+    g = sm[1]
+    gx, gy = cv2.Sobel(g, cv2.CV_32F, 1, 0) / 8, cv2.Sobel(g, cv2.CV_32F, 0, 1) / 8
+    mag = np.hypot(gx, gy)
+    ok = lit & (rgb.max(axis=2) < 250) & (g > 3)
+    if ok.sum() < 500:
+        return None
+    edge = ok & (mag >= np.percentile(mag[ok], 97)) & (mag > 2)
+    if edge.sum() < 50:
+        return None
+    out = []
+    for c in (0, 2):
+        k = float(np.median(sm[c][ok])) / max(float(np.median(g[ok])), 1e-3)
+        d = sm[c] / max(k, 1e-3) - g
+        sol = np.linalg.lstsq(np.stack([gx[edge], gy[edge]], 1), d[edge], rcond=None)[0]
+        out.append(float(np.hypot(*sol)))
+    return max(out)
 
 
 @check("channel_registration", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.25,
        about="a colour movie's channels do not line up: a coloured fringe along edges (257DA DAPHNIS001, #602)")
-def channel_registration(p, limit=4.0):
-    """The 90th percentile, over a colour movie's frames, of how much more colourful each is along its sharpest edges
-    than over its picture (_fringe, levels). A body's own colour along a limb scores high on both sides (a known
-    failure); a set whose channels come apart scores higher than before (a regression)."""
+def channel_registration(p, limit=0.7):
+    """The 90th percentile, over a colour movie's frames, of how far its red or blue channel sits from its green
+    (channel_offset: the larger of the edges' own match and the colour along them, channel_drift; px): 0.1 to 0.55 px in a set that lines up (no fringe to the eye, 11-20 Fable 5.2); 0.76 px on fine storm clouds is one (rz-saturn11-movie3)."""
     import numpy as np
     vals = {}
     for f in p.frames():
-        m = _fringe(p.load(f))
+        m = channel_offset(p.load(f))
         if m is not None:
             vals[f] = round(m, 2)
     if len(vals) < 2:
@@ -181,6 +233,6 @@ def channel_registration(p, limit=4.0):
     v = np.array(list(vals.values()))
     p90 = float(np.percentile(v, 90))
     worst = max(vals, key=vals.get)
-    return Result(p90, limit, p90 <= limit, f"colour along edges past the picture's own: p90 {p90:.2f} levels, largest "
-                                            f"{vals[worst]:.2f} ({len(vals)} colour frames)", where=worst,
+    return Result(p90, limit, p90 <= limit, f"red or blue channel off green: p90 {p90:.2f} px, largest "
+                                            f"{vals[worst]:.2f} px ({len(vals)} colour frames)", where=worst,
                   values={k: x for k, x in vals.items() if x > limit})
