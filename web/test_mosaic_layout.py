@@ -132,8 +132,17 @@ def kinds(us):
     return [(u["kind"], len(u["frames"])) for u in us]
 
 
+def bare(u):
+    """u's folder without the suffixes that come after the layout's own: a frame's carried-over pointing (REPOINTED) and
+    the Saturn look's tag (SATURN_TAG); 267SA LIMBINT002's folder ends _g3_sp1_sl3, the layout's being _g3 (RELAID)"""
+    folder = om.folder(u, "/c")
+    for tag in (om.SATURN_TAG, om.REPOINTED):
+        folder = folder[:-len(tag)] if folder.endswith(tag) else folder
+    return folder
+
+
 def relaid(u):
-    return om.folder(u, "/c").endswith(om.RELAID)
+    return bare(u).endswith(om.RELAID)
 
 
 def main():
@@ -177,7 +186,7 @@ def main():
     # rectangle but on ground the ring left empty (_zoom_join on _ground), in LAID's folder
     reg = passes(*OBS[10])
     assert kinds(reg) == [("mosaic", 80)] and reg[0]["joined"] and reg[0]["zoom_ground"], kinds(reg)
-    assert om.folder(reg[0], "/c").endswith("DIONE_ISS_129DI_REGMAP001_PRIME_N_0" + om.LAID)
+    assert bare(reg[0]).endswith("DIONE_ISS_129DI_REGMAP001_PRIME_N_0" + om.LAID)
 
     # the camera turning under a mosaic: the footprint holds every tile v46 placed (one angle left most outside)
     for name, v in cases["v46"].items():
@@ -208,7 +217,7 @@ def main():
     # a colour set's pointing jitter is no feature track; the least creeping feature track still is
     limb = passes(*OBS[15])
     assert kinds(limb) == [("mosaic", 25)] and not limb[0]["track"] and limb[0]["retracked"], kinds(limb)
-    assert om.folder(limb[0], "/c").endswith(om.RETRACKED)
+    assert bare(limb[0]).endswith(om.RETRACKED)
     laps = passes(*OBS[16])
     assert kinds(laps) == [("mosaic_movie", 80)] and laps[0]["retracked"], kinds(laps)
     feat = passes(*OBS[17])
@@ -218,7 +227,7 @@ def main():
     for key, kind, n in ((OBS[19], "mosaic", 78), (OBS[21], "mosaic", 83), (OBS[2], "mosaic_movie", 147)):
         us = [u for u in passes(*key) if len(u["frames"]) >= 20]
         assert kinds(us) == [(kind, n)] and not us[0]["revisit"] and us[0]["rescanned"], (key, kinds(us))
-        assert om.folder(us[0], "/c").endswith(om.RESCANNED)
+        assert bare(us[0]).endswith(om.RESCANNED)
     lat = [u for u in passes(*OBS[20]) if len(u["frames"]) >= 20]
     assert [k for k, _ in kinds(lat)] == ["mosaic", "mosaic"] and all(u["rescanned"] for u in lat), kinds(lat)
     # (the time series keep RELAID's folder)
@@ -229,7 +238,7 @@ def main():
     # OBS[23], are one movie until a dense scan is judged by its creep over a repeat window, #202: then three mosaics)
     for key, want in ((OBS[18], [("mosaic", 17), ("mosaic", 11)]), (OBS[22], [("mosaic", 12), ("mosaic", 16)])):
         us = passes(*key)
-        assert kinds(us) == want and all(om.folder(u, "/c").endswith(om.ISLANDS) for u in us), (key, kinds(us))
+        assert kinds(us) == want and all(bare(u).endswith(om.ISLANDS) for u in us), (key, kinds(us))
         assert [u["key"][3] for u in us] == list(range(len(us)))
     # an azimuthal scan whose stretches of ring do not quite meet stays whole, and a map round Dione's disk (its
     # middle the next pass) is not cut either (above)
@@ -254,7 +263,7 @@ def main():
     # (its first two holds take the same view, a pause apart: one movie, _restare)
     assert kinds(tdif) == [(None, 1), ("movie", 10), ("movie", 5), ("mosaic", 7), ("movie", 5), ("mosaic", 5),
                            (None, 1)], kinds(tdif)
-    assert all(om.folder(u, "/c").endswith(om.PANNED) for u in temp + tdif)
+    assert all(bare(u).endswith(om.PANNED) for u in temp + tdif)
     assert kinds(subm) == [("movie", 5)] * 6 and not any(u["panned"] for u in subm), kinds(subm)
     # four filters drifting 0.6 to 0.9 of a frame through each set over the B ring's edge: single pictures, relaid
     edge = passes(*OBS[32])
@@ -272,21 +281,21 @@ def main():
     # ... and its toss-up mosaic is turned frame by frame as the camera turns under it (135 degrees: one angle drew
     # its tiles off the canvas), every pass of both observations in LAID's folder after it
     assert arc[0]["twist"] and az[1]["twist"], (bool(arc[0].get("twist")), bool(az[1].get("twist")))
-    assert all(om.folder(u, "/c").endswith(om.LAID) for u in arc + az)
+    assert all(bare(u).endswith(om.LAID) for u in arc + az)
     assert not any(u["strip"] for key in (OBS[7], OBS[23], OBS[29], OBS[33]) for u in passes(*key))
-    assert not om.folder(passes(*OBS[23])[0], "/c").endswith(om.STRIPPED)
+    assert not bare(passes(*OBS[23])[0]).endswith(om.STRIPPED)
 
     # pass layout (fix plan PR 13, 2026-11-02): the ring strips' toss-ups turned frame by frame as the camera turns under
     # them (081RI 32 degrees, 283RI 4: one angle drew their mosaics off the canvas), still the movies they play as
     for key in (OBS[38], OBS[39]):
         us = [u for u in passes(*key) if u.get("strip")]
         assert us and all(u["kind"] == "movie" and u["tossup"] and u["twist"] for u in us), (key, kinds(passes(*key)))
-        assert all(om.folder(u, "/c").endswith(om.LAID) for u in passes(*key))
+        assert all(bare(u).endswith(om.LAID) for u in passes(*key))
     # Saturn's north polar vortex, seven filters every 50 minutes for six hours, its place drifting 2,200 px as Cassini
     # climbs: one view, a movie (drawn as a mosaic the vortex showed five times)
     vort = passes(*OBS[34])
     assert kinds(vort) == [("movie", 49)] and vort[0]["drifting"] and vort[0]["revisit"], kinds(vort)
-    assert om.folder(vort[0], "/c").endswith(om.LAID)
+    assert bare(vort[0]).endswith(om.LAID)
     # Titan's five stares two to three frames apart: no mosaic but a pass each; the mosaic before them keeps its
     # tiles that touch, its lone frames shown as single pictures
     titan = passes(*OBS[35])
