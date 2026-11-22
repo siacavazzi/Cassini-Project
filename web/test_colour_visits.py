@@ -129,4 +129,11 @@ assert om.set_mask(_big, 1.0) is not None
 assert om.set_mask(_big, 1.0, om.mix_span({"key": ("TITAN", "x", "N")})) is None
 assert om.set_mask(_big, 1.0, om.mix_span({"key": ("SATURN", "x", "N")})) is not None
 assert om.mix_span({"key": ("DIONE", "x", "N")}) == om.MIX_SPAN
+# visit_frames with the pass's span: a colour frame taken 2 h after the others at its place stays in its visit on Titan
+# (059TI's second CB3, past MIX_SPAN after its MT1) and is left out on Saturn
+_late = [(COLOUR[0], 0.0, 0.0), (COLOUR[1], 0.0, 60.0), (COLOUR[2], 0.0, 7200.0)]
+_ut, _ = make("TITAN", _late)
+assert om.visit_frames(_ut, COLOUR) == frozenset(range(3)), om.visit_frames(_ut, COLOUR)
+_us, _ = make("SATURN", _late)
+assert om.visit_frames(_us, COLOUR) != frozenset(range(3)), om.visit_frames(_us, COLOUR)
 print("slow mix span ok")

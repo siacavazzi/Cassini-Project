@@ -2322,6 +2322,8 @@ def mixes(u, p, tiles, colour):
             grid[int(round((y0 - gy) / MIX_CELL)):int(round((y1 - gy) / MIX_CELL)),
                  int(round((x0 - gx) / MIX_CELL)):int(round((x1 - gx) / MIX_CELL))] = drawn_time(u, t)
         times.append(grid)
+    # (MIX_SPAN here, not mix_span: whether the gray base is drawn under the colour at all, for the places no colour
+    # reaches; what of the colour is left out for mixing visits is decided with the pass's own span, so_far's set_mask)
     return set_mask(times, 1 / MIX_CELL) is not None
 
 
