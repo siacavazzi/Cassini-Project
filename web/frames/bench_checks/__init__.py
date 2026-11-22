@@ -79,9 +79,10 @@ class Result:
 
 
 class Check:
-    def __init__(self, name, fn, kinds, default, owner, about, worse_by):
+    def __init__(self, name, fn, kinds, default, owner, about, worse_by, judged_by_base=True):
         self.name, self.fn, self.kinds, self.default = name, fn, tuple(kinds), default
         self.owner, self.about, self.worse_by = owner, about, worse_by
+        self.judged_by_base = judged_by_base
         self.collector = None
 
     def collect(self, fn):
@@ -92,13 +93,15 @@ class Check:
         return self.fn(*a, **k)
 
 
-def check(name, kinds, default=False, owner="benchmark", about="", worse_by=0.25):
+def check(name, kinds, default=False, owner="benchmark", about="", worse_by=0.25, judged_by_base=True):
     """Register a check (see the module's notes). worse_by: when both sides fail, the candidate counts as a
-    regression if its value is over the base's by this share of the limit (or of the base's value, the larger)."""
+    regression if its value is over the base's by this share of the limit (or of the base's value, the larger).
+    judged_by_base False: what the check judges is chosen by something the change itself moves (full_banding judges the
+    frames whose Processed sky is black), so judging fewer of them is no regression in itself"""
     def wrap(fn):
         if name in CHECKS:
             raise ValueError(f"two checks named {name}")
-        c = Check(name, fn, kinds, default, owner, about or (fn.__doc__ or "").strip().split("\n")[0], worse_by)
+        c = Check(name, fn, kinds, default, owner, about or (fn.__doc__ or "").strip().split("\n")[0], worse_by, judged_by_base)
         CHECKS[name] = c
         return c
     return wrap
@@ -265,7 +268,8 @@ def verdict(name, base, cand):
     if cand.get("value") is None and judged_base:
         return "REGRESSION"
     jb, jc = (base or {}).get("judged"), cand.get("judged")
-    if judged_base and jb and jc is not None and jc < LOST_SHARE * jb:
+    c = CHECKS.get(name)
+    if judged_base and jb and jc is not None and jc < LOST_SHARE * jb and (c is None or c.judged_by_base):
         return "REGRESSION"
     if cand["ok"]:
         return "fixed" if base and not base.get("ok", True) and not base.get("error") else "pass"
@@ -273,7 +277,6 @@ def verdict(name, base, cand):
         return "fail (no base)"
     if base["ok"]:
         return "REGRESSION"
-    c = CHECKS.get(name)
     by = c.worse_by if c else 0.25
     b, v, lim = base.get("value"), cand.get("value"), cand.get("limit")
     if b is not None and v is not None:
