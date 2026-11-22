@@ -10406,7 +10406,9 @@ def veiled_frame(frames, n, tile_of):
     box = placed(tile_of(n))
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
         j = next((j for j in js if frames[j][2] == f and "offset" in tile_of(j)), None)
-        if j is None or tile_of(j).get("lit", 0.0) > VEIL_CLEAR:
+        # (a neighbour whose lit share was not measured, tile() keeps it only for frames with saturated pixels, is
+        # not known to be dark: 101SA AURORA003's clear frames before its wider view)
+        if j is None or tile_of(j).get("lit") is None or tile_of(j)["lit"] > VEIL_CLEAR:
             return False
         other = placed(tile_of(j))
         if box is None or other is None or _box_apart(box, other):
@@ -10867,6 +10869,11 @@ def _shown_of(u, p, n, not_shown, tile_of):
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, LUM_REACH)
             if j is not None and frames[j][2] == p["grey"] and tile_of(j).get("saturated", 0.0) < TINT_SATURATED:
                 return j, got, "near", False   # (the set's own moment: its brightness taken whole, tinted_frame's near)
+            if held_band(frames[s][2]):
+                # (a held band's frame with no gray frame near to draw it through is another layer's soft look, not the
+                # movie's: it shows its neighbour's picture, as one with no set does. 209RI RDCOLSCNM001's UV3 frame
+                # played its own blurred picture in the set's colours between tinted frames)
+                return s, got, False, True
         if got and tint:
             # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)

@@ -107,6 +107,8 @@ def test_veiled_frame_same_view():
     assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
     tiles[2], tiles[3] = tile(0.8), tile(0.3)
     assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[3] = {k: v for k, v in tile(0.0).items() if k != "lit"}   # (not measured: not known dark)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
 
 
 if __name__ == "__main__":
