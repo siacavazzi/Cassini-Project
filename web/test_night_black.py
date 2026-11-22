@@ -21,4 +21,5 @@ assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_19
 assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_196IA_X001_PRIME"'}]) == 0.0
 dark = np.full((300, 300), 0.015, np.float32); dark[240:, :] = 0.9   # a night side drawn near black already: kept
 assert c.night_black(dark, sat) == 0.0
+assert c.night_black(night, sat, margin=0.04) == 0.0   # drawn near black already: kept
 print("night black ok")

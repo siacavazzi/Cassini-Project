@@ -1112,8 +1112,9 @@ NIGHT_LIT_MOST = 0.3  # ... of it,
 NIGHT_DIM = 0.1       # ... and whose dim part (under this of white) covers at least NIGHT_DIM_LEAST of it, is a night side
 NIGHT_DIM_LEAST = 0.5
 NIGHT_CODES = {"SA": "SATURN"}   # night_target: an observation's target code (ISS_196SA_STORMW014_RIDER) for its body
-NIGHT_LIFTED = 0.025  # ... and whose night side the picture draws lifted (its median at least this of white): one nearly
-                      # dark all over (W1738173795, 0.016) keeps its faint glow and stars, which its black there took to pure black
+NIGHT_LIFTED = 0.02   # ... and whose night side the picture draws lifted (its median at least this of white over the black
+                      # it has): one drawn near black already (W1738173795, 5 of 255) keeps its faint glow and stars, which
+                      # a black at its night side's median took to pure black
 NIGHT_KEEP = 0.3      # ... drawn with its black at (1 - NIGHT_KEEP) of the dim part's median: the ringshine stays, a little
 
 
@@ -1124,7 +1125,7 @@ to (1 - NIGHT_KEEP) of the night side's median, so the ringshine on it stays vis
 third of white (taste call 31: 196SA STORMW014's MT3 / CB2 / MT2 set, W1756377010, its night side 3 to 7% of the
 crescent drawn at 64 to 83 of 255 with no sky to set a black on). 0 for anything else: a body's dark terrain in sunlight
 (Iapetus) is not a night side, and only Saturn's is lit by its rings (NIGHT_TARGETS). lum: the picture's brightness
-(white 1, level 0), infos: its frames' labels.
+(white 1, level 0), infos: its frames' labels, margin: the black it has already.
 """
 def night_target(info):
     """The body a frame looks at for night_black: its TARGET_NAME, or where that is unknown (a rider's frames: "UNK"),
@@ -1136,7 +1137,7 @@ def night_target(info):
     return NIGHT_CODES.get(m.group(1), "") if m else ""
 
 
-def night_black(lum, infos):
+def night_black(lum, infos, margin=0.0):
     if not infos or night_target(infos[0]) not in NIGHT_TARGETS:
         return 0.0
     local = cv2.blur(np.asarray(lum, np.float32), (15, 15))
@@ -1144,7 +1145,7 @@ def night_black(lum, infos):
     if (local >= NIGHT_LIT).mean() > NIGHT_LIT_MOST or dim.mean() < NIGHT_DIM_LEAST:
         return 0.0
     night = float(np.median(local[dim]))
-    if night < NIGHT_LIFTED:
+    if night - margin < NIGHT_LIFTED:
         return 0.0
     return night * (1 - NIGHT_KEEP)
 
@@ -2183,7 +2184,7 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
     else:
         # (on the brightness tone compares the margin with: after the mix, whose gains lift a faint band's whole picture)
         seen = np.stack(two_bands(channels) if mix is not None else channels).astype(np.float32)
-        margin = max(margin, night_black((apply_mix(mix, seen) if mix is not None else seen).mean(axis=0), infos))
+        margin = max(margin, night_black((apply_mix(mix, seen) if mix is not None else seen).mean(axis=0), infos, margin))
     if len(channels) > 1 and (measured or false):
         # without sky (a body filling the frame) the grain is measured on the whole picture
         channels = _clean_spikes(channels, sky, false, summing=[summing_of(i) for i in infos])
