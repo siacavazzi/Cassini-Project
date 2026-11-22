@@ -19,6 +19,6 @@ half = np.full((300, 300), 0.05, np.float32); half[:, 150:] = 0.9  # half lit: n
 assert c.night_black(half, sat) == 0.0
 assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_196SA_STORMW014_RIDER"'}]) == b
 assert c.night_black(night, [{"TARGET_NAME": '"UNK"', "OBSERVATION_ID": '"ISS_196IA_X001_PRIME"'}]) == 0.0
-dark = np.full((300, 300), 0.01, np.float32); dark[:, :2] = 0.5   # no crescent (under NIGHT_LIT_LEAST lit): kept
+dark = np.full((300, 300), 0.015, np.float32); dark[240:, :] = 0.9   # a night side drawn near black already: kept
 assert c.night_black(dark, sat) == 0.0
 print("night black ok")
