@@ -9185,8 +9185,10 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             tint.append(m)   # (a frame drawn in its set's colour, set_shown: the server draws it, steady-local.html want)
         elif got and _set_drawn_apart(u, list(got.values()), others, OUT / max(rect[2], rect[3])):
             server.append(m)
-        elif got and derotates(u):
-            server.append(m)   # (a clouded body's set, its channels redrawn as at one time: derotated, the server's)
+        elif got and derotates(u) and all(_sky_views(u).knows(tile_of(j).get("id")) for j in got.values()):
+            # (a giant planet's set SPICE can follow, its channels redrawn as at one time: derotated, the server's; a set
+            # the geometry cache has no times for is drawn as taken, so the page draws it as before: test_eye_local)
+            server.append(m)
         if not got and s != held_of([fr[2] for fr in u["frames"]], m, not_shown, holds(tile_of, not_shown)):
             step[str(m)] = s
     dhow = p["display_scale"].get("detail_how") or {}
