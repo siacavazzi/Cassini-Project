@@ -8539,11 +8539,13 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
-        if edges:
-            shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
-            how = (f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
-                   if shift is not None else f"edges: {seen}")
+        shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel) if edges else (None, None)
+        if shift is not None:
+            how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
         else:
+            # (where a clouded body's lit edges say nothing, the pictures: with edges alone, every link of Titan's
+            # haze movies and Saturn's ring movies failed and their frames rode SPICE's smoothed path, 4 to 21 px hops)
+            seen = None
             shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                      around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is not None and math.hypot(*shift) <= believed:
@@ -8741,8 +8743,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # 11 px a frame in C24JU 1X2NITE008 and the chain followed them, the movie snapping back where it broke
     # steady11 (past #610's steady9): a small target's square matched only where both pictures show the target, else the whole of both, its
     # stars (_shift_onto): Albiorix 129OT OUTERSATS002, never seen in its frames, was matched on its square's noise
-    # steady12: steady9's lit-edge matching off (edges=False): on Titan's haze limb, Saturn's ring movies and Jupiter
-    # every link found no edge and the frames rode SPICE's smoothed path, hopping 4 to 21 px (final spot check 11-22)
+    # steady12: steady9's lit-edge matching where the edges find a match, the pictures where they do not: with edges
+    # alone, Titan's haze, Saturn's ring movies and Jupiter found no edge on any link and the frames rode SPICE's
+    # smoothed path, hopping 4 to 21 px (final spot check 11-22)
     STEADY_FILE = f"steady12k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
@@ -8814,7 +8817,7 @@ def steady_chain(u, cache, p=None):
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made), edges=False)
+                                        steady_rings(u, made), edges=clouded(u))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
