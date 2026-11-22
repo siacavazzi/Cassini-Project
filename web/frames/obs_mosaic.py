@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -109,6 +109,8 @@ MOVIE_FIT = 2.0      # a pass played as a movie shows its whole footprint up to 
                      # follows the frame: each picture the frame as Cassini took it (follow_view)
 MOVIE_MARGIN = 0.15  # of a frame, round a movie's footprint when the geometry cache has none of its frames (pass_boxes)
 CENTRE_MARGIN = 0.2  # of the body's diameter, round its disk in a movie centred on it
+SET_APART = 4.0      # px: the farthest a colour set's channel the pictures placed may move from the others' median move
+CENTRE_FILL = 0.5    # of a view centred on the body that its frames' footprint must cover, or the pass is not centred
 CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep, or the pass is not centred (centre_half)
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
@@ -3585,6 +3587,7 @@ def _colour_filters(u):
 # (which SPICE's shape model puts a pixel or two off on a cratered moon) Dione's 2010 mapping mosaic and Iapetus'
 # drew doubled crater rims (the image benchmark, #506)
 LIMB_REGISTER = 2.0      # px
+LIMB_HAZY = frozenset({"TITAN"})   # bodies whose haze puts each filter's limb at its own height, many px apart
 LIMB_REGISTER_TURN = 0.9  # the least cosine between the two tiles' limb normals for their limbs to be compared
 
 
@@ -3790,6 +3793,14 @@ def _limb_register(u, q, ref, out, crop):
     if l0 is not None and float(np.dot(lq[1], l0[1])) >= LIMB_REGISTER_TURN:
         e = l0[0] - lq[0]
         v = (-e * l0[1][0], -e * l0[1][1])
+        if u["key"][0] in LIMB_HAZY and "spice_offset" in out and abs(e) > abs(off) + LIMB_REGISTER:
+            # (a hazy body's limb (LIMB_HAZY) further off at SPICE's place than at the match: it measures the filter's
+            # own haze height, not its place, and the match stands. Only Titan: on Saturn's ring mosaics the matches
+            # this let stand moved the panels and cut 4% of 2004 RINGMOSAIC's rings off its edges (image bench). 236TI M30R2CLD155's BL1, its limb 5 px out in Titan's blue haze, went
+            # back to SPICE's place 13 px from GRN: a blue rim on one side, yellow on the other)
+            reg = dict(reg, limb_off=round(off, 2), limb_at_spice=round(e, 2))
+            out["registered"] = reg
+            return
         if abs(e) <= LIMB_REGISTER:
             # (SPICE's place where the limbs agree there: JPL's corrected pointing, within a filter's haze of the
             # reference's; moved onto the reference's limb, the filter would take on the reference's haze height)
@@ -8136,7 +8147,7 @@ def _smoothed_path(x0):
     return out
 
 
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None):
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -8146,7 +8157,11 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     are held by several paths. As _chain, no place ends further than the guide's reach from the tile's own SPICE place:
     a tile the solve put past it (a run of frames another moon pulled along together) keeps SPICE's place and its links
     are left out. The pictures are read a window at a time (STEADY_WINDOW tiles and the links before them), so a movie
-    of hundreds of tiles never holds them all. ({n: [x, y]}, how)."""
+    of hundreds of tiles never holds them all. edges: a clouded body's (SURFACE_CLOUDED) tiles are matched on the
+    edges between its lit and dark only (edge_shift: its limb, terminator, ring edges), which stay put on the sky,
+    and never on its clouds, which turn and drift with the planet (Jupiter's 11 px a frame in C24JU 1X2NITE008: the
+    chain followed them and the movie slid, snapping back to SPICE where the chain broke); a pair with no such edge
+    in common is no link. ({n: [x, y]}, how)."""
     import scipy.sparse as sps
     import scipy.sparse.linalg as spla
     tiles = [t for t in made if "offset" in t and os.path.exists(os.path.join(there, f"{t['n']}.png"))]
@@ -8194,10 +8209,18 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
-        shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
-                                 around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
+        if edges:
+            shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
+            how = (f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
+                   if shift is not None else f"edges: {seen}")
+        else:
+            shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
+                                     around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is not None and math.hypot(*shift) <= believed:
             d = (rel[0] - shift[0], rel[1] - shift[1])
+            if edges and (seen or {}).get("normal"):
+                # (one straight edge says only how far across it: along it, the smoothed path's step)
+                d = along_path(d, rel, j, n, seen)
         elif ring is not None and not getattr(ring, "first", False):
             # (frames of the rings the pictures cannot be matched on, the ringlets repeating along the ring: their
             # radial profiles on SPICE's ring plane, matched across the rings only (ring_pair_shift), and along the
@@ -8293,12 +8316,19 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         if not changed:
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
-    linked = {}
+    linked, by_picture = {}, set()
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
+        if not str(how).startswith("rings") and not str(how).endswith("(one line)"):
+            by_picture |= {j, n}
+    # (a tile whose every link is a ring profile's, across the rings only, or one straight edge's (a ring's edge, a
+    # limb's arc too short to bend), its place along them SPICE's smoothed step: "along the rings", so a colour set
+    # does not take that place as the pictures' own, movie_frame. Taken as the channel's own, 2015's ring scan
+    # (rx-saturn15-movie2) drew its A ring's outer edge with a stronger magenta rim, blue 1.4 px off green)
     hows = {n: ("held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
-                else f"linked to {sorted(linked[n])}" if n in linked else "first" if n == order[0] else "linked from later tiles")
+                else (f"linked to {sorted(linked[n])}" + ("" if n in by_picture else " along the rings")) if n in linked
+                else "first" if n == order[0] else "linked from later tiles")
             for n in order}
     return places, hows
 
@@ -8373,7 +8403,10 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady8: another body's disk drawn by its shape toward the target (other_bodies, _limb_toward), and one only
     # over the square's sky round a small target left out of the match, not the match (STEADY_HIDDEN): Enceladus
     # setting behind Saturn (293EN ENCSET001) kept SPICE's jumps on 34 of its 48 frames
-    STEADY_FILE = f"steady8k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady9: a clouded body's frames (SURFACE_CLOUDED) matched on the edges between its lit and dark only
+    # (edge_shift, as its mosaics' pointings are), not on its clouds, which turn and drift: Jupiter's clouds moved
+    # 11 px a frame in C24JU 1X2NITE008 and the chain followed them, the movie snapping back where it broke
+    STEADY_FILE = f"steady9k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -8444,7 +8477,7 @@ def steady_chain(u, cache, p=None):
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made))
+                                        steady_rings(u, made), edges=clouded(u))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
@@ -8462,6 +8495,23 @@ def steady_held(u, cache, p=None):
         with open(path) as fh:
             held = {int(n): xy for n, xy in (json.load(fh).get("held") or {}).items()}
     return held
+
+
+def steady_hows(u, cache, p=None):
+    """{tile n: how}: how pass u's stabilization chain placed each tile (steady_chain's kept "how")."""
+    p = p or plan(u, cache)
+    steady_chain(u, cache, p)
+    path = os.path.join(folder(u, cache), STEADY_FILE)
+    if not os.path.exists(path):
+        return {}
+    with open(path) as fh:
+        return {int(n): str(h) for n, h in (json.load(fh).get("how") or {}).items()}
+
+
+def by_pictures(how):
+    """Whether a tile's stabilized place is the pictures' own: matched to other tiles on the pictures (not only by ring
+    profiles across the rings, and not held on SPICE's smoothed path for want of a match)."""
+    return how is not None and (how == "first" or how.startswith("linked")) and not how.endswith("along the rings")
 
 
 def seen_places(u, made, pic, there):
@@ -8967,6 +9017,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
+            "apart": SET_APART, "own": [by_pictures(hows.get(n)) and not _ring(u) for n in ns]
+            if (hows := steady_hows(u, cache, p)) is not None else None,
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
@@ -9134,7 +9186,15 @@ def centre_half(fp, radius, seen):
     inside = kept(seen, wide)
     if not (inside.mean() >= CENTRE_KEEP and inside.any(1).all()):
         return None
-    return fitted_half(seen, around / 2, wide)
+    half = fitted_half(seen, around / 2, wide)
+    # (a body the frames cut, at their edge: the square round it that keeps the frames is mostly empty, the pictures
+    # in one corner of it (127HE ROTCOLR003's best Helene, 28% of the view). Under CENTRE_FILL of the square holding
+    # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame,
+    # with CENTRE_MARGIN round its disk, stays centred however little of the square the frames fill: the 1999 Moon near
+    # its frame's edge; SPICE's mean radius of Helene fits its frame's corner bare, the moon itself does not)
+    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius * (1 + CENTRE_MARGIN)):
+        return None
+    return half
 
 
 def fitted_half(seen, least, most):
@@ -9159,6 +9219,28 @@ def fitted_half(seen, least, most):
 _g = (np.arange(SEEN_GRID) + 0.5) / SEEN_GRID - 0.5
 SEEN_DISK = (np.add.outer(_g ** 2, _g ** 2) <= 0.25).ravel()   # a frame's seen points within the circle across it
 del _g
+
+
+def covered(seen, half, grid=64):
+    """The share of the square of half side half round the body's centre that the frames (seen, pass_seen: each
+    frame's points, its outline their hull) cover, on a grid x grid raster of it."""
+    cover = np.zeros((grid, grid), np.uint8)
+    k = grid / (2 * half)
+    for pts in seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2):
+        hull = cv2.convexHull(np.round((pts + half) * k * 16).astype(np.int32))
+        cv2.fillConvexPoly(cover, hull, 1, shift=4)
+    return float(cover.mean())
+
+
+def disk_inside(seen, radius):
+    """Whether the body's whole disk (radius, about its centre) is on one of the frames (seen, pass_seen: each
+    frame's points, its outline their hull)."""
+    rim = [(radius * math.cos(a), radius * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 16, endpoint=False)]
+    for pts in seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2):
+        hull = cv2.convexHull(pts.astype(np.float32))
+        if all(cv2.pointPolygonTest(hull, (float(x), float(y)), False) >= 0 for x, y in rim):
+            return True
+    return False
 
 
 def kept(seen, half):
@@ -10491,14 +10573,30 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         own_gain = {}
         bases = {f: own if j == n else tile(u, j, cache, p["display_scale"]) for f, j in got.items()}
         to_white = one_white(list(bases.values()), p["display_scale"])
-        # (the set's one move: the median of its channels' own stabilization moves, so one channel the pictures could
-        # not match, or matched along the ring, moves none of them on its own)
-        # (from each channel's place as steady_places holds it: SPICE's, or the pictures' where seen_places took
-        # them; the page's table has those as its "spice")
+        # (a channel the pictures placed keeps that place: each filter's frame on the target where it was taken, the
+        # camera's drift between the exposures out (003SA 3X3MOVIEA003's ring edges doubled 2 to 3 px when the set
+        # moved as one block). A channel they did not place (held on the smoothed path, or along the rings by their
+        # profiles) moves with the ones they did, by the median of their moves, keeping its place against them as
+        # SPICE has it: on its own it came apart from them, 257DA DAPHNIS001's blue-violet fringe, #602/#606)
+        # (from each channel's place as steady_places holds it: SPICE's after the channels' registration (C8), or the
+        # pictures' where seen_places took them; the page's table has those as its "spice")
         sheld = steady_held(u, cache, p) if places and not track else {}
         anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
-        moves = [(places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
-                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})]
+        hows = steady_hows(u, cache, p) if places and not track else {}
+        # (none in a pass of the rings themselves (_ring): its frames slide along ringlets that repeat, and a match
+        # there is no channel's own place. 2015's ring scan, rx-saturn15-movie2, its channels each at its own match:
+        # a stronger magenta rim on the A ring's outer edge, blue 1.4 px off green)
+        mine = {q["n"] for q in bases.values() if "offset" in q and q.get("n") in (places or {})
+                and by_pictures(hows.get(q["n"]))} if not _ring(u) else set()
+        move = {q["n"]: (places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
+                for q in bases.values() if "offset" in q and q.get("n") in (places or {})}
+        if mine:
+            # (a channel whose own match moved it further from the others' than the camera drifts between exposures
+            # (SET_APART) slid along the scene, not with the camera: it follows the set. 257DA DAPHNIS001's UV3
+            # matched 12 px along the Keeler gap from GRN and IR1, a blue-violet fringe on its edge)
+            mid = np.median(np.array([move[m] for m in mine]), axis=0)
+            mine = {m for m in mine if math.hypot(move[m][0] - mid[0], move[m][1] - mid[1]) <= SET_APART}
+        moves = [move[m] for m in (mine or move)]
         set_shift = (float(np.median([m[0] for m in moves])), float(np.median([m[1] for m in moves]))) \
             if places and not track and len(bases) > 1 and moves else None
         for f, j in got.items():
@@ -10509,12 +10607,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
                             gamma=base.get("gamma", gamma))
             newest[f] = at(base)
             if set_shift is not None and "offset" in base:
-                # (a colour set's channels moved together, by the median of their own stabilization moves: each keeps its
-                # place against the others as SPICE has it (the channels' registration). Each at its own stabilized place, a
-                # channel the pictures could not match went on along the smoothed path while the others followed
-                # their matches, and the channels came apart: 257DA DAPHNIS001's blue-violet fringe along the
-                # Keeler gap's edge, #602)
-                newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
+                # (a channel the pictures did not place moved with the channels they did, keeping its place against
+                # them as the channels' registration has it: on the smoothed path alone it came apart from them,
+                # 257DA DAPHNIS001's blue-violet fringe along the Keeler gap's edge, #602)
+                if base.get("n") not in mine:
+                    newest[f] = dict(newest[f], offset=[anchor(base)[0] + set_shift[0], anchor(base)[1] + set_shift[1]])
             own_gain[f] = base.get("gain")
         used = want
     if used:
