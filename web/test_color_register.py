@@ -208,7 +208,7 @@ class Label:
 
 def drawn(bands, levels, target, cam="ISSWA"):
     iofs = [(np.where(disk, v, 0) + rng.normal(0, 0.0005, (H, H))).astype(np.float32) for v in levels]
-    chans, margin, mix = cal.load_linear([Label(b, target, cam) for b in bands], [np.zeros((H, H, 3), np.uint8)] * len(bands), iofs)
+    chans, margin, mix, _ = cal.load_linear([Label(b, target, cam) for b in bands], [np.zeros((H, H, 3), np.uint8)] * len(bands), iofs)
     return [float(c[disk][:, 0].mean()) for c in cal.tone(chans, margin, mix)]
 
 
@@ -244,7 +244,7 @@ if old_cal is not None:
             labels = [Label(b, target) for b in bands]
             # (under False color: Natural color now draws methane sets as natural color emulation, fix plan C)
             with false_colors(mod):
-                chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])
+                chans, margin, mix = mod.load_linear(labels, [np.zeros((H, H, 3), np.uint8)] * 3, [i.copy() for i in iofs])[:3]
                 got.append((np.asarray(mix).tobytes(), [c.tobytes() for c in mod.tone(chans, margin, mix)]))
         assert got[0] == got[1], (bands, target)
     cal.TOE_NEUTRAL = True
@@ -385,7 +385,7 @@ disk = np.hypot(yy2 - 100, xx2 - 100) < 70
 marks = (np.sin(xx2 / 6.0) > 0.3) & disk
 cb3 = np.where(disk, 0.10 * np.where(marks, 0.92, 1.0), 0).astype(np.float32)
 mt1 = np.where(disk, 0.20, 0).astype(np.float32)
-chans, margin, mix = cal.load_linear([Label("CB3", "TITAN", "ISSNA"), Label("MT1", "TITAN", "ISSNA")],
+chans, margin, mix, _ = cal.load_linear([Label("CB3", "TITAN", "ISSNA"), Label("MT1", "TITAN", "ISSNA")],
                                      [np.zeros((H, H, 3), np.uint8)] * 2, [cb3 + 0, mt1 + 0])
 assert np.allclose(mix, cal.pair_mix("N", ["CB3", "MT1"], "TITAN"))
 out = np.stack([c[..., 0] for c in cal.tone(chans, margin, mix)]).astype(float)   # red, green, blue
