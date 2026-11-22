@@ -1,9 +1,9 @@
-# Image benchmark: 2b8a40912647 against 045e0aeda77b
+# Image benchmark: b80611643989 against 5466830c990c
 
-**NEEDS EYES**. 75 items: 54 identical, 21 changed (20 outside the target), 0 not built.
+**NEEDS EYES**. 80 items: 58 identical, 22 changed (21 outside the target), 0 not built.
 
 
-Built in 52 min (base) and 52 min (candidate). Targets: dione139-mosaic.
+Built in 52 min (base) and 47 min (candidate). Targets: dione139-mosaic.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -51,13 +51,13 @@ Built in 52 min (base) and 52 min (candidate). Targets: dione139-mosaic.
 | telesto-movie | plain | identical | 0/36 | 0.00% |  |  |  |
 | daphnis17-movie | plain | identical | 0/64 | 0.00% |  |  |  |
 | pan17-movie | plain | identical | 0/38 | 0.00% |  |  |  |
-| titan-cloud-mosaic | plain | changed | 2/2 | 7.26% | 255 | mosaic.webp: clipped 1.37% -> 1.59% | the upper-left tiles now blend more evenly with their neighbours (the solved gains); the clipped share rises 1.37% to 1.59% from one small spot at the left notch, where a tiny dark hole is slightly more defined; cloud detail kept (Fable 11-21: slightly better) |
+| titan-cloud-mosaic | plain | changed | 2/2 | 7.26% | 255 | mosaic.webp: clipped 1.37% -> 1.59% | the upper-left tiles blend more evenly with their neighbours (the solved gains). One local loss: at the notch on the left edge about 95 px of the screen picture (a 13 x 9 px patch at x 157-165, y 447-459) that the grown mosaic covered are now uncovered (alpha 250 -> 51), so the notch's small dark hole is a larger hard-edged black block; that block is the clipped-share rise 1.37% -> 1.59%. Composed whole, the tile corner there is not drawn where the grown mosaic drew it; open (Fable 11-22: same, one local regression) |
 | earth-fb-still | plain | identical | 0/1 | 0.00% |  |  |  |
 | enceladus15-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | titan17-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | tossup-ring-108ri | hard | changed | 4/62 | 29.85% | 192 | mosaic_at029.webp: lit area's centre moved 8 px | one of 62 pictures (at029) changes in its lower-left strip, at noise level; the lit centre moves 8 px because that strip's faint levels changed, not the rings (Fable 11-21: same) |
 | titan127-movie | hard | identical | 0/108 | 0.00% |  |  |  |
-| june2004-mosaic | hard | changed | 2/2 | 0.00% | 44 |  | tiny differences only (largest 44 levels on a few pixels); its existing step and seam are unchanged (Fable 11-21: same) |
+| june2004-mosaic | hard | changed | 2/2 | 0.00% | 44 |  | small differences only (largest 44 levels, none over 8 levels on more than 0.01% of pixels); at 1:1 a tile at the upper left of the disc reads a touch darker with a soft vertical edge; its existing step and seam are unchanged (Fable 11-22: slightly worse, low confidence) |
 | saturn-limb-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | enceladus-eye-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | impact293-movie | hard | identical | 0/24 | 0.00% |  |  |  |
@@ -73,8 +73,13 @@ Built in 52 min (base) and 52 min (candidate). Targets: dione139-mosaic.
 | saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
 | saturn08-fullblack-movie | hard | identical | 0/84 | 0.00% |  |  |  |
 | pan09-banding-movie | hard | identical | 0/16 | 0.00% |  |  |  |
+| enceladus144-mosaic | hard | changed | 2/2 | 0.95% | 20 |  | the disc and crescent limb change by a few levels from the solved gains (one small spot on the bright limb, largest 57 levels); plume and tile frame unchanged (Fable 11-22: same) |
 | dione139-mosaic | target | changed | 2/2 | 20.89% | 93 |  | the target: the mid-disc brightness step between the tile rows is clearly softer (a faint trace remains) and the lower step and the darker patch near the right notch are gone; tiles of a balanced mosaic are now solved together with the log gains (held_level), not grown one at a time (Fable 11-21: better, high confidence) |
 | titan059-mosaic | hard | changed | 2/2 | 0.48% | 61 |  | thin changes along tile edges only; the tile tints are a different cause, not this PR's (Fable 11-21: same) |
+| storm13-night-composite | hard | identical | 0/1 | 0.00% |  |  |  |
+| night-washout-composite | hard | identical | 0/1 | 0.00% |  |  |  |
+| night-dark-composite | hard | identical | 0/1 | 0.00% |  |  |  |
+| storm13-night-movie | hard | identical | 0/10 | 0.00% |  |  |  |
 | fring274-movie | hard | identical | 0/172 | 0.00% |  |  |  |
 | npole0908-mosaicmovie | hard | changed | 1/1 | 0.00% | 9 |  | noise-level only (Fable 11-21: same) |
 | encset293-movie | hard | identical | 0/48 | 0.00% |  |  |  |
@@ -87,18 +92,23 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 
 ## Checks
 
-0 regressions, 0 fixed, 11 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+0 regressions, 0 fixed, 16 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
-| plume279-movie | odd_frame | known | 12.2141 | 12.2141 (limit 4.0) | worst 12.2 at frame250.webp (12 of 286 frames over 4.0) |
-| ringmovie04-movie | pointing_jitter | known | 13.8266 | 13.8266 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 13.8 px, largest 19.8 px (39 pairs) |
-| saturn05-movie | channel_registration | known | 10.236 | 10.236 (limit 4.0) | colour along edges past the picture's own: p90 10.24 levels, largest 10.74 (27 colour frames) |
-| daphnis17-movie | odd_frame | known | 118.1544 | 118.1544 (limit 4.0) | worst 118.2 at frame008.webp (2 of 9 frames over 4.0) |
+| plume279-movie | odd_frame | known | 12.1826 | 12.1826 (limit 4.0) | worst 12.2 at frame250.webp (10 of 286 frames over 4.0) |
+| ringmovie04-movie | full_black | known | 25.18 | 25.18 (limit 20.0) | black sky lost at Full: up to 25 points (82% of frame006.webp black at Processed, 57% at Full; 5 of 16 frames over 20) |
+| ringmovie04-movie | pointing_jitter | known | 6.3178 | 6.3178 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.3 px, largest 8.7 px (33 pairs) |
+| daphnis17-movie | odd_frame | known | 118.1355 | 118.1355 (limit 4.0) | worst 118.1 at frame008.webp (2 of 9 frames over 4.0) |
 | impact293-movie | odd_frame | known | 18.4491 | 18.4491 (limit 4.0) | worst 18.4 at frame007.webp (1 of 2 frames over 4.0) |
-| mimas04-movie | channel_registration | known | 54.34 | 54.34 (limit 4.0) | colour along edges past the picture's own: p90 54.34 levels, largest 54.34 (23 colour frames) |
-| mimas04-movie | full_black | known | 25.19 | 25.19 (limit 20.0) | black sky lost at Full: up to 25 points (98% of frame000.webp black at Processed, 73% at Full; 7 of 16 frames over 20) |
-| saturn07-fullblack-movie | full_black | known | 21.26 | 21.26 (limit 20.0) | black sky lost at Full: up to 21 points (72% of frame143.webp black at Processed, 51% at Full; 2 of 16 frames over 20) |
-| pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (6 of 6 frames over 1.0) |
-| fring274-movie | pointing_jitter | known | 6.0402 | 6.0402 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.0 px, largest 136.7 px (152 pairs) |
-| fring039-movie | full_black | known | 21.26 | 21.26 (limit 20.0) | black sky lost at Full: up to 21 points (72% of frame143.webp black at Processed, 51% at Full; 2 of 16 frames over 20) |
+| mimas04-movie | channel_registration | known | 1.29 | 1.29 (limit 0.7) | red or blue channel off green: p90 1.29 px, largest 1.97 px (23 colour frames) |
+| mimas04-movie | full_black | known | 25.17 | 25.17 (limit 20.0) | black sky lost at Full: up to 25 points (98% of frame000.webp black at Processed, 73% at Full; 7 of 16 frames over 20) |
+| saturn07-fullblack-movie | full_black | known | 30.05 | 30.05 (limit 20.0) | black sky lost at Full: up to 30 points (78% of frame029.webp black at Processed, 48% at Full; 16 of 16 frames over 20) |
+| saturn08w-fullblack-movie | full_black | known | 22.01 | 22.01 (limit 20.0) | black sky lost at Full: up to 22 points (56% of frame002.webp black at Processed, 34% at Full; 2 of 16 frames over 20) |
+| saturn08-fullblack-movie | full_black | known | 21.9 | 21.9 (limit 20.0) | black sky lost at Full: up to 22 points (74% of frame025.webp black at Processed, 52% at Full; 3 of 16 frames over 20) |
+| pan09-banding-movie | full_banding | known | 7.239 | 7.239 (limit 1.0) | Full sky banding up to 7.24 levels where Processed has black sky (5 of 5 frames over 1.0) |
+| night-dark-composite | gray_colour | known | 1.0 | 1.0 (limit 0.0) | 100% of 1 pictures gray (median chroma 0.000); the pipeline says: not aligned |
+| fring274-movie | full_black | known | 32.91 | 32.91 (limit 20.0) | black sky lost at Full: up to 33 points (64% of frame023.webp black at Processed, 31% at Full; 10 of 16 frames over 20) |
+| fring274-movie | pointing_jitter | known | 5.8112 | 5.8112 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.8 px, largest 136.4 px (151 pairs) |
+| fring039-movie | full_black | known | 30.05 | 30.05 (limit 20.0) | black sky lost at Full: up to 30 points (78% of frame029.webp black at Processed, 48% at Full; 16 of 16 frames over 20) |
+| titancloud264-movie | channel_registration | known | 1.36 | 1.36 (limit 0.7) | red or blue channel off green: p90 1.36 px, largest 1.38 px (52 colour frames) |
