@@ -16,6 +16,7 @@ import data_source as ds
 import numpy as np
 import mosaic as mo
 import cv2
+import math
 import datetime
 import multiprocessing
 import os
@@ -451,8 +452,14 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     # a clouded body's channels each redrawn as the body had turned at the reference's time (derotation_fields)
     fields = derotation_fields(lbls, ref, (linear[0] if linear is not None else imgs)[ref].shape[:2]) \
         if align and len(lbls) > 1 else None
+    gain = None
     if fields:
-        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.99, m)
+        # (not a set whose clouds the redrawing would hardly change: it only loses the strips at the frame's edges)
+        gain = derotation_gain(fields, linear[0] if linear is not None else imgs)
+        if gain < DEROTATE_GAIN:
+            fields = None
+    if fields:
+        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.99, m, f[3])
                  for f, m in zip(fields, masks)]
         if linear is not None:
             linear = (derotated(fields, linear[0]),) + tuple(linear[1:])
@@ -562,6 +569,9 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
     if warps and any(w is not None for w in warps):
         # each channel's scale and turn onto the reference (SPICE's range and twist), None where it needed none
         report["warped"] = [None if w is None else [round(w[2], 4), round(w[3], 3)] for w in warps]
+    if gain is not None:
+        # how much the redrawing changes the set's clouds (derotation_gain): under DEROTATE_GAIN, left as taken
+        report["derotation_gain"] = round(gain, 4)
     if fields:
         # each channel's most move (px) as its disk was redrawn as at the reference's time, None where it was not
         report["derotated"] = [None if f is None else f[3] for f in fields]
@@ -1472,9 +1482,16 @@ def derotation_fields(lbls, ref, shape):
     taken (the reference, DEROTATE_LEAST, SURFACE_STRETCH); None for the whole set when it is not derotated."""
     try:
         return _derotation_fields(lbls, ref, shape)
+    except KernelsMissing:
+        raise
     except Exception as e:   # noqa: BLE001  (SPICE can't follow the set: its channels stay as taken)
-        print(f"no derotation: {type(e).__name__}: {e}"[:200])
+        print(f"DEROTATION FAILED, channels as taken: {type(e).__name__}: {e}"[:200])
         return None
+
+
+class KernelsMissing(RuntimeError):
+    """A year's SPICE kernels could not be loaded for derotation: never draw a giant planet's colour set without them
+    (it would be served fringed, as if it had been derotated)."""
 
 
 def _derotation_fields(lbls, ref, shape):
@@ -1496,7 +1513,7 @@ def _derotation_fields(lbls, ref, shape):
     out = []
     with spice_lock:
         if not _year_kernels(lbls[ref]):
-            return None
+            raise KernelsMissing(f"no SPICE kernels for {lbls[ref].info['IMAGE_TIME']}")
         for j, g in enumerate(geoms):
             if j == ref:
                 out.append(None)
@@ -1518,34 +1535,64 @@ def _derotation_fields(lbls, ref, shape):
     return out if any(f is not None for f in out) else None
 
 
-def _squared(new, old):
-    """A derotated channel's valid pixels (new; old: before) with each side of the frame cut straight where the
-    redrawing drew from past it: the disk's motion changes along the edge, and Saturn's rings in front of it do not
-    move, so the edge it left came out slanted, stepped, with the ring's line poking past it into the black (Fable's
-    blind check of saturn07-deck, 11-21). Each side cut where 95% of its lines are left (the corners of the sides
-    beside it, where those lose their strips, are the other 5%)."""
-    out = new.copy()
-    for axis in (0, 1):
-        for flip in (False, True):
-            def firsts(m):
-                m = m if axis == 1 else m.T
-                m = m[:, ::-1] if flip else m
-                # (over the lines mostly valid: a line across the edge's own strip, the ring's alone, is not one)
-                has = m.mean(axis=1) >= 0.5
-                return np.argmax(m, axis=1)[has]
-            a, b = firsts(new), firsts(old)
-            if not len(a) or not len(b):
-                continue
-            cut, was = int(np.percentile(a, 95)), int(np.percentile(b, 95))
-            if cut <= was:
-                continue
-            n = new.shape[1] if axis == 1 else new.shape[0]
-            sl = slice(n - cut, n) if flip else slice(0, cut)
-            if axis == 1:
-                out[:, sl] = False
-            else:
-                out[sl, :] = False
+def _squared(new, old, reach):
+    """A derotated channel's valid pixels (new; old: before) cut to a rectangle where the redrawing drew from past the
+    frame's edge: the disk's motion changes along the edge, and Saturn's rings in front of it do not move, so the edge
+    it left came out slanted and stepped, with the ring's line poking past it into the black (Fable's blind checks of
+    saturn07-deck and the Jupiter portrait, 11-21). The pixels so lost are those of old not in new within reach (the
+    field's most move, px) of the old picture's bounds (a lost line inside the frame, moved a little, is not one); the
+    rectangle is old's bounds, each side cut just past the lost pixels within reach of it that are still inside, the
+    side with most of them first: straight sides, and nothing cut past what the redrawing lost but the corners of
+    those lines."""
+    lost = old & ~new
+    if not lost.any() or not old.any():
+        return new
+    ys, xs = np.nonzero(old)
+    top, bottom, left, right = int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
+    r = int(math.ceil(reach)) + 2
+    by, bx = np.nonzero(lost)
+    depth = np.stack([by - top, bottom - 1 - by, bx - left, right - 1 - bx])
+    # (the side with the most lost pixels within reach first, cut just past them; then the next side, over what is
+    # still inside: a strip's corners are its own side's, not the side beside it)
+    box = [top, bottom, left, right]
+    for k in sorted(range(4), key=lambda k: -int((depth[k] < r).sum())):
+        inside = (by >= box[0]) & (by < box[1]) & (bx >= box[2]) & (bx < box[3]) & (depth[k] < r)
+        if inside.any():
+            c = int(depth[k][inside].max()) + 1
+            box[k] = (box[k] + c) if k in (0, 2) else ((top, bottom, left, right)[k] - c)
+    top, bottom, left, right = box
+    if bottom <= top or right <= left:
+        return new
+    out = np.zeros_like(new)
+    out[top:bottom, left:right] = new[top:bottom, left:right]
     return out
+
+
+DEROTATE_GAIN = 0.007   # (derotation_gain) the least a set's redrawing changes its clouds for it to be redrawn
+
+
+def derotation_gain(fields, planes):
+    """How much a set's redrawing would change its clouds, the most of any channel with a field: over its lit disk,
+    the mean change of its cloud-scale detail (a band-pass, 1 to 8 px), against the disk's median light (how strong
+    the change is), times that change against the detail's own mean (how much the detail moves off itself rather than
+    along itself). A banded, featureless deck turns along its own bands, and redrawn it only lost a 20 px strip at the
+    frame's edge (saturn07-deck, 2007: 0.0036, deck2 0.0024); the 2004 approach set moves 1 to 2 px (0.0002), the
+    hexagon set 0.0040 (Fable: the same either way). The 2011 storm reads 0.0117 and Jupiter 2000 0.0209, both
+    clearly better redrawn (measured on the calibrated channels, 11-22)."""
+    most = 0.0
+    for f, plane in zip(fields, planes):
+        if f is None or plane is None:
+            continue
+        im = (plane if plane.ndim == 2 else plane[..., 0]).astype(np.float32)
+        detail = cv2.GaussianBlur(im, (0, 0), 1.0) - cv2.GaussianBlur(im, (0, 0), 8)
+        on = cv2.resize(f[2], im.shape[::-1], interpolation=cv2.INTER_NEAREST) > 0
+        if not on.any():
+            continue
+        lit = max(float(np.median(im[on])), 1e-9)
+        moved = derotated([f], [detail])[0]
+        change = float(np.abs(moved - detail)[on].mean())
+        most = max(most, (change / lit) * (change / max(float(np.abs(detail)[on].mean()), 1e-9)))
+    return most
 
 
 def derotated(fields, planes):
