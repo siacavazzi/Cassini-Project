@@ -1,0 +1,6 @@
+{
+ "storm13-night-composite": "the target: the 2013 storm crescent's night side (no sky) goes from a lifted gray (median about 74 of 255) to a dim ringshine (about 45); the crescent, the storm and the ring shadows are unchanged; ringshine arcs kept (taste call 31, Fable: better)",
+ "night-washout-composite": "the target: the washed-out gray night side (median about 85) goes to a dim ringshine (about 44); the lit crescent unchanged (taste call 31, Fable: better)",
+ "night-dark-composite": "the guard: a night side already drawn near black (median 6) is identical; its faint glow and stars kept (NIGHT_LIFTED)",
+ "storm13-night-movie": "the storm crescent's movie: identical, its night side already black (the pass's black is set on the pass's sky), so movies need no change"
+}

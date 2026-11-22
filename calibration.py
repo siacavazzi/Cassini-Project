@@ -1106,6 +1106,50 @@ SPIKE = 6.0          # balanced composites: a one-channel spike this many times 
 STREAK = 7           # balanced composites: in the sky, one-channel streaks (a cosmic ray's track) narrower than this many
                      # pixels are cleaned too (_clean_streaks)
 STREAK_BODY = 2000    # _clean_streaks: a patch of this many pixels not sky is a body, and the sky within 2 STREAK px of it is left
+NIGHT_TARGETS = ("SATURN",)   # night_black: the bodies whose night side ringshine lights
+NIGHT_LIT = 0.25      # ... of white (over 15 px): the lit crescent; a frame whose crescent covers at most NIGHT_LIT_MOST
+NIGHT_LIT_MOST = 0.3  # ... of it,
+NIGHT_DIM = 0.1       # ... and whose dim part (under this of white) covers at least NIGHT_DIM_LEAST of it, is a night side
+NIGHT_DIM_LEAST = 0.5
+NIGHT_CODES = {"SA": "SATURN"}   # night_target: an observation's target code (ISS_196SA_STORMW014_RIDER) for its body
+NIGHT_LIFTED = 0.02   # ... and whose night side the picture draws lifted (its median at least this of white over the black
+                      # it has): one drawn near black already (W1738173795, 5 of 255) keeps its faint glow and stars, which
+                      # a black at its night side's median took to pure black
+NIGHT_KEEP = 0.3      # ... drawn with its black at (1 - NIGHT_KEEP) of the dim part's median: the ringshine stays, a little
+
+
+"""
+The black (a share of white, as load_linear's margin) of a balanced picture with no sky of Saturn's night side: a
+frame the lit crescent covers little of (NIGHT_LIT_MOST) and its dim night side most of (NIGHT_DIM_LEAST), taken off up
+to (1 - NIGHT_KEEP) of the night side's median, so the ringshine on it stays visible without the gamma lifting it to a
+third of white (taste call 31: 196SA STORMW014's MT3 / CB2 / MT2 set, W1756377010, its night side 3 to 7% of the
+crescent drawn at 64 to 83 of 255 with no sky to set a black on). 0 for anything else: a body's dark terrain in sunlight
+(Iapetus) is not a night side, and only Saturn's is lit by its rings (NIGHT_TARGETS). lum: the picture's brightness
+(white 1, level 0), infos: its frames' labels, margin: the black it has already.
+"""
+def night_target(info):
+    """The body a frame looks at for night_black: its TARGET_NAME, or where that is unknown (a rider's frames: "UNK"),
+    the body its observation's target code names (NIGHT_CODES: 196SA STORMW014's WAC frames)"""
+    name = str(_value(info, "TARGET_NAME", "") or "").strip('"').upper()
+    if name and name != "UNK":
+        return name
+    m = re.match(r"^[A-Z]+_(?:C\d+|\d{3}|\d{2}[A-Z]|000)([A-Z]{2})_", str(_value(info, "OBSERVATION_ID", "") or "").strip('"'))
+    return NIGHT_CODES.get(m.group(1), "") if m else ""
+
+
+def night_black(lum, infos, margin=0.0):
+    if not infos or night_target(infos[0]) not in NIGHT_TARGETS:
+        return 0.0
+    local = cv2.blur(np.asarray(lum, np.float32), (15, 15))
+    dim = local < NIGHT_DIM
+    if (local >= NIGHT_LIT).mean() > NIGHT_LIT_MOST or dim.mean() < NIGHT_DIM_LEAST:
+        return 0.0
+    night = float(np.median(local[dim]))
+    if night - margin < NIGHT_LIFTED:
+        return 0.0
+    return night * (1 - NIGHT_KEEP)
+
+
 SKY_DARK = 99        # balanced composites: this percentile of the dark sky's brightness is below the toe (tone)
 SHOULDER = 0.8       # balanced composites: above this share of white, brightness rolls off softly instead
                      # of clipping (limbs and ring highlights past the white keep their shape)
@@ -2144,7 +2188,8 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         channels = _clean_spikes(channels, sky, false, summing=[summing_of(i) for i in infos])
         if measured:
             channels = _clean_streaks(channels, sky, false)
-    return channels, margin, mix
+    # (and, with no sky, the frames' labels, for tone's night side black: night_black)
+    return channels, margin, mix, (None if measured else infos)
 
 
 """
@@ -2241,7 +2286,7 @@ neutral white.
 still_look = contextvars.ContextVar("still_look", default=None)   # color_image.load_aligned: a Saturn picture's look
 
 
-def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None):
+def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=None, night=None):
     every = None
     if saturated is not None and any(m is not None and m.any() for m in saturated):
         channels, every = fill_saturated(channels, saturated)
@@ -2252,6 +2297,11 @@ def tone(channels, margin, mix=None, shoulder=SHOULDER, gamma=2.2, saturated=Non
     if mix is not None:
         x = apply_mix(mix, x)
     lum = x.mean(axis=0)
+    if night:
+        # a balanced picture with no sky: Saturn's night side's black (night_black: night, its frames' labels), on the
+        # brightness drawn here, after the mix and whatever the set was drawn from (a set drawn grey from one filter
+        # has no mix: W1738173795, its night side at 0.005 where its mixed bands read 0.04, went to pure black)
+        margin = max(margin, night_black(lum, night, margin))
     w = max(margin / 8, min(margin, TOE))
     # how far past the margin the toe starts: 0 for a sky's margin (centred on it), half its width for a floor black
     late = w / 2 * min(max(margin / TOE - 1, 0.0), 1.0) if TOE > 0 else w / 2

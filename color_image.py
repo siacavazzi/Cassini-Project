@@ -520,7 +520,7 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
             # a set drawn grey (a channel not aligned) is every channel the reference's, so no channel fill; a part
             # drawn grey keeps no channel's fill there either (the fill would put a colour back)
             imgs = cal.tone(*_greyed(channels, linear, ref, aligned, why, region),
-                            saturated=None if why and region is None else _saturated_masks(full, region))
+                            saturated=None if why and region is None else _saturated_masks(full, region), night=linear[3] if len(linear) > 3 else None)
             if why and region is not None:
                 imgs = neutral(imgs, region)
         else:
@@ -544,7 +544,7 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
             guide = None
     if linear is not None and guide is None:
         imgs = cal.tone(*_greyed(linear[0], linear, ref, aligned),
-                        saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None)
+                        saturated=_saturated_masks(full) if len(lbls) > 1 and not unaligned(aligned) else None, night=linear[3] if len(linear) > 3 else None)
     grey = unaligned(aligned) or (why == "moved" and region is None)
     if alone and calibrated and not grey and len(imgs) > 1:
         # the classic look's color set: its darkest part neutral (calibration.neutral_display), drawn after it was aligned

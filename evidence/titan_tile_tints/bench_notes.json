@@ -1,0 +1,4 @@
+{
+ "titan059-mosaic": "the target: the pale block at upper left and the gray block over the dark terrain (centre right) were the gray luminance base, tinted to match the colour round it, drawn where visit_frames left a CB3 frame out of its colour visit (taken more than 300 s after its pointing's MT1); with Titan's 4 h span every frame is in a visit and those places are colour. The terminator side reads darker and browner (colour, where the base was lighter). Fable 11-21: better (~80%), no new seams, holes or doubled features, detail kept",
+ "titan-cloud-mosaic": "noise-level changes scattered over the disk (0.05% of pixels moved over 8 levels, largest 30 on a couple of small spots): a few frames that were in the gray base now draw in colour; no visible change in tint, seams or cloud detail"
+}
