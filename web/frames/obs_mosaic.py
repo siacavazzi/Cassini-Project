@@ -8338,7 +8338,8 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
         if edges:
             shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
-            how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" if shift is not None else f"edges: {seen}"
+            how = (f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
+                   if shift is not None else f"edges: {seen}")
         else:
             shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                      around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
@@ -8446,10 +8447,12 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     for k in keep:
         (j, n), _, how = got[k]
         linked.setdefault(n, []).append(j)
-        if not str(how).startswith("rings"):
+        if not str(how).startswith("rings") and not str(how).endswith("(one line)"):
             by_picture |= {j, n}
-    # (a tile whose every link is a ring profile's, across the rings only, its place along them SPICE's smoothed step:
-    # "along the rings", so a colour set does not take that place as the pictures' own, movie_frame)
+    # (a tile whose every link is a ring profile's, across the rings only, or one straight edge's (a ring's edge, a
+    # limb's arc too short to bend), its place along them SPICE's smoothed step: "along the rings", so a colour set
+    # does not take that place as the pictures' own, movie_frame. Taken as the channel's own, 2015's ring scan
+    # (rx-saturn15-movie2) drew its A ring's outer edge with a stronger magenta rim, blue 1.4 px off green)
     hows = {n: ("held from the tile before (no match)" if n in lone else "held from the tile before (past reach)" if n in held
                 else (f"linked to {sorted(linked[n])}" + ("" if n in by_picture else " along the rings")) if n in linked
                 else "first" if n == order[0] else "linked from later tiles")
@@ -9143,7 +9146,8 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             "eye": _eye_recipes(u, p, ns, tiles) if colour and p.get("colour") else None,
             "filters": [fr[2] for fr in u["frames"]], "trail_most": TRAIL,
             "chain": [chain[n] for n in ns], "spice": [held.get(n) or tiles[n]["offset"] for n in ns],
-            "apart": SET_APART, "own": [by_pictures(hows.get(n)) for n in ns] if (hows := steady_hows(u, cache, p)) is not None else None,
+            "apart": SET_APART, "own": [by_pictures(hows.get(n)) and not _ring(u) for n in ns]
+            if (hows := steady_hows(u, cache, p)) is not None else None,
             "box": [tiles[n]["box"] for n in ns], "view": list(rect), "out": OUT, "k": OUT / max(rect[2], rect[3]),
             "colour": bool(p.get("colour")), "most": STEADY_MOST, "detail": sharpens(p["display_scale"]),
             "sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]) * dhow.get("sigma", 1.0),
@@ -9314,9 +9318,10 @@ def centre_half(fp, radius, seen):
     half = fitted_half(seen, around / 2, wide)
     # (a body the frames cut, at their edge: the square round it that keeps the frames is mostly empty, the pictures
     # in one corner of it (127HE ROTCOLR003's best Helene, 28% of the view). Under CENTRE_FILL of the square holding
-    # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame
-    # stays centred however little of the square the frames fill: the 1999 Moon near its frame's edge)
-    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius):
+    # pictures (covered), the view is the footprint's, the body where the frames show it. A body wholly on a frame,
+    # with CENTRE_MARGIN round its disk, stays centred however little of the square the frames fill: the 1999 Moon near
+    # its frame's edge; SPICE's mean radius of Helene fits its frame's corner bare, the moon itself does not)
+    if covered(seen, half) < CENTRE_FILL and not disk_inside(seen, radius * (1 + CENTRE_MARGIN)):
         return None
     return half
 
@@ -10708,8 +10713,11 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         sheld = steady_held(u, cache, p) if places and not track else {}
         anchor = lambda q: sheld.get(q.get("n")) or q["offset"]
         hows = steady_hows(u, cache, p) if places and not track else {}
+        # (none in a pass of the rings themselves (_ring): its frames slide along ringlets that repeat, and a match
+        # there is no channel's own place. 2015's ring scan, rx-saturn15-movie2, its channels each at its own match:
+        # a stronger magenta rim on the A ring's outer edge, blue 1.4 px off green)
         mine = {q["n"] for q in bases.values() if "offset" in q and q.get("n") in (places or {})
-                and by_pictures(hows.get(q["n"]))}
+                and by_pictures(hows.get(q["n"]))} if not _ring(u) else set()
         move = {q["n"]: (places[q["n"]][0] - anchor(q)[0], places[q["n"]][1] - anchor(q)[1])
                 for q in bases.values() if "offset" in q and q.get("n") in (places or {})}
         if mine:
