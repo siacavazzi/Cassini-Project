@@ -2631,12 +2631,13 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         # 279EN plume movie's E ring glow came up as a gray square on some frames and not on the frames black_of raises,
         # and the movie strobed more: odd_frame 14.8 -> 19.9)
         pass_black = out["blacks"][0]
-        out["blacks"] = [max(track_black(track, t), pass_black)]
-        # and the soft toe at least as wide as the raise, so faint light the raised black takes (ring glow, scattered
-        # light) rolls off into it instead of ending at a hard, scalloped edge (Fable, 11-21: saturn08 and the 2004
-        # ring movie's glow cut off at the black)
-        if out["blacks"][0] > pass_black:
-            out["toe"] = max(out.get("toe") or 0.0, TRACK_TOE * (out["blacks"][0] - pass_black))
+        raised = max(track_black(track, t), pass_black)
+        # half of the raise as black, the rest in the toe (TRACK_TOE times the raise wide): what is left of a ring's
+        # sheet, an F ring's skirt, a plume's outer glow and faint stars fades out instead of clipping (review 11-22:
+        # the Full movies cut harder than the stills)
+        out["blacks"] = [pass_black + TRACK_KEEP * (raised - pass_black)]
+        if raised > pass_black:
+            out["toe"] = max(out.get("toe") or 0.0, TRACK_TOE * (raised - pass_black))
         if seen is not None:
             seen["track_black"] = out["blacks"][0]
     long = scale.get("long")
@@ -2792,6 +2793,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
 
 
 TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
+TRACK_KEEP = 0.5   # tile_scale: the share of the track's raise over the pass's black that is black
 TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
 TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
                    # neighbours (an odd number), so one frame's stray light or lost lines do not set the frames round it
