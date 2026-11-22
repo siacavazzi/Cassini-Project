@@ -80,6 +80,16 @@
   {"name": "himalia00-movie", "kind": "pass", "frame": "N1355863292_2", "group": "hard", "watch": "Himalia 2000 (Jupiter flyby): a small moon SPICE places several px off; its stabilization square must find the moon (STEADY_SEEN_PAD 24), not fall back to the stars (pointing_jitter 1.3 on main, 9.9 with an 8 px pad)"},
   {"name": "dione139-mosaic", "kind": "pass", "frame": "N1665974059_1", "group": "hard", "watch": "Dione 2010 colour map (139DI REGMAP001): no brightness step across the moon between tile rows, no green band"},
   {"name": "titan059-mosaic", "kind": "pass", "frame": "N1582413047_1", "group": "hard", "watch": "Titan 2008 CB3/MT1 map (059TI GLOBMAP001): tiles of one brightness and tint"},
-  {"name": "enceladus144-mosaic", "kind": "pass", "frame": "N1675140861_1", "group": "hard", "watch": "Enceladus 2011 plume map (144EN PLMHPHR002): no gray squares under the plume, the jets over black sky"}
+  {"name": "enceladus144-mosaic", "kind": "pass", "frame": "N1675140861_1", "group": "hard", "watch": "Enceladus 2011 plume map (144EN PLMHPHR002): no gray squares under the plume, the jets over black sky"},
+  {"name": "m-janus10-pass", "kind": "pass", "frame": "N1648397319_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: JANUS movie JANUS_ISS_128JA_MUTUALEVE004_PRIME_N_0_r5"},
+  {"name": "rz-saturn12-movie", "kind": "pass", "frame": "N1733625714_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: spot 11-20 movie SATURN_ISS_176SA_AURSTARE002_UVIS_N_0_r100 (49 fr) | KNOWN FAIL"},
+  {"name": "rz-saturn09-movie3", "kind": "pass", "frame": "N1633636904_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: spot 11-20 movie SATURN_ISS_119SU_SWAURPTG007_CAPS_N_0_r100 (97 fr) | KNOWN FAIL"},
+  {"name": "m-pallene06-still", "kind": "still", "frame": "N1523883045_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: PALLENE still ISSNA (CL1,CL2) | KNOWN FAILURE"},
+  {"name": "m-calypso05-still", "kind": "still", "frame": "N1511290086_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: CALYPSO still ISSNA (CL1,CL2) | KNOWN FAILURE"},
+  {"name": "m-polydeuces12-still", "kind": "still", "frame": "N1726540043_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: POLYDEUCES still ISSNA (CL1,CL2) | KNOWN FAILURE"},
+  {"name": "m-siarnaq10-still", "kind": "still", "frame": "N1671700783_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: SIARNAQ still ISSNA (BL1,CL2) | KNOWN FAILURE"},
+  {"name": "m-telesto06-still", "kind": "still", "frame": "W1524686058_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: TELESTO still ISSWA (CL1,CL2) | KNOWN FAILURE"},
+  {"name": "rz-iapetus11-still", "kind": "still", "frame": "N1686229427_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: spot 11-20 still ISSNA (CL1,CL2) IAPETUS | KNOWN FAILURE"},
+  {"name": "aurstare13-movie", "kind": "pass", "frame": "N1740330477_1", "group": "hard", "watch": "182SA AURSTARE001 night side: drawn near white on 7d4edf16"}
  ]
 }
