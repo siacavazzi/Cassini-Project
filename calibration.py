@@ -1143,11 +1143,12 @@ GLOW_IOF = (1e-3, 5e-3)  # balanced, no sky: a picture whose median brightness (
 GLOW_PCT = 50        # or the E ring's glow, stray light, a star field's offset), not a sunlit surface, which is brighter than
                      # GLOW_IOF[1]: its black is its GLOW_PCT percentile, so the sky goes near black and only the glow
                      # brighter than the sky shows; in between, a blend (on a log scale) from the floor black
-GLOW_FINE = (0.07, 0.15)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
+GLOW_FINE = (0.066, 0.1)  # ... but only for smooth light: none of it as the picture's fine structure (the 90th percentile of
                      # its 1.5 px detail, against 8 px, over its median) goes from GLOW_FINE[0] to GLOW_FINE[1], so faint
                      # rings seen at high phase or from their unlit side keep the floor black (glows and star fields measure
                      # under 0.04, rings over 0.15; measured net of the camera's banding and noise, the faint sky round a distant
-                     # moon still measures 0.06-0.065 on its leftover pattern, so the blend starts at 0.07: spot check 11-21)
+                     # moon still measures 0.04-0.065 on its leftover pattern, the equinox shadow's faint ringlets 0.084 (about half its glow black, as main gave it): the
+                     # blend runs between them, spot check and Fable 11-21)
 FINE_NOISE = 0.4     # fine_structure(net): white noise of this spread puts about 0.31 of it (0.4 with 8-bit steps) in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
@@ -2583,7 +2584,6 @@ runs through it when the darkest pixels' top (the cut) is within SKY_SPLIT times
 frame that is noise and stars alone (_noise_only): a faint ring band under one bright ring keeps its cut.
 """
 SKY_CUT = 0.05     # of the 99.9th percentile
-SKY_OFFSET_MOST = 0.25   # ... above the frame's floor, when that floor (an offset left in the sky) is under this share of the top
 SKY_NOISE = 4.0    # the sky's noise times this above its level is sky too, where the cut runs through the noise ...
 SKY_SPLIT = 2.0    # ... (the cut within this many times the noise of the dark pixels' median)
 SKY_FLAT = 0.4     # ... and only on a frame of noise alone: blurred, it varies by at most this times the noise ...
@@ -2606,13 +2606,7 @@ def _noise_only(iof, middle, noise):
 def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
-        top, floor = (float(v) for v in np.percentile(iof, (99.9, 1)))
-        # measured from the frame's floor when the sky has an offset left in it (its 1st percentile over 0 and under
-        # SKY_OFFSET_MOST of the top), as a movie's dark sky is (obs_mosaic._dark_sky): a 2000 s MT3 frame past the dark
-        # model's 1200 s grid kept a flat 0.0058 I/F over its sky, above 5% of its top, so none of it counted as sky and
-        # the whole storm composite was drawn on a dull gray (ISS_196SA_STORMW014_RIDER W1756377010_1, R83/G76/B64)
-        floor = floor if 0.0 < floor <= SKY_OFFSET_MOST * top else 0.0
-        cut = floor + SKY_CUT * (top - floor)
+        cut = SKY_CUT * float(np.percentile(iof, 99.9))
         dark = iof[iof < cut]
         if dark.size >= 1000:
             low, middle = (float(v) for v in np.percentile(dark, (16, 50)))
@@ -2952,7 +2946,7 @@ def sky_levels(images, masks, floor_pct=None):
     return levels, margin
 
 
-GRAIN_SMOOTH = 33    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
+GRAIN_SMOOTH = 65    # sky_grain: the sky less its own mean over this many pixels (of 1024) is its grain
 GRAIN_LEAST = 1000   # ... measured on at least this many sky pixels (else the sky's spread as it is)
 GRAIN_GLOW = 0.5     # ... plus this share of the slow light's spread over it: on the grain alone Saturn's scattered light
                      # came up as a wide glow band past the limb that read as a halo (Fable, 11-21: saturn-limb-still), and Titan's
