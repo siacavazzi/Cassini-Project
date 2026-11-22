@@ -51,6 +51,15 @@ def _deck(contrast, noise, seed=1):
 
 
 def test_flat_clean_deck_spreads():
+    keep = calibration.FLAT_SHARE
+    calibration.FLAT_SHARE = 0.8   # (the rule as taste call 32 would turn it on)
+    try:
+        _test_flat_clean_deck_spreads()
+    finally:
+        calibration.FLAT_SHARE = keep
+
+
+def _test_flat_clean_deck_spreads():
     lum = _deck(0.2, 0.0005)
     lit = np.ones(lum.shape, bool)
     floor, top = (float(v) for v in np.percentile(lum, (calibration.FLOOR_PCT, calibration.WHITE_PCT)))
@@ -63,6 +72,15 @@ def test_flat_clean_deck_spreads():
 
 
 def test_flat_noisy_deck_stretches_less():
+    keep = calibration.FLAT_SHARE
+    calibration.FLAT_SHARE = 0.8   # (the rule as taste call 32 would turn it on)
+    try:
+        _test_flat_noisy_deck_stretches_less()
+    finally:
+        calibration.FLAT_SHARE = keep
+
+
+def _test_flat_noisy_deck_stretches_less():
     clean, noisy = _deck(0.2, 0.0005), _deck(0.2, 0.01)
     got = []
     for lum in (clean, noisy):
