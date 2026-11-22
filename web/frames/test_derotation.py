@@ -65,6 +65,20 @@ def test_squared_corners_belong_to_their_strip():
     assert out[40:, :].all(), "the sides beside it are not cut for the strip's corners"
 
 
+def test_eased_at_edges():
+    h, w = 400, 600
+    gy, gx = np.mgrid[0:h + STEP:STEP, 0:w + STEP:STEP].astype(np.float64)
+    dx = np.full(gx.shape, 12.0, np.float32)            # every place looks 12 px right ...
+    dy = np.where(gy < h / 2, -0.05, 0.05).astype(np.float32)   # ... and a hair up or down
+    ex, ey = ci._eased_at_edges(dx, dy, gx, gy, h, w)
+    inside = gx <= w - 1
+    assert np.all(gx[inside] + ex[inside] <= w - 1 + 1e-6), "never looks past the right edge"
+    assert np.all(ex[gx < w - 1 - 3 * 12] == 12), "the move is whole away from the edge it looks toward"
+    assert np.all(ex[gx < 50] == 12), "the left edge, looked away from, leaves the move whole"
+    assert np.all(np.abs(np.diff(ex, axis=0)) < 1e-6), "a tiny move across the bands does not cut the move along them"
+    assert rp.field_stretch(ex, ey, np.ones_like(ex), STEP) <= om.SURFACE_STRETCH
+
+
 class Label:
     def __init__(self, target):
         self.info = {"TARGET_NAME": target, "IMAGE_TIME": "2011-057T15:45:45"}

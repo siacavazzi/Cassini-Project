@@ -459,7 +459,9 @@ def _load_aligned(paths, hdr=False, scale=None, repeat_window=120, around=None, 
         if gain < DEROTATE_GAIN:
             fields = None
     if fields:
-        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.99, m, f[3])
+        # (a mask redrawn valid where it draws at least half from valid pixels: over 0.99, each lone lost pixel's
+        # Lanczos lobes grew it into a 7 px hole, and the holes near an edge were read as a strip to cut)
+        masks = [m if f is None else _squared(derotated([f], [m.astype(np.float32)])[0] > 0.5, m, f[3])
                  for f, m in zip(fields, masks)]
         if linear is not None:
             linear = (derotated(fields, linear[0]),) + tuple(linear[1:])
@@ -1476,6 +1478,27 @@ def _year_kernels(lbl):
     return True
 
 
+DEROTATE_EDGE_EASE = os.environ.get("CASSINI_DEROTATE_EDGE_EASE", "1") != "0"
+DEROTATE_EDGE_RAMP = 3.0   # (_eased_at_edges) the move eases in over this many times its own length from the frame's edge (a stretch of 1/3, under SURFACE_STRETCH)
+
+
+def _eased_at_edges(dx, dy, gx, gy, h, w):
+    """A derotation field (dx, dy at grid places gx, gy of an h x w frame) eased toward the frame's edges, so the
+    redrawing never looks past the frame: each way (across, down) each place's move is cut to what lies between it and
+    the edge it looks toward, over DEROTATE_EDGE_RAMP times the move's length. Cut where it looked past the frame instead, the channel
+    had nothing there, and the composite lost a straight strip along that side (the 2000 Jupiter portrait's right
+    edge, 15 px black from the limb down, a 1 px step where the channels' strips met; review of #614). Within the
+    ramp the clouds come part of the way to their time, so a faint fringe can be left at the frame's very edge."""
+    room_x = np.where(dx > 0, (w - 1) - gx, gx)
+    room_y = np.where(dy > 0, (h - 1) - gy, gy)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        kx = np.where(np.abs(dx) > 1e-6, np.clip(room_x / (DEROTATE_EDGE_RAMP * np.abs(dx)), 0, 1), 1.0)
+        ky = np.where(np.abs(dy) > 1e-6, np.clip(room_y / (DEROTATE_EDGE_RAMP * np.abs(dy)), 0, 1), 1.0)
+    # (each way on its own: a move along the bands cut for a tiny move across them, at the frame's top or bottom,
+    # jumped from 12 px to none between two grid places, a stretch of 3.2)
+    return (dx * kx).astype(np.float32), (dy * ky).astype(np.float32)
+
+
 def derotation_fields(lbls, ref, shape):
     """For each channel of a set (frames of shape h x w, not yet lined up) whose body turns while it is taken: (dx, dy,
     weight, most px) on DEROTATE_STEP's grid (reproject.spin_field, as at lbls[ref]'s time), or None where it is left as
@@ -1517,6 +1540,8 @@ def _derotation_fields(lbls, ref, shape):
                 out.append(None)
                 continue
             dx, dy, weight = rp.spin_field(g, view, spun, gx, gy)
+            if DEROTATE_EDGE_EASE:
+                dx, dy = _eased_at_edges(dx, dy, gx, gy, h, w)
             on = weight > 0
             most = float(max(np.abs(dx[on]).max(), np.abs(dy[on]).max())) if on.any() else 0.0
             stretch = rp.field_stretch(dx, dy, weight, DEROTATE_STEP)
@@ -1544,6 +1569,15 @@ def _squared(new, old, reach):
     ys, xs = np.nonzero(old)
     top, bottom, left, right = int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
     r = int(math.ceil(reach)) + 2
+    # (only what is lost along the frame's edge: the lost pixels joined to old's bounds; a lone lost pixel near the
+    # edge, a hot pixel or a dropped one moved with the picture, is no strip)
+    count, label = cv2.connectedComponents(lost.astype(np.uint8), connectivity=8)
+    rim = np.zeros_like(lost)
+    rim[top:top + 2, :] = rim[bottom - 2:bottom, :] = rim[:, left:left + 2] = rim[:, right - 2:right] = True
+    edge = np.unique(label[rim & lost])
+    lost = np.isin(label, edge[edge > 0])
+    if not lost.any():
+        return new
     by, bx = np.nonzero(lost)
     depth = np.stack([by - top, bottom - 1 - by, bx - left, right - 1 - bx])
     # (the side with the most lost pixels within reach first, cut just past them; then the next side, over what is
