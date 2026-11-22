@@ -95,7 +95,12 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v158", "raw": "obs-v141", "eye": "obs-v158-eye", "false": "obs-v158-false", "classic": "obs-v127-classic"}   # v158/v141/v127 (numbered past #610): a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611); v156/v139/v125: a giant planet's colour set as at one time: each channel redrawn as SPICE turns the body to the set's time (derotation: Saturn's 2011 storm fringes; numbered past #608, #611, #612, #615, #616); v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v158", "raw": "obs-v141", "eye": "obs-v158-eye", "false": "obs-v158-false", "classic": "obs-v127-classic"}   # v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
+# before: v157/v140/v126 (numbered past #608, #611, #614): a small target's square matched only where both pictures show it (Albiorix 129OT's star hops); a tinted movie frame's brightness matched over what is lit, not the sky (Jupiter C23JU W_10's white, gray and yellow flips); a frame unfit or of a held band with no set over it shows what the frame before shows (170SA WIND5HR005's 85 px hop back and near-black MT3); a movie's lone first or last frames at another pointing are passes of their own (289SA AURSTARE001's white flash); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# before: v156/v139/v125: a giant planet's colour set as at one time: each channel redrawn as SPICE turns the body to the set's time (derotation: Saturn's 2011 storm fringes; numbered past #608, #611, #612, #615, #616); v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# before: v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# before: v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# before: v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -115,6 +120,7 @@ CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep,
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
+WHITE_EACH = 99.5    # pass_scale: a movie's white is at least each frame's this percentile (less its black)
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
 LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
 LAP_OVERLAP = 0.6    # ... when the two footprints share at least this much (area both cover / either covers)
@@ -710,6 +716,9 @@ def _retargets(u):
         lo, hi = np.minimum.accumulate(xy), np.maximum.accumulate(xy)   # the frames up to each one
         rlo, rhi = np.minimum.accumulate(xy[::-1])[::-1], np.maximum.accumulate(xy[::-1])[::-1]   # ... and from it on
         cuts = [i + 1 for i in range(len(pts) - 1) if ((rlo[i + 1] - hi[i] >= FRAME) | (lo[i] - rhi[i + 1] >= FRAME)).any()]
+        # (and each piece's own lone ends: a piece the cut above ends can end on a frame at another pointing too)
+        bounds = [0] + cuts + [len(pts)]
+        cuts = sorted(set(cuts) | {a + c for a, b in zip(bounds, bounds[1:]) for c in _lone_ends(xy[a:b])})
     else:
         # a mosaic, frame by frame (the frames before and after a cut each round the other's boxes, 282RI's third
         # strip between the first two): the latest frame each frame's footprint comes within ISLAND_GAP of
@@ -746,6 +755,36 @@ def _retargets(u):
         if any(v["kind"] not in ("mosaic", "mosaic_movie") for v in pieces):
             return [u]
     return pieces
+
+
+LONE_END = 2     # frames: (_lone_ends) at most this many at a movie's start or end, at another pointing, are cut off it
+LONE_LOOK = 8    # ... when they touch none of this many frames on the movie's side of the jump
+
+
+def _lone_ends(xy):
+    """(_retargets) Where to cut a movie (indexes into xy, as _retargets' cuts) so that its first or last frames, at
+    most LONE_END of them, taken at another pointing than the frames beside them (the jump between them a frame or
+    more, their footprints apart) and touching none of the LONE_LOOK frames on the other side, are a pass of their own.
+    units cuts a long stare where Cassini's distance changed by ZOOM, wherever that falls, so a pass can open on the last
+    frame of the stare before it: 289SA AURSTARE001 N_3 opened on a 68 s frame of the lit limb 6,500 px from its aurora
+    stare, a white flash, and ended on one 2,700 px off. A movie that goes back and forth between two places touches its
+    first place again within a few frames and is not cut."""
+    n = len(xy)
+    if n < 2 * LONE_END + 2:
+        return []
+    apart = lambda a, b: bool((np.abs(xy[a] - xy[b]) >= FRAME).any())
+    cuts = []
+    for i in range(LONE_END):
+        if apart(i, i + 1):
+            if all(apart(a, b) for a in range(i + 1) for b in range(i + 1, min(n, i + 1 + LONE_LOOK))):
+                cuts.append(i + 1)
+            break
+    for i in range(n - 1, n - 1 - LONE_END, -1):
+        if apart(i - 1, i):
+            if all(apart(a, b) for a in range(i, n) for b in range(max(0, i - LONE_LOOK), i)):
+                cuts.append(i)
+            break
+    return cuts
 
 
 def _island(xy, pics):
@@ -3171,6 +3210,21 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     if calibration.look() == "balanced":
         blacks = undrawn_blacks(blacks, drawn, {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), UNDRAWN_TOP))
                                                 for f, iofs in by.items()})
+    # a movie's white at least each of its frames' WHITE_EACH percentile, so no frame clips over (100 - WHITE_EACH)% of
+    # itself: the pass's percentile is over all its frames pooled, and a movie that brightens as it goes (a stare on
+    # Saturn's night side as the ring-shine grows, 289SA AURSTARE001: its median rose tenfold) had its last frames' aurora
+    # clipped flat over 3% of the picture. Not from a frame exposed LONG_EXPOSURE times the pass's median (its runs of long
+    # exposures have their own white, _long_white) or one the camera saturated over OVER_LEAST of it (its own white is
+    # the camera's limit, not the scene's)
+    if u.get("movie") and white > 0:
+        exps = [g[2] for g in read_all if g is not None and g[2]]
+        mid = float(np.median(exps)) if exps else None
+        for fr, g in zip(frames, read_all):
+            if g is None or fr[2] not in blacks or sat_share.get(fr[1], 0.0) >= OVER_LEAST:
+                continue
+            if mid and g[2] and g[2] >= LONG_EXPOSURE * mid:
+                continue
+            white = max(white, float(np.percentile(g[0], WHITE_EACH)) - blacks[fr[2]])
     # a ring pass's white has headroom (RING_HEADROOM): since CISSCAL's hot pixel and cosmic ray repair (#153) its 99.9th
     # percentile is the brightest real ringlet, not a defect over it, and the rings drew ~15% brighter than before (124RI,
     # 239RI, 111RI movies: lit median 175 of 255 before, 202 after; 180 at 1.4). Moons' passes are not brighter than
@@ -4073,6 +4127,22 @@ def _shift_onto(q, ref, at_q, t, crop, at_t, within=None, sure=None, around=None
             masks = [m & ~out for m in masks]
             if min(int(m.sum()) for m in masks) < 32 * 32:
                 return None, "other body"
+    if kept is not None and where.get("cut"):
+        # the square round a small target is matched only where both pictures show the target: STEADY_SEEN_LEAST pixels
+        # lit (STEADY_SEEN_LEVEL) within STEADY_SEEN_PAD of its disk. A moon the frames never show (Albiorix in 129OT
+        # OUTERSATS002, a fraction of a pixel and under the sky's noise) left a square of sky and noise, which the
+        # alignment matched anyway, and the stars round it hopped 10 to 40 px from frame to frame. Where it is not seen
+        # the two are matched over the whole of what they share instead (other bodies still left out), the stars that
+        # pointing is reckoned from
+        h, w = masks[0].shape
+        yy, xx = np.mgrid[0:h, 0:w]
+        cx, cy, r = kept
+        near = (xx + 0.5 + where["x0"] - cx) ** 2 + (yy + 0.5 + where["y0"] - cy) ** 2 <= (r + STEADY_SEEN_PAD) ** 2
+        seen = all(int(((i.max(axis=2) if i.ndim == 3 else i)[near & m] >= STEADY_SEEN_LEVEL).sum()) >= STEADY_SEEN_LEAST
+                   for i, m in zip(imgs, masks))
+        if not seen:
+            shift, how = _shift_onto(q, ref, at_q, t, crop, at_t, within, sure, None, holes, None)
+            return shift, (f"target not seen; whole: {how}" if how else how)
     if within is not None:
         # only where both tiles have picture, well inside each: the same ground in both
         k = np.ones((2 * REGISTER_INSET + 1, 2 * REGISTER_INSET + 1), np.uint8)
@@ -7468,6 +7538,10 @@ CLIP_REACH = 1 / 16   # (colour_picture) of the picture's side: how far round a 
 
 
 TINT_LIT = 0.1      # of the bright end: lit pixels, where a tinted frame's brightness match and mean hue are measured
+TINT_LIT_LEVEL = 16  # display levels (LIT_LEVEL): the bright end above is measured over pixels this bright in the frame or
+#                      the set, not over the overlap's sky
+TINT_TOP_PCT = 99.5  # (tinted_frame) a brightness match takes the frame's lit pixels up to this percentile no further than white
+TINT_HUE_LEAST = 16  # lit pixels: fewer than LUM_MATCH_MIN give no brightness match; this many still give the set's hue
 TINT_CLIP = 200     # display levels: from here up to CLIP_FROM a tinted frame eases over to the set's own picture (the
 #                     shoulder squeezes a frame's last levels before it clips: Saturn behind the 2012 Titan transit)
 TINT_HUE = (0.6, 1.6)   # how far a pixel's hue strays from the set's mean, per channel: a set's colour fringes (a body
@@ -7567,7 +7641,7 @@ def _onto_frame(colour, grey):
                           borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
 
-def tinted_frame(colour, grey, gamma=2.2, same=False):
+def tinted_frame(colour, grey, gamma=2.2, same=False, body=None, speck=False):
     """A movie frame's own picture (grey: RGBA, its first channel the frame on the pass's display scale) drawn in the
     colour of a colour set (colour: colour_picture's RGBA on the same canvas): in linear light, the set's hue (each
     channel over its luminance) times the frame's brightness, brought to the set's over the lit part both cover. Where
@@ -7596,18 +7670,46 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     # (C23RI RMOV001 frame 59, 2026-11-16))
     clipped = near >= 1
     both = (ca > 0.99) & (ga > 0.99) & ~clipped
-    top_y = float(np.percentile(y[both], 99)) if both.any() else 0.0
-    top_g = float(np.percentile(g[both], 99)) if both.any() else 0.0
-    lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g)
+    # the bright end of what is lit in either picture (TINT_LIT_LEVEL and up), not of the whole overlap: where the body
+    # is under 1% of the picture (Jupiter 80 px across a cruise WAC movie, a moon a few px across) the overlap's 99th
+    # percentile is sky, 0 once black is taken off, so every pixel over 0 counted as lit and the brightness match was
+    # the sky's noise against the set's, at LUM_MATCH's end: C23JU 6ATM2X2B037 W_10 went blown white, gray and yellow
+    # from frame to frame on the same set and the same gray frame
+    up = both & ((grey[..., 0] >= TINT_LIT_LEVEL) | (colour[..., :3].max(axis=2) >= TINT_LIT_LEVEL))
+    top_y = float(np.percentile(y[up], 99)) if up.any() else 0.0
+    top_g = float(np.percentile(g[up], 99)) if up.any() else 0.0
+    lit = both & (y > TINT_LIT * top_y) & (g > TINT_LIT * top_g) if top_y > 0 and top_g > 0 else np.zeros_like(both)
     if lit.sum() >= LUM_MATCH_MIN and np.median(g[lit]) > 0:
         match = float(np.median(y[lit]) / np.median(g[lit]))
         hue = np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0)
     else:
-        match = float(np.median(y[both]) / max(np.median(g[both]), 1e-6)) if both.sum() >= LUM_MATCH_MIN else 1.0
-        hue = np.ones(3, np.float32)
+        # (too little lit to measure a match on, a speck: the frame's own brightness on the pass's one scale, in the
+        # set's hue where it has a few lit pixels; never a match of the two pictures' sky)
+        match = 1.0
+        hue = (np.median(rgb[lit] / np.maximum(y[lit], 1e-6)[:, None], axis=0) if lit.sum() >= TINT_HUE_LEAST
+               else np.ones(3, np.float32))
+    if body is not None and not speck:
+        # body: the target's disk on the picture (movie_frame). The set's mean hue is the body's, measured on it, not on
+        # the glare or stray light round it: each channel's own sky black takes a different share of a veil off (Mimas
+        # 2004, 000OT TIMIIA001: the glare drew red 27, green 1, blue 5), so its hue is no colour of anything. (The
+        # brightness match stays on all that is lit: on the body alone Methone's 166ME frames were brought up to clip.)
+        on = lit & body
+        if on.sum() >= TINT_HUE_LEAST:
+            hue = np.median(rgb[on] / np.maximum(y[on], 1e-6)[:, None], axis=0)
     # (same: the frame was taken with the set, the same moment, so its brightness is brought to the set's whole; a frame
     # further off only within TINT_MATCH)
     match = float(np.clip(match, *((1 / LUM_MATCH[1], LUM_MATCH[1]) if same else TINT_MATCH)))
+    if match > 1.0 and up.any():
+        # (and never past where the frame's own lit top, TINT_TOP_PCT of it, reaches white: on a small body the set's
+        # brightness is its few lit pixels, and Methone's 166ME clear frames were brought up 1.4 times, the moon's core
+        # flat white over 3% of the picture)
+        top = float(np.percentile(g[up], TINT_TOP_PCT))
+        if top > 0:
+            match = max(1.0, min(match, 1.0 / top))
+    # speck: a target under LUM_MATCH_MIN pixels of the picture (its channels a few px apart, each a dot) gives the frame
+    # no hue at all: drawn in gray, its brightness matched as any other
+    if speck:
+        hue = np.ones(3, np.float32)
     own = rgb / np.maximum(y, 1e-6)[..., None]
     # how far a pixel's hue strays from the set's mean, its largest per channel: past TINT_TRUST it fades to the mean,
     # gone at TINT_HUE (a channel lit where the others are not, the set's channels apart on a limb against the frame's
@@ -7625,6 +7727,8 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
     frame_lit = np.clip(g / max(TINT_DARK * top_g, 1e-6), 0, 1)[..., None]
     # (and only where the frame itself is lit: its dark sky takes no hue from the set's cosmic rays and hot pixels)
     w = (seen * trust)[..., None] * frame_lit
+    if speck:
+        w = np.zeros_like(w)   # (a speck: gray, no hue of the set's at any pixel)
     rest = hue[None, None, :] * frame_lit + (1 - frame_lit)
     h = own * w + rest * (1 - w)
     out = np.clip(h * (g * match)[..., None], 0, 1)
@@ -7662,6 +7766,9 @@ def tinted_frame(colour, grey, gamma=2.2, same=False):
         # misregistration in, a lime rim round Epimetheus' clipped clear frames, 259EP EPIMETHEU001)
         fill = np.clip(h * (y * local)[..., None], 0, 1)
         out = out * (1 - clip[..., None]) + fill * clip[..., None]
+    if speck:
+        # (gray: the clipped fill above took the set's colours, a speck's channels apart)
+        out = np.repeat((out @ np.asarray([0.2126, 0.7152, 0.0722], np.float32))[..., None], 3, axis=2)
     rgb8 = (calibration.encode(out, gamma) * 255 + 0.5).astype(np.uint8)
     return np.dstack([rgb8, grey[..., 3]])
 
@@ -8607,6 +8714,9 @@ STEADY_REACH = image_correction.FIT_REACH   # px: the furthest a stabilized tile
                       # is 3 to 5 px off, 27 to 30 at worst between a set's filters); a match further off followed
                       # something else that moves, another moon crossing the frame (Sam 2026-11-04)
 STEADY_PAD = 4        # px round another body's disk left out of a stabilization match (steady_chain)
+STEADY_SEEN_PAD = 24   # px round a small target's disk where a stabilization match looks for it in both pictures (_shift_onto)
+STEADY_SEEN_LEVEL = 16   # display levels (LIT_LEVEL): ... and what is lit there
+STEADY_SEEN_LEAST = 3    # px: ... this many of them (a hot pixel is one); fewer in either picture, the whole of both is matched
 STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STEADY_PAD round it) and a small target's
                       # stabilization match is not made (_shift_onto); less, and only that body is left out of the match
 STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
@@ -8629,7 +8739,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady9: a clouded body's frames (SURFACE_CLOUDED) matched on the edges between its lit and dark only
     # (edge_shift, as its mosaics' pointings are), not on its clouds, which turn and drift: Jupiter's clouds moved
     # 11 px a frame in C24JU 1X2NITE008 and the chain followed them, the movie snapping back where it broke
-    STEADY_FILE = f"steady9k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady11 (past #610's steady9): a small target's square matched only where both pictures show the target, else the whole of both, its
+    # stars (_shift_onto): Albiorix 129OT OUTERSATS002, never seen in its frames, was matched on its square's noise
+    STEADY_FILE = f"steady11k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -9200,7 +9312,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
     fp = movie_footprint(u, cache, p)
     seen = pass_seen(u) if centre else None
     ns = sorted(chain)
-    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen)):
+    if follows(fp, movie_rect(fp, {"offset": (0.0, 0.0)}, radius, centre, seen), _inside_body(u)):
         return {"local": False}   # (a view following the frame: the server draws it, follow_view)
     held = steady_held(u, cache, p)
     tiles = {n: tile(u, n, cache, p["display_scale"]) for n in ns}
@@ -9255,7 +9367,7 @@ def _steady_table(u, n, cache, centre=True, colour=False):
             **({"base": {"sigma": DETAIL_SIGMA * FRAME * OUT / max(rect[2], rect[3]), "amount": DETAIL}}
                if dhow.get("lit") and p["display_scale"].get("detail_base") else {}),
             **({"disk": [-rect[0] / rect[2], -rect[1] / rect[3], radius / rect[2]]}
-               if dhow.get("lit") and radius and not follows(fp, rect) else {}),
+               if dhow.get("lit") and radius and not follows(fp, rect, _inside_body(u)) else {}),
             **({"headroom": p["display_scale"]["headroom"], "hgamma": p["display_scale"].get("gamma", 2.2), "ringDisk": RING_DISK,
                 "shoulder": p["display_scale"].get("shoulder") or calibration.SHOULDER}
                if p["display_scale"].get("headroom") and isinstance(p["display_scale"].get("gamma", 2.2), (int, float)) else {})}
@@ -9563,11 +9675,34 @@ def pass_boxes(u):
     return got
 
 
-def follows(fp, rect):
-    """True when a movie's view rect (movie_rect) follows the frame: its footprint fp is wider than MOVIE_FIT frames
-    and the view is not centred on the body."""
+def follows(fp, rect, filled=False):
+    """True when a movie's view rect (movie_rect) follows the frame: the view is not centred on the body, and its
+    footprint fp is wider than MOVIE_FIT frames, or its frames drift over more than FOLLOW_FILLED of a frame (past the
+    footprint's room round them, HALF each side) in a pass whose frames the body fills (filled:
+    the plan's display scale's), where no limb or ring edge holds a still view in place: 289SA AURSTARE001's night-side
+    stare drifts half a frame over Saturn's disk and played as a half-size frame sliding over a black canvas."""
     x0, y0, x1, y1 = fp
-    return max(x1 - x0, y1 - y0) > MOVIE_FIT * FRAME and not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
+    wide = max(x1 - x0, y1 - y0)
+    return (wide > MOVIE_FIT * FRAME or (filled and wide > 2 * HALF + FOLLOW_FILLED * FRAME)) and \
+        not (rect[0] == -rect[2] / 2 and rect[1] == -rect[3] / 2)
+
+
+FOLLOW_FILLED = 0.25   # of a frame (follows)
+
+
+def _inside_body(u):
+    """(follows' filled) Whether every placed frame of pass u lies wholly inside its body's disk (its middle's
+    distance from the body's centre, plus half its diagonal, under the body's radius, all on the frame's own scale):
+    no limb or ring edge in any frame to hold a still view against. 289SA AURSTARE001 stares at Saturn's night side
+    21,000 px from its centre, 27,000 px its radius; a Titan cloud movie (264TI) shows the limb, and keeps its view."""
+    km = RADIUS.get(str(u["key"][0]).upper(), 0)
+    placed = [fr for fr in u["frames"] if fr[7]]
+    if not km or not placed:
+        return False
+    for fr in placed:
+        if math.hypot(fr[5], fr[6]) + HALF >= km / (fr[7] * IFOV[u["key"][2]]):
+            return False
+    return True
 
 
 FOLLOW_SLACK = 2   # px: a following frame is drawn this much bigger than the picture and its middle cut out, so its
@@ -10665,6 +10800,14 @@ def _shown_of(u, p, n, not_shown, tile_of):
     hidden = (lambda j: not_shown(j) or over_exposed(tile_of(j))) if colours else not_shown
     whole = holds(tile_of, hidden)
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
+    if colours and s != n and abs(frames[n][3] - frames[s][3]) > HOLD_AGE:
+        # a frame not fit to show whose own filter's last whole frame was taken more than HOLD_AGE before it, a cycle
+        # or more back, holds the newest whole frame before it of any filter instead, when that one is its moment
+        # (within HOLD_AGE): 101SA AURORA003 W's unfit MT3 frame held one 22 minutes back and Saturn jumped to that
+        # frame's size and place for one frame, then back
+        last = next((j for j in range(n - 1, -1, -1) if whole(j)), None)
+        if last is not None and frames[n][3] - frames[last][3] <= HOLD_AGE:
+            s = last
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got, tint = set_shown(u, n, want, not_shown, placed, covers)
@@ -10695,8 +10838,31 @@ def _shown_of(u, p, n, not_shown, tile_of):
         if got:
             return s, got, False, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
+        held = s != n
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
                        lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
+        # (and a frame taken at another pointing than the colour sets beside it, which cover under HELD_COVER of its
+        # place: C44SA APPRMOVM001's clear frames 670 px either side of Saturn, each drawn as a clipped white sliver of
+        # the planet at the frame's edge between colour frames)
+        # (only between frames the set does cover: a run of frames the sets never take in plays as it is)
+        near_set = set_of(u, n, want, not_shown, placed) if colours and got is None and s == n else None
+        cover_of = lambda m, got: placed(m) and set_cover(tile_of(m), [tile_of(j) for j in got.values()]) >= HELD_COVER
+
+        # (the same set covering a fit frame on each side of it within STEP_RUN: the movie goes on at that set's view
+        # after it. A frame that starts a new view, whose frames after it the set no longer covers, plays as it is:
+        # 257DA DAPHNIS001's GRN frame at its next view, which drew the set before it, pink and teal, over the new view)
+        side = lambda ms: any(not not_shown(m) and cover_of(m, near_set) for m in ms)
+        covered_before = lambda: side(range(n - 1, max(-1, n - 1 - STEP_RUN), -1))
+        covered_after = lambda: side(range(n + 1, min(len(frames), n + 1 + STEP_RUN)))
+        apart = bool(near_set) and covered_before() and covered_after()
+        if colours and (held or apart or (s == n and held_band(frames[n][2]))):
+            # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
+            # last whole frame is a cycle or more back (and step_frame's gray frame beside that one older still), and a
+            # held band's frame with no gray frame near, whose own gray is not the body's look, show what the frame
+            # before them shows (shown_of's run rule), never a picture from cycles back. 170SA WIND5HR005 N_1's last
+            # cycle: its MT2 frame came down with 254 lines lost and jumped back two cycles, 85 px, to that cycle's
+            # BL1, and its MT3 frame after it played its own methane gray, near black
+            return s, None, False, True
     return s, None, False, False
 
 
@@ -10785,9 +10951,10 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
     # a movie following the frame: the frame drawn as Cassini took it, filling the picture (follow_view); with a
     # rolling trail asked for, the window MOVIE_FIT frames across as before, so the frames before it show round it
     unturn = None
-    if not track and not trail and follows(fp, rect):
+    if not track and not trail and follows(fp, rect, _inside_body(u)):
         rect, k, turn = follow_view(u, s, t, out, _pic(u, cache, p["display_scale"], t))
-        unturn = (turn, follow_middle(t, rect, k), out, out)
+        mx, my = follow_middle(t, rect, k)
+        unturn = (turn, (mx, my), out, out)
         rep["follow"] = {"turn": round(turn, 2)}
     W, H = max(1, math.ceil(rect[2] * k)), max(1, math.ceil(rect[3] * k))
     # only the frames this picture needs are made: the colour set's, the trail
@@ -10896,8 +11063,18 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
             rep["ids"] = [newest[f]["id"] for f in used]
             if tint:
                 # frame n's own picture in the set's colour (set_shown): its brightness and detail, the set's hue
+                body, speck = None, False
+                if unturn is None and radius > 0:
+                    # (the target's disk on the picture, DISK_MARGIN wider for the pointing: where the set's hue is read)
+                    yy, xx = np.ogrid[:H, :W]
+                    rr = radius * k * (1 + DISK_MARGIN[0]) + DISK_MARGIN[1] * k
+                    body = (xx + 0.5 + rect[0] * k) ** 2 + (yy + 0.5 + rect[1] * k) ** 2 <= rr * rr
+                    # (a disk off the picture, a ring movie of Saturn's rings: the hue as before, from all that is lit)
+                    speck = math.pi * rr * rr < LUM_MATCH_MIN
+                    if not speck and not body.any():
+                        body = None
                 rgba = tinted_frame(rgba, shown if shown is not None else _place(u, t, rect, k, W, H, cache, p["display_scale"]),
-                                    gamma, tint == "near")
+                                    gamma, tint == "near", body, speck)
                 rep["tint"] = True
         else:
             used = None
