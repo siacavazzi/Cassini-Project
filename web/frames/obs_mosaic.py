@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v151", "raw": "obs-v134", "eye": "obs-v151-eye", "false": "obs-v151-false", "classic": "obs-v120-classic"}  # v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v155", "raw": "obs-v138", "eye": "obs-v155-eye", "false": "obs-v155-false", "classic": "obs-v124-classic"}  # v155/v138/v124: registration and steadying matched at one common black per pair (common_floor): a frame's black never moves it; numbered past the open picture PRs; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -3864,6 +3864,9 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
     near = REGISTER_NEAR.get(u["key"][2])
+    # (both at one black, common_floor: the filters' own blacks differ, and the faint light one drew and the other did
+    # not moved the match)
+    ref, crop = common_floor(scale)(q, ref, out, crop)
     shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=near * FRAME if near else None)
     far = REGISTER_FAR.get(u["key"][2])
     colour = _colour_filters(u)
@@ -8145,7 +8148,7 @@ def _smoothed_path(x0):
     return out
 
 
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False):
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False, floor=None):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -8207,12 +8210,13 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
                 if g.get("reach") is not None and math.hypot(*move) > g["reach"]:
                     return pr, None, "past reach"
                 return pr, d, f"rings {rhow['lag_km']:+.0f} km"
+        pj, pn = floor(by[j], own[j], t, own[n]) if floor else (own[j], own[n])
         if edges:
-            shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel)
+            shift, seen = edge_shift(by[j], pj, (0.0, 0.0), t, pn, rel)
             how = (f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
                    if shift is not None else f"edges: {seen}")
         else:
-            shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
+            shift, how = _shift_onto(by[j], pj, (0.0, 0.0), t, pn, rel,
                                      around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
         if shift is not None and math.hypot(*shift) <= believed:
             d = (rel[0] - shift[0], rel[1] - shift[1])
@@ -8404,7 +8408,9 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # steady9: a clouded body's frames (SURFACE_CLOUDED) matched on the edges between its lit and dark only
     # (edge_shift, as its mosaics' pointings are), not on its clouds, which turn and drift: Jupiter's clouds moved
     # 11 px a frame in C24JU 1X2NITE008 and the chain followed them, the movie snapping back where it broke
-    STEADY_FILE = f"steady9k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    # steady10: each pair matched at one common black (common_floor): a frame's black following its sky moved the
+    # matches 8 to 9 px (#609's blacks)
+    STEADY_FILE = f"steady10k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -8475,11 +8481,48 @@ def steady_chain(u, cache, p=None):
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made), edges=clouded(u))
+                                        steady_rings(u, made), edges=clouded(u), floor=common_floor(p["display_scale"]))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
+
+
+def tile_black(t, scale):
+    """The black tile t was drawn from (its own sky's, a movie frame's tracked one, else its filter's on the display
+    scale), in the scale's units; None when the scale has no numeric tone."""
+    b = t.get("track_black", t.get("black"))
+    if b is None:
+        b = (scale.get("blacks") or {}).get(t.get("filter"))
+    return float(b) if isinstance(b, (int, float)) else None
+
+
+def common_floor(scale):
+    """(tile a, picture a, tile b, picture b) -> the two pictures as matched: each put back to its light (the display
+    scale's white and gamma), cut at the higher of the two tiles' blacks and drawn again, so a pair always shows the
+    same faint light whatever black each was drawn with. A movie frame's black follows its sky through time (sky_track),
+    and two neighbours drew different amounts of glow: their matches slid with it, 8 to 9 px in 2004's ring movie
+    (HIPHLFMOV001) and daphnis17 when the blacks changed (#609). The pictures as they are where the scale has no plain
+    gamma or the blacks agree."""
+    white, gamma = scale.get("white"), scale.get("gamma")
+    if not isinstance(white, (int, float)) or not isinstance(gamma, (int, float)) or white <= 0 or gamma <= 0:
+        return lambda ta, a, tb, b: (a, b)
+
+    def recut(im, own, top):
+        if own is None or top <= own + 1e-12:
+            return im
+        rgb = im[..., :3].astype(np.float32) / 255.0
+        light = own + rgb ** gamma * (white - own)
+        out = np.clip((light - top) / max(white - top, 1e-12), 0, 1) ** (1.0 / gamma)
+        return np.concatenate([np.round(out * 255).astype(np.uint8), im[..., 3:]], axis=2)
+
+    def pair(ta, a, tb, b):
+        ba, bb = tile_black(ta, scale), tile_black(tb, scale)
+        if ba is None or bb is None or abs(ba - bb) <= 1e-9:
+            return a, b
+        top = max(ba, bb)
+        return recut(a, ba, top), recut(b, bb, top)
+    return pair
 
 
 def steady_held(u, cache, p=None):
