@@ -2696,16 +2696,7 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
     # the black no lower than a share of the lit picture's own floor, as one margin (tone takes it off the brightness,
     # so every channel keeps its color): its darkest parts stay a little above black and the rest spreads out
     if floor:
-        if measured:
-            margin = max(margin, floor * _floor(iofs, levels, sky, glow))
-        else:
-            # without sky the glow black (a lit sky's level, GLOW_IOF) is taken off as the sky's level, not as a margin:
-            # tone centres its toe on a margin the size of the sky's noise, and on a glow black that size the toe drew
-            # the sky's median a fifth of the way up (21 of 255): 25 distant-moon stills on a gray, banded sky (Calypso,
-            # Polydeuces, Siarnaq, Telesto; spot check 11-22)
-            black, lit_sky = _floor(iofs, levels, None, glow, parts=True)
-            levels = [level + floor * lit_sky for level in levels]
-            margin = max(margin, floor * black)
+        margin = max(margin, floor * _floor(iofs, levels, sky if measured else None, glow))
     blacks = [level + margin for level in levels]
     # One white for all channels: the WHITE_PCT percentile of the brightest channel over the lit pixels (the
     # body, not the sky), so a few bright limb or ring pixels don't leave the body dim and gray; the shoulder
@@ -2870,7 +2861,7 @@ to FLOOR_EVEN[1] of their WHITE_PCT percentile; 0 when under
 FLOOR_MIN of the picture is that far from the sky, and no higher than the median of any other lit thing in the picture
 too small or thin to be that far from the sky (a small moon, a narrow ring: FLOOR_BODY), so it is not drawn black
 """
-def _floor(iofs, levels, sky=None, glow=1.0, parts=False):
+def _floor(iofs, levels, sky=None, glow=1.0):
     lum = iofs[0] - np.float32(levels[0]) if len(iofs) == 1 else \
         np.mean([iof - np.float32(level) for iof, level in zip(iofs, levels)], axis=0)
     lum = np.ascontiguousarray(lum, dtype=np.float32)
@@ -2887,13 +2878,12 @@ def _floor(iofs, levels, sky=None, glow=1.0, parts=False):
             # a picture brighter than lit sky (most): none of its glow whatever its fine structure, a finite share for
             # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
             # sign) without measuring it (two blurs, ~35 ms)
-            return (black, glow * dim * bright) if parts else black + glow * dim * bright
+            return black + glow * dim * bright
         # (net of the camera's pattern, and never more than the plain measure: taking the line medians off a frame a
         # faint ring crosses diagonally left its edges as more structure, Pallene N1523883045_1 0.069 -> 0.088, and
         # its sky went from 37 to 49 of 255; spot check 11-22)
         smooth = (GLOW_FINE[1] - min(fine_structure(lum), fine_structure(lum, net=True))) / (GLOW_FINE[1] - GLOW_FINE[0])
-        lit_sky = glow * dim * min(max(smooth, 0.0), 1.0) * bright
-        return (black, lit_sky) if parts else black + lit_sky
+        return black + glow * dim * min(max(smooth, 0.0), 1.0) * bright
     side = 2 * FLOOR_EDGE + 1
     lit = (~sky).astype(np.uint8)
     far = cv2.erode(lit, np.ones((side, side), np.uint8)).astype(bool) & _inner(lum.shape)
