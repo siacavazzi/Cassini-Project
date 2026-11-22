@@ -109,6 +109,26 @@ def test_veiled_frame_same_view():
     assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
     tiles[3] = {k: v for k, v in tile(0.0).items() if k != "lit"}   # (not measured: not known dark)
     assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    # a run of veiled frames (Skathi 2011's 48-50) between dark ones: each is veiled; a run past VEIL_RUN is not
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j) for j in range(9)]
+    tiles = [tile(0.01), tile(0.02), tile(0.8), tile(0.7), tile(0.8), tile(0.01)] + [tile(0.01)] * 3
+    assert all(om.veiled_frame(frames, n, lambda j: tiles[j]) for n in (2, 3, 4))
+    tiles = [tile(0.01)] + [tile(0.8)] * (om.VEIL_RUN + 1) + [tile(0.01)] * (8 - om.VEIL_RUN)
+    assert not any(om.veiled_frame(frames, n, lambda j: tiles[j]) for n in range(1, om.VEIL_RUN + 2))
+
+
+def test_step_frame_keeps_time_order():
+    # Titan 2016 (245TI M90R1CLD288): CB3 frames, then MT1-MT3, RED, GRN, BL1, UV3, UV1, UV2, then CB3 again. On Titan
+    # every other filter takes the CB3 frame; elsewhere only the held bands do, and never across a frame that plays its
+    # own picture (UV3 at frame 9 does not step back to frame 2 after RED, GRN and BL1 played)
+    fs = ["CB3"] * 3 + ["MT1", "MT2", "MT3", "RED", "GRN", "BL1", "UV3", "UV1", "UV2"] + ["CB3"] * 3
+    times = [0, 110, 220, 314, 408, 550, 606, 661, 709, 819, 1889, 2409, 2481, 2591, 2701]
+    ok = lambda j: True
+    for takes, want in ((lambda i: fs[i] != "CB3", [0, 1, 2] + [2] * 7 + [12, 12, 12, 13, 14]),
+                        (lambda i: om.held_band(fs[i]), [0, 1, 2, 2, 2, 2, 6, 7, 8, 12, 12, 12, 12, 13, 14])):
+        got = [om.step_frame(fs, s, "CB3", ok, ok, times, om.HOLD_REACH if takes(s) else None, takes) for s in range(len(fs))]
+        assert got == want, got
+        assert all(a <= b for a, b in zip(got, got[1:])), got   # (never back in time)
 
 
 if __name__ == "__main__":

@@ -101,12 +101,16 @@ def _onto(a, b, sure=0.25):
     return cv2.warpAffine(b, m, (a.shape[1], a.shape[0]))
 
 
+RUN_MAX = 3   # odd_frame: the longest run of odd frames between two that agree it scores as a run
+
+
 @check("odd_frame", kinds=("movie",), default=True,
        about="a frame unlike both neighbours while they agree: a doubled limb, a flash, a jump to another place")
 def odd_frame(p, limit=4.0):
     """For each played frame between two others: its difference from the mean of its neighbours (each moved onto it),
     over half their difference from each other plus one level. A frame in a smooth movie scores about 1; a frame
-    that is neither neighbour scores far more."""
+    that is neither neighbour scores far more. A run of up to RUN_MAX such frames is scored against the frames either
+    side of it, each frame of the run taking the run's weakest score."""
     import numpy as np
     shown, _ = played(p)
     if len(shown) < 3:
@@ -123,6 +127,26 @@ def odd_frame(p, limit=4.0):
         own = float(np.abs(a - (b + c) / 2)[lit].mean())
         them = float(np.abs(b - c)[lit].mean())
         scores.append(own / (them / 2 + 1.0))
+    # a run of up to RUN_MAX odd frames between two that agree (Skathi 2011's 460 s veils come two and three in a
+    # row: each frame of the run is like its run neighbour, so the one-frame score misses them): each frame of the
+    # run scored against the frames either side of the run, the run taking its weakest frame's score
+    for size in range(2, RUN_MAX + 1):
+        for j in range(1, len(ims) - size):
+            run = range(j, j + size)
+            outs = []
+            for m in run:
+                a = ims[m]
+                b, c = _onto(a, ims[j - 1]), _onto(a, ims[j + size])
+                lit = (a > 8) | (b > 8) | (c > 8)
+                if lit.sum() < 50:
+                    outs = []
+                    break
+                own = float(np.abs(a - (b + c) / 2)[lit].mean())
+                them = float(np.abs(b - c)[lit].mean())
+                outs.append(own / (them / 2 + 1.0))
+            if outs:
+                for m in run:
+                    scores[m - 1] = max(scores[m - 1], min(outs))
     k = int(np.argmax(scores))
     worst = scores[k]
     n = sum(s > limit for s in scores)
