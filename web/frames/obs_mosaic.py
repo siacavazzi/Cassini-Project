@@ -94,7 +94,8 @@ import label_handler  # noqa: E402
 # obs-v145/v128/v114: a mosaic movie's tiles the camera steps between lap after lap are two slots, not one (#604, numbered past #602)
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
-VERSIONS = {"balanced": "obs-v147", "raw": "obs-v130", "eye": "obs-v147-eye", "false": "obs-v147-false", "classic": "obs-v116-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+# obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
+VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2620,6 +2621,23 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     frame's, for now). speck: the body is one of SPECKS
     (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
+    out.pop("sky_track", None)
+    track = (scale.get("sky_track") or {}).get(f)
+    if own_sky and track and t is not None:
+        # a movie frame's black follows the pass's sky as it changes (sky_track), on the pass's one white: up where the
+        # frame's sky or its black as a still is over the pass's typical black, never under it (taken under it, the
+        # 279EN plume movie's E ring glow came up as a gray square on some frames and not on the frames black_of raises,
+        # and the movie strobed more: odd_frame 14.8 -> 19.9)
+        pass_black = out["blacks"][0]
+        raised = max(track_black(track, t), pass_black)
+        # half of the raise as black, the rest in the toe (TRACK_TOE times the raise wide): what is left of a ring's
+        # sheet, an F ring's skirt, a plume's outer glow and faint stars fades out instead of clipping (review 11-22:
+        # the Full movies cut harder than the stills)
+        out["blacks"] = [pass_black + TRACK_KEEP * (raised - pass_black)]
+        if raised > pass_black:
+            out["toe"] = max(out.get("toe") or 0.0, TRACK_TOE * (raised - pass_black))
+        if seen is not None:
+            seen["track_black"] = out["blacks"][0]
     long = scale.get("long")
     if (long and own_sky and not on_body and exposure is not None and exposure >= long["exposure"] and t is not None
             and any(a <= t <= b for a, b in long["runs"])):
@@ -2766,10 +2784,63 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             return None
         if seen is not None:
             seen["black"] = raised
-        return {"black": raised, "toe": scale.get("toe")}
+        return {"black": raised, "toe": out.get("toe")}
 
     out["black_of"] = black_of
     return out
+
+
+TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
+TRACK_KEEP = 0.5   # tile_scale: the share of the track's raise over the pass's black that is black
+TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
+TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
+                   # neighbours (an odd number), so one frame's stray light or lost lines do not set the frames round it
+
+
+def sky_track(qs, masks, ts, top):
+    """(pass_scale) A movie's black through time for one filter, [[t, black]...] in time order: each sampled frame's
+    own dark sky level (qs: its quarter size I/F, masks: its dark sky, ts: its time; calibration.sky_levels, pixels far
+    under the sky, a line lost in downlink, left out as tile_scale's black_of leaves them) plus top (the band's
+    height over its sky, pass_scale's), the median of TRACK_WINDOW neighbours. Sam (11-19): Full's blacks crushed or
+    gray where the pass's one black sat over or under a frame's sky: the 2017 F ring movies' scattered light, 270RC
+    PLATDARK's IR3 black under its sky (negative, set with its lost columns). [] when under three frames have sky."""
+    got = []
+    for q, m, t in zip(qs, masks, ts):
+        if t is None or m.mean() <= SKY_MIN:
+            continue
+        median = float(np.median(q[m]))
+        steps = np.abs(np.diff(q, axis=1))[m[:, 1:] & m[:, :-1]]
+        noise = 1.4826 * float(np.median(steps)) / math.sqrt(2) if steps.size else 0.0
+        ok = m & (q >= median - max(0.05 * float(np.percentile(q, 99.9)), SKY_OUTLIER * noise))
+        if ok.mean() <= SKY_MIN:
+            continue
+        (level,), _ = calibration.sky_levels([[q]], [[ok]])
+        # and no lower than the frame's own sky black as a still (Processed: calibration._balanced_scale, its sky level
+        # and the grain over it), so Full keeps the black sky Processed has: the 2004 ring movie and 2007-13
+        # Saturn movies lost 30-60 points of it at Full, their faint ring light and scattered light drawn gray over the
+        # pass's lower black (bench full_black, spot check 11-20). Pixels far under the sky take its median first
+        clean = np.where(ok | ~m, q, np.float32(median))
+        # (its sky black alone, not the floor black a still takes off a lit part: with it, a dim ring band between
+        # bright rings went solid black, 2008 W1602057697_1's movie, lit share 33% -> 10%; Fable 11-21)
+        (still,), still_margin, _, measured = calibration._balanced_scale([clean], floor=False)
+        black = level + top
+        if measured and still + still_margin > black:
+            # a quarter of the way up (TRACK_STILL; half and all the way lost faint light): all the way, the F ring's arc, a ring's faint sheet and the plume's outer
+            # glow went black at Full (review 11-21, Sam's "go more conservative")
+            black += TRACK_STILL * (still + still_margin - black)
+        got.append((t, black))
+    if len(got) < 3:
+        return []
+    got.sort(key=lambda g: g[0])
+    half = TRACK_WINDOW // 2
+    levels = [g[1] for g in got]
+    return [[got[i][0], float(np.median(levels[max(0, i - half):i + half + 1]))] for i in range(len(got))]
+
+
+def track_black(track, t):
+    """The black at time t on a sky_track: between its samples, a straight line; before or after them, the end's"""
+    ts = [p[0] for p in track]
+    return float(np.interp(t, ts, [p[1] for p in track]))
 
 
 DISK_WHITE = 99.5   # pass_scale: the percentile of the body's disk that the pass's white is at least
@@ -2891,7 +2962,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     (the measured values come back as "sky_tops", with the soft "toe" above black). lit_levels: a dict given here gets
     each filter's lit median on the scale (linear, white = 1), which the luminance base's gains come from; the
     scale itself is the same with or without it."""
-    by, disks, each, bodies = {}, {}, [], {}
+    by, disks, each, bodies, times = {}, {}, [], {}, {}
     # the frames read and calibrated MOVIE_WORKERS at once (in order: the same scale), so a cold pass's plan is not
     # one frame after another (021TI REGMAPNA001: 67 frames, 28 s of a 100 s first movie frame)
     mode = calibration.mode()
@@ -2940,6 +3011,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                 if km > 0 and not clouded(u):
                     body = _disk_mask(q.shape, shape, x, y, km / (z * IFOV[u["key"][2]]), inner=True)
             bodies.setdefault(f, []).append(body)
+            times.setdefault(f, []).append(fr[3])
     if not by:
         return {"blacks": {}, "white": 1.0, "gamma": 3.0, "filled": False}
     scale = calibration.shared_scale(list(by.values()), 99.9, gamma=3.0)
@@ -2958,6 +3030,13 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     inside = [math.hypot(x, y) < radius / z for *_, x, y, z in frames if z]
     floor = float(np.mean(inside)) if inside else 0.0
     filled = floor > FILLED
+    if filled and max(float(np.percentile(np.concatenate([i.ravel() for i in iofs]), 99.5)) for iofs in by.values()) \
+            < calibration.GLOW_IOF[0]:
+        # the body's disk fills the frames but nothing in them is as bright as a sunlit surface (GLOW_IOF): its night
+        # side (an aurora stare, 182SA AURSTARE001: 4e-5 I/F at its 99.5th percentile). Stretched from its 1st to its
+        # 99.5th percentile as a lit surface, its noise and offset filled the range and every frame came out near white
+        # (median 217 of 255; spot check 11-21). It is drawn as sky is: black at its sky, the aurora and stars over it
+        filled = False
     gamma = 3.0
     if filled and calibration.look() == "balanced":
         # The classic gamma 1.5 (a steeper curve lifts the dark end's noise and steps into view). True colour: one black and white for the filters drawn, so the colour is what they saw
@@ -2988,7 +3067,7 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # body clipped white. White at least the DISK_WHITE percentile of its disk, as a body against the sky has (a
         # body over most of the frames already sets their 99.5th percentile: left as it is)
         white = max(white, max(float(np.percentile(on[f] - blacks[f], DISK_WHITE)) for f in on))
-    toe = None
+    toe, track = None, None
     if calibration.look() == "balanced":
         # where the pass has dark sky, no band's black below that sky's level plus the noise margin, as a single
         # picture's (calibration.sky_levels): the 1st percentile of a pass that is mostly sky sits in the sky's
@@ -3021,6 +3100,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
+            if u.get("movie") and not u.get("mosaic"):
+                track = {f: sky_track(by[f], masks[f], times[f], tops[f]) for f in by}
+                track = {f: v for f, v in track.items() if v}
     if calibration.look() == "balanced":
         blacks = undrawn_blacks(blacks, drawn, {f: float(np.percentile(np.concatenate([i.ravel() for i in iofs]), UNDRAWN_TOP))
                                                 for f, iofs in by.items()})
@@ -3063,6 +3145,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     sat = saturn_look(u) if calibration.look() == "balanced" else {}
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
            "detail": bool(filled and not small)}
+    if track:
+        out["sky_track"] = track
     if sat_white:
         out["sat_white"] = sat_white
         out["headroom"] = saturn_look(u)["headroom"]
