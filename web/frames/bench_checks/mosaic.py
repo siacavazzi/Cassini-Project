@@ -25,7 +25,7 @@ def missing_panel(p, limit=0):
     return Result(n, limit, n <= limit,
                   f"{n} pairs of tiles the camera steps between {TWICE}+ times drawn in one slot "
                   f"({got['slots']} slots for {got['pointings']} pointings)",
-                  where=", ".join(f"{a}/{b}" for a, b in pairs[:4]) or None, judged=got.get("steps"))
+                  where=", ".join(f"{f} {a}/{b}" for f, a, b in pairs[:4]) or None, judged=got.get("steps"))
 
 
 @missing_panel.collect
@@ -41,38 +41,46 @@ def _slots(ctx):
     import mosaic
     step = mosaic.min_step * ctx.om.FRAME
     slots = ctx.om.slots(u)
-    seen, pointing = [], []
+    # each filter's pointings on their own, and the steps between one frame of a filter and its next: a scan that
+    # creeps while it takes its filters (the camera riding a UVIS slew, 000SA AURORAA011: six filters a third of a
+    # frame apart at each of two places) puts each filter somewhere else at one place, and stepping from one
+    # filter's frame to the next filter's is that creep, not a step between tiles of the raster
+    seen, pointing = collections.defaultdict(list), []
     for fr in u["frames"]:
         x, y, z = fr[5:8]
         if not z:
             pointing.append(None)
             continue
+        f = fr[2]
         pt = (-x * z / u["z"], -y * z / u["z"])
-        # the nearest pointing seen so far within a tile's step, else a new one (the newest copy: a drift is followed)
+        # the nearest pointing of the filter seen so far within a tile's step, else a new one (the newest copy: a
+        # drift is followed)
         best = None
-        for i, q in enumerate(seen):
+        for i, q in enumerate(seen[f]):
             d = max(abs(pt[0] - q[0]), abs(pt[1] - q[1]))
             if d < step and (best is None or d < best[0]):
                 best = (d, i)
         if best is None:
-            seen.append(pt)
-            pointing.append(len(seen) - 1)
+            seen[f].append(pt)
+            pointing.append((f, len(seen[f]) - 1))
         else:
-            seen[best[1]] = pt
-            pointing.append(best[1])
-    stepped, wiped, prev = collections.Counter(), collections.Counter(), None
-    for j, i in enumerate(pointing):
-        if i is None:
+            seen[f][best[1]] = pt
+            pointing.append((f, best[1]))
+    stepped, wiped, prev = collections.Counter(), collections.Counter(), {}
+    for j, at in enumerate(pointing):
+        if at is None:
             continue
-        if prev is not None and i != prev[0]:
-            pair = (min(i, prev[0]), max(i, prev[0]))
+        f, i = at
+        before = prev.get(f)
+        if before is not None and i != before[0]:
+            pair = (f, min(i, before[0]), max(i, before[0]))
             stepped[pair] += 1
-            # the step lands in the slot the frame before it is in: the newer tile takes the older one's place
-            if slots[j] is not None and slots[j] == prev[1]:
+            # the step lands in the slot the filter's frame before it is in: the newer tile takes the older one's place
+            if slots[j] is not None and slots[j] == before[1]:
                 wiped[pair] += 1
-        prev = (i, slots[j])
+        prev[f] = (i, slots[j])
     pairs = sorted(q for q, k in stepped.items() if k >= TWICE and wiped[q] >= TWICE)
-    return {"kind": "mosaic_movie", "pairs": [list(q) for q in pairs], "pointings": len(seen),
+    return {"kind": "mosaic_movie", "pairs": [list(q) for q in pairs], "pointings": max((len(v) for v in seen.values()), default=0),
             "slots": len({s for s in slots if s is not None}), "steps": sum(stepped.values())}
 
 
