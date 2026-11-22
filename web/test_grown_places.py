@@ -13,6 +13,9 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "frames"))
 import numpy as np  # noqa: E402
 import obs_mosaic as om  # noqa: E402
+WHOLE = om.WHOLE_MOST
+om.WHOLE_MOST = om.GROW_FROM   # the balanced look solves up to WHOLE_MOST tiles a filter whole (held_level);
+                               # this test is about the mosaics past that, which are grown
 
 om.SHARED_SEAMS = False
 

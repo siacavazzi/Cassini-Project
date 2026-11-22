@@ -10,6 +10,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "frames"))
 import obs_mosaic as om  # noqa: E402
+WHOLE = om.WHOLE_MOST
+om.WHOLE_MOST = om.GROW_FROM   # the balanced look solves up to WHOLE_MOST tiles a filter whole (held_level);
+                               # this test is about the mosaics past that, which are grown
 
 BOX = [-512, -512, 1024, 1024]
 def tile(n, x, f="GRN", **kw):
@@ -39,3 +42,10 @@ assert mn.solved_first(marked, False) == marked
 assert mn.solved_first(few, False) == few and mn.solved_first(many, True) == many
 assert mn.solved_first([dict(t, fill=True) if t["n"] == 3 else t for t in many], False)[-1]["n"] == many[-1]["n"]
 print("the native mosaic's corrections solve a filter holding a long repeat whole, as the screen does; ok")
+
+# the balanced look composes a balanced mosaic of up to WHOLE_MOST tiles a filter whole (held_level), never grown
+om.WHOLE_MOST = WHOLE
+if om.calibration.look() == "balanced":
+    assert not om.grows(many) and not om.grows([tile(n, 700 * n) for n in range(WHOLE)])
+    assert om.grows([tile(n, 700 * n) for n in range(WHOLE + 1)])
+    print("balanced: up to WHOLE_MOST tiles a filter composed whole, more grown; ok")
