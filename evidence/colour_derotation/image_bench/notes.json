@@ -1,0 +1,6 @@
+{
+ "storm-composite": "Derotated: CB2/MT2/BL1 channels turned to the reference's time before lining up (BL1 clouds were 40 px off); the edges the turned channels have no picture for are cut straight (about 13% of the frame). Fable: clearly better.",
+ "jupiter-portrait-composite": "Derotated: channels 11 to 13 px apart on the clouds; detail up 38% because the smear is gone (the flagged measure). Fable: far better.",
+ "saturn05-movie": "Derotated movie colour sets (003SA 3X3MOVIEA002): moves under 1 px at this scale, up to 30 levels on cloud edges. Fable: the same.",
+ "approach-movie": "Derotated movie colour sets on the 2004 approach: 0.02% of pixels move over 8 levels. Fable: the same."
+}

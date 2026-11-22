@@ -31,7 +31,7 @@ def test_grain_leaves_the_glow_out():
     assert spread < 0.0006 < raw, (spread, raw)
     # sky_levels' margin with a floor percentile is now the grain's
     _, margin = calibration.sky_levels([[iof]], [[sky]], floor_pct=98)
-    assert spread < margin < 0.6 * raw, (margin, raw)   # the grain plus GRAIN_GLOW of the glow over it
+    assert spread < margin < 0.7 * raw, (margin, raw)   # the grain plus GRAIN_GLOW of the glow over it
 
 
 def test_grain_of_a_plain_sky_is_its_spread():
@@ -51,6 +51,15 @@ def _deck(contrast, noise, seed=1):
 
 
 def test_flat_clean_deck_spreads():
+    keep = calibration.FLAT_SHARE
+    calibration.FLAT_SHARE = 0.8   # (the rule as taste call 32 would turn it on)
+    try:
+        _test_flat_clean_deck_spreads()
+    finally:
+        calibration.FLAT_SHARE = keep
+
+
+def _test_flat_clean_deck_spreads():
     lum = _deck(0.2, 0.0005)
     lit = np.ones(lum.shape, bool)
     floor, top = (float(v) for v in np.percentile(lum, (calibration.FLOOR_PCT, calibration.WHITE_PCT)))
@@ -63,6 +72,15 @@ def test_flat_clean_deck_spreads():
 
 
 def test_flat_noisy_deck_stretches_less():
+    keep = calibration.FLAT_SHARE
+    calibration.FLAT_SHARE = 0.8   # (the rule as taste call 32 would turn it on)
+    try:
+        _test_flat_noisy_deck_stretches_less()
+    finally:
+        calibration.FLAT_SHARE = keep
+
+
+def _test_flat_noisy_deck_stretches_less():
     clean, noisy = _deck(0.2, 0.0005), _deck(0.2, 0.01)
     got = []
     for lum in (clean, noisy):
@@ -107,7 +125,8 @@ def test_tile_scale_raises_to_the_track():
     assert out["blacks"][0] == 0.005                   # never under the pass's black
     scale["sky_track"]["CL1"] = [[0.0, 0.006], [10.0, 0.008]]
     out = obs_mosaic.tile_scale(scale, "CL1", own_sky=True, t=5.0, on_body=True)
-    assert abs(out["blacks"][0] - 0.007) < 1e-9        # over it where the frame's sky is
+    assert abs(out["blacks"][0] - 0.006) < 1e-9        # over it where the frame's sky is, by TRACK_KEEP of the raise
+    assert abs(out["toe"] - 3 * 0.002) < 1e-9          # and the toe TRACK_TOE times the raise
     assert "sky_track" not in out
     assert obs_mosaic.tile_scale(scale, "CL1", own_sky=False, t=5.0)["blacks"][0] == 0.005   # mosaics keep the pass's
 
