@@ -1595,7 +1595,7 @@ PLAN_FILE = "plan4.json"   # renamed when the plan's rules change, so cached pla
 FOOTPRINT_FILE = "movie_footprint2-" + PLAN_FILE
 # a feature track's steady places (track_places), and its footprint drawn from them; renamed (with the track's movie
 # frames, movie_webp) whenever the rule changes
-TRACK_FILE = "track2-" + PLAN_FILE
+TRACK_FILE = "track3-" + PLAN_FILE   # track3: each pair matched at one common black (common_floor)
 TRACK_FOOTPRINT_FILE = "movie_footprint-" + TRACK_FILE
 
 
@@ -8072,7 +8072,7 @@ def _every_tile(u, cache, p):
     return made, pic, there
 
 
-def _chain(made, pic, there, believed, step, guide=None):
+def _chain(made, pic, there, believed, step, guide=None, floor=None):
     """Each placed tile registered to the tile before it ({n: [x, y]} and how), the chain track_places and
     steady_places are made of. Tile n is put first where step(j, n) says it is from tile j's place, and registered
     there to the tile before it, or to the newest earlier tile of its own filter (another filter can look too
@@ -8093,7 +8093,8 @@ def _chain(made, pic, there, believed, step, guide=None):
             for j in dict.fromkeys(j for j in (prev, newest.get(t["filter"])) if j is not None):
                 at = step(places, j, n)
                 g = guide(places, j, n, at) if guide else {}
-                shift, how = _shift_onto(made[j], pic(j), (0.0, 0.0), t, pic(n), (at[0] - places[j][0], at[1] - places[j][1]),
+                pj, pn = floor(made[j], pic(j), t, pic(n)) if floor else (pic(j), pic(n))
+                shift, how = _shift_onto(made[j], pj, (0.0, 0.0), t, pn, (at[0] - places[j][0], at[1] - places[j][1]),
                                          around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
                 if shift is not None and math.hypot(*shift) <= believed:
                     found = [at[0] - shift[0], at[1] - shift[1]]
@@ -8377,7 +8378,8 @@ def track_places(u, cache, p=None):
     def work():
         made, pic, there = _every_tile(u, cache, p)
         # a track's tile starts where the tile before it is
-        return _chain(made, pic, there, TRACK_MAX * FRAME, lambda places, j, n: list(places[j]))
+        return _chain(made, pic, there, TRACK_MAX * FRAME, lambda places, j, n: list(places[j]),
+                      floor=common_floor(p["display_scale"]))
     return _chained(u, cache, p, TRACK_FILE, "track", work)
 
 
@@ -8423,7 +8425,7 @@ STEADY_EDGE = 16     # px: a blob found nearer the tile's edge than its radius a
 STEADY_SEEN = 0.5     # of the placed tiles: the least share the moon must be found on for the pictures to be believed
 
 
-def steady_rings(u, made):
+def steady_rings(u, made, scale=None):
     """steady_chain's ring match for a pass that shows Saturn's rings (_ring_geometry): (tile s, its picture, tile t,
     its picture) -> ring_pair_shift's (move of t across the rings, how) or (None, why); None for any other pass. A ring
     movie's frames slide along ringlets that repeat along the ring, so a match of the pictures fails or finds the
@@ -8441,7 +8443,11 @@ def steady_rings(u, made):
     # frame spans a few thousand km of ring, and a movie is steadied to a pixel)
     km_px = IFOV[u["key"][2]] * u["z"]
 
+    floor = common_floor(scale) if scale else None
+
     def match(s, ref, t, mine):
+        if floor:
+            ref, mine = floor(s, ref, t, mine)
         return ring_pair_shift(u, rings, s, ref, t, mine, bin_km=min(RING_BIN, km_px))
     # (a pass of the rings themselves, _ring: matched on the rings first, the pictures where the profiles say nothing; a
     # moon's pass with rings behind it, Daphnis in the Keeler gap: on the pictures first, as before)
@@ -8481,7 +8487,8 @@ def steady_chain(u, cache, p=None):
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made), edges=clouded(u), floor=common_floor(p["display_scale"]))
+                                        steady_rings(u, made, p["display_scale"]), edges=clouded(u),
+                                        floor=common_floor(p["display_scale"]))
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why}
