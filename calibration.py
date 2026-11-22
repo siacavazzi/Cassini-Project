@@ -1195,6 +1195,7 @@ GLOW_FINE = (0.066, 0.1)  # ... but only for smooth light: none of it as the pic
                      # under 0.04, rings over 0.15; measured net of the camera's banding and noise, the faint sky round a distant
                      # moon still measures 0.04-0.065 on its leftover pattern, the equinox shadow's faint ringlets 0.084 (about half its glow black, as main gave it): the
                      # blend runs between them, spot check and Fable 11-21)
+NET_OVER = 1.15      # _floor's glow test: a net fine structure this many times the plain one is taken as made by the net
 FINE_NOISE = 0.4     # fine_structure(net): white noise of this spread puts about 0.31 of it (0.4 with 8-bit steps) in the 90th percentile of its 1.5 px detail
 TOE = 0.05           # balanced composites: a margin up to this share of white (the sky's noise) has a toe (tone) as wide as
                      # it and centred on it, so a night side or twilight it reaches into (the sky test counts it as sky)
@@ -2879,7 +2880,14 @@ def _floor(iofs, levels, sky=None, glow=1.0):
             # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
             # sign) without measuring it (two blurs, ~35 ms)
             return black + glow * dim * bright
-        smooth = (GLOW_FINE[1] - fine_structure(lum, net=True)) / (GLOW_FINE[1] - GLOW_FINE[0])
+        # (net of the camera's pattern; taking the line medians off a frame a faint ring crosses diagonally left its
+        # edges as more structure, Pallene N1523883045_1 0.069 -> 0.088, and its sky went from 37 to 49 of 255; spot
+        # check 11-22)
+        plain, net = fine_structure(lum), fine_structure(lum, net=True)
+        # (the plain measure where the net one is well over it, NET_OVER: the line medians' removal itself made the
+        # structure; within it the net one, as #609 had it: the equinox shadow's faint ringlet, plain 0.079 net 0.084)
+        fine = plain if net > NET_OVER * plain else net
+        smooth = (GLOW_FINE[1] - fine) / (GLOW_FINE[1] - GLOW_FINE[0])
         return black + glow * dim * min(max(smooth, 0.0), 1.0) * bright
     side = 2 * FLOOR_EDGE + 1
     lit = (~sky).astype(np.uint8)
