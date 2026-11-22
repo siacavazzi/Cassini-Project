@@ -197,6 +197,18 @@ def test_items_resolve():
         bc.checks_for(it, {"pass_kind": "movie"} if it["kind"] == "pass" else None)
 
 
+
+def test_judged_set_moved_by_the_change():
+    """full_banding judges the frames whose Processed sky is black; a change that lifts Processed's sky judges fewer of
+    them, which alone is no regression (it was read as one: improvements flagged, review 11-22)"""
+    from bench_checks import verdict, load
+    load()
+    base = {"value": 0.0, "ok": True, "limit": 1.0, "judged": 16}
+    cand = {"value": 0.0, "ok": True, "limit": 1.0, "judged": 2}
+    assert verdict("full_banding", base, cand) == "pass"
+    assert verdict("limb_halo", {"value": 0.03, "ok": True, "limit": 0.08, "judged": 100},
+                   {"value": 0.0, "ok": True, "limit": 0.08, "judged": 5}) == "REGRESSION"
+
 if __name__ == "__main__":
     import pathlib
     n = 0
