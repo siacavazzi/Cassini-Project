@@ -1137,8 +1137,9 @@ def night_target(info):
     return NIGHT_CODES.get(m.group(1), "") if m else ""
 
 
-def night_black(lum, infos, margin=0.0):
-    if not infos or night_target(infos[0]) not in NIGHT_TARGETS:
+def night_black(lum, infos, margin=0.0, target=None):
+    # (target: the body, for a caller with no labels: a movie frame's tile, obs_mosaic.tile_scale's night)
+    if (target or (night_target(infos[0]) if infos else "")) not in NIGHT_TARGETS:
         return 0.0
     local = cv2.blur(np.asarray(lum, np.float32), (15, 15))
     dim = local < NIGHT_DIM

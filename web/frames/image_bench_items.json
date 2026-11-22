@@ -66,6 +66,10 @@
   {"name": "saturn08w-fullblack-movie", "kind": "pass", "frame": "W1602057697_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
   {"name": "saturn13-fullblack-movie", "kind": "pass", "frame": "N1741151683_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
   {"name": "saturn08-fullblack-movie", "kind": "pass", "frame": "N1601603945_1", "group": "hard", "watch": "spot 11-20: Full keeps the black sky Processed has"},
-  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"}
+  {"name": "pan09-banding-movie", "kind": "pass", "frame": "N1622390734_1", "group": "hard", "watch": "spot 11-20: no sky banding at Full where Processed's sky is black"},
+  {"name": "storm13-night-composite", "kind": "composite", "frame": "W1756377010_1", "group": "hard", "watch": "2013 storm crescent (196SA STORMW014, no sky): Saturn's night side dim ringshine, not lifted to a third of white (taste call 31)"},
+  {"name": "night-washout-composite", "kind": "composite", "frame": "W1729024337_1", "group": "hard", "watch": "Saturn crescent with no sky: the night side was drawn washed-out gray; dim ringshine kept (taste call 31)"},
+  {"name": "night-dark-composite", "kind": "composite", "frame": "W1738173795_1", "group": "hard", "watch": "Saturn night side already near black: keeps its faint glow and stars, never crushed (taste call 31 guard)"},
+  {"name": "storm13-night-movie", "kind": "pass", "frame": "W1756377010_1", "group": "hard", "watch": "the 2013 storm crescent's pass as a movie: its night side as dim as the still's (taste call 31)"}
  ]
 }

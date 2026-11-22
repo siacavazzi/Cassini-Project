@@ -95,7 +95,7 @@ import label_handler  # noqa: E402
 # obs-v144/v127/v113: every movie stabilized by default, one pointing source per sequence (#602, numbered past #600)
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
-VERSIONS = {"balanced": "obs-v148", "raw": "obs-v131", "eye": "obs-v148-eye", "false": "obs-v148-false", "classic": "obs-v117-classic"}  # v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
+VERSIONS = {"balanced": "obs-v155", "raw": "obs-v131", "eye": "obs-v155-eye", "false": "obs-v155-false", "classic": "obs-v117-classic"}  # v155 (numbered past #614): a balanced movie of Saturn's night side with no sky takes the black its still has (night_of, calibration.night_black, taste call 31); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 CANVAS = 2048        # longest side of the canvas the view is drawn on
 OUT = 1024           # longest side of the picture sent
 FRAME = 1024         # full resolution frame
@@ -2603,7 +2603,7 @@ def _sky_fine(iofs, masks):
 
 
 def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exposure=None, t=None, codes=True,
-               speck=False, clean_lost=False):
+               speck=False, clean_lost=False, night=None):
     """The display scale of one tile of filter f: the pass's, and with own_sky (a movie's frames, each shown
     alone) a black raised to the frame's own sky level plus the band's height over it (sky_tops) where that sky
     sits above the pass's: in the Jupiter approach movie one color set's stray light lifts its sky over the
@@ -2619,7 +2619,9 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
     their white. codes: a sky in whole codes is measured as such (black_of); False for a ring pass, whose faint rings in
     the shadow (032RI's silhouette) are in the sky the rule would take under black. clean_lost: the frame's own black is measured without the pixels it lost in downlink (black_of: a narrow-angle
     frame's, for now). speck: the body is one of SPECKS
-    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil."""
+    (from beyond Saturn's system, only ever a speck on sky), whose frame under SPECK_PX is all veil. night: a movie's
+    body (u["key"][0]), whose night side with no sky takes the black a still of it has (calibration.night_black,
+    night_of)."""
     out = {**scale, "blacks": [scale["blacks"].get(f, 0.0)]}
     out.pop("sky_track", None)
     track = (scale.get("sky_track") or {}).get(f)
@@ -2645,6 +2647,8 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             seen["white"] = long["white"]
     top = scale.get("sky_tops", {}).get(f)
     if not own_sky or (top is None and disk is None and on_body):
+        if own_sky and night:
+            out["black_of"] = night_of(out, None, night, seen)
         return out   # (a frame of the body, in a pass with no sky height of its own: the pass's black, as before #279)
     # (a pass with no sky height of its own and no small body: only a frame lit all over by a glow gets a black of its
     # own, every other frame keeps the pass's)
@@ -2785,8 +2789,32 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             seen["black"] = raised
         return {"black": raised, "toe": out.get("toe")}
 
-    out["black_of"] = black_of
+    out["black_of"] = night_of(out, black_of, night, seen) if night else black_of
     return out
+
+
+def night_of(out, own, night, seen=None):
+    """(tile_scale) A movie frame's black_of with Saturn's night side drawn as a still of it is (taste call 31): own
+    (the frame's own black_of, or None) first, then, where the frame is a night side with no sky lifted over that
+    black (calibration.night_black on the frame's I/F over the pass's white), the night side's black, and the soft toe
+    a still with that black has (calibration.tone). A night side is the frame's own, not the sky's, so this is not
+    sky_track's TRACK_STILL quarter step (which keeps the faint light round a body on sky): night_black already keeps
+    NIGHT_KEEP of the ringshine, and the movie draws it where its still does (the 2013 storm crescent's movie and still
+    otherwise differed: gray night side in one, dim ringshine in the other). None of it on a frame drawn near black
+    already (NIGHT_LIFTED), so a movie's faint frames keep their glow and stars."""
+    def black_of(iof, valid=None):
+        got = (own(iof, valid) if valid is not None else own(iof)) if own else None
+        black, white = (got["black"] if got else out["blacks"][0]), float(out.get("white") or 0.0)
+        if white <= 0 or calibration.look() != "balanced":
+            return got
+        nb = calibration.night_black(np.asarray(iof, np.float32) / white, None, black / white, target=night)
+        if nb * white <= black:
+            return got
+        if seen is not None:
+            seen["night_black"] = nb * white
+        toe = max(nb / 8, min(nb, calibration.TOE)) * white
+        return {"black": nb * white, "toe": max((got or {}).get("toe") or out.get("toe") or 0.0, toe)}
+    return black_of
 
 
 TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
@@ -3352,7 +3380,8 @@ def _tile_made(u, n, cache, scale, base):
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk), seen, disk,
                                                                                            on_disk(u, u["frames"][n]), exposure, t,
-                                                                                           not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N"),
+                                                                                           not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N",
+                                                                                           u["key"][0] if u.get("movie") and not u.get("mosaic") else None),
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
                                                         turn=view_turn(u))
