@@ -2864,6 +2864,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
 
 
 TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
+NIGHT_GAMMA = 1.5  # pass_scale: a night-side pass's gamma (its disk fills the frames, nothing in them sunlit)
 TRACK_KEEP = 0.5   # tile_scale: the share of the track's raise over the pass's black that is black
 TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
 TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
@@ -3139,8 +3140,12 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
         # the body's disk fills the frames but nothing in them is as bright as a sunlit surface (GLOW_IOF): its night
         # side (an aurora stare, 182SA AURSTARE001: 4e-5 I/F at its 99.5th percentile). Stretched from its 1st to its
         # 99.5th percentile as a lit surface, its noise and offset filled the range and every frame came out near white
-        # (median 217 of 255; spot check 11-21). It is drawn as sky is: black at its sky, the aurora and stars over it
-        filled = False
+        # (median 217 of 255; spot check 11-21). It is drawn as sky is: black at its sky, the aurora and stars over it,
+        # on the filled passes' gentle gamma (NIGHT_GAMMA): on the sky's gamma 3 their whole frame of faint noise came up
+        # gray (176SA AURSTARE002 mean 57 -> 81, 119SU SWAURPTG007 14 -> 23; spot check 11-22)
+        filled, night = False, True
+    else:
+        night = False
     gamma = 3.0
     if filled and calibration.look() == "balanced":
         # The classic gamma 1.5 (a steeper curve lifts the dark end's noise and steps into view). True colour: one black and white for the filters drawn, so the colour is what they saw
@@ -3262,6 +3267,8 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
     sat = saturn_look(u) if calibration.look() == "balanced" else {}
+    if night and not isinstance(gamma, str):
+        gamma = min(float(gamma), NIGHT_GAMMA)
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
            "detail": bool(filled and not small)}
     if track:
