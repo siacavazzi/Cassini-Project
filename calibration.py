@@ -2879,7 +2879,10 @@ def _floor(iofs, levels, sky=None, glow=1.0):
             # pixels of this size (their blurs cannot overflow into a NaN), so the same number (zero, of the same
             # sign) without measuring it (two blurs, ~35 ms)
             return black + glow * dim * bright
-        smooth = (GLOW_FINE[1] - fine_structure(lum, net=True)) / (GLOW_FINE[1] - GLOW_FINE[0])
+        # (net of the camera's pattern, and never more than the plain measure: taking the line medians off a frame a
+        # faint ring crosses diagonally left its edges as more structure, Pallene N1523883045_1 0.069 -> 0.088, and
+        # its sky went from 37 to 49 of 255; spot check 11-22)
+        smooth = (GLOW_FINE[1] - min(fine_structure(lum), fine_structure(lum, net=True))) / (GLOW_FINE[1] - GLOW_FINE[0])
         return black + glow * dim * min(max(smooth, 0.0), 1.0) * bright
     side = 2 * FLOOR_EDGE + 1
     lit = (~sky).astype(np.uint8)
