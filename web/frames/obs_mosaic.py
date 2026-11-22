@@ -3209,7 +3209,9 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
                     tops[f] = max(margin, top)
             toe = SKY_TOE * max(tops.values())
             blacks = {f: max(blacks[f], level + tops[f]) for f, level in zip(by, levels)}
-            if u.get("movie") and not u.get("mosaic"):
+            if u.get("movie") and not u.get("mosaic") and len(set(drawn or [])) < 2:
+                # (a grey movie's only: each filter of a colour movie followed its own sky by its own raise, and its
+                # colour moved with them, Janus 2010's frames 2-4 drawn pink, spot check 11-22)
                 track = {f: sky_track(by[f], masks[f], times[f], tops[f]) for f in by}
                 track = {f: v for f, v in track.items() if v}
     if calibration.look() == "balanced":
