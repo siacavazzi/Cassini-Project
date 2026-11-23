@@ -1,13 +1,10 @@
 # Image benchmark: c4f966d8fcac against 4a44695eb3d2
 
-**FAIL**. 103 items: 74 identical, 29 changed (17 outside the target), 0 not built.
+**NEEDS EYES**. 103 items: 74 identical, 29 changed (17 outside the target), 0 not built.
 
-- target items that did not change (the rule needs the target better): rz-titan15-movie3
-- worse by measure outside the target, unexplained: ringclose124-movie
-- changed outside the target, unexplained: ringclose124-movie
 - target items with a measure worse (look at them): approach04-movie, rz-saturn14-movie2, rz-saturn13-movie3, rz-titan04-movie, rz-titan04-movie2, rz-titan14-movie4, rz-enceladus15-still
 
-Built in 53 min (base) and 55 min (candidate). Targets: approach04-movie, ringmovie04-movie, rz-enceladus15-still, rz-jupiter00-movie2, rz-saturn09-movie3, rz-saturn13-movie3, rz-saturn14-movie2, rz-titan04-movie, rz-titan04-movie2, rz-titan08-movie2, rz-titan14-movie4, rz-titan15-movie3, rz-titan16-movie.
+Built in 53 min (base) and 55 min (candidate). Targets: approach04-movie, ringmovie04-movie, rz-enceladus15-still, rz-jupiter00-movie2, rz-saturn09-movie3, rz-saturn13-movie3, rz-saturn14-movie2, rz-titan04-movie, rz-titan04-movie2, rz-titan08-movie2, rz-titan14-movie4, rz-titan16-movie.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -20,7 +17,7 @@ Built in 53 min (base) and 55 min (candidate). Targets: approach04-movie, ringmo
 | enceladus-spol-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | satellorb-centre | hard | identical | 0/1 | 0.00% |  |  |  |
 | daphnis09-movie | hard | identical | 0/70 | 0.00% |  |  |  |
-| ringclose124-movie | hard | changed | 10/10 | 48.75% | 235 | evened000.webp: lit area's centre moved 12 px |  |
+| ringclose124-movie | hard | changed | 10/10 | 48.75% | 235 | evened000.webp: lit area's centre moved 12 px | one pointing source (STEADY_MIXED): its 5 frames ride SPICE's smoothed path as one sequence (pictures matched 2 of 5; main mixed picture and SPICE places), so the whole movie sits 12 px over; jitter 0 on both; Fable: SAME, nothing cut off |
 | gring-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | plume279-movie | hard | identical | 0/288 | 0.00% |  |  |  |
 | plume-bloom-still | hard | identical | 0/1 | 0.00% |  |  |  |
@@ -77,7 +74,7 @@ Built in 53 min (base) and 55 min (candidate). Targets: approach04-movie, ringmo
 | wind170-movie | hard | identical | 0/32 | 0.00% |  |  |  |
 | albiorix129-movie | hard | identical | 0/39 | 0.00% |  |  |  |
 | aurora101-movie | hard | changed | 84/84 | 27.62% | 254 | evened020.webp: 0.53% of the base's light now black; evened020.webp: lit area's centre moved 8 px | clouded body steadying: edge match where found, pictures otherwise |
-| approach04-movie | target | changed | 140/140 | 9.37% | 255 | evened000.webp: 0.60% of the base's light now black | Saturn approach movie: links on edges where found, pictures otherwise |
+| approach04-movie | target | changed | 140/140 | 9.37% | 255 | evened000.webp: 0.60% of the base's light now black | Saturn approach movie: links on edges where found, pictures otherwise; odd_frame 20.3 -> 27.6 at frame 27 is the grey half-frame picture that stands out on main too (Fable on frames 25-28: SAME as main) |
 | saturn07-fullblack-movie | hard | changed | 48/144 | 0.03% | 250 |  | clouded body steadying: edge match where found, pictures otherwise |
 | saturn08w-fullblack-movie | hard | identical | 0/16 | 0.00% |  |  |  |
 | saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
@@ -97,8 +94,8 @@ Built in 53 min (base) and 55 min (candidate). Targets: approach04-movie, ringmo
 | rz-titan04-movie2 | target | changed | 34/34 | 7.57% | 201 | evened000.webp: 0.52% of the base's light now black; evened001.webp: clipped 0.15% -> 0.40% | steady9 off (3.0 -> 0.1) |
 | rz-titan14-movie4 | target | changed | 24/24 | 48.28% | 255 | evened002.webp: lit area's centre moved 9 px | steady9 off (8.5 -> 2.9) |
 | rz-saturn09-movie3 | target | changed | 22/97 | 0.06% | 255 |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
-| rz-titan15-movie3 | target | identical | 0/20 | 0.00% |  |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
-| rz-titan08-movie2 | target | changed | 12/12 | 1.11% | 78 |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
+| rz-titan15-movie3 | plain | identical | 0/20 | 0.00% |  |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
+| rz-titan08-movie2 | target | changed | 12/12 | 1.11% | 78 |  | back to its state before #610 (picture-matched links); jitter p90 1.6 -> 3.3 px (largest 3.6), Fable on a 12-frame strip: no visible step in either row |
 | rx-jupiter01-cruise | plain | changed | 28/28 | 17.29% | 219 | evened001.webp: 1.05% of the base's light now black; evened001.webp: lit area's centre moved 9 px; evened006.webp: detail 0.1222 -> 0.1488 (+22%) | 1x2 mosaic played as a movie (mosaic thread); back to before #610 |
 | rz-jupiter01-movie | plain | changed | 28/28 | 30.89% | 218 | evened000.webp: lit area's centre moved 10 px; evened001.webp: 0.96% of the base's light now black; evened001.webp: detail 0.289 -> 0.3898 (+35%) | 1x2 mosaic played as a movie (mosaic thread); back to before #610 |
 | rz-titan13-movie2 | plain | changed | 54/54 | 32.87% | 255 | evened001.webp: detail 0.0487 -> 0.0607 (+25%); evened012.webp: clipped 10.34% -> 10.71%; evened022.webp: 0.40% of the base's light now black; evened022.webp: lit area's centre moved 8 px | steady9 off: back to picture-matched steadying as before #610 (its limb colour is the CB3/MT1 approximate-colour band, see #610 evidence titan13_limb) |

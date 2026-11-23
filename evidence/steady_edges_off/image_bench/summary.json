@@ -1,10 +1,6 @@
 {
- "verdict": "FAIL",
- "fails": [
-  "target items that did not change (the rule needs the target better): rz-titan15-movie3",
-  "worse by measure outside the target, unexplained: ringclose124-movie",
-  "changed outside the target, unexplained: ringclose124-movie"
- ],
+ "verdict": "NEEDS EYES",
+ "fails": [],
  "identical": 74,
  "changed": [
   "ringclose124-movie",
@@ -188,7 +184,7 @@
   "candidate": 3271
  },
  "tool": "bench-v3",
- "at": "2026-11-23T07:13:24Z",
+ "at": "2026-11-23T10:44:21Z",
  "targets": [
   "approach04-movie",
   "ringmovie04-movie",
@@ -201,7 +197,6 @@
   "rz-titan04-movie2",
   "rz-titan08-movie2",
   "rz-titan14-movie4",
-  "rz-titan15-movie3",
   "rz-titan16-movie"
  ],
  "rows": [
@@ -1129,7 +1124,7 @@
    "frame": "N1641890798_1",
    "time": "2010-01-11T08:02:55",
    "target": false,
-   "note": "",
+   "note": "one pointing source (STEADY_MIXED): its 5 frames ride SPICE's smoothed path as one sequence (pictures matched 2 of 5; main mixed picture and SPICE places), so the whole movie sits 12 px over; jitter 0 on both; Fable: SAME, nothing cut off",
    "pictures": {
     "evened000.webp": {
      "base": {
@@ -25091,7 +25086,7 @@
    "frame": "N1460416300_1",
    "time": "2004-04-11T22:48:10",
    "target": true,
-   "note": "Saturn approach movie: links on edges where found, pictures otherwise",
+   "note": "Saturn approach movie: links on edges where found, pictures otherwise; odd_frame 20.3 -> 27.6 at frame 27 is the grey half-frame picture that stands out on main too (Fable on frames 25-28: SAME as main)",
    "pictures": {
     "evened000.webp": {
      "base": {
@@ -44387,7 +44382,7 @@
    "watch": "spot 11-20 movie TITAN_ISS_213TI_FIRLMBINT002_CIRS_N_0_r33.8 (10 fr) | KNOWN FAILURE",
    "frame": "N1805215623_2",
    "time": "2015-03-16T15:45:35",
-   "target": true,
+   "target": false,
    "note": "back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up",
    "pictures": {
     "evened000.webp": {
@@ -44619,7 +44614,7 @@
    "frame": "W1582464087_1",
    "time": "2008-02-23T12:44:46",
    "target": true,
-   "note": "back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up",
+   "note": "back to its state before #610 (picture-matched links); jitter p90 1.6 -> 3.3 px (largest 3.6), Fable on a 12-frame strip: no visible step in either row",
    "pictures": {
     "frame000.webp": {
      "base": {
