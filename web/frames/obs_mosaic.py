@@ -10502,7 +10502,10 @@ def veiled_frame(frames, n, tile_of):
     # (a frame lost in part, held itself, is no neighbour: Methone 2012's frame 18, 85% lost, beside its veiled 17)
     usable = lambda j: "offset" in tile_of(j) and not partial(tile_of(j))
     mine = [j for j in range(len(frames)) if frames[j][2] == f and usable(j)]
-    if len(mine) >= 3 and 3 * sum(veil(tile_of(j)) for j in mine) > len(mine):
+    by_sky = (tile_of(n).get("lit") or 0.0) < VEIL_LIT
+    if by_sky and len(mine) >= 3 and 3 * sum(veil(tile_of(j)) for j in mine) > len(mine):
+        # (a veil told by its sky alone, in a filter gray over a third of the time: what the camera saw. A frame lit
+        # all over by its lit share is held as before: Io 2000's eclipse frames with a gray-green halo, frames 1 and 12)
         return False
     run, sides = 1, 0
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):

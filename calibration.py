@@ -2008,10 +2008,21 @@ SAT_SMOOTH = (0.3, 0.6) # ... through the camera's limit when this share of its 
 SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or a spike beside a patch reads anything)
 
 
+SAT_SOLID = 0.7   # (_largest_share) a saturated patch whose area is this much of its convex hull or more is a body's disc
+
+
 def _largest_share(full):
-    """The share of mask full that its largest 8-connected patch takes up of the whole picture."""
-    count, _, stats, _ = cv2.connectedComponentsWithStats(np.asarray(full, np.uint8), connectivity=8)
-    return float(stats[1:, cv2.CC_STAT_AREA].max()) / full.size if count > 1 else 0.0
+    """The share of the whole picture that mask full's largest 8-connected patch takes up, when that patch is solid
+    (its area SAT_SOLID of its convex hull or more: a body's disc); else 0. A ring of saturated junk round a small
+    body with a hole in it (Io 2000's eclipse frames 1 and 12, lines lost, a blocky gray-green ring) is no disc."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(np.asarray(full, np.uint8), connectivity=8)
+    if count < 2:
+        return 0.0
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    area = float(stats[k, cv2.CC_STAT_AREA])
+    contours, _ = cv2.findContours((labels == k).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    hull = cv2.contourArea(cv2.convexHull(np.vstack(contours)))
+    return area / full.size if hull > 0 and area >= SAT_SOLID * hull else 0.0
 
 
 def saturated_code(iof, full, draw):
