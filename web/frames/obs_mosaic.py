@@ -8880,7 +8880,9 @@ def one_source(places, hows, made):
     if not places or not unlinked:
         return places, hows
     if len(unlinked) <= STEADY_MIXED * len(places):
-        return from_pictures(places, hows, set(unlinked))
+        when = {t["n"]: t.get("t") for t in made}
+        return from_pictures(places, hows, set(unlinked), when if all(isinstance(when.get(n), (int, float))
+                                                                       for n in places) else None)
     ns = sorted(places)
     by_n = {t["n"]: t for t in made if "offset" in t}
     xs = _smoothed_path([by_n[n]["offset"] for n in ns])
@@ -8889,10 +8891,13 @@ def one_source(places, hows, made):
                 f"{len(ns)} frames)" for n in ns})
 
 
-def from_pictures(places, hows, unlinked):
+def from_pictures(places, hows, unlinked, when=None):
     """(places, hows) with each frame the pictures did not place (unlinked: held on SPICE's step from the tile before,
     _chain_links) put where the pictures' own places around it say: between two placed frames, on the straight line
-    between their places by frame number; before the first or after the last, on from it by the median of the placed
+    between their places by the time each was taken (when: {n: seconds}; by frame number without times), so a colour
+    set's frames, taken seconds apart, stay together between sets taken minutes apart (by frame number, 2010's Janus pass (m-janus10-pass):
+    frames 21-22 went 8 px toward the next set and its hop there doubled); before the first or after the last, on from
+    it by the median of the placed
     frames' steps nearest it (STEADY_EDGE_STEPS of them). The pictures stay the sequence's one source of pointing (Sam
     2026-11-18): a held frame on SPICE's step put SPICE's pointing scatter into a picture-steadied movie, a hop of its
     scatter where the two met (titan08-movie2's 3.6 px)."""
@@ -8901,26 +8906,30 @@ def from_pictures(places, hows, unlinked):
     if not good:
         return places, hows
 
+    at = (lambda n: float(when[n])) if when else (lambda n: float(n))
+
     def edge_step(side):
         run = good[:STEADY_EDGE_STEPS + 1] if side < 0 else good[-STEADY_EDGE_STEPS - 1:]
         if len(run) < 2:
             return 0.0, 0.0
-        steps = [((places[b][0] - places[a][0]) / (b - a), (places[b][1] - places[a][1]) / (b - a))
-                 for a, b in zip(run, run[1:])]
+        steps = [((places[b][0] - places[a][0]) / (at(b) - at(a)), (places[b][1] - places[a][1]) / (at(b) - at(a)))
+                 for a, b in zip(run, run[1:]) if at(b) != at(a)]
+        if not steps:
+            return 0.0, 0.0
         return float(np.median([s[0] for s in steps])), float(np.median([s[1] for s in steps]))
     out, why = dict(places), dict(hows)
     for n in unlinked:
         before = max((g for g in good if g < n), default=None)
         after = min((g for g in good if g > n), default=None)
         if before is not None and after is not None:
-            f = (n - before) / (after - before)
+            f = (at(n) - at(before)) / (at(after) - at(before)) if at(after) != at(before) else 0.5
             out[n] = [places[before][0] + f * (places[after][0] - places[before][0]),
                       places[before][1] + f * (places[after][1] - places[before][1])]
             why[n] = f"between the pictures' places of {before} and {after} (no match of its own)"
         else:
             g = before if before is not None else after
             st = edge_step(1 if before is not None else -1)
-            out[n] = [places[g][0] + (n - g) * st[0], places[g][1] + (n - g) * st[1]]
+            out[n] = [places[g][0] + (at(n) - at(g)) * st[0], places[g][1] + (at(n) - at(g)) * st[1]]
             why[n] = f"on from the pictures' place of {g} by their step (no match of its own)"
     return out, why
 
@@ -10128,8 +10137,13 @@ def centre_view(frame_id):
         # Enceladus mostly above the top edge, centred showed the top half of the view black and the moon cut on a
         # seam; taste call 36, 11-23. Decided on the frame itself: 125TI EUVFUV001's crescent, mostly on its picture
         # in a pass of frames beside the disk, stays centred)
-        hit = {k: v for k, v in hit.items() if k not in ("quarter",)}
-        hit.update(centre=False, frame=True, why="most of the body's disk is off this picture")
+        hit = dict(hit, centre=False, why="most of the body's disk is off this picture")
+        if hit.get("axes") is not None:
+            # (turned by the pass's quarter, as its other stills face: Fable saw a 125TI limb and a Saturn picture
+            # a quarter turn from the pass's centred stills)
+            hit["quarter"] = quarter_of(hit["turn"], hit["axes"])
+        else:
+            hit["frame"] = True
     elif hit["centre"]:
         hit = dict(hit, side=FRAME, radius=own_r)
     if not hit["centre"]:

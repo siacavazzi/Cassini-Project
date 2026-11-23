@@ -6,7 +6,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [os.path.join(HERE, "frames"), HERE]
 import obs_mosaic as om  # noqa: E402
 
-made = [{"n": n, "offset": [10.0 * n + (3.0 if n % 2 else -3.0), 0.0]} for n in range(10)]   # SPICE: 10 px a frame, scattered 3 px
+made = [{"n": n, "t": 100.0 * n, "offset": [10.0 * n + (3.0 if n % 2 else -3.0), 0.0]} for n in range(10)]   # SPICE: 10 px a frame, scattered 3 px
 chain = {n: [10.0 * n + 0.5, 0.0] for n in range(10)}
 mostly = {n: ("linked to [0]" if n < 8 else "held from the tile before (no match)") for n in range(10)}
 places, hows = om.one_source(chain, mostly, made)
@@ -30,3 +30,11 @@ assert not any(str(h).startswith("held") for h in hows.values()), hows
 steps = [places[n + 1][0] - places[n][0] for n in range(9)]
 assert max(abs(s - 10.0) for s in steps) < 1e-6, steps
 print("a sequence the pictures place most of: its unmatched frames go between the pictures' places: ok")
+
+# (by time, not frame number: frame 1 taken just after frame 0, frame 2 long after)
+uneven = [{"n": 0, "t": 0.0, "offset": [0.0, 0.0]}, {"n": 1, "t": 10.0, "offset": [0.0, 0.0]},
+          {"n": 2, "t": 100.0, "offset": [0.0, 0.0]}]
+places, hows = om.from_pictures({0: [0.0, 0.0], 1: [55.0, 0.0], 2: [100.0, 0.0]}, {0: "first", 1: "held", 2: "linked"},
+                                {1}, {0: 0.0, 1: 10.0, 2: 100.0})
+assert abs(places[1][0] - 10.0) < 1e-6, places
+print("an unmatched frame goes between the pictures' places by when it was taken: ok")
