@@ -50,7 +50,7 @@ def test_large_glow_is_not_flat():
 
 def test_slow_glow_down_the_frame_is_not_sky():
     iof = frame()
-    iof += (np.linspace(6.0e-5, 0.0, 512)[:, None] * np.ones((1, 512))).astype(np.float32)
+    iof += (1.2e-4 * np.exp(-(511 - np.arange(512)) / 150.0)[:, None] * np.ones((1, 512))).astype(np.float32)   # a glow rising to the frame's foot
     assert calibration._mostly_sky(iof) is None
 
 
