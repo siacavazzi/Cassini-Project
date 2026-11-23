@@ -2694,7 +2694,10 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         group = scale.get("track_set") or []
         if f in group:
             lift = min(max(track_black(scale["sky_track"][g], t) - scale["blacks"].get(g, 0.0), 0.0) for g in group)
-            raised = pass_black + lift
+            # but never under the filter's own sky level: one filter's sky lit by stray light (Io's IR4 frames in its
+            # 2001 eclipse, sky 0.0005 I/F over a pass black of 0.0002) stayed gray over the others' least raise (#619)
+            own = track_black(track, t, 2) if len(track[0]) > 2 else pass_black
+            raised = max(pass_black + lift, min(raised, own))
         # half of the raise as black, the rest in the toe (TRACK_TOE times the raise wide): what is left of a ring's
         # sheet, an F ring's skirt, a plume's outer glow and faint stars fades out instead of clipping (review 11-22:
         # the Full movies cut harder than the stills)
@@ -2863,7 +2866,13 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             return None
         if seen is not None:
             seen["black"] = raised
-        return {"black": raised, "toe": out.get("toe")}
+        # (on a movie with a sky track, the toe at least as wide as this frame's own raise over it: the frame's sky over
+        # its track black, lit by stray light, fades into black instead of showing as a gray floor, Io's IR4 eclipse
+        # frames 0 -> 5 when #619 raised a colour movie's track by its filters' least raise)
+        toe = out.get("toe")
+        if scale.get("sky_track"):
+            toe = max(toe or 0.0, raised - black)
+        return {"black": raised, "toe": toe}
 
     out["black_of"] = black_of
     return out
@@ -2908,19 +2917,22 @@ def sky_track(qs, masks, ts, top):
             # a quarter of the way up (TRACK_STILL; half and all the way lost faint light): all the way, the F ring's arc, a ring's faint sheet and the plume's outer
             # glow went black at Full (review 11-21, Sam's "go more conservative")
             black += TRACK_STILL * (still + still_margin - black)
-        got.append((t, black))
+        got.append((t, black, level))
     if len(got) < 3:
         return []
     got.sort(key=lambda g: g[0])
     half = TRACK_WINDOW // 2
-    levels = [g[1] for g in got]
-    return [[got[i][0], float(np.median(levels[max(0, i - half):i + half + 1]))] for i in range(len(got))]
+    blacks, levels = [g[1] for g in got], [g[2] for g in got]
+    # [t, black, the sky's own level] (the level: how far a colour movie's filter must come up at the least, track_set)
+    return [[got[i][0], float(np.median(blacks[max(0, i - half):i + half + 1])),
+             float(np.median(levels[max(0, i - half):i + half + 1]))] for i in range(len(got))]
 
 
-def track_black(track, t):
-    """The black at time t on a sky_track: between its samples, a straight line; before or after them, the end's"""
+def track_black(track, t, k=1):
+    """The black at time t on a sky_track (k=2: its sky's level): between its samples, a straight line; before or after
+    them, the end's"""
     ts = [p[0] for p in track]
-    return float(np.interp(t, ts, [p[1] for p in track]))
+    return float(np.interp(t, ts, [p[k] if len(p) > k else p[1] for p in track]))
 
 
 DISK_WHITE = 99.5   # pass_scale: the percentile of the body's disk that the pass's white is at least
@@ -3273,6 +3285,11 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
     sat = saturn_look(u) if calibration.look() == "balanced" else {}
+    if night and os.environ.get("NIGHT_PROBE"):
+        shares = [float(_dark_sky(i).mean()) for iofs in by.values() for i in iofs]
+        lit = [float(((i - blacks.get(f, 0.0)) / max(white, 1e-12) > 0.1).mean()) for f, iofs in by.items() for i in iofs]
+        with open(os.environ["NIGHT_PROBE"], "a") as fh:
+            fh.write(f"{u['key']} darksky {np.median(shares):.3f} lit>0.1 {np.median(lit):.4f} gamma {gamma}\n")
     if night and not isinstance(gamma, str):
         gamma = min(float(gamma), NIGHT_GAMMA)
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),

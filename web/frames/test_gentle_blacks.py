@@ -144,6 +144,16 @@ def test_colour_movie_filters_raised_together():
     assert "track_set" not in red
 
 
+def test_colour_filter_never_under_its_own_sky():
+    scale = {"blacks": {"IR4": 0.0002, "UV3": 0.0004}, "white": 0.05, "gamma": 3.0,
+             "sky_track": {"IR4": [[0.0, 0.0006, 0.0005], [10.0, 0.0006, 0.0005]],
+                           "UV3": [[0.0, 0.0004, 0.00038], [10.0, 0.0004, 0.00038]]},
+             "track_set": ["IR4", "UV3"]}
+    ir4 = obs_mosaic.tile_scale(scale, "IR4", own_sky=True, t=5.0, on_body=True)
+    k = obs_mosaic.TRACK_KEEP
+    assert abs(ir4["blacks"][0] - (0.0002 + k * (0.0005 - 0.0002))) < 1e-12   # up to its own sky level, not the least raise
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
