@@ -8763,6 +8763,8 @@ STEADY_AROUND = 32    # px: half the least square round a small target a stabili
                       # is added round its disk (CENTRE_MARGIN): SPICE's few px off, the disk most of the square, so the
                       # match is the disk's own (on a square mostly sky the alignment takes it for a star field)
 STEADY_EDGE_STEPS = 3   # (from_pictures) placed frames' steps whose median carries the pictures' places past the ends
+STEADY_DISAGREE = 5.0   # px: the pictures' links disagreeing past this (res_p90) and the whole sequence plays on
+#                         SPICE's smoothed path (one_source); a steady movie's links agree within 0.2 to 1.5 px
 STEADY_MIXED = 0.5    # of a movie's frames: more than this left unmatched by the pictures, and the whole sequence plays on
 #                       SPICE's smoothed path (steady_chain): never two pointing sources taking turns in one sequence
 STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by default (0: SPICE's places)
@@ -8861,7 +8863,7 @@ def steady_chain(u, cache, p=None):
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
                                         steady_rings(u, made), edges=clouded(u), stats=stats)
-            places, hows = one_source(places, hows, made)
+            places, hows = one_source(places, hows, made, stats)
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why,
@@ -8869,7 +8871,7 @@ def steady_chain(u, cache, p=None):
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 
 
-def one_source(places, hows, made):
+def one_source(places, hows, made, stats=None):
     """(places, hows) of a stabilization chain as one source of pointing for the whole sequence (Sam 2026-11-18): where
     the pictures place under STEADY_MIXED of the frames, the rest riding SPICE's smoothed path between them, the two
     sources took turns and the movie hopped where they met (2004's ring movie HIPHLFMOV001, 29 of 44 frames unmatched:
@@ -8877,9 +8879,12 @@ def one_source(places, hows, made):
     (_smoothed_path of made's places). Where they place the rest, the frames they do not place take their places from
     the pictures' own places around them, not SPICE's step (from_pictures): the pictures are the sequence's one source."""
     unlinked = [n for n, h in hows.items() if str(h).startswith("held")]
-    if not places or not unlinked:
+    # (pictures that disagree with themselves (stats: _chain_links' res_p90 past STEADY_DISAGREE) cannot place the
+    # sequence either: a 2010 Janus pass's matches disagreed by tens of px and it hopped 20 px where they met)
+    unsure = (stats or {}).get("res_p90") is not None and stats["res_p90"] > STEADY_DISAGREE
+    if not places or (not unlinked and not unsure):
         return places, hows
-    if len(unlinked) <= STEADY_MIXED * len(places):
+    if not unsure and len(unlinked) <= STEADY_MIXED * len(places):
         when = {t["n"]: t.get("t") for t in made}
         return from_pictures(places, hows, set(unlinked), when if all(isinstance(when.get(n), (int, float))
                                                                        for n in places) else None)
@@ -8888,7 +8893,7 @@ def one_source(places, hows, made):
     xs = _smoothed_path([by_n[n]["offset"] for n in ns])
     return ({n: [float(x), float(y)] for n, (x, y) in zip(ns, xs)},
             {n: f"held on SPICE's smoothed path (the whole sequence: the pictures matched {len(ns) - len(unlinked)} of "
-                f"{len(ns)} frames)" for n in ns})
+                f"{len(ns)} frames" + (f", disagreeing by {stats['res_p90']} px" if unsure else "") + ")" for n in ns})
 
 
 def from_pictures(places, hows, unlinked, when=None):
