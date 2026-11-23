@@ -9668,19 +9668,21 @@ STILL_DISK_ON = 0.5   # of the body's disk: a still with less of it on its pictu
 
 
 def disk_share(seen, radius, grid=24):
-    """The share of the body's disk (radius, about its centre) on one of the frames (seen, pass_seen: each frame's
-    points, its outline their hull), on a grid x grid raster of the disk; 1.0 without frames to say."""
+    """How much of the body's disk (radius, about its centre) a picture of the pass shows: the share of the disk on
+    each frame (seen, pass_seen: each frame's points, its outline their hull), on a grid x grid raster of the disk,
+    the median over the pass's frames (centre_view decides once for the pass; 214EN PLMHPMR001's plume frames each
+    show under a fifth of Enceladus, together most of it); 1.0 without frames to say."""
     if seen is None or not len(seen[1]) or radius <= 0:
         return 1.0
     u = (np.arange(grid) + 0.5) / grid * 2 - 1
     xx, yy = np.meshgrid(u, u)
     inner = xx * xx + yy * yy <= 1
     pts = np.stack([xx[inner] * radius, yy[inner] * radius], 1).astype(np.float32)
-    on = np.zeros(len(pts), bool)
+    shares = []
     for f in seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2):
         hull = cv2.convexHull(f.astype(np.float32))
-        on |= np.array([cv2.pointPolygonTest(hull, (float(x), float(y)), False) >= 0 for x, y in pts])
-    return float(on.mean())
+        shares.append(float(np.mean([cv2.pointPolygonTest(hull, (float(x), float(y)), False) >= 0 for x, y in pts])))
+    return float(np.median(shares))
 
 
 def disk_inside(seen, radius):
