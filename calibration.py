@@ -2656,6 +2656,7 @@ def _noise_only(iof, middle, noise):
     return float(np.std(inner)) <= SKY_FLAT * noise
 
 
+SKY_WHOLE_IOF = 4e-4    # _mostly_sky: only a frame whose median I/F is under this (the empty skies fixed here: 2e-5 to 2.8e-4)
 SKY_MOSTLY = 0.95       # _sky: a frame this share of whose pixels lie within SKY_NOISE noise of its own median ...
 SKY_FLAT_BANDED = 0.6   # ... and whose clipped blur, its row and column banding taken out, varies by at most this times that noise is sky all over (_mostly_sky)
 
@@ -2673,10 +2674,11 @@ def _mostly_sky(iof):
     over, its speck and stars above the cut."""
     low, middle = (float(v) for v in np.percentile(iof, (16, 50)))
     noise = middle - low
-    # only a dark frame (its median under GLOW_IOF[0], as _sunlit's lit sky): a bland, even cloud deck filling the frame
-    # (Saturn's NAC close-ups, I/F 0.1 to 0.5) is as flat round its median and is no sky (the 573-item bench drew four
-    # of them gray, and took the black of ring and Saturn movie frames off their Processed level)
-    if noise <= 0 or middle >= GLOW_IOF[0]:
+    # only a dark frame (its median under SKY_WHOLE_IOF): a bland, even cloud deck filling the frame (Saturn's NAC
+    # close-ups, I/F 0.1 to 0.5) is as flat round its median and is no sky (the 573-item bench drew four of them gray),
+    # nor is the faint ring light within the noise of a Daphnis ring movie's frames (I/F 7e-4 to 1e-3, as flat as the
+    # stills fixed here: their Processed level lost the faint ring and the bench's full_black failed)
+    if noise <= 0 or middle >= SKY_WHOLE_IOF:
         return None
     cut = middle + SKY_NOISE * noise
     if float((iof < cut).mean()) < SKY_MOSTLY:
