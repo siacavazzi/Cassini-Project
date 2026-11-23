@@ -96,7 +96,7 @@ import label_handler  # noqa: E402
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
 # obs-v161/v144/v130: lifted skies after #609: night-side passes on gamma 1.5, the net glow test never above the plain one, a colour movie's drawn filters raised together on Full's sky track
-VERSIONS = {"balanced": "obs-v167", "raw": "obs-v150", "eye": "obs-v167-eye", "false": "obs-v167-false", "classic": "obs-v136-classic"}   # v167/v150/v136: a speck movie's gray veil frames (a sky VEIL_SKY over frames whose sky is dark: Methone 2012 and Pallene 2017's 1 s frames, Mundilfari 2007's RED) are held (veiled_frame; tile reports keep each frame's sky)
+VERSIONS = {"balanced": "obs-v167", "raw": "obs-v150", "eye": "obs-v167-eye", "false": "obs-v167-false", "classic": "obs-v136-classic"}   # v167/v150/v136: a speck movie's gray veil frames (a mid-gray sky between frames whose sky is dark: Methone 2012 and Pallene 2017's 1 s frames, Mundilfari 2007's RED) are held (veiled_frame; tile reports keep each frame's sky)
 # before: v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
 # before: v157/v140/v126 (numbered past #608, #611, #614): a small target's square matched only where both pictures show it (Albiorix 129OT's star hops); a tinted movie frame's brightness matched over what is lit, not the sky (Jupiter C23JU W_10's white, gray and yellow flips); a frame unfit or of a held band with no set over it shows what the frame before shows (170SA WIND5HR005's 85 px hop back and near-black MT3); a movie's lone first or last frames at another pointing are passes of their own (289SA AURSTARE001's white flash); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 # before: v156/v139/v125: a giant planet's colour set as at one time: each channel redrawn as SPICE turns the body to the set's time (derotation: Saturn's 2011 storm fringes; numbered past #608, #611, #612, #615, #616); v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
@@ -10454,24 +10454,29 @@ def blank_frame(frames, n, tile_of):
 
 VEIL_LIT = 0.5     # of a frame: (veiled_frame) a frame lit (LIT_LEVEL and up) over this much ...
 VEIL_CLEAR = 0.05  # ... among its filter's nearest frames on both sides lit over this much or less is a lone veiled frame
-VEIL_SKY = 16      # levels: (veiled_frame) a frame whose sky (median, display scale) is this or more ...
+VEIL_SKY = 20      # levels: (veiled_frame) a frame whose sky (median, display scale) is this ...
+VEIL_SKY_MAX = 90  # ... to this, a mid gray (a ring or a planet filling the frame is brighter) ...
 VEIL_DARK = 3      # ... between frames whose sky is this or less is a veiled frame too (a speck's: no lit share kept)
 VEIL_RUN = 4       # frames: the longest run of such frames veiled_frame takes as veils (longer: what the camera saw)
 
 
 def veiled_frame(frames, n, tile_of):
     """True when frame n of a movie is a gray veil: lit nearly all over (its tile's "lit" share VEIL_LIT or more) or its
-    sky VEIL_SKY levels or more, between frames measured dark (lit VEIL_CLEAR or less, or sky VEIL_DARK or less) at the
-    same view: a frame of another kind among them, whose sky did not calibrate to the others' (Skathi 2011: one 460 s
-    full-resolution frame among 220 s summed ones, its dark current a gray veil 64 levels over a black sky, a flash
-    every few dozen frames; Methone 2012 and Pallene 2017's 1 s frames among 10 s ones; Mundilfari 2007's lone RED
+    sky a mid gray (VEIL_SKY to VEIL_SKY_MAX), between frames measured dark (lit VEIL_CLEAR or less, or sky VEIL_DARK or
+    less) at the same view: a frame of another kind among them, whose sky did not calibrate to the others' (Skathi 2011:
+    one 460 s full-resolution frame among 220 s summed ones, its dark current a gray veil 64 levels over a black sky, a
+    flash every few dozen frames; Methone 2012 and Pallene 2017's 1 s frames among 10 s ones; Mundilfari 2007's lone RED
     frame between BL1 and IR2). Its neighbours are its filter's frames each side, else, with none of its filter on that
-    side, the nearest frame of any. A run of up to VEIL_RUN such frames is veiled as one. A pass that brightens
-    steadily has a lit frame on one side, so its frames are never veiled by this rule, nor is a frame at another view
-    than those frames (its box's middle a quarter of its size or more from theirs): 101SA AURORA003 W's clear frame at the
-    movie's next, wider view takes in the lit planet the frames before it did not, and is that view's first picture."""
+    side, the nearest frame of any filter but a held band (a UV or methane frame is dark by nature: 124RI's ring close-up
+    lit all over beside its UV3). A run of up to VEIL_RUN of its filter's such frames is veiled as one, and the movie's
+    first or last frames when the frames on their one side are dark; a filter whose frames are veiled over a third of
+    the time is what the camera saw (the 2002 Sun scattered-light series, gray in four clear frames of five). A pass
+    that brightens steadily has a lit frame on one side, so its frames are never veiled by this rule, nor is a frame at
+    another view than those frames (its box's middle a quarter of its size or more from theirs): 101SA AURORA003 W's
+    clear frame at the movie's next, wider view takes in the lit planet the frames before it did not, and is that
+    view's first picture."""
     def veil(t):
-        return (t.get("lit") or 0.0) >= VEIL_LIT or (t.get("sky") or 0) >= VEIL_SKY
+        return (t.get("lit") or 0.0) >= VEIL_LIT or VEIL_SKY <= (t.get("sky") or 0) <= VEIL_SKY_MAX
 
     def dark(t):
         # (a neighbour neither of whose measures was taken is not known to be dark: tile() keeps lit only for frames
@@ -10487,27 +10492,32 @@ def veiled_frame(frames, n, tile_of):
     box = placed(tile_of(n))
     if box is None:
         return False
+    # (a frame lost in part, held itself, is no neighbour: Methone 2012's frame 18, 85% lost, beside its veiled 17)
+    usable = lambda j: "offset" in tile_of(j) and not partial(tile_of(j))
+    mine = [j for j in range(len(frames)) if frames[j][2] == f and usable(j)]
+    if len(mine) >= 3 and 3 * sum(veil(tile_of(j)) for j in mine) > len(mine):
+        return False
     run, sides = 1, 0
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
-        # (a frame lost in part, held itself, is no neighbour: Methone 2012's frame 18, 85% lost, beside its veiled 17)
-        js = [j for j in js if "offset" in tile_of(j) and not partial(tile_of(j))]
-        side = [j for j in js if frames[j][2] == f] or js
-        mine = iter(side)
-        j, last = next(mine, None), None
-        while j is not None and veil(tile_of(j)) and run < VEIL_RUN:
-            other = placed(tile_of(j))
+        js = [j for j in js if usable(j)]
+        same = [j for j in js if frames[j][2] == f]
+        j, k = None, 0
+        while k < len(same) and veil(tile_of(same[k])) and run < VEIL_RUN:
+            other = placed(tile_of(same[k]))
             if other is None or _box_apart(box, other):
                 return False
-            run, last = run + 1, j
-            j = next(mine, None)
-        past = [k for k in js if last is None or abs(k - n) > abs(last - n)]   # (the frames past the run)
-        if j is None and last is not None:
-            # (its filter's frames on that side all veiled: the nearest frame of any filter past them)
-            j = next(iter(past), None)
-        if j is None and not past:
-            # (the movie's first or last frames: veiled when the frames on their one side are dark, Himalia 2000's
-            # first BL1 frame, Mundilfari 2007's last two clear frames after its dark IR2)
-            continue
+            run, k = run + 1, k + 1
+        if k < len(same):
+            j = same[k]
+        else:
+            # (none of its filter past the run on that side: the nearest frame of any filter but a held band)
+            last = same[k - 1] if k else n
+            past = [m for m in js if abs(m - n) > abs(last - n) and not held_band(frames[m][2])]
+            if not past and all(abs(m - n) <= abs(last - n) for m in js):
+                # (the movie's first or last frames: veiled when the frames on their one side are dark, Himalia
+                # 2000's first BL1 frame, Mundilfari 2007's last two clear frames after its dark IR2)
+                continue
+            j = past[0] if past else None
         if j is None or not dark(tile_of(j)):
             return False
         other = placed(tile_of(j))

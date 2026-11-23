@@ -154,6 +154,18 @@ def test_veiled_speck_by_sky():
     assert om.veiled_frame(frames, 2, lambda j: tiles[j])
 
 
+def test_veil_is_not_a_lit_frame():
+    # a ring close-up lit all over beside a dark UV3 frame (124RI) is no veil: UV frames are dark by nature, and its sky
+    # is over VEIL_SKY_MAX; a filter gray in most of its frames (the 2002 Sun series) is what the camera saw
+    tile = lambda sky: {"offset": [0.0, 0.0], "box": [-512.0, -512.0, 1024.0, 1024.0], "sky": sky}
+    frames = [("p", f"F{j}", f, 100.0 * j) for j, f in enumerate(["RED", "GRN", "BL1", "UV3", "IR4"])]
+    tiles = [tile(116), tile(111), tile(101), tile(0), tile(60)]
+    assert not any(om.veiled_frame(frames, n, lambda j: tiles[j]) for n in range(5))
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j) for j in range(5)]
+    tiles = [tile(50), tile(0), tile(50), tile(50), tile(50)]
+    assert not any(om.veiled_frame(frames, n, lambda j: tiles[j]) for n in range(5))
+
+
 if __name__ == "__main__":
     for name, f in list(globals().items()):
         if name.startswith("test_"):
