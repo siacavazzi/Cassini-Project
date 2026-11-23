@@ -48,6 +48,12 @@ def test_large_glow_is_not_flat():
     assert calibration._mostly_sky(iof) is None
 
 
+def test_bland_cloud_deck_is_not_sky():
+    rng = np.random.default_rng(3)
+    deck = (0.3 + 0.002 * rng.standard_normal((512, 512))).astype(np.float32)
+    assert calibration._mostly_sky(deck) is None
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

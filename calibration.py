@@ -2674,7 +2674,10 @@ def _mostly_sky(iof):
     its shape and fails it."""
     low, middle = (float(v) for v in np.percentile(iof, (16, 50)))
     noise = middle - low
-    if noise <= 0:
+    # only a dark frame (its median under GLOW_IOF[0], as _sunlit's lit sky): a bland, even cloud deck filling the frame
+    # (Saturn's NAC close-ups, I/F 0.1 to 0.5) is as flat round its median and is no sky (the 573-item bench drew four
+    # of them gray, and took the black of ring and Saturn movie frames off their Processed level)
+    if noise <= 0 or middle >= GLOW_IOF[0]:
         return None
     cut = middle + SKY_NOISE * noise
     if float((iof < cut).mean()) < SKY_MOSTLY:
