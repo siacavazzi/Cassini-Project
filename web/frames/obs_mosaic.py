@@ -8496,6 +8496,14 @@ def _smoothed_path(x0):
     return out
 
 
+STEADY_ACROSS = 0.1   # weight of a clouded body's picture link across two filters (no lit edge matched), against its
+#                       own filter's links: two filters show two layers, haze or cloud tops, a few px apart. Weighted
+#                       as one, 003SA 3X3MOVIEA002's Saturn stepped 2 to 3 px at each colour set and 125TI EUVFUV001's
+#                       Titan 98 px on one frame; left out, Titan 2004's haze movies (TA) and the 2004 Saturn approach
+#                       movie lost the links that tie their filters together and hopped 3 to 23 px
+ACROSS = "(across filters)"
+
+
 # (stats: a dict the caller passes to _chain_links to be filled with that solve's link statistics; per call, so server
 # threads solving different passes never share it)
 def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False, stats=None):
@@ -8563,17 +8571,14 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel) if edges else (None, None)
         if shift is not None:
             how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
-        elif edges and by[j].get("filter") != t.get("filter"):
-            # (a clouded body's frames in two filters show two layers, haze or cloud tops, apart by a few px: with no
-            # lit edge to match, no link. Matched on the pictures, 003SA 3X3MOVIEA002's Saturn stepped 2 to 3 px at
-            # each colour set and 125TI EUVFUV001's Titan 98 px on one frame; its own filter's frame before it links it)
-            return pr, None, "no edges across filters"
         else:
             # (where a clouded body's lit edges say nothing, the pictures: with edges alone, every link of Titan's
             # haze movies and Saturn's ring movies failed and their frames rode SPICE's smoothed path, 4 to 21 px hops)
             seen = None
             shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                      around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
+            if edges and by[j].get("filter") != t.get("filter"):
+                how = f"{how} {ACROSS}"
         if shift is not None and math.hypot(*shift) <= believed:
             d = (rel[0] - shift[0], rel[1] - shift[1])
             if edges and (seen or {}).get("normal"):
@@ -8620,6 +8625,8 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         for k in keep:
             (j, n), d, _ = got[k]
             w = math.sqrt(robust[k]) / STEADY_LINK_NOISE
+            if str(got[k][2]).endswith(ACROSS):
+                w *= STEADY_ACROSS
             rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
             rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
             r += 1
