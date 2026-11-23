@@ -2016,13 +2016,14 @@ SAT_EDGE_LIT = 48   # (_lit_round) display code: a saturated patch whose edge is
 
 
 def _lit_round(picture, full):
-    """The median display code of the unsaturated pixels just round mask full (SAT_RING px): a saturated disc's edge is
-    the lit body it clipped on (Enceladus 2006's terrain round its clipped cap); junk saturated round a dark frame has
-    only sky round it (Io 2000's eclipse frames 1 and 12, a blocky ring round Io in a frame lost in part)."""
+    """The display code that a quarter of the unsaturated pixels just round mask full (SAT_RING px) reach: a saturated
+    disc's edge is in part the lit body it clipped on (Enceladus 2006's terrain round its clipped cap, the sky over its
+    limb the rest); junk saturated round a dark frame has only sky round it (Io 2000's eclipse frames 1 and 12, a
+    blocky ring round Io in a frame lost in part)."""
     side = 2 * SAT_RING + 1
     edge = cv2.dilate(np.asarray(full, np.uint8), np.ones((side, side), np.uint8)).astype(bool) & ~np.asarray(full, bool)
     v = np.asarray(picture)[edge]
-    return float(np.median(v)) if v.size else 0.0
+    return float(np.percentile(v, 75)) if v.size else 0.0
 
 
 def _largest_share(full):
