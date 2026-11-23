@@ -41,6 +41,11 @@ print(r.detail)
 assert not r.ok and r.value == 3, r.as_dict()
 p.meta["collected"] = {"pointing_sources": {"frames": 3, "auto": True, "linked": 2, "smoothed": 1, "on_spice": 0}}
 assert bc.CHECKS["pointing_sources"](p).ok
+# (two sources in one sequence: one frame held on SPICE's step among frames the pictures place)
+p.meta["collected"] = {"pointing_sources": {"frames": 3, "auto": True, "linked": 2, "smoothed": 1, "on_spice": 0, "mixed": 1}}
+r = bc.CHECKS["pointing_sources"](p)
+assert not r.ok and r.value == 1, r.as_dict()
+print(r.detail)
 
 
 # every frame measurable (no blank first pair): the worst move's frame is named, never past the last frame

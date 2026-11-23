@@ -96,7 +96,7 @@ import label_handler  # noqa: E402
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
 # obs-v161/v144/v130: lifted skies after #609: night-side passes on gamma 1.5, the net glow test never above the plain one, a colour movie's drawn filters raised together on Full's sky track
-VERSIONS = {"balanced": "obs-v166", "raw": "obs-v149", "eye": "obs-v166-eye", "false": "obs-v166-false", "classic": "obs-v135-classic"}   # v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
+VERSIONS = {"balanced": "obs-v169", "raw": "obs-v152", "eye": "obs-v169-eye", "false": "obs-v169-false", "classic": "obs-v138-classic"}   # v169/v152/v138: a frame the pictures do not place, in a sequence they place most of, goes between the pictures' places around it, not on SPICE's step (from_pictures, one pointing source end to end; past the speck-veils branch); v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
 # before: v157/v140/v126 (numbered past #608, #611, #614): a small target's square matched only where both pictures show it (Albiorix 129OT's star hops); a tinted movie frame's brightness matched over what is lit, not the sky (Jupiter C23JU W_10's white, gray and yellow flips); a frame unfit or of a held band with no set over it shows what the frame before shows (170SA WIND5HR005's 85 px hop back and near-black MT3); a movie's lone first or last frames at another pointing are passes of their own (289SA AURSTARE001's white flash); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 # before: v156/v139/v125: a giant planet's colour set as at one time: each channel redrawn as SPICE turns the body to the set's time (derotation: Saturn's 2011 storm fringes; numbered past #608, #611, #612, #615, #616); v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 # before: v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
@@ -8750,6 +8750,7 @@ STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STE
 STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
                       # is added round its disk (CENTRE_MARGIN): SPICE's few px off, the disk most of the square, so the
                       # match is the disk's own (on a square mostly sky the alignment takes it for a star field)
+STEADY_EDGE_STEPS = 3   # (from_pictures) placed frames' steps whose median carries the pictures' places past the ends
 STEADY_MIXED = 0.5    # of a movie's frames: more than this left unmatched by the pictures, and the whole sequence plays on
 #                       SPICE's smoothed path (steady_chain): never two pointing sources taking turns in one sequence
 STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by default (0: SPICE's places)
@@ -8775,7 +8776,7 @@ if int(os.environ.get("CASSINI_STEADY_LINKS", "4")) > 1:
     # alone, Titan's haze, Saturn's ring movies and Jupiter found no edge on any link and the frames rode SPICE's
     # smoothed path, hopping 4 to 21 px (final spot check 11-22)
     # steady14: a sequence the pictures match under half of goes whole on SPICE's smoothed path (STEADY_MIXED)
-    STEADY_FILE = f"steady14k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
+    STEADY_FILE = f"steady15k{int(os.environ.get('CASSINI_STEADY_LINKS', '4'))}-" + PLAN_FILE
                                        # steady4: seen_places not where another body touches the moon
 # a small moon that SPICE places badly (Sam 2026-11-04: "see variance between frames that are close together and then
 # if it's a certain amount ... just use visual frame alignment"): where the pictures show the moon
@@ -8861,10 +8862,13 @@ def one_source(places, hows, made):
     the pictures place under STEADY_MIXED of the frames, the rest riding SPICE's smoothed path between them, the two
     sources took turns and the movie hopped where they met (2004's ring movie HIPHLFMOV001, 29 of 44 frames unmatched:
     14.8 px; Titan 213TI FIRLMBINT002, 7 of 10: 5.0 px), so every frame goes on SPICE's smoothed path
-    (_smoothed_path of made's places); otherwise as they are."""
+    (_smoothed_path of made's places). Where they place the rest, the frames they do not place take their places from
+    the pictures' own places around them, not SPICE's step (from_pictures): the pictures are the sequence's one source."""
     unlinked = [n for n, h in hows.items() if str(h).startswith("held")]
-    if not places or len(unlinked) <= STEADY_MIXED * len(places):
+    if not places or not unlinked:
         return places, hows
+    if len(unlinked) <= STEADY_MIXED * len(places):
+        return from_pictures(places, hows, set(unlinked))
     ns = sorted(places)
     by_n = {t["n"]: t for t in made if "offset" in t}
     xs = _smoothed_path([by_n[n]["offset"] for n in ns])
@@ -8872,6 +8876,41 @@ def one_source(places, hows, made):
             {n: f"held on SPICE's smoothed path (the whole sequence: the pictures matched {len(ns) - len(unlinked)} of "
                 f"{len(ns)} frames)" for n in ns})
 
+
+def from_pictures(places, hows, unlinked):
+    """(places, hows) with each frame the pictures did not place (unlinked: held on SPICE's step from the tile before,
+    _chain_links) put where the pictures' own places around it say: between two placed frames, on the straight line
+    between their places by frame number; before the first or after the last, on from it by the median of the placed
+    frames' steps nearest it (STEADY_EDGE_STEPS of them). The pictures stay the sequence's one source of pointing (Sam
+    2026-11-18): a held frame on SPICE's step put SPICE's pointing scatter into a picture-steadied movie, a hop of its
+    scatter where the two met (titan08-movie2's 3.6 px)."""
+    ns = sorted(places)
+    good = [n for n in ns if n not in unlinked]
+    if not good:
+        return places, hows
+
+    def edge_step(side):
+        run = good[:STEADY_EDGE_STEPS + 1] if side < 0 else good[-STEADY_EDGE_STEPS - 1:]
+        if len(run) < 2:
+            return 0.0, 0.0
+        steps = [((places[b][0] - places[a][0]) / (b - a), (places[b][1] - places[a][1]) / (b - a))
+                 for a, b in zip(run, run[1:])]
+        return float(np.median([s[0] for s in steps])), float(np.median([s[1] for s in steps]))
+    out, why = dict(places), dict(hows)
+    for n in unlinked:
+        before = max((g for g in good if g < n), default=None)
+        after = min((g for g in good if g > n), default=None)
+        if before is not None and after is not None:
+            f = (n - before) / (after - before)
+            out[n] = [places[before][0] + f * (places[after][0] - places[before][0]),
+                      places[before][1] + f * (places[after][1] - places[before][1])]
+            why[n] = f"between the pictures' places of {before} and {after} (no match of its own)"
+        else:
+            g = before if before is not None else after
+            st = edge_step(1 if before is not None else -1)
+            out[n] = [places[g][0] + (n - g) * st[0], places[g][1] + (n - g) * st[1]]
+            why[n] = f"on from the pictures' place of {g} by their step (no match of its own)"
+    return out, why
 
 def steady_held(u, cache, p=None):
     """{tile n: [x, y]}: what steady_places holds pass u's chain to, SPICE's place of each tile (its offset) or, where

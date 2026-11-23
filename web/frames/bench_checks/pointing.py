@@ -4,8 +4,9 @@ most movies at SPICE's raw pointing, which scatters 3 to 26 px from frame to fra
 Saturn, 293EN ENCSET001, mixed the pictures' places with SPICE's):
 
   pointing_jitter   how far the movie's picture jumps from frame to frame beyond its own smooth motion
-  pointing_sources  how many of the movie's frames play at SPICE's own raw pointing (none should: every frame is
-                    placed by the pictures, or on SPICE's smoothed path between frames the pictures place). It reads
+  pointing_sources  how many of the movie's frames play at SPICE's own raw pointing, or on SPICE's step in a sequence
+                    the pictures otherwise place (none should: a sequence is placed by the pictures end to end, or
+                    whole on SPICE's smoothed path). It reads
                     the commit's own placement (its collect hook), so it is paired with pointing_jitter, which measures
                     the pictures themselves
 """
@@ -82,7 +83,7 @@ def pointing_sources(p, limit=0):
     got = p.collected("pointing_sources")
     if not got or got.get("frames") is None:
         return Result(None, limit, True, "the build kept no pointing facts (collect hook missing)")
-    n = got["on_spice"]
+    n = got["on_spice"] + (got.get("mixed") or 0)
     made = len(p.frames())
     if made * 2 < got["frames"]:
         # (a movie whose pictures could not be read, LeanFrameMissing without the 12-bit originals: its chain had
@@ -92,7 +93,8 @@ def pointing_sources(p, limit=0):
         return Result(0, limit, True, f"the view follows the frames: each of {got['frames']} drawn as the camera took it, "
                                       "no pointing places it")
     return Result(n, limit, n <= limit,
-                  f"{n} of {got['frames']} frames at SPICE's raw pointing; {got.get('linked')} placed by the pictures, "
+                  f"{got['on_spice']} of {got['frames']} frames at SPICE's raw pointing, {got.get('mixed') or 0} on SPICE's "
+                  f"step among frames the pictures place; {got.get('linked')} placed by the pictures, "
                   f"{got.get('smoothed')} on the smoothed path ({'stabilized' if got.get('auto') else 'not stabilized'} "
                   f"by default)")
 
@@ -128,7 +130,12 @@ def _sources(ctx):
     raw = len(u["frames"]) if not auto else sum(h.startswith("SPICE") for h in hows)
     if auto and not hasattr(om, "STEADY_HIDDEN"):
         raw += sum(h.startswith("held") for h in hows)
-    return {"frames": len(u["frames"]), "auto": auto, "linked": linked, "smoothed": smoothed, "on_spice": raw}
+    # (two sources in one sequence: a chain whose frames the pictures place in part, the rest held on SPICE's step or
+    # path. from_pictures puts those between the pictures' own places; before it they counted as smoothed only)
+    by_spice = sum(h.startswith("held") for h in hows)
+    mixed = by_spice if auto and by_spice and by_spice < len(hows) else 0
+    return {"frames": len(u["frames"]), "auto": auto, "linked": linked, "smoothed": smoothed, "on_spice": raw,
+            "mixed": mixed}
 
 
 ITEMS = [
