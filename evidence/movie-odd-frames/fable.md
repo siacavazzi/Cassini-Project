@@ -1,14 +1,7 @@
-Fable 5.2, neutral brief, 11-22.
-
-Changed sheets (one sample frame each, 56d65b8b vs 4e6ac06b):
-- Better: saturn16-uv2 (clean black sky, specks gone), skathi11-veil (gray veil gone), titan16-methane (clean disc, surface markings).
-- Mixed on one frame: impact293, pan17, rx-saturn14. Fable could not judge flashes from a single frame, so the movie strips below were judged.
-
-Frame strips (main top, candidate bottom):
-- impact293 4-9: candidate better. Main's frame 7 flashes dark gray between orange frames; the candidate's matches them.
-- rx-saturn14 30-36: candidate better. Main's frames 33-35 shrink, blur and get a black border (the blurred UV3 held three times); the candidate's are sharp and full-frame, like 30-32.
-- rx-saturn14 49-54: candidate better. Main's frames 52-53 get a green cast, blur and a border; the candidate's match 49-51.
-- pan17 10-16: mixed. Both rows have one rotation of the ring panels (the camera's turn). Main turns between 15 and 16; the candidate turns between 13 and 14, because polarizer frames 14-15 now show the clear frame nearest them in time.
-- titan16-methane 5-12: candidate better. Titan stays put (no jump over 2-3 px); main's dark, speckled UV1 frame 10 is gone.
-
-Fable saw no frame where the candidate looked worse than main.
+Fable 5.2, neutral brief, 11-23 (bench 6452dc6d vs 53f62663). Frame strips, main on top, candidate below:
+- titan16 0-15: candidate better. Main flashes at 5-10: dark and gray frames without markings, the worst a near-outline disc on a gray veil at 10, and the disc hops. The candidate has no flash, jump or lost detail. Measured by phase correlation: main steps 14 px at 5 and 8 px at 9; the candidate's steps are 0.0-0.4 px.
+- skathi11 44-59: candidate better. Main has 8 gray veil frames (46, 48-50, 54, 56-57, 59); the candidate's sky is black throughout and the stars are kept.
+- skathi11 84-93: candidate better. Main's veils at 89, 90 and 93 are gone. The dimmer 84 and 87 and the 86-88 step are the same on both.
+- impact293 4-9, rx-saturn14 30-36 and 49-54 (strips here; judged better on 11-22): these frames are unchanged from the 11-22 candidate.
+- pan17: mixed on 11-22. The camera's one turn shows two frames earlier, because polarizer frames take the clear frame nearest in time.
+No new defect seen.
