@@ -102,6 +102,11 @@
   {"name": "m-siarnaq10-still", "kind": "still", "frame": "N1671700783_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: SIARNAQ still ISSNA (BL1,CL2) | KNOWN FAILURE"},
   {"name": "m-telesto06-still", "kind": "still", "frame": "W1524686058_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: TELESTO still ISSWA (CL1,CL2) | KNOWN FAILURE"},
   {"name": "rz-iapetus11-still", "kind": "still", "frame": "N1686229427_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: spot 11-20 still ISSNA (CL1,CL2) IAPETUS | KNOWN FAILURE"},
-  {"name": "aurstare13-movie", "kind": "pass", "frame": "N1740330477_1", "group": "hard", "watch": "182SA AURSTARE001 night side: drawn near white on 7d4edf16"}
+  {"name": "aurstare13-movie", "kind": "pass", "frame": "N1740330477_1", "group": "hard", "watch": "182SA AURSTARE001 night side: drawn near white on 7d4edf16"},
+  {"name": "adj-rz-enceladus13-movie-yr", "kind": "pass", "frame": "W1604170832_1", "group": "hard", "watch": "spot 11-23 blacks follow-up: same target/kind other year as rz-enceladus13-movie: ENCELADUS_ISS_091EN_SECLNX0"},
+  {"name": "rx-saturn08-other", "kind": "pass", "frame": "N1606803349_1", "group": "hard", "watch": "spot 11-23 blacks follow-up: spot 11-20 odd-other: SATURN_ISS_095SA_NPOLEDYN001_VIMS_N_2_g3 (6 frames, 2008-3"},
+  {"name": "adj-rx-saturn08-other-obs", "kind": "pass", "frame": "N1606769509_4", "group": "hard", "watch": "spot 11-23 blacks follow-up: same observation as rx-saturn08-other: SATURN_ISS_095SA_NPOLEDYN001_VIMS_N_0_g3 "},
+  {"name": "adj-m-io00-pass-yr", "kind": "pass", "frame": "N1357078639_3", "group": "hard", "watch": "spot 11-23 blacks follow-up: same target/kind other year as m-io00-pass: IO_ISS_C23IO_IOECLPSC_PRIME_N_0_r72_"},
+  {"name": "rz-enceladus10-movie2", "kind": "pass", "frame": "N1669795989_1", "group": "hard", "watch": "spot 11-23 blacks follow-up: spot 11-20 movie ENCELADUS_ISS_141EN_PLMHPHR001_PIE_N_0_g3 (31 fr) | KNOWN FAILU"}
  ]
 }
