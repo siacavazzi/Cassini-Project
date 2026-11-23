@@ -2656,6 +2656,40 @@ def _noise_only(iof, middle, noise):
     return float(np.std(inner)) <= SKY_FLAT * noise
 
 
+SKY_MOSTLY = 0.95       # _sky: a frame this share of whose pixels lie within SKY_NOISE noise of its own median ...
+SKY_FLAT_BANDED = 0.3   # ... and whose clipped blur, its row and column banding taken out, varies by at most this times that noise is sky all over (_mostly_sky)
+
+
+def _mostly_sky(iof):
+    """The cut under which a frame that is its sky nearly all over is sky, or None. SKY_CUT of the 99.9th percentile
+    finds no sky on a frame of noise round a speck (a distant moon, a star field: its sky is a few hundred noise widths
+    above nothing but only a few tens under its brightest pixels, so under 1000 pixels lie below the cut, and the
+    _noise_only rescue never runs); the sky then went unmeasured, the black sat on the floor and the whole frame came out
+    a gray banded panel (Calypso 2005 N1511290086_1, Polydeuces 2012 N1726540043_1, Telesto W1524686058_1, Phoebe
+    N1515090832_1, Io N1357386993_1: sky medians 20 to 70 of 255). Here the frame's own median and its 16th
+    percentile give the sky level and noise; when SKY_MOSTLY of it lies within SKY_NOISE noise of that level and its
+    clipped blur, its row and column banding taken out (with the camera's banding, these long exposures measure 0.45 to
+    0.62 of the noise under _noise_only's measure; without it, 0.05 to 0.16), is flat to SKY_FLAT_BANDED, the frame is
+    sky all over, its speck and stars above the cut. A glow or ring band varies across rows and columns alike, keeps
+    its shape and fails it."""
+    low, middle = (float(v) for v in np.percentile(iof, (16, 50)))
+    noise = middle - low
+    if noise <= 0:
+        return None
+    cut = middle + SKY_NOISE * noise
+    if float((iof < cut).mean()) < SKY_MOSTLY:
+        return None
+    clipped = np.clip(np.nan_to_num(iof.astype(np.float32)), middle - SKY_NOISE * noise, cut)
+    # the camera's column and row banding taken out first (each column's, then each row's median less the frame's), so
+    # the flatness asked is of what varies across rows and columns alike
+    clipped = clipped - (np.median(clipped, axis=0) - middle)[None, :].astype(np.float32)
+    clipped = clipped - (np.median(clipped, axis=1) - middle)[:, None].astype(np.float32)
+    big = cv2.GaussianBlur(clipped, (0, 0), SKY_FLAT_PX)
+    m = 2 * SKY_FLAT_PX
+    inner = big[m:-m, m:-m] if min(big.shape[:2]) > 4 * m else big
+    return cut if float(np.std(inner)) <= SKY_FLAT_BANDED * noise else None
+
+
 def _sky(iofs):
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
@@ -2666,6 +2700,11 @@ def _sky(iofs):
             noise = middle - low
             if noise > 0 and cut - middle < SKY_SPLIT * noise and _noise_only(iof, middle, noise):
                 cut = max(cut, middle + SKY_NOISE * noise)
+        if float((iof < cut).mean()) < SKY_MOSTLY:
+            # a frame of sky round a speck that the cut above misses (_mostly_sky)
+            whole = _mostly_sky(iof)
+            if whole is not None:
+                cut = max(cut, whole)
         sky &= iof < cut
     return sky
 
