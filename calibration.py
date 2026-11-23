@@ -1967,7 +1967,8 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # SAT_WHITE, for a patch a smooth glow climbs into; one with an edge or among ringlets stays white (260RI
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
-            if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"]:
+            if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"] \
+                    and _lit_round(picture, full) >= SAT_EDGE_LIT:
                 # (a movie's frame, shown alone, that saturated a body, one patch sat_white_all of the frame or more:
                 # white, as draw_saturated draws a one frame picture's; obs_mosaic.tile. Star trails, many thin patches,
                 # keep saturated_code: white, they flashed in Skathi 2011's long frames)
@@ -2009,6 +2010,19 @@ SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or 
 
 
 SAT_SOLID = 0.7   # (_largest_share) a saturated patch whose area is this much of its convex hull or more is a body's disc
+
+
+SAT_EDGE_LIT = 48   # (_lit_round) display code: a saturated patch whose edge is this bright is part of a lit body
+
+
+def _lit_round(picture, full):
+    """The median display code of the unsaturated pixels just round mask full (SAT_RING px): a saturated disc's edge is
+    the lit body it clipped on (Enceladus 2006's terrain round its clipped cap); junk saturated round a dark frame has
+    only sky round it (Io 2000's eclipse frames 1 and 12, a blocky ring round Io in a frame lost in part)."""
+    side = 2 * SAT_RING + 1
+    edge = cv2.dilate(np.asarray(full, np.uint8), np.ones((side, side), np.uint8)).astype(bool) & ~np.asarray(full, bool)
+    v = np.asarray(picture)[edge]
+    return float(np.median(v)) if v.size else 0.0
 
 
 def _largest_share(full):
