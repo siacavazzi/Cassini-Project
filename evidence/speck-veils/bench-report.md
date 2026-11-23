@@ -1,13 +1,13 @@
-# Image benchmark: 7cc21a7476e2 against 53c9279ef64e
+# Image benchmark: 1cc1f71f8482 against 53c9279ef64e
 
-**FAIL**. 121 items: 1 identical, 21 changed (8 outside the target), 99 not built.
+**FAIL**. 121 items: 5 identical, 17 changed (4 outside the target), 99 not built.
 
 - 99 items not built on both commits: ringsFA-mosaic, earthsmiled-mosaic, ringmosaic04-mosaic, shadow-mosaic, photlit039-mosaic, jupiter-atmos-mosaic, enceladus-spol-mosaic, satellorb-centre, daphnis09-movie, ringclose124-movie, gring-still, plume-bloom-still, ringmovie04-movie, telesto-composite, moon99-composite, venus99-still, masursky-still, jupiter-portrait-composite, approach-composite, phoebe-mosaic, titan04-composite, rhea-glocol-composite, hyperion-mosaic, rhea-mosaic, titan-globmap-mosaic, equinox-shadow-still, kiviuq-still, prometheus-still, pan07-still, iapetus-mosaic, iapetus-composite, enceladus-composite, mimas-mosaic, storm-composite, methone-movie, hexagon-composite, dione-mosaic, enceladus15-movie, telesto-movie, daphnis17-movie, pan17-movie, titan-cloud-mosaic, earth-fb-still, enceladus15-composite, titan17-composite, tossup-ring-108ri, titan127-movie, june2004-mosaic, saturn-limb-still, enceladus-eye-composite, impact293-movie, mimas167-mosaic, titanwac17-haze, saturn07-deck, saturn07-deck2, titan08-mt1, rings08-bright, mimas04-movie, aurstare289-movie, jupiter-tint-movie, wind170-movie, albiorix129-movie, aurora101-movie, saturn07-fullblack-movie, saturn08w-fullblack-movie, saturn13-fullblack-movie, saturn08-fullblack-movie, pan09-banding-movie, storm13-night-composite, night-washout-composite, night-dark-composite, storm13-night-movie, titan16-methane-movie, dione139-mosaic, titan059-mosaic, enceladus144-mosaic, rx-saturn14-movie, m-aegaeon15-pass2, rx-saturn09-movie, rx-sun02-cruise, m-janus10-pass, rz-saturn12-movie, rz-saturn09-movie3, m-pallene06-still, m-calypso05-still, m-polydeuces12-still, m-siarnaq10-still, m-telesto06-still, rz-iapetus11-still, aurstare13-movie, rz-saturn09-movie2, rz-saturn17-movie3, rz-saturn08-movie, fring274-movie, npole0908-mosaicmovie, daphnis257n1-movie, fring039-movie, fring183-movie, titancloud264-movie
 - worse by measure outside the target, unexplained: plume279-movie, adj-m-io00-pass-yr
-- changed outside the target, unexplained: plume279-movie, approach-movie, saturn05-movie, approach04-movie, rz-enceladus13-movie, adj-m-io00-pass-yr, rx-saturn05-movie, encset293-movie
+- changed outside the target, unexplained: plume279-movie, rz-enceladus13-movie, adj-m-io00-pass-yr, encset293-movie
 - target items with a measure worse (look at them): himalia00-movie, saturn16-uv2-movie, m-himalia00-pass, m-mundilfari07-pass, m-pallene17-pass, ry-methone12-movie, m-io00-pass, adj-m-jupiter01-pass2-obs, rz-saturn06-movie, ry-saturn16-movie2, ry-dione17-movie, adj-rz-enceladus06-movie-yr, adj-ry-saturn04-mosaic-obs
 
-Built in 101 min (base) and 22 min (candidate). Targets: adj-m-jupiter01-pass2-obs, adj-ry-saturn04-mosaic-obs, adj-rz-enceladus06-movie-yr, himalia00-movie, m-aegaeon15-pass2, m-himalia00-pass, m-io00-pass, m-mundilfari07-pass, m-pallene17-pass, ry-dione17-movie, ry-methone12-movie, ry-saturn16-movie2, rz-saturn06-movie, saturn16-uv2-movie.
+Built in 101 min (base) and 23 min (candidate). Targets: adj-m-jupiter01-pass2-obs, adj-ry-saturn04-mosaic-obs, adj-rz-enceladus06-movie-yr, himalia00-movie, m-aegaeon15-pass2, m-himalia00-pass, m-io00-pass, m-mundilfari07-pass, m-pallene17-pass, ry-dione17-movie, ry-methone12-movie, ry-saturn16-movie2, rz-saturn06-movie, saturn16-uv2-movie.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -24,7 +24,7 @@ Built in 101 min (base) and 22 min (candidate). Targets: adj-m-jupiter01-pass2-o
 | gring-still | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | plume279-movie | hard | changed | 2/288 | 86.02% | 112 | frame286.webp: 89.89% of the base's light now black; frame286.webp: detail 0.2682 -> 1.2275 (+358%); frame286.webp: lit area's centre moved 135 px; frame286.webp: lit share 85.7% -> 2.2% |  |
 | plume-bloom-still | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
-| approach-movie | hard | changed | 88/96 | 0.01% | 14 |  |  |
+| approach-movie | hard | identical | 0/96 | 0.00% |  |  |  |
 | ringmovie04-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | telesto-composite | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | moon99-composite | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
@@ -34,7 +34,7 @@ Built in 101 min (base) and 22 min (candidate). Targets: adj-m-jupiter01-pass2-o
 | approach-composite | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | phoebe-mosaic | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | titan04-composite | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
-| saturn05-movie | plain | changed | 54/54 | 0.10% | 243 |  |  |
+| saturn05-movie | plain | identical | 0/54 | 0.00% |  |  |  |
 | rhea-glocol-composite | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | hyperion-mosaic | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rhea-mosaic | plain | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
@@ -77,7 +77,7 @@ Built in 101 min (base) and 22 min (candidate). Targets: adj-m-jupiter01-pass2-o
 | wind170-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | albiorix129-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | aurora101-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
-| approach04-movie | hard | changed | 94/140 | 0.01% | 13 |  |  |
+| approach04-movie | hard | identical | 0/140 | 0.00% |  |  |  |
 | saturn07-fullblack-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | saturn08w-fullblack-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | saturn13-fullblack-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
@@ -118,12 +118,12 @@ Built in 101 min (base) and 22 min (candidate). Targets: adj-m-jupiter01-pass2-o
 | adj-m-jupiter01-pass2-obs | target | changed | 11/130 | 87.17% | 255 | evened050.webp: clipped 5.27% -> 6.43%; evened055.webp: 0.83% of the base's light now black; evened055.webp: lit area's centre moved 55 px |  |
 | rz-saturn06-movie | target | changed | 7/28 | 97.15% | 255 | evened011.webp: 29.33% of the base's light now black; evened011.webp: lit area's centre moved 190 px; evened011.webp: lit share 99.8% -> 62.6% |  |
 | ry-saturn16-movie2 | target | changed | 4/52 | 84.76% | 231 | frame003.webp: 0.61% of the base's light now black; frame016.webp: lit area's centre moved 8 px |  |
-| ry-dione17-movie | target | changed | 9/30 | 7.97% | 254 | evened000.webp: clipped 0.36% -> 18.50%; evened000.webp: 72.56% of the base's light now black; evened000.webp: lit area's centre moved 49 px |  |
+| ry-dione17-movie | target | changed | 5/30 | 7.97% | 254 | evened000.webp: clipped 0.36% -> 18.50%; evened000.webp: 72.56% of the base's light now black; evened000.webp: lit area's centre moved 49 px |  |
 | adj-rz-enceladus06-movie-yr | target | changed | 4/4 | 7.83% | 255 | frame000.webp: clipped 0.07% -> 91.92% |  |
 | adj-ry-saturn04-mosaic-obs | target | changed | 2/124 | 12.60% | 223 | evened061.webp: lit area's centre moved 13 px |  |
 | rz-saturn09-movie2 | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rz-saturn17-movie3 | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
-| rx-saturn05-movie | hard | changed | 6/54 | 0.00% | 235 |  |  |
+| rx-saturn05-movie | hard | identical | 0/54 | 0.00% |  |  |  |
 | rz-saturn08-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | fring274-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | npole0908-mosaicmovie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
@@ -143,8 +143,8 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 |---|---|---|---|---|---|
 | plume279-movie | full_black | fixed | 24.85 | 2.57 (limit 20.0) | black sky lost at Full: up to 3 points (93% of frame038.webp black at Processed, 90% at Full; 0 of 16 frames over 20) |
 | plume279-movie | odd_frame | known | 14.0524 | 14.0524 (limit 4.0) | worst 14.1 at frame074.webp (102 of 284 frames over 4.0) |
-| saturn05-movie | odd_frame | known | 5.1307 | 5.1353 (limit 4.0) | worst 5.1 at frame012.webp (4 of 7 frames over 4.0) |
-| approach04-movie | odd_frame | known | 27.6188 | 27.4725 (limit 4.0) | worst 27.5 at frame027.webp (1 of 12 frames over 4.0) |
+| saturn05-movie | odd_frame | known | 5.1307 | 5.1307 (limit 4.0) | worst 5.1 at frame012.webp (4 of 7 frames over 4.0) |
+| approach04-movie | odd_frame | known | 27.6188 | 27.6188 (limit 4.0) | worst 27.6 at frame027.webp (1 of 12 frames over 4.0) |
 | himalia00-movie | full_banding | fixed | 4.049 | 0.0 (limit 1.0) | Full sky banding up to 0.00 levels where Processed has black sky (0 of 8 frames over 1.0) |
 | himalia00-movie | full_black | fixed | 91.67 | -0.09 (limit 20.0) | black sky lost at Full: up to -0 points (100% of frame004.webp black at Processed, 100% at Full; 0 of 16 frames over 20) |
 | himalia00-movie | odd_frame | fixed | 40.8583 | 2.6487 (limit 4.0) | worst 2.6 at frame014.webp (0 of 11 frames over 4.0) |
@@ -173,6 +173,6 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | ry-saturn16-movie2 | full_banding | known | 1.303 | 1.303 (limit 1.0) | Full sky banding up to 1.30 levels where Processed has black sky (1 of 16 frames over 1.0) |
 | ry-saturn16-movie2 | odd_frame | fixed | 18.5014 | 3.6371 (limit 4.0) | worst 3.6 at frame006.webp (0 of 32 frames over 4.0) |
 | ry-saturn16-movie2 | pointing_jitter | fixed | 3.6398 | 1.665 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 1.7 px, largest 5.2 px (50 pairs) |
-| ry-dione17-movie | odd_frame | known | 15.5571 | 15.5645 (limit 4.0) | worst 15.6 at frame004.webp (3 of 10 frames over 4.0) |
+| ry-dione17-movie | odd_frame | known | 15.5571 | 15.5571 (limit 4.0) | worst 15.6 at frame004.webp (3 of 10 frames over 4.0) |
 | adj-ry-saturn04-mosaic-obs | channel_registration | known | 0.92 | 0.92 (limit 0.7) | red or blue channel off green: p90 0.92 px, largest 0.93 px (62 colour frames) |
 | rx-saturn05-movie | odd_frame | known | 5.6011 | 5.6011 (limit 4.0) | worst 5.6 at frame003.webp (4 of 7 frames over 4.0) |
