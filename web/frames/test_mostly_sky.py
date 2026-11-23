@@ -60,6 +60,11 @@ def test_bland_cloud_deck_is_not_sky():
     assert calibration._mostly_sky(deck) is None
 
 
+def test_color_set_keeps_its_old_sky():
+    a, b = frame(seed=1), frame(seed=2)
+    assert calibration._sky([a, b]).mean() < 0.95   # the whole-sky rule is for one-frame pictures only
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

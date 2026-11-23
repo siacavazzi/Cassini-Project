@@ -2700,7 +2700,10 @@ def _mostly_sky(iof):
 
 def _sky(iofs, whole=True):
     """whole: also a frame that is sky all over round a speck (_mostly_sky); off for a movie frame's own sky black
-    (obs_mosaic's black track), whose frame has its lit parts already set to its sky's median and is flat for that"""
+    (obs_mosaic's black track), whose frame has its lit parts already set to its sky's median and is flat for that;
+    and only for a one-frame picture: a color set's channels keep the sky they always had, so its alignment guide and
+    channel mix are as before (m-paaliaq15 and rz-hyperion04 composites lost their target core and colour with it)"""
+    whole = whole and len(iofs) == 1
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
         cut = SKY_CUT * float(np.percentile(iof, 99.9))
