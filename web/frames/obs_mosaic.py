@@ -2874,6 +2874,11 @@ TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky'
 NIGHT_GAMMA = 2.2  # pass_scale: a night-side pass's gamma (its disk fills the frames, nothing in them sunlit). 1.5
                    # (#619) darkened Saturn's 2008 polar night 42-44% and the Enceladus 2013 crescent's terminator; 3 lifted
                    # the aurora stares' noise to gray. Fable 11-23 over six night-side passes: 2.2 is never the worst
+NIGHT_NOISE_GAMMA = 1.5  # pass_scale: ... and a night-side pass of faint light at the noise floor (an aurora stare)
+NIGHT_DARK = 0.5   # ... is one whose frames have under this share of dark sky (median over the frames)
+NIGHT_LIT = 0.6    # ... and under this share lit over a tenth of white (six night-side passes measured 11-23: aurora stares
+                   # 0.00 dark / 0.35-0.54 lit; Saturn's 2008 polar night 0.00-0.07 / 0.68-0.93; an Enceladus crescent and
+                   # an aurora pointing over the limb 0.83-0.99 dark)
 TRACK_KEEP = 0.5   # tile_scale: the share of the track's raise over the pass's black that is black
 TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
 TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
@@ -3277,7 +3282,14 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
     sat = saturn_look(u) if calibration.look() == "balanced" else {}
     if night and not isinstance(gamma, str):
-        gamma = min(float(gamma), NIGHT_GAMMA)
+        # a night side of mostly dark sky (a crescent against its night) or mostly lit (ring-shine over the disk) takes
+        # NIGHT_GAMMA; one in between, its frames all faint light at the noise floor with no dark sky (an aurora stare),
+        # the gentler NIGHT_NOISE_GAMMA, whose noise and column banding 2.2 lifted (bench full_banding 0.7 -> 1.1)
+        dark = float(np.median([_dark_sky(i).mean() for iofs in by.values() for i in iofs]))
+        lit = float(np.median([((i - blacks.get(f, 0.0)) / max(white, 1e-12) > 0.1).mean()
+                               for f, iofs in by.items() for i in iofs]))
+        noise_floor = dark < NIGHT_DARK and lit < NIGHT_LIT
+        gamma = min(float(gamma), NIGHT_NOISE_GAMMA if noise_floor else NIGHT_GAMMA)
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
            "detail": bool(filled and not small)}
     if track:
