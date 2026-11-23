@@ -10465,7 +10465,7 @@ def veiled_frame(frames, n, tile_of):
     frame between BL1 and IR2). Its neighbours are its filter's frames each side, else, with none of its filter on that
     side, the nearest frame of any. A run of up to VEIL_RUN such frames is veiled as one. A pass that brightens
     steadily has a lit frame on one side, so its frames are never veiled by this rule, nor is a frame at another view
-    than those frames (its box's middle half its size or more from theirs): 101SA AURORA003 W's clear frame at the
+    than those frames (its box's middle a quarter of its size or more from theirs): 101SA AURORA003 W's clear frame at the
     movie's next, wider view takes in the lit planet the frames before it did not, and is that view's first picture."""
     def veil(t):
         return (t.get("lit") or 0.0) >= VEIL_LIT or (t.get("sky") or 0) >= VEIL_SKY
@@ -10484,31 +10484,43 @@ def veiled_frame(frames, n, tile_of):
     box = placed(tile_of(n))
     if box is None:
         return False
-    run = 1
+    run, sides = 1, 0
     for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
-        js = [j for j in js if "offset" in tile_of(j)]
-        mine = iter([j for j in js if frames[j][2] == f] or js)
-        j = next(mine, None)
+        # (a frame lost in part, held itself, is no neighbour: Methone 2012's frame 18, 85% lost, beside its veiled 17)
+        js = [j for j in js if "offset" in tile_of(j) and not partial(tile_of(j))]
+        side = [j for j in js if frames[j][2] == f] or js
+        mine = iter(side)
+        j, last = next(mine, None), None
         while j is not None and veil(tile_of(j)) and run < VEIL_RUN:
             other = placed(tile_of(j))
             if other is None or _box_apart(box, other):
                 return False
-            run += 1
+            run, last = run + 1, j
             j = next(mine, None)
+        past = [k for k in js if last is None or abs(k - n) > abs(last - n)]   # (the frames past the run)
+        if j is None and last is not None:
+            # (its filter's frames on that side all veiled: the nearest frame of any filter past them)
+            j = next(iter(past), None)
+        if j is None and not past:
+            # (the movie's first or last frames: veiled when the frames on their one side are dark, Himalia 2000's
+            # first BL1 frame, Mundilfari 2007's last two clear frames after its dark IR2)
+            continue
         if j is None or not dark(tile_of(j)):
             return False
         other = placed(tile_of(j))
         if other is None or _box_apart(box, other):
             return False
-    return True
+        sides += 1
+    return sides > 0
 
 
 def _box_apart(a, b):
-    """(veiled_frame) Whether boxes a and b ([x, y, w, h]) show other views: their middles half their size or more
-    apart, or one over 1.5 times the other's size."""
+    """(veiled_frame) Whether boxes a and b ([x, y, w, h]) show other views: their middles a quarter of their size or
+    more apart (101SA AURORA003's wider view, 400 px from its first; a veil is at its neighbours' place, within a few
+    px), or one over 1.5 times the other's size."""
     size = max(a[2], a[3], b[2], b[3])
     ca, cb = (a[0] + a[2] / 2, a[1] + a[3] / 2), (b[0] + b[2] / 2, b[1] + b[3] / 2)
-    return math.hypot(ca[0] - cb[0], ca[1] - cb[1]) >= size / 2 or max(a[2], b[2]) > 1.5 * min(a[2], b[2])
+    return math.hypot(ca[0] - cb[0], ca[1] - cb[1]) >= size / 4 or max(a[2], b[2]) > 1.5 * min(a[2], b[2])
 
 
 def unfit(frames, n, tile_of):

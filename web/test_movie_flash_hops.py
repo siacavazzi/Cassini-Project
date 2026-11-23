@@ -143,6 +143,15 @@ def test_veiled_speck_by_sky():
     tiles[3] = tile(0)
     tiles[2] = tile(10)                     # (a sky under VEIL_SKY: what the camera saw)
     assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    # the movie's last two frames veiled after dark ones (Mundilfari 2007's clear frames); a movie all veil is not
+    tiles = [tile(0), tile(1), tile(0), tile(26), tile(25)]
+    assert om.veiled_frame(frames, 3, lambda j: tiles[j]) and om.veiled_frame(frames, 4, lambda j: tiles[j])
+    tiles = [tile(30)] * 3
+    assert not any(om.veiled_frame(frames[:3], n, lambda j: tiles[j]) for n in range(3))
+    # a neighbour lost in part (partial) is passed over: Methone 2012's veiled 17 beside its 85%-lost 18
+    tiles = [tile(0), tile(0), tile(35), {**tile(0), "lost": 0.85, "box": [-492.0, -492.0, 154.0, 984.0]}, tile(0)]
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j) for j in range(5)]
+    assert om.veiled_frame(frames, 2, lambda j: tiles[j])
 
 
 if __name__ == "__main__":
