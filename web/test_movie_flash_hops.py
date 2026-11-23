@@ -131,6 +131,20 @@ def test_step_frame_keeps_time_order():
         assert all(a <= b for a, b in zip(got, got[1:])), got   # (never back in time)
 
 
+def test_veiled_speck_by_sky():
+    # a speck's frame has no lit share kept; its sky (median level) tells a gray veil: Mundilfari 2007's lone RED frame
+    # between BL1 and IR2 frames with black skies, Methone 2012's 1 s frame between 10 s and 100 s ones
+    tile = lambda sky, x=0.0: {"offset": [x, 0.0], "box": [-512.0, -512.0, 1024.0, 1024.0], "sky": sky}
+    frames = [("p", f"F{j}", f, 100.0 * j) for j, f in enumerate(["BL1", "BL1", "RED", "IR2", "IR2"])]
+    tiles = [tile(0), tile(1), tile(30), tile(0), tile(1)]
+    assert om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[3] = tile(12)                     # (a neighbour neither dark nor veiled: not a veil)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[3] = tile(0)
+    tiles[2] = tile(10)                     # (a sky under VEIL_SKY: what the camera saw)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+
+
 if __name__ == "__main__":
     for name, f in list(globals().items()):
         if name.startswith("test_"):
