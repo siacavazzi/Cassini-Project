@@ -184,3 +184,11 @@ print("a body in the frames' corner is not centred: ok")
 # (a single picture, fill=False: centred however little of the square its frame fills, as before #610)
 assert om.centre_half(box((470, 470)), 60, seen((470, 470)), fill=False) is not None
 print("a still is centred even with its body in the frame's corner: ok")
+
+# (a still whose body's disk is mostly off its picture, 214EN PLMHPMR001's Enceladus above the plume: the picture as
+# taken; one with most of its disk on the picture stays centred, taste call 36)
+assert om.disk_share(seen((0, 0)), 60) == 1.0
+assert om.disk_share(seen((400, 400)), 60) > om.STILL_DISK_ON
+off = (0, F / 2 + 30)
+assert om.disk_share(seen(off), 60) < om.STILL_DISK_ON, om.disk_share(seen(off), 60)
+print("a still keeps its picture as taken when its body's disk is mostly off it: ok")

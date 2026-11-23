@@ -9664,6 +9664,25 @@ def covered(seen, half, grid=64):
     return float(cover.mean())
 
 
+STILL_DISK_ON = 0.5   # of the body's disk: a still with less of it on its picture keeps the picture as taken (centre_view)
+
+
+def disk_share(seen, radius, grid=24):
+    """The share of the body's disk (radius, about its centre) on one of the frames (seen, pass_seen: each frame's
+    points, its outline their hull), on a grid x grid raster of the disk; 1.0 without frames to say."""
+    if seen is None or not len(seen[1]) or radius <= 0:
+        return 1.0
+    u = (np.arange(grid) + 0.5) / grid * 2 - 1
+    xx, yy = np.meshgrid(u, u)
+    inner = xx * xx + yy * yy <= 1
+    pts = np.stack([xx[inner] * radius, yy[inner] * radius], 1).astype(np.float32)
+    on = np.zeros(len(pts), bool)
+    for f in seen[1].reshape(-1, SEEN_GRID * SEEN_GRID, 2):
+        hull = cv2.convexHull(f.astype(np.float32))
+        on |= np.array([cv2.pointPolygonTest(hull, (float(x), float(y)), False) >= 0 for x, y in pts])
+    return float(on.mean())
+
+
 def disk_inside(seen, radius):
     """Whether the body's whole disk (radius, about its centre) is on one of the frames (seen, pass_seen: each
     frame's points, its outline their hull)."""
@@ -10055,9 +10074,12 @@ def centre_view(frame_id):
         turn = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
         seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, turn)) \
             if fp and radius else None
-        # (a single picture keeps its body centred however little of the square it fills (fill=False): a movie's
-        # CENTRE_FILL put 214EN PLMHPMR001's Enceladus, at its frame's edge with the plume below, against the top)
-        half = centre_half(fp, radius, seen, fill=False) if fp and radius else None
+        # (a single picture keeps its body centred however little of the square it fills, unless most of the body's
+        # disk is off the picture (disk_share under STILL_DISK_ON): then it is a picture of what is beside the body, a
+        # plume or a limb, and keeps the picture as taken, as a movie's CENTRE_FILL does. 214EN PLMHPMR001's Enceladus,
+        # its disk mostly above the frame's top edge, centred left the top half of the view black and the plume small;
+        # taste call 36, 11-23)
+        half = centre_half(fp, radius, seen, fill=disk_share(seen, radius) < STILL_DISK_ON) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
