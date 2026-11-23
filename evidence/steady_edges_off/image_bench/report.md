@@ -1,10 +1,13 @@
-# Image benchmark: 99d6e0f9f81f against 6452dc6d3bc0
+# Image benchmark: c4f966d8fcac against 4a44695eb3d2
 
-**NEEDS EYES**. 103 items: 74 identical, 29 changed (17 outside the target), 0 not built.
+**FAIL**. 103 items: 74 identical, 29 changed (17 outside the target), 0 not built.
 
-- target items with a measure worse (look at them): ringmovie04-movie, rz-saturn14-movie2, rz-saturn13-movie3, rz-titan04-movie, rz-titan04-movie2, rz-titan14-movie4, rz-saturn09-movie3, rz-titan15-movie3, rz-enceladus15-still
+- target items that did not change (the rule needs the target better): rz-titan15-movie3
+- worse by measure outside the target, unexplained: ringclose124-movie
+- changed outside the target, unexplained: ringclose124-movie
+- target items with a measure worse (look at them): approach04-movie, rz-saturn14-movie2, rz-saturn13-movie3, rz-titan04-movie, rz-titan04-movie2, rz-titan14-movie4, rz-enceladus15-still
 
-Built in 56 min (base) and 59 min (candidate). Targets: ringmovie04-movie, rz-enceladus15-still, rz-jupiter00-movie2, rz-saturn09-movie3, rz-saturn13-movie3, rz-saturn14-movie2, rz-titan04-movie, rz-titan04-movie2, rz-titan08-movie2, rz-titan14-movie4, rz-titan15-movie3, rz-titan16-movie.
+Built in 53 min (base) and 55 min (candidate). Targets: approach04-movie, ringmovie04-movie, rz-enceladus15-still, rz-jupiter00-movie2, rz-saturn09-movie3, rz-saturn13-movie3, rz-saturn14-movie2, rz-titan04-movie, rz-titan04-movie2, rz-titan08-movie2, rz-titan14-movie4, rz-titan15-movie3, rz-titan16-movie.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -17,12 +20,12 @@ Built in 56 min (base) and 59 min (candidate). Targets: ringmovie04-movie, rz-en
 | enceladus-spol-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | satellorb-centre | hard | identical | 0/1 | 0.00% |  |  |  |
 | daphnis09-movie | hard | identical | 0/70 | 0.00% |  |  |  |
-| ringclose124-movie | hard | identical | 0/10 | 0.00% |  |  |  |
+| ringclose124-movie | hard | changed | 10/10 | 48.75% | 235 | evened000.webp: lit area's centre moved 12 px |  |
 | gring-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | plume279-movie | hard | identical | 0/288 | 0.00% |  |  |  |
 | plume-bloom-still | hard | identical | 0/1 | 0.00% |  |  |  |
 | approach-movie | hard | changed | 96/96 | 7.26% | 160 |  | steady9 off: Saturn colour movie steadied on its pictures as before #610 |
-| ringmovie04-movie | target | changed | 44/44 | 40.06% | 255 | frame000.webp: 1.48% of the base's light now black; frame000.webp: lit area's centre moved 13 px | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
+| ringmovie04-movie | target | changed | 5/44 | 0.00% | 161 |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
 | telesto-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | moon99-composite | plain | identical | 0/1 | 0.00% |  |  |  |
 | venus99-still | plain | identical | 0/1 | 0.00% |  |  |  |
@@ -74,7 +77,7 @@ Built in 56 min (base) and 59 min (candidate). Targets: ringmovie04-movie, rz-en
 | wind170-movie | hard | identical | 0/32 | 0.00% |  |  |  |
 | albiorix129-movie | hard | identical | 0/39 | 0.00% |  |  |  |
 | aurora101-movie | hard | changed | 84/84 | 27.62% | 254 | evened020.webp: 0.53% of the base's light now black; evened020.webp: lit area's centre moved 8 px | clouded body steadying: edge match where found, pictures otherwise |
-| approach04-movie | hard | changed | 140/140 | 9.37% | 255 | evened000.webp: 0.60% of the base's light now black | Saturn approach movie: links on edges where found, pictures otherwise |
+| approach04-movie | target | changed | 140/140 | 9.37% | 255 | evened000.webp: 0.60% of the base's light now black | Saturn approach movie: links on edges where found, pictures otherwise |
 | saturn07-fullblack-movie | hard | changed | 48/144 | 0.03% | 250 |  | clouded body steadying: edge match where found, pictures otherwise |
 | saturn08w-fullblack-movie | hard | identical | 0/16 | 0.00% |  |  |  |
 | saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
@@ -93,8 +96,8 @@ Built in 56 min (base) and 59 min (candidate). Targets: ringmovie04-movie, rz-en
 | rz-titan04-movie | target | changed | 34/34 | 12.57% | 253 | evened000.webp: 11.43% of the base's light now black; evened000.webp: lit area's centre moved 12 px; evened006.webp: clipped 32.11% -> 32.51% | steady9 off (5.2 -> 0.3) |
 | rz-titan04-movie2 | target | changed | 34/34 | 7.57% | 201 | evened000.webp: 0.52% of the base's light now black; evened001.webp: clipped 0.15% -> 0.40% | steady9 off (3.0 -> 0.1) |
 | rz-titan14-movie4 | target | changed | 24/24 | 48.28% | 255 | evened002.webp: lit area's centre moved 9 px | steady9 off (8.5 -> 2.9) |
-| rz-saturn09-movie3 | target | changed | 97/97 | 19.29% | 255 | frame000.webp: 0.52% of the base's light now black; frame001.webp: detail 0.4272 -> 0.4969 (+16%); frame032.webp: lit area's centre moved 20 px | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
-| rz-titan15-movie3 | target | changed | 20/20 | 32.40% | 255 | evened000.webp: detail 0.1043 -> 0.1223 (+17%); evened009.webp: 0.26% of the base's light now black; evened009.webp: lit area's centre moved 8 px | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
+| rz-saturn09-movie3 | target | changed | 22/97 | 0.06% | 255 |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
+| rz-titan15-movie3 | target | identical | 0/20 | 0.00% |  |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
 | rz-titan08-movie2 | target | changed | 12/12 | 1.11% | 78 |  | back to its state before #610 (picture-matched links): on #610 every link failed and its frames rode SPICE's smoothed path, smooth here only because SPICE is; the ring/haze movie steadying itself is a known follow-up |
 | rx-jupiter01-cruise | plain | changed | 28/28 | 17.29% | 219 | evened001.webp: 1.05% of the base's light now black; evened001.webp: lit area's centre moved 9 px; evened006.webp: detail 0.1222 -> 0.1488 (+22%) | 1x2 mosaic played as a movie (mosaic thread); back to before #610 |
 | rz-jupiter01-movie | plain | changed | 28/28 | 30.89% | 218 | evened000.webp: lit area's centre moved 10 px; evened001.webp: 0.96% of the base's light now black; evened001.webp: detail 0.289 -> 0.3898 (+35%) | 1x2 mosaic played as a movie (mosaic thread); back to before #610 |
@@ -116,15 +119,14 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 
 ## Checks
 
-5 regressions, 7 fixed, 26 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+2 regressions, 7 fixed, 27 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
 | plume279-movie | full_black | known | 24.85 | 24.85 (limit 20.0) | black sky lost at Full: up to 25 points (40% of frame287.webp black at Processed, 15% at Full; 1 of 16 frames over 20) |
 | plume279-movie | odd_frame | known | 14.0524 | 14.0524 (limit 4.0) | worst 14.1 at frame074.webp (100 of 286 frames over 4.0) |
-| ringmovie04-movie | full_black | known | 25.18 | 25.29 (limit 20.0) | black sky lost at Full: up to 25 points (82% of frame006.webp black at Processed, 57% at Full; 5 of 16 frames over 20) |
-| ringmovie04-movie | pointing_jitter | REGRESSION | 6.3178 | 14.836 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 14.8 px, largest 23.6 px (33 pairs) |
-| impact293-movie | odd_frame | known | 17.108 | 17.108 (limit 4.0) | worst 17.1 at frame007.webp (1 of 2 frames over 4.0) |
+| ringmovie04-movie | full_black | known | 25.18 | 25.18 (limit 20.0) | black sky lost at Full: up to 25 points (82% of frame006.webp black at Processed, 57% at Full; 5 of 16 frames over 20) |
+| ringmovie04-movie | pointing_jitter | known | 6.3178 | 6.0158 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 6.0 px, largest 8.7 px (33 pairs) |
 | mimas04-movie | odd_frame | known | 5.3802 | 5.3802 (limit 4.0) | worst 5.4 at frame018.webp (1 of 9 frames over 4.0) |
 | aurstare289-movie | full_banding | known | 1.447 | 1.447 (limit 1.0) | Full sky banding up to 1.45 levels where Processed has black sky (7 of 16 frames over 1.0) |
 | aurstare289-movie | full_black | known | 68.47 | 68.47 (limit 20.0) | black sky lost at Full: up to 68 points (71% of frame022.webp black at Processed, 2% at Full; 11 of 16 frames over 20) |
@@ -145,8 +147,7 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | rz-titan04-movie2 | pointing_jitter | fixed | 3.0039 | 0.0683 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 0.1 px, largest 0.2 px (16 pairs) |
 | rz-titan14-movie4 | channel_registration | known | 1.459 | 1.467 (limit 0.7) | red or blue channel off green: p90 1.47 px, largest 1.47 px (12 colour frames) |
 | rz-titan14-movie4 | pointing_jitter | fixed | 8.4838 | 2.8532 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 2.9 px, largest 4.3 px (9 pairs) |
-| rz-saturn09-movie3 | pointing_jitter | REGRESSION | 4.7339 | 10.2183 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 10.2 px, largest 66.6 px (90 pairs) |
-| rz-titan15-movie3 | pointing_jitter | REGRESSION | 0.0 | 4.9708 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.0 px, largest 10.8 px (8 pairs) |
+| rz-saturn09-movie3 | pointing_jitter | known | 4.7339 | 5.3958 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.4 px, largest 66.5 px (93 pairs) |
 | rz-titan08-movie2 | pointing_jitter | REGRESSION | 1.6054 | 3.3241 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 3.3 px, largest 3.6 px (11 pairs) |
 | rx-jupiter01-cruise | pointing_jitter | known | 10.6716 | 11.8174 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 11.8 px, largest 75.9 px (13 pairs) |
 | rz-jupiter01-movie | pointing_jitter | known | 10.5005 | 11.3942 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 11.4 px, largest 73.2 px (13 pairs) |
