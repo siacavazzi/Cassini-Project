@@ -8496,10 +8496,9 @@ def _smoothed_path(x0):
     return out
 
 
-_chain_stats = {}   # (the last chain solve's link statistics, _chain_links; steady_chain keeps them)
-
-
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False):
+# (stats: a dict the caller passes to _chain_links to be filled with that solve's link statistics; per call, so server
+# threads solving different passes never share it)
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False, stats=None):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -8672,7 +8671,7 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
     # (how well the pictures agree with themselves: every link's disagreement with the solved places, px)
     allres = [math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1]) for (j, n), d, _ in got]
-    _chain_stats.update(links=len(got), kept=len(keep), lone=len(lone), held=len(held), tiles=N,
+    (stats if stats is not None else {}).update(links=len(got), kept=len(keep), lone=len(lone), held=len(held), tiles=N,
                         res_med=round(float(np.median(allres)), 2) if allres else None,
                         res_p90=round(float(np.percentile(allres, 90)), 2) if allres else None)
     linked, by_picture = {}, set()
@@ -8845,14 +8844,15 @@ def steady_chain(u, cache, p=None):
             # SPICE's step from tile j to tile n, from where tile j was put
             return [places[j][0] + made[n]["offset"][0] - made[j]["offset"][0],
                     places[j][1] + made[n]["offset"][1] - made[j]["offset"][1]]
+        stats = {}
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made), edges=clouded(u))
+                                        steady_rings(u, made), edges=clouded(u), stats=stats)
             places, hows = one_source(places, hows, made)
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
         return places, hows, {"held": {str(n): [round(v, 2) for v in xy] for n, xy in held.items()}, "seen": why,
-                              "links": dict(_chain_stats)}
+                              "links": stats}
     return _chained(u, cache, p, STEADY_FILE, "steady", work)
 
 
