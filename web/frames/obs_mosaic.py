@@ -10440,6 +10440,58 @@ def blank_frame(frames, n, tile_of):
     return all(me < BLANK_SHARE * v for v in near)
 
 
+VEIL_LIT = 0.5     # of a frame: (veiled_frame) a frame lit (LIT_LEVEL and up) over this much ...
+VEIL_CLEAR = 0.05  # ... among its filter's nearest frames on both sides lit over this much or less is a lone veiled frame
+VEIL_RUN = 4       # frames: the longest run of such frames veiled_frame takes as veils (longer: what the camera saw)
+
+
+def veiled_frame(frames, n, tile_of):
+    """True when frame n of a movie is lit nearly all over (its tile's "lit" share VEIL_LIT or more) between frames of
+    its filter lit over VEIL_CLEAR or less: a lone frame of another kind among them, whose sky did not calibrate to the
+    others' (Skathi 2011: one 460 s full-resolution frame among 220 s summed ones, its dark current a gray veil 64 levels
+    over a black sky, a flash every few dozen frames). A pass that brightens steadily has a lit frame on one side, so its
+    frames are never veiled by this rule, nor is a frame at another view than those frames (its box's middle half its
+    size or more from theirs): 101SA AURORA003 W's clear frame at the movie's next, wider view takes in the lit planet
+    the frames before it did not, and is that view's first picture."""
+    me = tile_of(n).get("lit")
+    if me is None or me < VEIL_LIT:
+        return False
+    f = frames[n][2]
+    placed = lambda t: (t["offset"][0] + t["box"][0], t["offset"][1] + t["box"][1], t["box"][2], t["box"][3]) \
+        if "box" in t and "offset" in t else None
+    box = placed(tile_of(n))
+    if box is None:
+        return False
+    run = 1
+    for js in (range(n - 1, -1, -1), range(n + 1, len(frames))):
+        # (its filter's frames on each side, passing over veiled ones like it, VEIL_RUN at most in all: Skathi's
+        # 460 s frames also come two and three in a row, 48-50, 56-57, 89-90, each beside another)
+        mine = (j for j in js if frames[j][2] == f and "offset" in tile_of(j))
+        j = next(mine, None)
+        while j is not None and (tile_of(j).get("lit") or 0.0) >= VEIL_LIT and run < VEIL_RUN:
+            other = placed(tile_of(j))
+            if other is None or _box_apart(box, other):
+                return False
+            run += 1
+            j = next(mine, None)
+        # (a neighbour whose lit share was not measured, tile() keeps it only for frames with saturated pixels, is
+        # not known to be dark: 101SA AURORA003's clear frames before its wider view)
+        if j is None or tile_of(j).get("lit") is None or tile_of(j)["lit"] > VEIL_CLEAR:
+            return False
+        other = placed(tile_of(j))
+        if other is None or _box_apart(box, other):
+            return False
+    return True
+
+
+def _box_apart(a, b):
+    """(veiled_frame) Whether boxes a and b ([x, y, w, h]) show other views: their middles half their size or more
+    apart, or one over 1.5 times the other's size."""
+    size = max(a[2], a[3], b[2], b[3])
+    ca, cb = (a[0] + a[2] / 2, a[1] + a[3] / 2), (b[0] + b[2] / 2, b[1] + b[3] / 2)
+    return math.hypot(ca[0] - cb[0], ca[1] - cb[1]) >= size / 2 or max(a[2], b[2]) > 1.5 * min(a[2], b[2])
+
+
 def unfit(frames, n, tile_of):
     """True when frame n of a movie (frames: the pass's, tile_of(j): tile j's report) is not shown, its filter's
     whole frame before it held in its place (held_of): a partial frame (partial), a frame that can't be calibrated
@@ -10454,7 +10506,8 @@ def unfit(frames, n, tile_of):
     t = tile_of(n)
     if "offset" not in t:
         return False
-    if partial(t) or lost_held(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of):
+    if partial(t) or lost_held(t) or (t.get("calibrated") is False and calibration.step("calibrate")) or blank_frame(frames, n, tile_of) \
+            or veiled_frame(frames, n, tile_of):
         return True
     s = t.get("saturated", 0.0)
     if s < OVER_LEAST:
@@ -10713,7 +10766,7 @@ def _set_shown(u, n, want, not_shown, placed, covers=None):
     return got, True
 
 
-def step_frame(filters, s, grey, whole, near, times=None):
+def step_frame(filters, s, grey, whole, near, times=None, reach=None, same=None):
     """The frame shown for frame s (held_of's) in a movie playing its grey filter (pure, ported to the page through
     the steady table's "step"): s when it is the grey filter's; else, in a run of at most STEP_RUN frames of other
     filters, the grey filter's last whole frame before the run (whole(j): placed, shown), else its first after it,
@@ -10730,9 +10783,22 @@ def step_frame(filters, s, grey, whole, near, times=None):
         return s
     before = (j for j in range(a - 1, -1, -1) if filters[j] == grey and whole(j))
     after = (j for j in range(b + 1, len(filters)) if filters[j] == grey and whole(j))
-    for j in (next(before, None), next(after, None)):
+    pick = [next(before, None), next(after, None)]
+    if reach is not None and same is not None:
+        # (reaching further, HOLD_REACH: only across frames that all take that gray frame too, same(i); a frame between
+        # that plays its own picture, later than the gray frame before or earlier than the one after, is kept in order)
+        if pick[0] is not None and not all(same(i) for i in range(a, s)):
+            pick[0] = None
+        if pick[1] is not None and not all(same(i) for i in range(s + 1, b + 1)):
+            pick[1] = None
+    if reach is not None and times is not None:
+        # (a held band reaching further, HOLD_REACH: the gray frame nearest it in time, before or after; Titan 2016's
+        # UV1 and UV2 frames took the CB3 frame 1,700-2,200 s before them over the one 70-600 s after, and the moon
+        # jumped back to where it was half an hour earlier)
+        pick.sort(key=lambda j: float("inf") if j is None else abs(times[j] - times[s]))
+    for j in pick:
         # (times: the frames' times; a gray frame taken over HOLD_AGE from s is not s's moment, s plays itself)
-        if j is not None and near(j) and (times is None or abs(times[j] - times[s]) <= HOLD_AGE):
+        if j is not None and near(j) and (times is None or abs(times[j] - times[s]) <= (HOLD_AGE if reach is None else reach)):
             return j
     return s
 
@@ -10860,8 +10926,10 @@ def _shown_of(u, p, n, not_shown, tile_of):
         # a frame not fit to show whose own filter's last whole frame was taken more than HOLD_AGE before it, a cycle
         # or more back, holds the newest whole frame before it of any filter instead, when that one is its moment
         # (within HOLD_AGE): 101SA AURORA003 W's unfit MT3 frame held one 22 minutes back and Saturn jumped to that
-        # frame's size and place for one frame, then back
-        last = next((j for j in range(n - 1, -1, -1) if whole(j)), None)
+        # frame's size and place for one frame, then back. Not a frame of a held band (held_band: UV, methane), another
+        # layer's soft look that is itself only shown when nothing else is: 209RI RDCOLSCNM001's UV2 and UV1 frames held
+        # the blurred UV3 frame before them, so it played three times in place of the sharp frames
+        last = next((j for j in range(n - 1, -1, -1) if whole(j) and not held_band(frames[j][2])), None)
         if last is not None and frames[n][3] - frames[last][3] <= HOLD_AGE:
             s = last
     if colours:
@@ -10876,6 +10944,11 @@ def _shown_of(u, p, n, not_shown, tile_of):
             j = lum_of(frames, s, p["grey"], whole, lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, LUM_REACH)
             if j is not None and frames[j][2] == p["grey"] and tile_of(j).get("saturated", 0.0) < TINT_SATURATED:
                 return j, got, "near", False   # (the set's own moment: its brightness taken whole, tinted_frame's near)
+            if held_band(frames[s][2]):
+                # (a held band's frame with no gray frame near to draw it through is another layer's soft look, not the
+                # movie's: it shows its neighbour's picture, as one with no set does. 209RI RDCOLSCNM001's UV3 frame
+                # played its own blurred picture in the set's colours between tinted frames)
+                return s, got, False, True
         if got and tint:
             # its own moment in the set's colour, its picture from lum_of (one look for the movie; a frame held_of
             # holds another in place of is tinted as that one is: 153HY's unfit P120 frames flashed gray)
@@ -10895,8 +10968,20 @@ def _shown_of(u, p, n, not_shown, tile_of):
             return s, got, False, False
     if placed(s) and len({fr[2] for fr in frames}) > 1:
         held = s != n
+        # (a held band's frame, a methane or UV band whose own gray is not the body's look, takes the gray frame within
+        # HOLD_REACH, as shown_of holds such a frame in a colour movie: Titan 2016's MT3 and UV1 frames, 5 and 11
+        # minutes from its CB3 frames, played their own dark haze)
+        # On a body whose surface window is the pass's gray filter (calibration.SURFACE_WINDOW, Titan's CB3) any other
+        # filter sees another layer, the haze, so its frame takes the gray frame as a held band's does: Titan 2016's
+        # RED, GRN and BL1 frames dipped 45, 40, 29 between CB3 frames at 45. A frame takes a gray frame only over a
+        # run whose frames all take it too (same): one that played its own picture between them would have the movie
+        # step back in time (Titan 2016's UV3 took the CB3 frame half an hour before it, after three frames of their
+        # own, and Titan hopped 20 px back and forth)
+        window = calibration.SURFACE_WINDOW.get(str(u.get("key", ("",))[0]).upper()) == p["grey"]
+        reaches = lambda i: held_band(frames[i][2]) or (window and frames[i][2] != p["grey"])
         s = step_frame([fr[2] for fr in frames], s, p["grey"], whole,
-                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames])
+                       lambda j: box_cover(tile_of(s), tile_of(j)) >= HELD_COVER, [fr[3] for fr in frames],
+                       HOLD_REACH if reaches(s) else None, reaches)
         # (and a frame taken at another pointing than the colour sets beside it, which cover under HELD_COVER of its
         # place: C44SA APPRMOVM001's clear frames 670 px either side of Saturn, each drawn as a clipped white sliver of
         # the planet at the frame's edge between colour frames)
@@ -10911,7 +10996,7 @@ def _shown_of(u, p, n, not_shown, tile_of):
         covered_before = lambda: side(range(n - 1, max(-1, n - 1 - STEP_RUN), -1))
         covered_after = lambda: side(range(n + 1, min(len(frames), n + 1 + STEP_RUN)))
         apart = bool(near_set) and covered_before() and covered_after()
-        if colours and (held or apart or (s == n and held_band(frames[n][2]))):
+        if colours and (held or apart or held_band(frames[n][2])):
             # in a pass playing in colour, with no colour set over its place: a frame not fit to show, whose own filter's
             # last whole frame is a cycle or more back (and step_frame's gray frame beside that one older still), and a
             # held band's frame with no gray frame near, whose own gray is not the body's look, show what the frame

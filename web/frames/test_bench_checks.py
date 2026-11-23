@@ -80,6 +80,11 @@ def test_odd_frame(tmp_path):
     jump["frame003.webp"] = disk(60, 200, 30)                 # one frame of another place
     r = judge(str(tmp_path / "j"), MOVIE, jump, MOVIE_META)["odd_frame"]
     assert not r["ok"], r
+    run = dict(good)
+    for j in (3, 4):                                          # two odd frames in a row (Skathi 2011's veils)
+        run[f"frame{j:03d}.webp"] = disk(60, 200, 30)
+    r = judge(str(tmp_path / "r"), MOVIE, run, MOVIE_META)["odd_frame"]
+    assert not r["ok"] and r["where"] in ("frame003.webp", "frame004.webp"), r
 
 
 def test_gray_colour(tmp_path):
