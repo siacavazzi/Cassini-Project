@@ -10076,12 +10076,9 @@ def centre_view(frame_id):
         turn = view_turn(u) if found else pass_turn(frame_id=frame_id, target=target, cam=cam)
         seen = (pass_seen(u) if found else frames_seen([(None, frame_id, None, None, None, *g)], z, turn)) \
             if fp and radius else None
-        # (a single picture keeps its body centred however little of the square it fills, unless most of the body's
-        # disk is off the picture (disk_share under STILL_DISK_ON): then it is a picture of what is beside the body, a
-        # plume or a limb, and keeps the picture as taken, as a movie's CENTRE_FILL does. 214EN PLMHPMR001's Enceladus,
-        # its disk mostly above the frame's top edge, centred left the top half of the view black and the plume small;
-        # taste call 36, 11-23)
-        half = centre_half(fp, radius, seen, fill=disk_share(seen, radius) < STILL_DISK_ON) if fp and radius else None
+        # (a single picture keeps its body centred however little of the square it fills: a movie's CENTRE_FILL is
+        # not the rule for stills; a picture with most of the body's disk off it is, below)
+        half = centre_half(fp, radius, seen, fill=False) if fp and radius else None
         hit = {"centre": bool(half), "pass": [str(v) for v in key]}
         if not half:
             hit["why"] = "no disk of a known body that fits the view" if not radius else \
@@ -10111,9 +10108,19 @@ def centre_view(frame_id):
         with _lock:
             _centre_views[key] = hit
     # the frame's own disk of the body (full resolution pixels), so centred knows whether the frame cuts it
-    if hit["centre"]:
-        hit = dict(hit, side=FRAME, radius=RADIUS.get(target, 0) / (g[2] * IFOV[cam]))
-    else:
+    own_r = RADIUS.get(target, 0) / (g[2] * IFOV[cam])
+    if hit["centre"] and disk_share(frames_seen([(None, frame_id, None, None, None, *g)], g[2], hit.get("turn") or 0.0),
+                                    own_r) < STILL_DISK_ON:
+        # (a picture with most of the body's disk off it is a picture of what is beside the body, a plume or a limb: it
+        # keeps the picture as taken, the pass's other stills centred as they are. 214EN PLMHPMR001's plume frames,
+        # Enceladus mostly above the top edge, centred showed the top half of the view black and the moon cut on a
+        # seam; taste call 36, 11-23. Decided on the frame itself: 125TI EUVFUV001's crescent, mostly on its picture
+        # in a pass of frames beside the disk, stays centred)
+        hit = {k: v for k, v in hit.items() if k not in ("quarter",)}
+        hit.update(centre=False, frame=True, why="most of the body's disk is off this picture")
+    elif hit["centre"]:
+        hit = dict(hit, side=FRAME, radius=own_r)
+    if not hit["centre"]:
         hit = dict(hit, side=FRAME) if hit.get("north") else dict(hit)
         if hit.get("quarter") is not None:
             # turned by a whole quarter alone, so its roll stays as the camera had it. A frame that needs no turn (it
