@@ -3537,7 +3537,10 @@ def _tile_made(u, n, cache, scale, base):
         # lone RED frame)
         inside = image[..., 3] > 0
         if inside.any():
-            out["sky"] = int(np.percentile(_brightest(image)[inside], 50, method="lower"))
+            lo, mid, hi = (int(x) for x in np.percentile(_brightest(image)[inside], [10, 50, 90], method="lower"))
+            # (and how flat it is: its 10th to 90th percentile. A veil is one gray all over, a ring or a lit body
+            # that fills the frame is not: 124RI's ring close-up between dark UV frames)
+            out["sky"], out["sky_spread"] = mid, hi - lo
     if image is not None and disk is None:
         # what the tile shows, levels on the display scale: its floor (1st percentile) and top (99.99th: a hundred
         # pixels of a frame, a small lit crescent) inside its alpha, what empty() measures (a speck's frame, whose
