@@ -1967,10 +1967,10 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # SAT_WHITE, for a patch a smooth glow climbs into; one with an edge or among ringlets stays white (260RI
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
-            if full is not None and full.any() and scale.get("sat_white_all") and full.mean() >= scale["sat_white_all"]:
-                # (a movie's frame, shown alone, that saturated a body, sat_white_all of the frame or more: white, as
-                # draw_saturated draws a one frame picture's; obs_mosaic.tile. A few saturated star pixels keep
-                # saturated_code: white, they flashed in Skathi 2011's long frames)
+            if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"]:
+                # (a movie's frame, shown alone, that saturated a body, one patch sat_white_all of the frame or more:
+                # white, as draw_saturated draws a one frame picture's; obs_mosaic.tile. Star trails, many thin patches,
+                # keep saturated_code: white, they flashed in Skathi 2011's long frames)
                 picture[full] = 255
             elif full is not None and full.any():
                 picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale.get("sat_white") or scale["white"], gamma,
@@ -2006,6 +2006,12 @@ SAT_SMOOTH = (0.3, 0.6) # ... through the camera's limit when this share of its 
                         # glow; under it the patch has an edge and is white (250EN ENCELSPOL001's crescent: its ring the
                         # night side and the sky; 269RI HIPHASEFB001's glow: its whole ring within 2% of the clip)
 SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or a spike beside a patch reads anything)
+
+
+def _largest_share(full):
+    """The share of mask full that its largest 8-connected patch takes up of the whole picture."""
+    count, _, stats, _ = cv2.connectedComponentsWithStats(np.asarray(full, np.uint8), connectivity=8)
+    return float(stats[1:, cv2.CC_STAT_AREA].max()) / full.size if count > 1 else 0.0
 
 
 def saturated_code(iof, full, draw):
