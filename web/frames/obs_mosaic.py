@@ -122,6 +122,7 @@ CENTRE_KEEP = 0.95   # of the frames' area a view centred on the body must keep,
 SEEN_GRID = 16       # points across a frame that centre_half measures that share on (SEEN_GRID x SEEN_GRID per frame)
 MOVIE_SAMPLES = 6    # tiles a movie's footprint is measured on
 TRAIL = 12           # most earlier frames a movie's rolling trail keeps under the newest
+SAT_WHITE_SHARE = 0.01   # tile: a movie frame that saturated this much of itself or more draws what it saturated white
 WHITE_EACH = 99.5    # pass_scale: a movie's white is at least each frame's this percentile (less its black)
 SCALE_FRAMES = 96    # most frames the pass's display scale is measured on (evenly spread over a long movie)
 LAP_GAP = 7200       # a mosaic taken again over the same ground within this many seconds is its next lap
@@ -3501,7 +3502,7 @@ def _tile_made(u, n, cache, scale, base):
                 # (calibration's sat_white_all), not eased to the light round it as a mosaic's glow is. A movie's white
                 # is at least each frame's own (WHITE_EACH), so a long exposure's clipped disk drawn at its clipped
                 # value came out a flat gray (061EN FP3HOTSPT001's frame 2: Enceladus at 158)
-                drawn = {**drawn, "sat_white_all": True}
+                drawn = {**drawn, "sat_white_all": SAT_WHITE_SHARE}
             image, _, rep = color_image.processed_frame([path], hdr=True, scale=drawn,
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
@@ -10975,7 +10976,7 @@ def _shown_of(u, p, n, not_shown, tile_of):
     hidden = (lambda j: not_shown(j) or over_exposed(tile_of(j))) if colours else not_shown
     whole = holds(tile_of, hidden)
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
-    if s != n and abs(frames[n][3] - frames[s][3]) > HOLD_AGE:
+    if colours and s != n and abs(frames[n][3] - frames[s][3]) > HOLD_AGE:
         # a frame not fit to show whose own filter's last whole frame was taken more than HOLD_AGE before it, a cycle
         # or more back, holds the newest whole frame before it of any filter instead, when that one is its moment
         # (within HOLD_AGE): 101SA AURORA003 W's unfit MT3 frame held one 22 minutes back and Saturn jumped to that
@@ -10988,7 +10989,8 @@ def _shown_of(u, p, n, not_shown, tile_of):
         else:
             # with none of its moment to hold, it never holds a picture from further back (Io 2000's eclipse: RED/GRN
             # frames held one 25 to 58 frames back, Io lit in the shadow; a Jupiter 2001 CB2 frame held one 85 minutes
-            # off, another scene): it shows what the frame before it shows (shown_of), in a gray movie too
+            # off, another scene): it shows what the frame before it shows (shown_of). (A movie playing its gray
+            # filter takes the gray frame by step_frame instead: Saturn 2009's BL1 frames between clear ones)
             return n, None, False, True
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
