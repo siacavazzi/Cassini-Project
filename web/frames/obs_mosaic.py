@@ -8563,6 +8563,11 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         shift, seen = edge_shift(by[j], own[j], (0.0, 0.0), t, own[n], rel) if edges else (None, None)
         if shift is not None:
             how = f"edges {shift[0]:+.1f},{shift[1]:+.1f}" + (" (one line)" if (seen or {}).get("normal") else "")
+        elif edges and by[j].get("filter") != t.get("filter"):
+            # (a clouded body's frames in two filters show two layers, haze or cloud tops, apart by a few px: with no
+            # lit edge to match, no link. Matched on the pictures, 003SA 3X3MOVIEA002's Saturn stepped 2 to 3 px at
+            # each colour set and 125TI EUVFUV001's Titan 98 px on one frame; its own filter's frame before it links it)
+            return pr, None, "no edges across filters"
         else:
             # (where a clouded body's lit edges say nothing, the pictures: with edges alone, every link of Titan's
             # haze movies and Saturn's ring movies failed and their frames rode SPICE's smoothed path, 4 to 21 px hops)
