@@ -10831,9 +10831,12 @@ def step_frame(filters, s, grey, whole, near, times=None, reach=None, same=None)
     if reach is not None and same is not None:
         # (reaching further, HOLD_REACH: only across frames that all take that gray frame too, same(i); a frame between
         # that plays its own picture, later than the gray frame before or earlier than the one after, is kept in order)
-        if pick[0] is not None and not all(same(i) for i in range(a, s)):
+        # (a frame between that takes it within HOLD_AGE itself counts: Saturn 2006's RED and BL1 frames show the
+        # clear frame before them, so its UV3 frame after them takes it too, not its own washed gray)
+        takes = lambda i, j: same(i) or times is None or abs(times[i] - times[j]) <= HOLD_AGE
+        if pick[0] is not None and not all(takes(i, pick[0]) for i in range(a, s)):
             pick[0] = None
-        if pick[1] is not None and not all(same(i) for i in range(s + 1, b + 1)):
+        if pick[1] is not None and not all(takes(i, pick[1]) for i in range(s + 1, b + 1)):
             pick[1] = None
     if reach is not None and times is not None:
         # (a held band reaching further, HOLD_REACH: the gray frame nearest it in time, before or after; Titan 2016's
@@ -10966,7 +10969,7 @@ def _shown_of(u, p, n, not_shown, tile_of):
     hidden = (lambda j: not_shown(j) or over_exposed(tile_of(j))) if colours else not_shown
     whole = holds(tile_of, hidden)
     s = held_of([fr[2] for fr in frames], n, hidden, whole)
-    if colours and s != n and abs(frames[n][3] - frames[s][3]) > HOLD_AGE:
+    if s != n and abs(frames[n][3] - frames[s][3]) > HOLD_AGE:
         # a frame not fit to show whose own filter's last whole frame was taken more than HOLD_AGE before it, a cycle
         # or more back, holds the newest whole frame before it of any filter instead, when that one is its moment
         # (within HOLD_AGE): 101SA AURORA003 W's unfit MT3 frame held one 22 minutes back and Saturn jumped to that
@@ -10976,6 +10979,11 @@ def _shown_of(u, p, n, not_shown, tile_of):
         last = next((j for j in range(n - 1, -1, -1) if whole(j) and not held_band(frames[j][2])), None)
         if last is not None and frames[n][3] - frames[last][3] <= HOLD_AGE:
             s = last
+        else:
+            # with none of its moment to hold, it never holds a picture from further back (Io 2000's eclipse: RED/GRN
+            # frames held one 25 to 58 frames back, Io lit in the shadow; a Jupiter 2001 CB2 frame held one 85 minutes
+            # off, another scene): it shows what the frame before it shows (shown_of), in a gray movie too
+            return n, None, False, True
     if colours:
         covers = lambda got: set_cover(tile_of(n), [tile_of(j) for j in got.values()]) >= HELD_COVER
         got, tint = set_shown(u, n, want, not_shown, placed, covers)
