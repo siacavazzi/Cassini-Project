@@ -180,3 +180,7 @@ assert om.covered(seen((0, 0)), F / 2) > 0.8
 # (the body wholly on a frame, near its edge, as the 1999 Moon: centred still)
 assert om.centre_half(box((300, 0)), 60, seen((300, 0))) is not None
 print("a body in the frames' corner is not centred: ok")
+
+# (a single picture, fill=False: centred however little of the square its frame fills, as before #610)
+assert om.centre_half(box((470, 470)), 60, seen((470, 470)), fill=False) is not None
+print("a still is centred even with its body in the frame's corner: ok")
