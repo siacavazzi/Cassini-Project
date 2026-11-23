@@ -96,7 +96,8 @@ import label_handler  # noqa: E402
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
 # obs-v161/v144/v130: lifted skies after #609: night-side passes on gamma 1.5, the net glow test never above the plain one, a colour movie's drawn filters raised together on Full's sky track
-VERSIONS = {"balanced": "obs-v166", "raw": "obs-v149", "eye": "obs-v166-eye", "false": "obs-v166-false", "classic": "obs-v135-classic"}   # v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
+# obs-v169/v152/v138: blacks follow-ups: night-side passes on gamma 2.2
+VERSIONS = {"balanced": "obs-v169", "raw": "obs-v152", "eye": "obs-v169-eye", "false": "obs-v169-false", "classic": "obs-v138-classic"}   # v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
 # before: v157/v140/v126 (numbered past #608, #611, #614): a small target's square matched only where both pictures show it (Albiorix 129OT's star hops); a tinted movie frame's brightness matched over what is lit, not the sky (Jupiter C23JU W_10's white, gray and yellow flips); a frame unfit or of a held band with no set over it shows what the frame before shows (170SA WIND5HR005's 85 px hop back and near-black MT3); a movie's lone first or last frames at another pointing are passes of their own (289SA AURSTARE001's white flash); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes); v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 # before: v156/v139/v125: a giant planet's colour set as at one time: each channel redrawn as SPICE turns the body to the set's time (derotation: Saturn's 2011 storm fringes; numbered past #608, #611, #612, #615, #616); v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
 # before: v155/v138/v124 (numbered past #610): a balanced mosaic's tiles (up to 120 a filter) solved together, not grown one at a time, and their gains the log solve (obs_mosaic.held_level, WHOLE_MOST: Dione 139DI REGMAP001's step and green band), a pixel clipped in every band kept neutral under the gains (mosaic.keep_clipped: ringsFA's cream block) (numbered past PR 610) (numbered three past the blacks PR, one past the Enceladus sky-tile PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v154/v137/v123 (numbered past #610): a still mosaic's tile of an airless body takes its own sky's black (measured off the disk), at most 1% of white over the pass's (obs_mosaic.mosaic_sky_tile: Enceladus 144EN PLMHPHR002's gray squares under the plume and round the disk) (numbered two past the blacks PR);v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);; v151/v134/v120: clouded bodies' movies steadied on their lit edges, not their drifting clouds (steady9, edge_shift); a colour set's channel the pictures placed keeps its own place, the camera's drift between exposures out (003SA 3X3MOVIEA003 doubled edges, #606), the others moving with it; a body at its frames' edge not centred when the square round it would be mostly empty (CENTRE_FILL, 127HE Helene); a filter's match stands where the limb is further off at SPICE's place (_limb_register, 236TI blue); numbered three past gentler blacks; v146/v129/v115: a filter's frame turned against its pointing's reference frame is turned back onto it before colour registration (Mimas 167MI's 1.4 to 3 degree colour fringes; numbered past #604);# v143/126/112: a channel with nothing to fringe placed by SPICE when the channel being placed is flat (image_correction._match: 175SA NPOLVORT001's UV3, 145SA WIND5HR006's MT2); HAL in RED's place in natural color (calibration.RED_STANDINS: the 1999 Moon); a colour movie's frame with no gray-filter frame near shows the picture before its run (obs_mosaic.shown_of: 127TI CLOUD001's P60 and GRN flashes);
@@ -2694,10 +2695,7 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
         group = scale.get("track_set") or []
         if f in group:
             lift = min(max(track_black(scale["sky_track"][g], t) - scale["blacks"].get(g, 0.0), 0.0) for g in group)
-            # but never under the filter's own sky level: one filter's sky lit by stray light (Io's IR4 frames in its
-            # 2001 eclipse, sky 0.0005 I/F over a pass black of 0.0002) stayed gray over the others' least raise (#619)
-            own = track_black(track, t, 2) if len(track[0]) > 2 else pass_black
-            raised = max(pass_black + lift, min(raised, own))
+            raised = pass_black + lift
         # half of the raise as black, the rest in the toe (TRACK_TOE times the raise wide): what is left of a ring's
         # sheet, an F ring's skirt, a plume's outer glow and faint stars fades out instead of clipping (review 11-22:
         # the Full movies cut harder than the stills)
@@ -2866,20 +2864,16 @@ def tile_scale(scale, f, own_sky=False, seen=None, disk=None, on_body=False, exp
             return None
         if seen is not None:
             seen["black"] = raised
-        # (on a movie with a sky track, the toe at least as wide as this frame's own raise over it: the frame's sky over
-        # its track black, lit by stray light, fades into black instead of showing as a gray floor, Io's IR4 eclipse
-        # frames 0 -> 5 when #619 raised a colour movie's track by its filters' least raise)
-        toe = out.get("toe")
-        if scale.get("sky_track"):
-            toe = max(toe or 0.0, raised - black)
-        return {"black": raised, "toe": toe}
+        return {"black": raised, "toe": out.get("toe")}
 
     out["black_of"] = black_of
     return out
 
 
 TRACK_STILL = 0.25 # sky_track: how far a movie frame's black goes from its sky's height up to its sky black as a still
-NIGHT_GAMMA = 1.5  # pass_scale: a night-side pass's gamma (its disk fills the frames, nothing in them sunlit)
+NIGHT_GAMMA = 2.2  # pass_scale: a night-side pass's gamma (its disk fills the frames, nothing in them sunlit). 1.5
+                   # (#619) darkened Saturn's 2008 polar night 42-44% and the Enceladus 2013 crescent's terminator; 3 lifted
+                   # the aurora stares' noise to gray. Fable 11-23 over six night-side passes: 2.2 is never the worst
 TRACK_KEEP = 0.5   # tile_scale: the share of the track's raise over the pass's black that is black
 TRACK_TOE = 3.0    # tile_scale: the soft toe this many times as wide as the raise over the pass's black
 TRACK_WINDOW = 5   # sky_track: a movie's sampled frames' sky blacks, per filter in time order, are the median of this many
@@ -2917,22 +2911,19 @@ def sky_track(qs, masks, ts, top):
             # a quarter of the way up (TRACK_STILL; half and all the way lost faint light): all the way, the F ring's arc, a ring's faint sheet and the plume's outer
             # glow went black at Full (review 11-21, Sam's "go more conservative")
             black += TRACK_STILL * (still + still_margin - black)
-        got.append((t, black, level))
+        got.append((t, black))
     if len(got) < 3:
         return []
     got.sort(key=lambda g: g[0])
     half = TRACK_WINDOW // 2
-    blacks, levels = [g[1] for g in got], [g[2] for g in got]
-    # [t, black, the sky's own level] (the level: how far a colour movie's filter must come up at the least, track_set)
-    return [[got[i][0], float(np.median(blacks[max(0, i - half):i + half + 1])),
-             float(np.median(levels[max(0, i - half):i + half + 1]))] for i in range(len(got))]
+    levels = [g[1] for g in got]
+    return [[got[i][0], float(np.median(levels[max(0, i - half):i + half + 1]))] for i in range(len(got))]
 
 
-def track_black(track, t, k=1):
-    """The black at time t on a sky_track (k=2: its sky's level): between its samples, a straight line; before or after
-    them, the end's"""
+def track_black(track, t):
+    """The black at time t on a sky_track: between its samples, a straight line; before or after them, the end's"""
     ts = [p[0] for p in track]
-    return float(np.interp(t, ts, [p[k] if len(p) > k else p[1] for p in track]))
+    return float(np.interp(t, ts, [p[1] for p in track]))
 
 
 DISK_WHITE = 99.5   # pass_scale: the percentile of the body's disk that the pass's white is at least
@@ -3285,11 +3276,6 @@ def pass_scale(frames, u, drawn=None, true_colour=False, sky_tops=None, lit_leve
     # across in 038DI ZEROPHASE001's 1024 px movie, Rhea in 056RH's) the neighbourhood's mean is half sky, so every
     # pixel of the disk was raised by DETAIL times its own brightness and the disk came out flat white
     sat = saturn_look(u) if calibration.look() == "balanced" else {}
-    if night and os.environ.get("NIGHT_PROBE"):
-        shares = [float(_dark_sky(i).mean()) for iofs in by.values() for i in iofs]
-        lit = [float(((i - blacks.get(f, 0.0)) / max(white, 1e-12) > 0.1).mean()) for f, iofs in by.items() for i in iofs]
-        with open(os.environ["NIGHT_PROBE"], "a") as fh:
-            fh.write(f"{u['key']} darksky {np.median(shares):.3f} lit>0.1 {np.median(lit):.4f} gamma {gamma}\n")
     if night and not isinstance(gamma, str):
         gamma = min(float(gamma), NIGHT_GAMMA)
     out = {"blacks": blacks, "white": white, "gamma": gamma, "filled": filled, "floor": round(floor, 3),
