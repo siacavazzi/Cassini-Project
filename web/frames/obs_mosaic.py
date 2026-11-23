@@ -2902,7 +2902,8 @@ def sky_track(qs, masks, ts, top):
         clean = np.where(ok | ~m, q, np.float32(median))
         # (its sky black alone, not the floor black a still takes off a lit part: with it, a dim ring band between
         # bright rings went solid black, 2008 W1602057697_1's movie, lit share 33% -> 10%; Fable 11-21)
-        (still,), still_margin, _, measured = calibration._balanced_scale([clean], floor=False)
+        (still,), still_margin, _, measured = calibration._balanced_scale([clean], floor=False,
+                                                                       sky=calibration._sky([clean], whole=False))
         black = level + top
         if measured and still + still_margin > black:
             # a quarter of the way up (TRACK_STILL; half and all the way lost faint light): all the way, the F ring's arc, a ring's faint sheet and the plume's outer

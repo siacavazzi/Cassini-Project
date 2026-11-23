@@ -2657,7 +2657,7 @@ def _noise_only(iof, middle, noise):
 
 
 SKY_MOSTLY = 0.95       # _sky: a frame this share of whose pixels lie within SKY_NOISE noise of its own median ...
-SKY_FLAT_BANDED = 0.3   # ... and whose clipped blur, its row and column banding taken out, varies by at most this times that noise is sky all over (_mostly_sky)
+SKY_FLAT_BANDED = 0.6   # ... and whose clipped blur, its row and column banding taken out, varies by at most this times that noise is sky all over (_mostly_sky)
 
 
 def _mostly_sky(iof):
@@ -2668,10 +2668,9 @@ def _mostly_sky(iof):
     a gray banded panel (Calypso 2005 N1511290086_1, Polydeuces 2012 N1726540043_1, Telesto W1524686058_1, Phoebe
     N1515090832_1, Io N1357386993_1: sky medians 20 to 70 of 255). Here the frame's own median and its 16th
     percentile give the sky level and noise; when SKY_MOSTLY of it lies within SKY_NOISE noise of that level and its
-    clipped blur, its row and column banding taken out (with the camera's banding, these long exposures measure 0.45 to
-    0.62 of the noise under _noise_only's measure; without it, 0.05 to 0.16), is flat to SKY_FLAT_BANDED, the frame is
-    sky all over, its speck and stars above the cut. A glow or ring band varies across rows and columns alike, keeps
-    its shape and fails it."""
+    clipped blur, its row and column banding taken out, is flat to SKY_FLAT_BANDED (these frames measure 0.45 to 0.59 of
+    their noise; the E-ring glow sloping down rz-enceladus15-still's frame, N1807689257_1, 1.36), the frame is sky all
+    over, its speck and stars above the cut."""
     low, middle = (float(v) for v in np.percentile(iof, (16, 50)))
     noise = middle - low
     # only a dark frame (its median under GLOW_IOF[0], as _sunlit's lit sky): a bland, even cloud deck filling the frame
@@ -2683,17 +2682,23 @@ def _mostly_sky(iof):
     if float((iof < cut).mean()) < SKY_MOSTLY:
         return None
     clipped = np.clip(np.nan_to_num(iof.astype(np.float32)), middle - SKY_NOISE * noise, cut)
-    # the camera's column and row banding taken out first (each column's, then each row's median less the frame's), so
-    # the flatness asked is of what varies across rows and columns alike
-    clipped = clipped - (np.median(clipped, axis=0) - middle)[None, :].astype(np.float32)
-    clipped = clipped - (np.median(clipped, axis=1) - middle)[:, None].astype(np.float32)
+    # the camera's column and row banding taken out first: each column's, then each row's median less its own blur over
+    # SKY_FLAT_PX (the banding is a few rows or columns across; a glow's slow slope down the frame, the E ring's or a
+    # plume's, stays and fails the flatness, rz-enceladus15-still's lower glow was cut to black when the whole row
+    # median came off)
+    def banding(profile):
+        return (profile - cv2.GaussianBlur(profile.reshape(1, -1), (0, 0), SKY_FLAT_PX).ravel()).astype(np.float32)
+    clipped = clipped - banding(np.median(clipped, axis=0))[None, :]
+    clipped = clipped - banding(np.median(clipped, axis=1))[:, None]
     big = cv2.GaussianBlur(clipped, (0, 0), SKY_FLAT_PX)
     m = 2 * SKY_FLAT_PX
     inner = big[m:-m, m:-m] if min(big.shape[:2]) > 4 * m else big
     return cut if float(np.std(inner)) <= SKY_FLAT_BANDED * noise else None
 
 
-def _sky(iofs):
+def _sky(iofs, whole=True):
+    """whole: also a frame that is sky all over round a speck (_mostly_sky); off for a movie frame's own sky black
+    (obs_mosaic's black track), whose frame has its lit parts already set to its sky's median and is flat for that"""
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
         cut = SKY_CUT * float(np.percentile(iof, 99.9))
@@ -2703,7 +2708,7 @@ def _sky(iofs):
             noise = middle - low
             if noise > 0 and cut - middle < SKY_SPLIT * noise and _noise_only(iof, middle, noise):
                 cut = max(cut, middle + SKY_NOISE * noise)
-        if float((iof < cut).mean()) < SKY_MOSTLY:
+        if whole and float((iof < cut).mean()) < SKY_MOSTLY:
             # a frame of sky round a speck that the cut above misses (_mostly_sky)
             whole = _mostly_sky(iof)
             if whole is not None:

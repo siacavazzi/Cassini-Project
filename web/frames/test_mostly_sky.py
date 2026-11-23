@@ -48,6 +48,12 @@ def test_large_glow_is_not_flat():
     assert calibration._mostly_sky(iof) is None
 
 
+def test_slow_glow_down_the_frame_is_not_sky():
+    iof = frame()
+    iof += (np.linspace(6.0e-5, 0.0, 512)[:, None] * np.ones((1, 512))).astype(np.float32)
+    assert calibration._mostly_sky(iof) is None
+
+
 def test_bland_cloud_deck_is_not_sky():
     rng = np.random.default_rng(3)
     deck = (0.3 + 0.002 * rng.standard_normal((512, 512))).astype(np.float32)
