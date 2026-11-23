@@ -3493,10 +3493,16 @@ def _tile_made(u, n, cache, scale, base):
         with (calibration.hdr_capture() if HDR_ON else contextlib.nullcontext(None)) as sink:
             body = on_disk(u, u["frames"][n])
             sky_tile = mosaic_sky_tile(u, scale, disk, u["frames"][n])
-            image, _, rep = color_image.processed_frame([path], hdr=True, scale=tile_scale(scale, f, bool(u.get("movie") or disk or sky_tile is not None), seen, disk,
-                                                                                           body, exposure, t,
-                                                                                           not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N",
-                                                                                           mosaic_sky_most(scale) if sky_tile else None, sky_tile),
+            drawn = tile_scale(scale, f, bool(u.get("movie") or disk or sky_tile is not None), seen, disk, body, exposure, t,
+                               not _ring(u), u["key"][0] in SPECKS, u["key"][2] == "N",
+                               mosaic_sky_most(scale) if sky_tile else None, sky_tile)
+            if u.get("movie"):
+                # a movie's frame is shown alone, as a one frame picture is: what the camera saturated is white
+                # (calibration's sat_white_all), not eased to the light round it as a mosaic's glow is. A movie's white
+                # is at least each frame's own (WHITE_EACH), so a long exposure's clipped disk drawn at its clipped
+                # value came out a flat gray (061EN FP3HOTSPT001's frame 2: Enceladus at 158)
+                drawn = {**drawn, "sat_white_all": True}
+            image, _, rep = color_image.processed_frame([path], hdr=True, scale=drawn,
                                                         repeat_window=u.get("repeat_gap", mosaic_benchmark.REPEAT_GAP),
                                                         around=_around(u, n) if u.get("movie") else _same_pointing(u, n),
                                                         turn=view_turn(u))
