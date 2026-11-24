@@ -1,1 +1,7 @@
-{}
+{
+ "plume279-movie": "veiled_frame: the movie's last two frames (286-287, N1876495358/495398) are gray veils after dark frames (sky 30/33 against 0); they hold frame 285 and share its movie_shown key, so the movie plays that picture once (no repeat); full_black 24.9 -> 2.6",
+ "rz-enceladus13-movie": "saturated white: Enceladus' clipped disc (a solid patch over 1% of the frame with a lit edge) drawn white instead of saturated_code's eased level; only that patch, so hot pixels and stars the frames also saturated keep their level",
+ "adj-m-io00-pass-yr": "veiled_frame: frame 100's gray veil (blocky gray over the frame, Io dim) is held; pointing_jitter 28.2 -> 0.2. The IR4 sky lift on main is not this PR's",
+ "encset293-movie": "saturated white: Saturn's clipped limb (a solid patch with a lit edge) drawn white; only that patch, so no speck on the sky",
+ "m-aegaeon15-pass2": "target, unchanged: frame 1 is a bright 100 ms frame among 460 ms to 10 s ones (lit 0.13, sky 0), not a veil; built for evidence"
+}
