@@ -1967,15 +1967,18 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # SAT_WHITE, for a patch a smooth glow climbs into; one with an edge or among ringlets stays white (260RI
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
-            if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"] \
-                    and _lit_round(picture, full) >= SAT_EDGE_LIT:
-                # (a movie's frame, shown alone, that saturated a body, one patch sat_white_all of the frame or more:
-                # white, as draw_saturated draws a one frame picture's; obs_mosaic.tile. Star trails, many thin patches,
-                # keep saturated_code: white, they flashed in Skathi 2011's long frames)
-                picture[full] = 255
-            elif full is not None and full.any():
+            if full is not None and full.any():
                 picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale.get("sat_white") or scale["white"], gamma,
                                                                             scale.get("shoulder"), toe)[..., 0])
+                if scale.get("sat_white_all"):
+                    # (a movie's frame, shown alone: a body's clipped disc, a solid patch sat_white_all of the frame or
+                    # more with a lit edge, is white, as draw_saturated draws a one frame picture's; obs_mosaic.tile.
+                    # Only that patch: a hot pixel or star the frame also saturated keeps saturated_code, as do star
+                    # trails and junk round a dark frame. White as a whole it was a bright speck on the sky, 188EN
+                    # PLMMPMR001's frame 13, ENCSET 293's frame 30)
+                    disc = _white_patch(full, picture, scale["sat_white_all"])
+                    if disc is not None:
+                        picture[disc] = 255
         sink = _hdr_sink.get()
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
             # ... and HDR_SATURATED times white in its recovery map (where it is drawn white)
@@ -2024,6 +2027,20 @@ def _lit_round(picture, full):
     edge = cv2.dilate(np.asarray(full, np.uint8), np.ones((side, side), np.uint8)).astype(bool) & ~np.asarray(full, bool)
     v = np.asarray(picture)[edge]
     return float(np.percentile(v, 75)) if v.size else 0.0
+
+
+def _white_patch(full, picture, share):
+    """(display with sat_white_all) The mask of mask full's largest 8-connected patch when it is a body's clipped disc:
+    share of the picture or more, solid (SAT_SOLID of its convex hull) and with a lit edge (_lit_round SAT_EDGE_LIT or
+    more); else None."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(np.asarray(full, np.uint8), connectivity=8)
+    if count < 2:
+        return None
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    patch = labels == k
+    if _largest_share(patch) < share or _lit_round(picture, patch) < SAT_EDGE_LIT:
+        return None
+    return patch
 
 
 def _largest_share(full):
