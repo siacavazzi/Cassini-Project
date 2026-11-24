@@ -2772,6 +2772,10 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
         sunlit = _sunlit(iofs)
         brightest = native * sunlit + brightest * (1 - sunlit) if native < brightest else brightest
     white = max(white, brightest / MAX_STRETCH)
+    if white <= 0 and measured:
+        # a sky whose only lit pixels are single-pixel points (a star field measured as sky all over, _mostly_sky): the
+        # 3x3 median takes every one of them out, so the white is taken from them as they are rather than none at all
+        white = max(float(np.percentile((iof - np.float32(black))[lit], WHITE_PCT)) for iof, black in zip(iofs, blacks))
     return levels, margin, white, measured
 
 

@@ -77,7 +77,10 @@ stars = 3.5e-5 + rng.normal(0, 2e-7, (H, H))
 stars[rng.integers(0, H, 300), rng.integers(0, H, 300)] += 4e-5
 before, after = draw([stars], floor=False)[0], draw([stars])[0]
 print("star field p50/p99.99: before", pct(before, 50, 99.99), "after", pct(after, 50, 99.99))
-assert np.percentile(before, 50) > 150 and np.percentile(after, 50) < 25 and np.percentile(after, 99.99) > 200
+# (its offset is measured as sky now, calibration._mostly_sky, so it goes black without the glow black too; before
+# that, with no glow black, it drew as a gray veil, median over 150)
+assert np.percentile(before, 50) < 25 and np.percentile(after, 50) < 25 and np.percentile(after, 99.99) > 200
+assert np.percentile(before, 99.99) > 200
 dim = (haze * 0.05).astype(np.float32)                         # I/F 0.0085-0.0095: a sunlit surface, not sky
 keep = cal.GLOW_IOF
 cal.GLOW_IOF = (1e-30, 2e-30)
