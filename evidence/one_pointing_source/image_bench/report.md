@@ -1,10 +1,10 @@
-# Image benchmark: eaf1cfcaa79a against 53c9279ef64e
+# Image benchmark: 8dfd9d704598 against 53c9279ef64e
 
 **NEEDS EYES**. 144 items: 92 identical, 52 changed (41 outside the target), 0 not built.
 
 - target items with a measure worse (look at them): saturn05-movie, rz-enceladus15-still, adj-rz-enceladus15-still-obs, adj-rz-titan10-movie4-obs, t36-tethys, t36-jupiter, t36-titan028, t36-enc215, t36-enc243, t36-enc136ecl, t36-enc136lr
 
-Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-still-obs, adj-rz-titan10-movie4-obs, rz-enceladus15-still, saturn05-movie, t36-enc136ecl, t36-enc136lr, t36-enc215, t36-enc243, t36-jupiter, t36-tethys, t36-titan028.
+Built in 102 min (base) and 82 min (candidate). Targets: adj-rz-enceladus15-still-obs, adj-rz-titan10-movie4-obs, rz-enceladus15-still, saturn05-movie, t36-enc136ecl, t36-enc136lr, t36-enc215, t36-enc243, t36-jupiter, t36-tethys, t36-titan028.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -74,7 +74,7 @@ Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-stil
 | wind170-movie | hard | identical | 0/32 | 0.00% |  |  |  |
 | albiorix129-movie | hard | changed | 39/39 | 11.07% | 255 | frame000.webp: 98.47% of the base's light now black; frame000.webp: lit area's centre moved 15 px; frame004.webp: clipped 1.06% -> 1.34%; frame004.webp: detail 2.2879 -> 2.6768 (+17%) | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | aurora101-movie | hard | changed | 84/84 | 28.12% | 255 | evened011.webp: detail 0.1756 -> 0.2023 (+15%); evened040.webp: lit area's centre moved 9 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
-| approach04-movie | hard | changed | 134/140 | 0.39% | 33 |  | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| approach04-movie | hard | changed | 140/140 | 0.38% | 33 |  | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | saturn07-fullblack-movie | hard | changed | 19/144 | 7.62% | 221 |  | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | saturn08w-fullblack-movie | hard | identical | 0/16 | 0.00% |  |  |  |
 | saturn13-fullblack-movie | hard | identical | 0/61 | 0.00% |  |  |  |
@@ -83,7 +83,7 @@ Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-stil
 | storm13-night-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | night-washout-composite | hard | identical | 0/1 | 0.00% |  |  |  |
 | night-dark-composite | hard | identical | 0/1 | 0.00% |  |  |  |
-| storm13-night-movie | hard | changed | 10/10 | 12.31% | 158 | evened000.webp: 1.11% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| storm13-night-movie | hard | changed | 10/10 | 16.25% | 241 | evened000.webp: 9.62% of the base's light now black; evened000.webp: lit area's centre moved 11 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | himalia00-movie | hard | identical | 0/40 | 0.00% |  |  |  |
 | saturn16-uv2-movie | hard | changed | 52/52 | 28.37% | 255 | frame003.webp: 0.66% of the base's light now black | clouded body cross-filter links weigh 0.1, and its pictures disagree by 9 px (res_p90), so the sequence plays whole on SPICE's smoothed path; jitter 3.6 -> 6.4, Fable on frames 39-44: SAME |
 | titan16-methane-movie | hard | changed | 16/16 | 18.84% | 255 | frame000.webp: 1.66% of the base's light now black; frame000.webp: lit area's centre moved 15 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
@@ -91,16 +91,16 @@ Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-stil
 | dione139-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | titan059-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
 | enceladus144-mosaic | hard | identical | 0/2 | 0.00% |  |  |  |
-| rx-saturn14-movie | hard | changed | 144/144 | 0.97% | 23 |  | clouded body: picture links across two filters weigh 0.1 against same-filter links (Fable: saturn16-uv2 same; rx-saturn14 no visible fringe) |
+| rx-saturn14-movie | hard | changed | 108/144 | 0.00% | 11 |  | clouded body cross-filter links weigh 0.1; channel_registration 0.48 -> 0.82 by the measure, Fable at 1:1: no visible fringe |
 | m-aegaeon15-pass2 | hard | identical | 0/4 | 0.00% |  |  |  |
 | m-himalia00-pass | hard | identical | 0/40 | 0.00% |  |  |  |
 | m-mundilfari07-pass | hard | changed | 22/22 | 38.21% | 255 | evened000.webp: 97.67% of the base's light now black; evened006.webp: lit area's centre moved 13 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
-| m-pallene17-pass | hard | changed | 30/30 | 1.88% | 193 | evened001.webp: 33.45% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
-| rx-saturn09-movie | hard | changed | 16/108 | 0.10% | 44 | evened004.webp: clipped 0.54% -> 0.85%; evened004.webp: 4.38% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
-| rx-sun02-cruise | hard | changed | 22/22 | 50.58% | 255 | evened000.webp: 0.93% of the base's light now black; evened000.webp: lit area's centre moved 13 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| m-pallene17-pass | hard | changed | 30/30 | 14.02% | 193 | evened000.webp: 0.77% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| rx-saturn09-movie | hard | changed | 16/108 | 0.10% | 42 | evened004.webp: 4.23% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| rx-sun02-cruise | hard | changed | 22/22 | 50.58% | 255 | evened000.webp: 0.92% of the base's light now black; evened000.webp: lit area's centre moved 13 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | ry-methone12-movie | hard | changed | 47/47 | 0.07% | 253 | frame002.webp: clipped 0.44% -> 0.96%; frame022.webp: 0.34% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | rz-enceladus13-movie | hard | changed | 62/62 | 23.36% | 255 | frame000.webp: 8.93% of the base's light now black; frame000.webp: lit area's centre moved 25 px; frame005.webp: clipped 66.01% -> 66.37%; frame045.webp: detail 0.0914 -> 0.1065 (+17%) | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
-| m-janus10-pass | hard | changed | 48/48 | 20.35% | 247 | evened000.webp: 0.22% of the base's light now black; evened018.webp: clipped 4.29% -> 4.75%; evened020.webp: lit area's centre moved 35 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path); its one unmatched frame now sits where its own colour set's pictures put it (Fable: cleaner colour in frames 21-22), so the pictures' own 11 px jump to the next set shows as 20 px; a known failure (jitter 31 on main) |
+| m-janus10-pass | hard | changed | 48/48 | 3.06% | 201 | evened020.webp: 0.47% of the base's light now black | pointing: its unmatched red frame 21 takes the median of its colour set's placed frames (the pictures place frames 0-20 and 22-26 as two runs 80 px apart); jitter 30.8 -> 30.4, odd_frame 2.77 -> 2.71; Fable on frames 19-24: SAME colour and position as main |
 | rz-saturn12-movie | hard | identical | 0/49 | 0.00% |  |  |  |
 | rz-saturn09-movie3 | hard | identical | 0/97 | 0.00% |  |  |  |
 | m-pallene06-still | hard | identical | 0/1 | 0.00% |  |  |  |
@@ -117,7 +117,7 @@ Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-stil
 | rz-titan14-movie4 | plain | changed | 24/24 | 5.72% | 246 | evened006.webp: clipped 2.56% -> 2.77% | clouded body: picture links across two filters weigh 0.1 against same-filter links (Fable: saturn16-uv2 same; rx-saturn14 no visible fringe) |
 | rz-titan15-movie3 | plain | identical | 0/20 | 0.00% |  |  |  |
 | rz-titan08-movie2 | plain | identical | 0/12 | 0.00% |  |  |  |
-| rx-jupiter01-cruise | plain | changed | 28/28 | 4.90% | 201 | evened008.webp: 0.37% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| rx-jupiter01-cruise | plain | changed | 28/28 | 14.34% | 215 | evened001.webp: 0.64% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | rz-jupiter01-movie | plain | changed | 28/28 | 30.89% | 218 | evened000.webp: 0.54% of the base's light now black; evened000.webp: lit area's centre moved 10 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | rz-titan13-movie2 | plain | changed | 54/54 | 36.94% | 255 | evened000.webp: clipped 8.12% -> 8.40%; evened004.webp: 0.54% of the base's light now black; evened006.webp: lit area's centre moved 9 px; evened023.webp: detail 0.0482 -> 0.0594 (+23%) | clouded body: picture links across two filters weigh 0.1 against same-filter links (Fable: saturn16-uv2 same; rx-saturn14 no visible fringe) |
 | rz-titan16-movie | plain | changed | 12/22 | 0.00% | 9 |  | clouded body: picture links across two filters weigh 0.1 against same-filter links (Fable: saturn16-uv2 same; rx-saturn14 no visible fringe) |
@@ -127,7 +127,7 @@ Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-stil
 | rz-jupiter00-movie2 | plain | changed | 88/88 | 0.17% | 34 | evened000.webp: detail 0.1471 -> 0.1694 (+15%) | clouded body: picture links across two filters weigh 0.1 against same-filter links (Fable: saturn16-uv2 same; rx-saturn14 no visible fringe) |
 | rz-saturn17-movie2 | plain | identical | 0/12 | 0.00% |  |  |  |
 | adj-m-aegaeon15-pass2-yr | plain | identical | 0/18 | 0.00% |  |  |  |
-| adj-m-io00-pass-yr | plain | changed | 246/246 | 26.61% | 255 | evened000.webp: 0.57% of the base's light now black; evened046.webp: lit area's centre moved 9 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| adj-m-io00-pass-yr | plain | changed | 246/246 | 28.06% | 255 | evened000.webp: 1.24% of the base's light now black; evened046.webp: lit area's centre moved 14 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | adj-rz-bebhionn17-movie-yr | plain | identical | 0/35 | 0.00% |  |  |  |
 | adj-rz-enceladus15-still-obs | target | changed | 1/1 | 99.99% | 255 | still.webp: 14.70% of the base's light now black; still.webp: detail 0.1362 -> 0.578 (+324%); still.webp: lit area's centre moved 402 px; still.webp: lit share 100.0% -> 86.7% |  |
 | adj-rz-titan10-movie4-obs | target | changed | 48/48 | 1.12% | 250 | evened006.webp: clipped 2.72% -> 2.96% |  |
@@ -147,8 +147,8 @@ Built in 102 min (base) and 89 min (candidate). Targets: adj-rz-enceladus15-stil
 | t36-enc136lr | target | changed | 1/1 | 74.32% | 255 | still.webp: detail 0.0937 -> 0.2803 (+199%); still.webp: lit area's centre moved 328 px |  |
 | fring274-movie | hard | identical | 0/172 | 0.00% |  |  |  |
 | npole0908-mosaicmovie | hard | identical | 0/1 | 0.00% |  |  |  |
-| encset293-movie | hard | changed | 38/48 | 8.96% | 255 | frame019.webp: detail 0.0106 -> 0.0261 (+146%); frame028.webp: 0.21% of the base's light now black; frame038.webp: clipped 76.54% -> 76.79% | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
-| daphnis257n1-movie | hard | changed | 34/34 | 33.72% | 246 | evened000.webp: 0.80% of the base's light now black | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| encset293-movie | hard | changed | 37/48 | 5.45% | 255 | frame019.webp: detail 0.0106 -> 0.0261 (+146%); frame038.webp: clipped 76.54% -> 76.75% | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
+| daphnis257n1-movie | hard | changed | 34/34 | 42.02% | 246 | evened000.webp: 1.25% of the base's light now black; evened000.webp: lit area's centre moved 9 px | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | fring039-movie | hard | changed | 19/144 | 7.62% | 221 |  | pointing: one source per sequence (frames the pictures do not place go between the pictures' places by time; a sequence the pictures place under half of, or whose links disagree past 5 px, whole on SPICE's smoothed path) |
 | fring183-movie | hard | identical | 0/61 | 0.00% |  |  |  |
 | titancloud264-movie | hard | changed | 104/104 | 0.36% | 41 | evened003.webp: detail 0.0521 -> 0.0608 (+17%); evened012.webp: clipped 4.15% -> 4.36% | clouded body: picture links across two filters weigh 0.1 against same-filter links (Fable: saturn16-uv2 same; rx-saturn14 no visible fringe) |
@@ -173,7 +173,7 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | albiorix129-movie | pointing_sources | fixed | 5.0 | 0.0 (limit 0) | 0 of 39 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 0 placed by the pictures, 0 on the smoothed path (stabilized by defau |
 | aurora101-movie | odd_frame | known | 10.2827 | 9.9756 (limit 4.0) | worst 10.0 at frame009.webp (2 of 6 frames over 4.0) |
 | aurora101-movie | pointing_sources | fixed | 4.0 | 0.0 (limit 0) | 0 of 42 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 0 placed by the pictures, 0 on the smoothed path (stabilized by defau |
-| approach04-movie | odd_frame | known | 27.6188 | 27.4622 (limit 4.0) | worst 27.5 at frame027.webp (1 of 12 frames over 4.0) |
+| approach04-movie | odd_frame | known | 27.6188 | 27.2132 (limit 4.0) | worst 27.2 at frame027.webp (1 of 12 frames over 4.0) |
 | approach04-movie | pointing_sources | fixed | 1.0 | 0.0 (limit 0) | 0 of 70 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 69 placed by the pictures, 1 on the smoothed path (stabilized by defa |
 | saturn07-fullblack-movie | full_black | known | 29.14 | 29.14 (limit 20.0) | black sky lost at Full: up to 29 points (78% of frame029.webp black at Processed, 49% at Full; 16 of 16 frames over 20) |
 | saturn07-fullblack-movie | pointing_sources | fixed | 5.0 | 0.0 (limit 0) | 0 of 144 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 139 placed by the pictures, 5 on the smoothed path (stabilized by de |
@@ -192,21 +192,22 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | skathi11-veil-movie | odd_frame | REGRESSION | 2.8443 | 6.0996 (limit 4.0) | worst 6.1 at frame084.webp (1 of 97 frames over 4.0) |
 | skathi11-veil-movie | pointing_jitter | known | 26.2062 | 15.9921 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 16.0 px, largest 35.2 px (109 pairs) |
 | skathi11-veil-movie | pointing_sources | fixed | 53.0 | 0.0 (limit 0) | 0 of 134 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 0 placed by the pictures, 0 on the smoothed path (stabilized by defa |
+| rx-saturn14-movie | channel_registration | REGRESSION | 0.48 | 0.82 (limit 0.7) | red or blue channel off green: p90 0.82 px, largest 0.82 px (72 colour frames) |
 | m-aegaeon15-pass2 | odd_frame | known | 9.0587 | 9.0587 (limit 4.0) | worst 9.1 at frame001.webp (1 of 2 frames over 4.0) |
 | m-himalia00-pass | full_banding | known | 4.049 | 4.049 (limit 1.0) | Full sky banding up to 4.05 levels where Processed has black sky (3 of 10 frames over 1.0) |
 | m-himalia00-pass | full_black | known | 91.67 | 91.67 (limit 20.0) | black sky lost at Full: up to 92 points (94% of frame000.webp black at Processed, 3% at Full; 3 of 16 frames over 20) |
 | m-himalia00-pass | odd_frame | known | 40.8583 | 40.8583 (limit 4.0) | worst 40.9 at frame003.webp (2 of 14 frames over 4.0) |
 | m-mundilfari07-pass | odd_frame | known | 24.3752 | 24.738 (limit 4.0) | worst 24.7 at frame007.webp (2 of 4 frames over 4.0) |
 | m-mundilfari07-pass | pointing_sources | fixed | 3.0 | 0.0 (limit 0) | 0 of 11 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 0 placed by the pictures, 0 on the smoothed path (stabilized by defau |
-| m-pallene17-pass | full_black | known | 96.2 | 96.2 (limit 20.0) | black sky lost at Full: up to 96 points (97% of frame010.webp black at Processed, 1% at Full; 2 of 15 frames over 20) |
-| m-pallene17-pass | odd_frame | known | 36.7632 | 36.832 (limit 4.0) | worst 36.8 at frame005.webp (3 of 4 frames over 4.0) |
-| m-pallene17-pass | pointing_jitter | known | 40.6822 | 46.601 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 46.6 px, largest 121.2 px (10 pairs) |
+| m-pallene17-pass | full_black | known | 96.2 | 96.04 (limit 20.0) | black sky lost at Full: up to 96 points (97% of frame010.webp black at Processed, 1% at Full; 2 of 15 frames over 20) |
+| m-pallene17-pass | odd_frame | known | 36.7632 | 36.7003 (limit 4.0) | worst 36.7 at frame005.webp (3 of 4 frames over 4.0) |
+| m-pallene17-pass | pointing_jitter | known | 40.6822 | 41.2089 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 41.2 px, largest 107.1 px (10 pairs) |
 | m-pallene17-pass | pointing_sources | fixed | 1.0 | 0.0 (limit 0) | 0 of 15 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 14 placed by the pictures, 1 on the smoothed path (stabilized by defa |
 | rx-saturn09-movie | full_black | known | 63.74 | 63.74 (limit 20.0) | black sky lost at Full: up to 64 points (64% of frame046.webp black at Processed, 0% at Full; 3 of 16 frames over 20) |
 | rx-saturn09-movie | odd_frame | known | 43.7285 | 43.7285 (limit 4.0) | worst 43.7 at frame044.webp (9 of 27 frames over 4.0) |
 | rx-saturn09-movie | pointing_jitter | known | 73.3869 | 73.3869 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 73.4 px, largest 246.2 px (30 pairs) |
-| rx-sun02-cruise | odd_frame | known | 79.0499 | 78.9697 (limit 4.0) | worst 79.0 at frame003.webp (3 of 5 frames over 4.0) |
-| rx-sun02-cruise | pointing_jitter | fixed | 6.3895 | 0.293 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 0.3 px, largest 0.4 px (7 pairs) |
+| rx-sun02-cruise | odd_frame | known | 79.0499 | 78.9782 (limit 4.0) | worst 79.0 at frame003.webp (3 of 5 frames over 4.0) |
+| rx-sun02-cruise | pointing_jitter | fixed | 6.3895 | 0.2946 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 0.3 px, largest 0.4 px (7 pairs) |
 | rx-sun02-cruise | pointing_sources | fixed | 4.0 | 0.0 (limit 0) | 0 of 11 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 7 placed by the pictures, 4 on the smoothed path (stabilized by defau |
 | ry-methone12-movie | full_black | known | 93.61 | 93.9 (limit 20.0) | black sky lost at Full: up to 94 points (100% of frame018.webp black at Processed, 6% at Full; 4 of 16 frames over 20) |
 | ry-methone12-movie | odd_frame | known | 41.9536 | 41.9808 (limit 4.0) | worst 42.0 at frame015.webp (16 of 41 frames over 4.0) |
@@ -214,8 +215,7 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | rz-enceladus13-movie | odd_frame | known | 32.1055 | 23.7825 (limit 4.0) | worst 23.8 at frame008.webp (20 of 54 frames over 4.0) |
 | rz-enceladus13-movie | pointing_jitter | known | 20.9301 | 7.2667 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 7.3 px, largest 8.6 px (15 pairs) |
 | rz-enceladus13-movie | pointing_sources | fixed | 5.0 | 0.0 (limit 0) | 0 of 62 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 0 placed by the pictures, 0 on the smoothed path (stabilized by defau |
-| m-janus10-pass | odd_frame | REGRESSION | 2.7703 | 6.667 (limit 4.0) | worst 6.7 at frame011.webp (1 of 8 frames over 4.0) |
-| m-janus10-pass | pointing_jitter | known | 30.758 | 33.8601 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 33.9 px, largest 137.8 px (23 pairs) |
+| m-janus10-pass | pointing_jitter | known | 30.758 | 30.3857 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 30.4 px, largest 136.0 px (23 pairs) |
 | m-janus10-pass | pointing_sources | fixed | 1.0 | 0.0 (limit 0) | 0 of 27 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 23 placed by the pictures, 1 on the smoothed path (stabilized by defa |
 | rz-saturn12-movie | full_black | known | 93.78 | 93.78 (limit 20.0) | black sky lost at Full: up to 94 points (95% of frame000.webp black at Processed, 2% at Full; 16 of 16 frames over 20) |
 | rz-saturn09-movie3 | pointing_jitter | known | 5.3958 | 5.3958 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 5.4 px, largest 66.5 px (93 pairs) |
@@ -225,7 +225,7 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | rz-saturn13-movie3 | pointing_sources | fixed | 1.0 | 0.0 (limit 0) | 0 of 26 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 25 placed by the pictures, 1 on the smoothed path (stabilized by defa |
 | rz-titan14-movie4 | channel_registration | known | 1.467 | 1.48 (limit 0.7) | red or blue channel off green: p90 1.48 px, largest 1.51 px (12 colour frames) |
 | rz-titan08-movie2 | pointing_jitter | known | 3.3241 | 3.3241 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 3.3 px, largest 3.6 px (11 pairs) |
-| rx-jupiter01-cruise | pointing_jitter | known | 11.8174 | 11.8486 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 11.8 px, largest 76.1 px (13 pairs) |
+| rx-jupiter01-cruise | pointing_jitter | known | 11.8174 | 11.918 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 11.9 px, largest 76.6 px (13 pairs) |
 | rx-jupiter01-cruise | pointing_sources | fixed | 4.0 | 0.0 (limit 0) | 0 of 14 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 10 placed by the pictures, 4 on the smoothed path (stabilized by defa |
 | rz-jupiter01-movie | pointing_jitter | known | 11.3942 | 10.5002 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 10.5 px, largest 55.4 px (13 pairs) |
 | rz-jupiter01-movie | pointing_sources | fixed | 4.0 | 0.0 (limit 0) | 0 of 14 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 0 placed by the pictures, 0 on the smoothed path (stabilized by defau |
@@ -239,8 +239,8 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | rz-saturn17-movie2 | pointing_jitter | known | 97.8018 | 97.8018 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 97.8 px, largest 115.3 px (6 pairs) |
 | adj-m-aegaeon15-pass2-yr | odd_frame | known | 8.3486 | 8.3486 (limit 4.0) | worst 8.3 at frame004.webp (2 of 13 frames over 4.0) |
 | adj-m-aegaeon15-pass2-yr | pointing_jitter | known | 90.0713 | 90.0713 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 90.1 px, largest 122.4 px (5 pairs) |
-| adj-m-io00-pass-yr | odd_frame | known | 19.8693 | 19.8745 (limit 4.0) | worst 19.9 at frame100.webp (59 of 84 frames over 4.0) |
-| adj-m-io00-pass-yr | pointing_jitter | known | 28.2144 | 30.5573 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 30.6 px, largest 32.7 px (91 pairs) |
+| adj-m-io00-pass-yr | odd_frame | known | 19.8693 | 19.8522 (limit 4.0) | worst 19.9 at frame100.webp (59 of 84 frames over 4.0) |
+| adj-m-io00-pass-yr | pointing_jitter | known | 28.2144 | 29.7843 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 29.8 px, largest 31.8 px (91 pairs) |
 | adj-m-io00-pass-yr | pointing_sources | fixed | 25.0 | 0.0 (limit 0) | 0 of 123 frames at SPICE's raw pointing, 0 on SPICE's step among frames the pictures place; 98 placed by the pictures, 25 on the smoothed path (stabilized by de |
 | adj-rz-bebhionn17-movie-yr | pointing_jitter | known | 12.1616 | 12.1616 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 12.2 px, largest 18.1 px (30 pairs) |
 | adj-rz-titan10-movie4-obs | channel_registration | known | 1.295 | 1.039 (limit 0.7) | red or blue channel off green: p90 1.04 px, largest 1.34 px (24 colour frames) |
