@@ -8903,11 +8903,11 @@ def from_pictures(places, hows, unlinked, when=None, filters=None):
     pointing (Sam 2026-11-18): a held frame on SPICE's step put SPICE's pointing scatter into a picture-steadied movie,
     a hop of its scatter where the two met (titan08-movie2's 3.6 px).
 
-    A frame of a colour set (filters: {n: filter}; sets, _colour_sets_of, a run of frames with no filter twice) whose
-    set has a placed frame on one side only takes that frame's place: its set's channels are drawn together. Between
-    two sets the pictures may not agree (2010's Janus pass, m-janus10-pass: frames 0-20 and 22-26 placed by two
-    separate runs of links 80 px apart; frame 21, its set's red, put between them, half way, drew its set cyan and
-    doubled the hop to the next set). Otherwise between two placed frames, on the straight line between their places
+    A frame of a colour set (filters: {n: filter}; sets, _colour_sets_of, a run of frames with no filter twice) with
+    placed frames in its set takes the median of their places: its set's channels are drawn together. Between two
+    sets the pictures may not agree (2010's Janus pass, m-janus10-pass: frames 0-20 and 22-26 placed by two separate
+    runs of links 80 px apart; frame 21, its set's red, put half way between them drew its set cyan and doubled the
+    hop to the next set; put on its green alone, 10 px from its blue, the set stayed teal). Otherwise between two placed frames, on the straight line between their places
     by the time each was taken (when: {n: seconds}; by frame number without times); before the first or after the
     last, on from it by the median of the placed frames' steps nearest it (STEADY_EDGE_STEPS of them), no further
     than those steps span in time: past that, where the last of them is."""
@@ -8932,10 +8932,10 @@ def from_pictures(places, hows, unlinked, when=None, filters=None):
     for n in unlinked:
         before = max((g for g in good if g < n), default=None)
         after = min((g for g in good if g > n), default=None)
-        mine = [g for g in (before, after) if g is not None and sets[n] is not None and sets[g] == sets[n]]
-        if len(mine) == 1:
-            out[n] = list(places[mine[0]])
-            why[n] = f"with its colour set's place of {mine[0]} (no match of its own)"
+        mine = [g for g in good if sets[n] is not None and sets[g] == sets[n]]
+        if mine:
+            out[n] = [float(np.median([places[g][0] for g in mine])), float(np.median([places[g][1] for g in mine]))]
+            why[n] = f"with its colour set's places of {mine} (no match of its own)"
         elif before is not None and after is not None:
             f = (at(n) - at(before)) / (at(after) - at(before)) if at(after) != at(before) else 0.5
             out[n] = [places[before][0] + f * (places[after][0] - places[before][0]),
