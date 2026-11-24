@@ -144,6 +144,16 @@ def test_colour_movie_filters_raised_together():
     assert "track_set" not in red
 
 
+def test_night_gamma_split():
+    rng = np.random.default_rng(5)
+    lit = {"CL1": [(0.5 + rng.normal(0, 0.05, (64, 64))).astype(np.float32) for _ in range(3)]}    # ring-shine over the disk
+    noise = {"CL1": [(rng.normal(0, 0.05, (64, 64))).astype(np.float32) for _ in range(3)]}       # an aurora stare's floor
+    assert obs_mosaic.night_gamma(lit, {"CL1": 0.0}, 1.0) == obs_mosaic.NIGHT_GAMMA
+    assert obs_mosaic.night_gamma(noise, {"CL1": 0.0}, 1.0) == obs_mosaic.NIGHT_NOISE_GAMMA
+    assert obs_mosaic.night_gamma({}, {}, 1.0) == obs_mosaic.NIGHT_NOISE_GAMMA                    # no frames
+    assert obs_mosaic.night_gamma({"CL1": []}, {"CL1": 0.0}, 1.0) == obs_mosaic.NIGHT_NOISE_GAMMA
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
