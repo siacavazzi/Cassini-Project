@@ -2182,6 +2182,11 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         lum = np.mean(channels, axis=0) if lum is None else lum
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
+        if len(iofs) == 1 and _mostly_sky(iofs[0]) is not None:
+            # a frame of sky all over round a speck (_mostly_sky, flat but for its banding): all of its sky, so the
+            # brighter half of its banding and blotchy noise isn't left above black as islands that white lifts into
+            # bright worms (m-calypso05, m-pallene15 stills, Fable 11-24)
+            dark = sky
         if dark.sum() > 100:
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
     if len(channels) > 1 and (measured or false):
