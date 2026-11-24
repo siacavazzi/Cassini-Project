@@ -1968,7 +1968,8 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
             if os.environ.get("CASSINI_SATDEBUG") and full is not None and full.any() and scale.get("sat_white_all"):
-                print("SATDEBUG", round(float(full.mean()), 4), round(_largest_share(full), 4), _lit_round(picture, full), file=__import__("sys").stderr, flush=True)
+                with open(os.environ["CASSINI_SATDEBUG"], "a") as fh:
+                    fh.write(f"{full.mean():.4f} {_largest_share(full):.4f} {_lit_round(picture, full)} {full.shape}\n")
             if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"] \
                     and _lit_round(picture, full) >= SAT_EDGE_LIT:
                 # (a movie's frame, shown alone, that saturated a body, one patch sat_white_all of the frame or more:
