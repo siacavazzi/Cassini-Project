@@ -1,4 +1,4 @@
-# Image benchmark: 1cc1f71f8482 against 53c9279ef64e
+# Image benchmark: eb0a013621e7 against 53c9279ef64e
 
 **FAIL**. 121 items: 5 identical, 17 changed (4 outside the target), 99 not built.
 
@@ -7,7 +7,7 @@
 - changed outside the target, unexplained: plume279-movie, rz-enceladus13-movie, adj-m-io00-pass-yr, encset293-movie
 - target items with a measure worse (look at them): himalia00-movie, saturn16-uv2-movie, m-himalia00-pass, m-mundilfari07-pass, m-pallene17-pass, ry-methone12-movie, m-io00-pass, adj-m-jupiter01-pass2-obs, rz-saturn06-movie, ry-saturn16-movie2, ry-dione17-movie, adj-rz-enceladus06-movie-yr, adj-ry-saturn04-mosaic-obs
 
-Built in 101 min (base) and 23 min (candidate). Targets: adj-m-jupiter01-pass2-obs, adj-ry-saturn04-mosaic-obs, adj-rz-enceladus06-movie-yr, himalia00-movie, m-aegaeon15-pass2, m-himalia00-pass, m-io00-pass, m-mundilfari07-pass, m-pallene17-pass, ry-dione17-movie, ry-methone12-movie, ry-saturn16-movie2, rz-saturn06-movie, saturn16-uv2-movie.
+Built in 101 min (base) and 26 min (candidate). Targets: adj-m-jupiter01-pass2-obs, adj-ry-saturn04-mosaic-obs, adj-rz-enceladus06-movie-yr, himalia00-movie, m-aegaeon15-pass2, m-himalia00-pass, m-io00-pass, m-mundilfari07-pass, m-pallene17-pass, ry-dione17-movie, ry-methone12-movie, ry-saturn16-movie2, rz-saturn06-movie, saturn16-uv2-movie.
 
 | item | group | status | pictures changed | moved >8 levels (worst) | largest change (levels) | worse by measure | note |
 |---|---|---|---|---|---|---|---|
@@ -102,7 +102,7 @@ Built in 101 min (base) and 23 min (candidate). Targets: adj-m-jupiter01-pass2-o
 | rx-saturn09-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rx-sun02-cruise | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | ry-methone12-movie | target | changed | 5/47 | 97.74% | 255 | frame015.webp: clipped 0.00% -> 0.74%; frame015.webp: 99.73% of the base's light now black; frame015.webp: detail 2.3378 -> 3.2563 (+39%); frame015.webp: lit area's centre moved 194 px; frame015.webp: lit share 96.8% -> 0.1% |  |
-| rz-enceladus13-movie | hard | changed | 61/62 | 0.00% | 175 |  |  |
+| rz-enceladus13-movie | hard | changed | 27/62 | 0.00% | 168 |  |  |
 | m-janus10-pass | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rz-saturn12-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rz-saturn09-movie3 | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
@@ -113,13 +113,13 @@ Built in 101 min (base) and 23 min (candidate). Targets: adj-m-jupiter01-pass2-o
 | m-telesto06-still | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rz-iapetus11-still | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | aurstare13-movie | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
-| m-io00-pass | target | changed | 176/176 | 16.27% | 255 | evened001.webp: clipped 0.00% -> 1.33%; evened001.webp: detail 0.1064 -> 0.2561 (+141%); evened007.webp: lit area's centre moved 18 px; evened019.webp: 0.23% of the base's light now black |  |
+| m-io00-pass | target | changed | 71/176 | 16.01% | 255 | evened008.webp: clipped 1.21% -> 1.50%; evened041.webp: 0.28% of the base's light now black; evened041.webp: detail 0.2521 -> 0.3 (+19%); evened049.webp: lit area's centre moved 46 px |  |
 | adj-m-io00-pass-yr | hard | changed | 4/246 | 84.43% | 218 | evened100.webp: 98.91% of the base's light now black; evened100.webp: lit area's centre moved 72 px; evened100.webp: lit share 83.5% -> 0.6% |  |
 | adj-m-jupiter01-pass2-obs | target | changed | 11/130 | 87.17% | 255 | evened050.webp: clipped 5.27% -> 6.43%; evened055.webp: 0.83% of the base's light now black; evened055.webp: lit area's centre moved 55 px |  |
 | rz-saturn06-movie | target | changed | 7/28 | 97.15% | 255 | evened011.webp: 29.33% of the base's light now black; evened011.webp: lit area's centre moved 190 px; evened011.webp: lit share 99.8% -> 62.6% |  |
 | ry-saturn16-movie2 | target | changed | 4/52 | 84.76% | 231 | frame003.webp: 0.61% of the base's light now black; frame016.webp: lit area's centre moved 8 px |  |
 | ry-dione17-movie | target | changed | 5/30 | 7.97% | 254 | evened000.webp: clipped 0.36% -> 18.50%; evened000.webp: 72.56% of the base's light now black; evened000.webp: lit area's centre moved 49 px |  |
-| adj-rz-enceladus06-movie-yr | target | changed | 4/4 | 7.83% | 255 | frame000.webp: clipped 0.07% -> 91.92% |  |
+| adj-rz-enceladus06-movie-yr | target | changed | 4/4 | 7.83% | 255 | frame002.webp: clipped 0.25% -> 64.32% |  |
 | adj-ry-saturn04-mosaic-obs | target | changed | 2/124 | 12.60% | 223 | evened061.webp: lit area's centre moved 13 px |  |
 | rz-saturn09-movie2 | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
 | rz-saturn17-movie3 | hard | not built (candidate: not built) | 0/0 | 0.00% |  |  |  |
@@ -137,7 +137,7 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 
 ## Checks
 
-0 regressions, 16 fixed, 19 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
+0 regressions, 17 fixed, 18 known (failing on the base too), 0 errors. A known failure is a defect already on the base; it does not fail this run, and a fix should turn it into fixed.
 
 | item | check | verdict | base | candidate | what |
 |---|---|---|---|---|---|
@@ -163,7 +163,7 @@ Sheets: `sheets/<item>.jpg` (base | candidate | difference x4, with 1:1 crops of
 | ry-methone12-movie | odd_frame | known | 41.9536 | 21.7011 (limit 4.0) | worst 21.7 at frame028.webp (9 of 37 frames over 4.0) |
 | rz-enceladus13-movie | odd_frame | known | 32.1055 | 32.015 (limit 4.0) | worst 32.0 at frame008.webp (25 of 54 frames over 4.0) |
 | rz-enceladus13-movie | pointing_jitter | known | 20.9301 | 20.9309 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 20.9 px, largest 55.4 px (15 pairs) |
-| m-io00-pass | odd_frame | known | 60.7629 | 14.8532 (limit 4.0) | worst 14.9 at frame007.webp (3 of 15 frames over 4.0) |
+| m-io00-pass | odd_frame | fixed | 60.7629 | 3.1514 (limit 4.0) | worst 3.2 at frame019.webp (0 of 12 frames over 4.0) |
 | adj-m-io00-pass-yr | odd_frame | known | 19.8693 | 16.5817 (limit 4.0) | worst 16.6 at frame046.webp (61 of 83 frames over 4.0) |
 | adj-m-io00-pass-yr | pointing_jitter | known | 28.2144 | 28.148 (limit 3.0) | frame-to-frame jump past the movie's own motion: p90 28.1 px, largest 30.1 px (92 pairs) |
 | adj-m-jupiter01-pass2-obs | odd_frame | fixed | 37.2447 | 1.5741 (limit 4.0) | worst 1.6 at frame031.webp (0 of 4 frames over 4.0) |
