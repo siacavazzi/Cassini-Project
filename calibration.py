@@ -1967,8 +1967,8 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # SAT_WHITE, for a patch a smooth glow climbs into; one with an edge or among ringlets stays white (260RI
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
-            if os.environ.get("CASSINI_SATDEBUG") and full is not None and full.any() and scale.get("sat_white_all"):
-                with open(os.environ["CASSINI_SATDEBUG"], "a") as fh:
+            if full is not None and full.any() and scale.get("sat_white_all"):
+                with open("/Users/samiacavazzi/cassini-build/moviefix/satdebug.txt", "a") as fh:
                     fh.write(f"{full.mean():.4f} {_largest_share(full):.4f} {_lit_round(picture, full)} {full.shape}\n")
             if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"] \
                     and _lit_round(picture, full) >= SAT_EDGE_LIT:
