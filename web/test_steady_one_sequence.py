@@ -45,3 +45,14 @@ assert all(h.startswith("held on SPICE's smoothed path") for h in hows.values())
 places, hows = om.one_source(chain, {n: "linked to [0]" for n in range(10)}, made, {"res_p90": 0.4})
 assert places is chain
 print("a sequence whose pictures disagree goes whole on SPICE's smoothed path: ok")
+
+# (a colour set's frame with its set placed on one side only: with its set, not half way to the next set's place)
+pl = {18: [112.0, 0.0], 19: [126.0, 0.0], 20: [140.0, 0.0], 21: [0.0, 0.0], 22: [60.0, 0.0], 23: [50.0, 0.0]}
+fl = {18: "RED", 19: "GRN", 20: "BL1", 21: "RED", 22: "GRN", 23: "BL1"}
+places, hows = om.from_pictures(pl, {n: "linked" for n in pl}, {21}, None, fl)
+assert places[21] == [60.0, 0.0], places[21]
+# (past the end: on by the placed frames' step no further than those steps span)
+pl = {0: [0.0, 0.0], 1: [10.0, 0.0], 2: [20.0, 0.0], 3: [30.0, 0.0], 50: [0.0, 0.0]}
+places, hows = om.from_pictures(pl, {n: "linked" for n in pl}, {50})
+assert abs(places[50][0] - 60.0) < 1e-6, places[50]
+print("a colour set's unmatched frame stays with its set; no extrapolation past the steps' own span: ok")

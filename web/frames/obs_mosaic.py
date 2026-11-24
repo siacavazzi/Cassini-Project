@@ -8887,7 +8887,8 @@ def one_source(places, hows, made, stats=None):
     if not unsure and len(unlinked) <= STEADY_MIXED * len(places):
         when = {t["n"]: t.get("t") for t in made}
         return from_pictures(places, hows, set(unlinked), when if all(isinstance(when.get(n), (int, float))
-                                                                       for n in places) else None)
+                                                                       for n in places) else None,
+                             {t["n"]: t.get("filter") for t in made})
     ns = sorted(places)
     by_n = {t["n"]: t for t in made if "offset" in t}
     xs = _smoothed_path([by_n[n]["offset"] for n in ns])
@@ -8896,47 +8897,73 @@ def one_source(places, hows, made, stats=None):
                 f"{len(ns)} frames" + (f", disagreeing by {stats['res_p90']} px" if unsure else "") + ")" for n in ns})
 
 
-def from_pictures(places, hows, unlinked, when=None):
+def from_pictures(places, hows, unlinked, when=None, filters=None):
     """(places, hows) with each frame the pictures did not place (unlinked: held on SPICE's step from the tile before,
-    _chain_links) put where the pictures' own places around it say: between two placed frames, on the straight line
-    between their places by the time each was taken (when: {n: seconds}; by frame number without times), so a colour
-    set's frames, taken seconds apart, stay together between sets taken minutes apart (by frame number, 2010's Janus pass (m-janus10-pass):
-    frames 21-22 went 8 px toward the next set and its hop there doubled); before the first or after the last, on from
-    it by the median of the placed
-    frames' steps nearest it (STEADY_EDGE_STEPS of them). The pictures stay the sequence's one source of pointing (Sam
-    2026-11-18): a held frame on SPICE's step put SPICE's pointing scatter into a picture-steadied movie, a hop of its
-    scatter where the two met (titan08-movie2's 3.6 px)."""
+    _chain_links) put where the pictures' own places around it say. The pictures stay the sequence's one source of
+    pointing (Sam 2026-11-18): a held frame on SPICE's step put SPICE's pointing scatter into a picture-steadied movie,
+    a hop of its scatter where the two met (titan08-movie2's 3.6 px).
+
+    A frame of a colour set (filters: {n: filter}; sets, _colour_sets_of, a run of frames with no filter twice) whose
+    set has a placed frame on one side only takes that frame's place: its set's channels are drawn together. Between
+    two sets the pictures may not agree (2010's Janus pass, m-janus10-pass: frames 0-20 and 22-26 placed by two
+    separate runs of links 80 px apart; frame 21, its set's red, put between them, half way, drew its set cyan and
+    doubled the hop to the next set). Otherwise between two placed frames, on the straight line between their places
+    by the time each was taken (when: {n: seconds}; by frame number without times); before the first or after the
+    last, on from it by the median of the placed frames' steps nearest it (STEADY_EDGE_STEPS of them), no further
+    than those steps span in time: past that, where the last of them is."""
     ns = sorted(places)
     good = [n for n in ns if n not in unlinked]
     if not good:
         return places, hows
-
     at = (lambda n: float(when[n])) if when else (lambda n: float(n))
+    sets = _colour_sets_of(ns, filters) if filters else {n: None for n in ns}
 
     def edge_step(side):
         run = good[:STEADY_EDGE_STEPS + 1] if side < 0 else good[-STEADY_EDGE_STEPS - 1:]
         if len(run) < 2:
-            return 0.0, 0.0
+            return (0.0, 0.0), 0.0
         steps = [((places[b][0] - places[a][0]) / (at(b) - at(a)), (places[b][1] - places[a][1]) / (at(b) - at(a)))
                  for a, b in zip(run, run[1:]) if at(b) != at(a)]
         if not steps:
-            return 0.0, 0.0
-        return float(np.median([s[0] for s in steps])), float(np.median([s[1] for s in steps]))
+            return (0.0, 0.0), 0.0
+        return (float(np.median([s[0] for s in steps])), float(np.median([s[1] for s in steps]))), \
+            abs(at(run[-1]) - at(run[0]))
     out, why = dict(places), dict(hows)
     for n in unlinked:
         before = max((g for g in good if g < n), default=None)
         after = min((g for g in good if g > n), default=None)
-        if before is not None and after is not None:
+        mine = [g for g in (before, after) if g is not None and sets[n] is not None and sets[g] == sets[n]]
+        if len(mine) == 1:
+            out[n] = list(places[mine[0]])
+            why[n] = f"with its colour set's place of {mine[0]} (no match of its own)"
+        elif before is not None and after is not None:
             f = (at(n) - at(before)) / (at(after) - at(before)) if at(after) != at(before) else 0.5
             out[n] = [places[before][0] + f * (places[after][0] - places[before][0]),
                       places[before][1] + f * (places[after][1] - places[before][1])]
             why[n] = f"between the pictures' places of {before} and {after} (no match of its own)"
         else:
             g = before if before is not None else after
-            st = edge_step(1 if before is not None else -1)
-            out[n] = [places[g][0] + (at(n) - at(g)) * st[0], places[g][1] + (at(n) - at(g)) * st[1]]
+            st, span = edge_step(1 if before is not None else -1)
+            dt = max(-span, min(span, at(n) - at(g)))
+            out[n] = [places[g][0] + dt * st[0], places[g][1] + dt * st[1]]
             why[n] = f"on from the pictures' place of {g} by their step (no match of its own)"
     return out, why
+
+
+def _colour_sets_of(ns, filters):
+    """{n: set number}: frames ns (in order) cut into runs with no filter twice, a new run where a filter repeats (a
+    colour movie's sets, RED GRN BL1 RED GRN BL1 ...); a frame with no filter known, None."""
+    out, k, seen = {}, 0, set()
+    for n in ns:
+        f = filters.get(n)
+        if f is None:
+            out[n] = None
+            continue
+        if f in seen:
+            k, seen = k + 1, set()
+        seen.add(f)
+        out[n] = k
+    return out
 
 def steady_held(u, cache, p=None):
     """{tile n: [x, y]}: what steady_places holds pass u's chain to, SPICE's place of each tile (its offset) or, where
