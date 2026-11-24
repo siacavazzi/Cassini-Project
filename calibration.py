@@ -1967,9 +1967,6 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             # SAT_WHITE, for a patch a smooth glow climbs into; one with an edge or among ringlets stays white (260RI
             # HIPHASEFA001's lone 3.8 s RED, W1865188311_1, saturated over 80% of the frame with a hard edge: still a
             # white block, since nothing round it says how bright it was)
-            if full is not None and full.any() and scale.get("sat_white_all"):
-                with open("/Users/samiacavazzi/cassini-build/moviefix/satdebug.txt", "a") as fh:
-                    fh.write(f"{full.mean():.4f} {_largest_share(full):.4f} {_lit_round(picture, full)} {full.shape}\n")
             if full is not None and full.any() and scale.get("sat_white_all") and _largest_share(full) >= scale["sat_white_all"] \
                     and _lit_round(picture, full) >= SAT_EDGE_LIT:
                 # (a movie's frame, shown alone, that saturated a body, one patch sat_white_all of the frame or more:
@@ -2015,7 +2012,7 @@ SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or 
 SAT_SOLID = 0.7   # (_largest_share) a saturated patch whose area is this much of its convex hull or more is a body's disc
 
 
-SAT_EDGE_LIT = 48   # (_lit_round) display code: a saturated patch whose edge is this bright is part of a lit body
+SAT_EDGE_LIT = 24   # (_lit_round) display code: a saturated patch whose edge is this bright is part of a lit body (Enceladus 2006's clipped cap: 37-38; junk round a dark frame: 0)
 
 
 def _lit_round(picture, full):
