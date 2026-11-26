@@ -2236,6 +2236,11 @@ def load_linear(labels, images=None, iofs=None, floor=1.0, glow=1.0, off_disk=No
         lum = np.mean(channels, axis=0) if lum is None else lum
         local = cv2.blur(lum, (15, 15))
         dark = sky & (local <= np.median(local[sky]))
+        if len(iofs) == 1 and _mostly_sky(iofs[0]) is not None:
+            # a frame of sky all over round a speck (_mostly_sky, flat but for its banding): all of its sky, so the
+            # brighter half of its banding and blotchy noise isn't left above black as islands that white lifts into
+            # bright worms (m-calypso05, m-pallene15 stills, Fable 11-24)
+            dark = sky
         if dark.sum() > 100:
             margin = max(margin, float(np.percentile(lum[dark], SKY_DARK)))
     if len(channels) > 1 and (measured or false):
@@ -2710,7 +2715,54 @@ def _noise_only(iof, middle, noise):
     return float(np.std(inner)) <= SKY_FLAT * noise
 
 
-def _sky(iofs):
+SKY_WHOLE_IOF = 4e-4    # _mostly_sky: only a frame whose median I/F is under this (the empty skies fixed here: 2e-5 to 2.8e-4)
+SKY_MOSTLY = 0.95       # _sky: a frame this share of whose pixels lie within SKY_NOISE noise of its own median ...
+SKY_FLAT_BANDED = 0.6   # ... and whose clipped blur, its row and column banding taken out, varies by at most this times that noise is sky all over (_mostly_sky)
+
+
+def _mostly_sky(iof):
+    """The cut under which a frame that is its sky nearly all over is sky, or None. SKY_CUT of the 99.9th percentile
+    finds no sky on a frame of noise round a speck (a distant moon, a star field: its sky is a few hundred noise widths
+    above nothing but only a few tens under its brightest pixels, so under 1000 pixels lie below the cut, and the
+    _noise_only rescue never runs); the sky then went unmeasured, the black sat on the floor and the whole frame came out
+    a gray banded panel (Calypso 2005 N1511290086_1, Polydeuces 2012 N1726540043_1, Telesto W1524686058_1, Phoebe
+    N1515090832_1, Io N1357386993_1: sky medians 20 to 70 of 255). Here the frame's own median and its 16th
+    percentile give the sky level and noise; when SKY_MOSTLY of it lies within SKY_NOISE noise of that level and its
+    clipped blur, its row and column banding taken out, is flat to SKY_FLAT_BANDED (these frames measure 0.45 to 0.59 of
+    their noise; the E-ring glow sloping down rz-enceladus15-still's frame, N1807689257_1, 1.36), the frame is sky all
+    over, its speck and stars above the cut."""
+    low, middle = (float(v) for v in np.percentile(iof, (16, 50)))
+    noise = middle - low
+    # only a dark frame (its median under SKY_WHOLE_IOF): a bland, even cloud deck filling the frame (Saturn's NAC
+    # close-ups, I/F 0.1 to 0.5) is as flat round its median and is no sky (the 573-item bench drew four of them gray),
+    # nor is the faint ring light within the noise of a Daphnis ring movie's frames (I/F 7e-4 to 1e-3, as flat as the
+    # stills fixed here: their Processed level lost the faint ring and the bench's full_black failed)
+    if noise <= 0 or middle >= SKY_WHOLE_IOF:
+        return None
+    cut = middle + SKY_NOISE * noise
+    if float((iof < cut).mean()) < SKY_MOSTLY:
+        return None
+    clipped = np.clip(np.nan_to_num(iof.astype(np.float32)), middle - SKY_NOISE * noise, cut)
+    # the camera's column and row banding taken out first: each column's, then each row's median less its own blur over
+    # SKY_FLAT_PX (the banding is a few rows or columns across; a glow's slow slope down the frame, the E ring's or a
+    # plume's, stays and fails the flatness, rz-enceladus15-still's lower glow was cut to black when the whole row
+    # median came off)
+    def banding(profile):
+        return (profile - cv2.GaussianBlur(profile.reshape(1, -1), (0, 0), SKY_FLAT_PX).ravel()).astype(np.float32)
+    clipped = clipped - banding(np.median(clipped, axis=0))[None, :]
+    clipped = clipped - banding(np.median(clipped, axis=1))[:, None]
+    big = cv2.GaussianBlur(clipped, (0, 0), SKY_FLAT_PX)
+    m = 2 * SKY_FLAT_PX
+    inner = big[m:-m, m:-m] if min(big.shape[:2]) > 4 * m else big
+    return cut if float(np.std(inner)) <= SKY_FLAT_BANDED * noise else None
+
+
+def _sky(iofs, whole=True):
+    """whole: also a frame that is sky all over round a speck (_mostly_sky); off for a movie frame's own sky black
+    (obs_mosaic's black track), whose frame has its lit parts already set to its sky's median and is flat for that;
+    and only for a one-frame picture: a color set's channels keep the sky they always had, so its alignment guide and
+    channel mix are as before (m-paaliaq15 and rz-hyperion04 composites lost their target core and colour with it)"""
+    whole = whole and len(iofs) == 1
     sky = np.ones(iofs[0].shape, dtype=bool)
     for iof in iofs:
         cut = SKY_CUT * float(np.percentile(iof, 99.9))
@@ -2720,6 +2772,11 @@ def _sky(iofs):
             noise = middle - low
             if noise > 0 and cut - middle < SKY_SPLIT * noise and _noise_only(iof, middle, noise):
                 cut = max(cut, middle + SKY_NOISE * noise)
+        if whole and float((iof < cut).mean()) < SKY_MOSTLY:
+            # a frame of sky round a speck that the cut above misses (_mostly_sky)
+            whole = _mostly_sky(iof)
+            if whole is not None:
+                cut = max(cut, whole)
         sky &= iof < cut
     return sky
 
@@ -2774,6 +2831,10 @@ def _balanced_scale(iofs, sky_fraction=0.1, sky_percentile=98, sky=None, floor=T
         sunlit = _sunlit(iofs)
         brightest = native * sunlit + brightest * (1 - sunlit) if native < brightest else brightest
     white = max(white, brightest / MAX_STRETCH)
+    if white <= 0 and measured:
+        # a sky whose only lit pixels are single-pixel points (a star field measured as sky all over, _mostly_sky): the
+        # 3x3 median takes every one of them out, so the white is taken from them as they are rather than none at all
+        white = max(float(np.percentile((iof - np.float32(black))[lit], WHITE_PCT)) for iof, black in zip(iofs, blacks))
     return levels, margin, white, measured
 
 
