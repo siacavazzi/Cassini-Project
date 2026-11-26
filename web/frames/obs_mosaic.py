@@ -8701,7 +8701,11 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             break
     places = {n: [float(px[at[n]]), float(py[at[n]])] for n in order}
     # (how well the pictures agree with themselves: every link's disagreement with the solved places, px)
-    allres = [math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1]) for (j, n), d, _ in got]
+    # (a clouded body's links across two filters (ACROSS) left out: two layers a few px apart, they disagree by design;
+    # counted, Saturn 2016's ring-calibration movie (saturn16-uv2-movie, 232RI) read 9 px and left its pictures for
+    # SPICE's path, hopping 5 to 7 px where main held it still)
+    allres = [math.hypot(px[at[n]] - px[at[j]] - d[0], py[at[n]] - py[at[j]] - d[1]) for (j, n), d, how in got
+              if not str(how).endswith(ACROSS)]
     (stats if stats is not None else {}).update(links=len(got), kept=len(keep), lone=len(lone), held=len(held), tiles=N,
                         res_med=round(float(np.median(allres)), 2) if allres else None,
                         res_p90=round(float(np.percentile(allres, 90)), 2) if allres else None)
