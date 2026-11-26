@@ -8798,6 +8798,8 @@ STEADY_HIDDEN = 0.1   # of the target's disk: more of it under another body (STE
 STEADY_AROUND = 32    # px: half the least square round a small target a stabilization match is made on, and twice what
                       # is added round its disk (CENTRE_MARGIN): SPICE's few px off, the disk most of the square, so the
                       # match is the disk's own (on a square mostly sky the alignment takes it for a star field)
+STEADY_SET_NEAR = 2     # frames: (from_pictures) how far a colour set's placed frames are taken from an unplaced one; a
+#                         run of a dozen filters, none twice (Jupiter 2000 C23JU FEATURE004), is no set to be held to
 STEADY_EDGE_STEPS = 3   # (from_pictures) placed frames' steps whose median carries the pictures' places past the ends
 STEADY_DISAGREE = 0.2   # of a chain's links: more than this left out for disagreeing with the solve (STEADY_AGREE) and
 #                         the whole sequence plays on SPICE's smoothed path (one_source). Measured as the links' p90
@@ -8943,7 +8945,7 @@ def from_pictures(places, hows, unlinked, when=None, filters=None):
     a hop of its scatter where the two met (titan08-movie2's 3.6 px).
 
     A frame of a colour set (filters: {n: filter}; sets, _colour_sets_of, a run of frames with no filter twice) with
-    placed frames in its set takes the median of their places: its set's channels are drawn together. Between two
+    placed frames of its set within STEADY_SET_NEAR frames takes the median of their places: its set's channels are drawn together. Between two
     sets the pictures may not agree (2010's Janus pass, m-janus10-pass: frames 0-20 and 22-26 placed by two separate
     runs of links 80 px apart; frame 21, its set's red, put half way between them drew its set cyan and doubled the
     hop to the next set; put on its green alone, 10 px from its blue, the set stayed teal). Otherwise between two placed frames, on the straight line between their places
@@ -8971,7 +8973,7 @@ def from_pictures(places, hows, unlinked, when=None, filters=None):
     for n in unlinked:
         before = max((g for g in good if g < n), default=None)
         after = min((g for g in good if g > n), default=None)
-        mine = [g for g in good if sets[n] is not None and sets[g] == sets[n]]
+        mine = [g for g in good if sets[n] is not None and sets[g] == sets[n] and abs(g - n) <= STEADY_SET_NEAR]
         if mine:
             out[n] = [float(np.median([places[g][0] for g in mine])), float(np.median([places[g][1] for g in mine]))]
             why[n] = f"with its colour set's places of {mine} (no match of its own)"

@@ -56,3 +56,10 @@ pl = {0: [0.0, 0.0], 1: [10.0, 0.0], 2: [20.0, 0.0], 3: [30.0, 0.0], 50: [0.0, 0
 places, hows = om.from_pictures(pl, {n: "linked" for n in pl}, {50})
 assert abs(places[50][0] - 60.0) < 1e-6, places[50]
 print("a colour set's unmatched frame takes its set's places; no extrapolation past the steps' own span: ok")
+
+# (a long run of filters, none twice, is no colour set: an unmatched frame takes only its near neighbours)
+pl = {n: [10.0 * n, 0.0] for n in range(12)}
+fl = {n: f"F{n}" for n in range(12)}
+places, hows = om.from_pictures(pl, {n: "linked" for n in pl}, {6}, None, fl)
+assert abs(places[6][0] - 60.0) < 1e-6, places[6]
+print("a run of filters with none twice holds an unmatched frame to its near neighbours only: ok")
