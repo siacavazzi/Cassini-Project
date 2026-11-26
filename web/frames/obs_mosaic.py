@@ -8525,7 +8525,8 @@ ACROSS = "(across filters)"
 
 # (stats: a dict the caller passes to _chain_links to be filled with that solve's link statistics; per call, so server
 # threads solving different passes never share it)
-def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False, stats=None):
+def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, ring=None, edges=False, stats=None,
+                 across=True):
     """_chain solved over more links: each placed tile matched (as _chain matches it, on its target, _shift_onto) to
     each of the links placed tiles before it, and to the newest earlier tile of its own filter, every match a link
     "tile n sits d from tile j"; then all the tiles' places solved together (least squares, Huber, links that disagree
@@ -8596,7 +8597,9 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
             seen = None
             shift, how = _shift_onto(by[j], own[j], (0.0, 0.0), t, own[n], rel,
                                      around=g.get("around"), holes=g.get("holes", ()), kept=g.get("kept"))
-            if edges and by[j].get("filter") != t.get("filter"):
+            if edges and across and by[j].get("filter") != t.get("filter"):
+                # (not on a pass of the rings themselves (across False): their filters show the same ringlets, and
+                # weighed down, Saturn 2016's UV2 ring movie hopped 4 to 10 px)
                 how = f"{how} {ACROSS}"
         if shift is not None and math.hypot(*shift) <= believed:
             d = (rel[0] - shift[0], rel[1] - shift[1])
@@ -8892,7 +8895,7 @@ def steady_chain(u, cache, p=None):
         stats = {}
         if STEADY_LINKS > 1:
             places, hows = _chain_links(made, pic, there, STEADY_MAX * FRAME, steady_guide(u), STEADY_LINKS,
-                                        steady_rings(u, made), edges=clouded(u), stats=stats)
+                                        steady_rings(u, made), edges=clouded(u), stats=stats, across=not _ring(u))
             places, hows = one_source(places, hows, made, stats)
         else:
             places, hows = _chain(made, pic, there, STEADY_MAX * FRAME, step, steady_guide(u))
