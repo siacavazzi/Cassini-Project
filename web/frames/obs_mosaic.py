@@ -8639,12 +8639,16 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
     xs = _smoothed_path(x0)
     px, py = x0[:, 0].copy(), x0[:, 1].copy()
     for rnd in range(len(got) + 10):
+        # (tiles with a link of their own filter kept: only between two such is a link across filters weighed down,
+        # STEADY_ACROSS; a tile whose own filter's frames are out of reach is tied by its links across filters as before
+        # (Saturn 2016's UV2 ring movie, saturn16-uv2-movie: weighed down there, it hopped 5 to 10 px))
+        own_filter = {m for k in keep if not str(got[k][2]).endswith(ACROSS) for m in got[k][0]}
         rows, cols, vals, rhs_x, rhs_y = [], [], [], [], []
         r = 0
         for k in keep:
             (j, n), d, _ = got[k]
             w = math.sqrt(robust[k]) / STEADY_LINK_NOISE
-            if str(got[k][2]).endswith(ACROSS):
+            if str(got[k][2]).endswith(ACROSS) and j in own_filter and n in own_filter:
                 w *= STEADY_ACROSS
             rows += [r, r]; cols += [at[n], at[j]]; vals += [w, -w]
             rhs_x.append(w * d[0]); rhs_y.append(w * d[1])
