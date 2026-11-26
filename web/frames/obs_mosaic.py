@@ -8799,8 +8799,10 @@ STEADY_AROUND = 32    # px: half the least square round a small target a stabili
                       # is added round its disk (CENTRE_MARGIN): SPICE's few px off, the disk most of the square, so the
                       # match is the disk's own (on a square mostly sky the alignment takes it for a star field)
 STEADY_EDGE_STEPS = 3   # (from_pictures) placed frames' steps whose median carries the pictures' places past the ends
-STEADY_DISAGREE = 5.0   # px: the pictures' links disagreeing past this (res_p90) and the whole sequence plays on
-#                         SPICE's smoothed path (one_source); a steady movie's links agree within 0.2 to 1.5 px
+STEADY_DISAGREE = 0.2   # of a chain's links: more than this left out for disagreeing with the solve (STEADY_AGREE) and
+#                         the whole sequence plays on SPICE's smoothed path (one_source). Measured as the links' p90
+#                         disagreement (5 px), Dione 2017's HIPHASE001 (19% left out, the rest within 0.7 px) left its
+#                         pictures and hopped 9 px; Enceladus 2013 (23%), Albiorix (31%), Skathi (58%) are SPICE's
 STEADY_MIXED = 0.5    # of a movie's frames: more than this left unmatched by the pictures, and the whole sequence plays on
 #                       SPICE's smoothed path (steady_chain): never two pointing sources taking turns in one sequence
 STEADY_SMOOTH = 12    # frames: Settings > Movie's stabilization smoothing by default (0: SPICE's places)
@@ -8915,9 +8917,10 @@ def one_source(places, hows, made, stats=None):
     (_smoothed_path of made's places). Where they place the rest, the frames they do not place take their places from
     the pictures' own places around them, not SPICE's step (from_pictures): the pictures are the sequence's one source."""
     unlinked = [n for n, h in hows.items() if str(h).startswith("held")]
-    # (pictures that disagree with themselves (stats: _chain_links' res_p90 past STEADY_DISAGREE) cannot place the
-    # sequence either: a 2010 Janus pass's matches disagreed by tens of px and it hopped 20 px where they met)
-    unsure = (stats or {}).get("res_p90") is not None and stats["res_p90"] > STEADY_DISAGREE
+    # (pictures that disagree with themselves (stats: more than STEADY_DISAGREE of _chain_links' links left out) cannot
+    # place the sequence either: Enceladus 2013's PLMMPMR001, a quarter of its links left out, hopped 21 to 28 px on them)
+    left = 1 - (stats or {}).get("kept", 0) / stats["links"] if (stats or {}).get("links") else 0.0
+    unsure = left > STEADY_DISAGREE
     if not places or (not unlinked and not unsure):
         return places, hows
     if not unsure and len(unlinked) <= STEADY_MIXED * len(places):
@@ -8930,7 +8933,7 @@ def one_source(places, hows, made, stats=None):
     xs = _smoothed_path([by_n[n]["offset"] for n in ns])
     return ({n: [float(x), float(y)] for n, (x, y) in zip(ns, xs)},
             {n: f"held on SPICE's smoothed path (the whole sequence: the pictures matched {len(ns) - len(unlinked)} of "
-                f"{len(ns)} frames" + (f", disagreeing by {stats['res_p90']} px" if unsure else "") + ")" for n in ns})
+                f"{len(ns)} frames" + (f", {round(100 * left)}% of their links disagreeing" if unsure else "") + ")" for n in ns})
 
 
 def from_pictures(places, hows, unlinked, when=None, filters=None):

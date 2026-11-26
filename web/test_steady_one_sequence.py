@@ -40,9 +40,9 @@ assert abs(places[1][0] - 10.0) < 1e-6, places
 print("an unmatched frame goes between the pictures' places by when it was taken: ok")
 
 # (pictures that disagree with themselves: the whole sequence on SPICE's smoothed path, even when they place most of it)
-places, hows = om.one_source(chain, {n: "linked to [0]" for n in range(10)}, made, {"res_p90": 12.0})
+places, hows = om.one_source(chain, {n: "linked to [0]" for n in range(10)}, made, {"links": 40, "kept": 25})
 assert all(h.startswith("held on SPICE's smoothed path") for h in hows.values()), hows
-places, hows = om.one_source(chain, {n: "linked to [0]" for n in range(10)}, made, {"res_p90": 0.4})
+places, hows = om.one_source(chain, {n: "linked to [0]" for n in range(10)}, made, {"links": 40, "kept": 36})
 assert places is chain
 print("a sequence whose pictures disagree goes whole on SPICE's smoothed path: ok")
 

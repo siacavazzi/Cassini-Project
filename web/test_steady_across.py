@@ -2,7 +2,7 @@
 filters (ACROSS), which show two layers a few px apart.
   1. weighed down (STEADY_ACROSS) between tiles that keep links of their own filter, but not on a pass of the rings
      themselves (across=False), whose filters show the same ringlets;
-  2. left out of the chain's agreement (res_p90, STEADY_DISAGREE);
+  2. left out of the chain's agreement (res_p90);
   3. not left out of the solve for disagreeing (STEADY_AGREE).
 Run: python web/test_steady_across.py"""
 import os
@@ -55,7 +55,7 @@ assert change_down - change_even > 0.3, (change_down, change_even)
 assert max(abs(v - 20.0) for v in own_down) < 0.05, own_down
 print("links across filters weighed down off the rings, as their own on a ring pass: ok")
 # 2. the chain's agreement leaves them out: the pictures agree with themselves
-assert s_down["res_p90"] is not None and s_down["res_p90"] < om.STEADY_DISAGREE / 4, s_down
+assert s_down["res_p90"] is not None and s_down["res_p90"] < 1.0, s_down
 assert s_even["res_p90"] > s_down["res_p90"] + 2, s_even   # (counted, as on a ring pass, the layers read as disagreement)
 print("links across filters left out of the chain's agreement: ok")
 # 3. not left out of the solve for disagreeing: every link kept
