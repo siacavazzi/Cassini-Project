@@ -102,6 +102,18 @@
   {"name": "m-siarnaq10-still", "kind": "still", "frame": "N1671700783_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: SIARNAQ still ISSNA (BL1,CL2) | KNOWN FAILURE"},
   {"name": "m-telesto06-still", "kind": "still", "frame": "W1524686058_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: small moons/Jupiter 11-20: TELESTO still ISSWA (CL1,CL2) | KNOWN FAILURE"},
   {"name": "rz-iapetus11-still", "kind": "still", "frame": "N1686229427_1", "group": "hard", "watch": "spot 11-22 lifted gray sky / colour after #609: spot 11-20 still ISSNA (CL1,CL2) IAPETUS | KNOWN FAILURE"},
-  {"name": "aurstare13-movie", "kind": "pass", "frame": "N1740330477_1", "group": "hard", "watch": "182SA AURSTARE001 night side: drawn near white on 7d4edf16"}
+  {"name": "aurstare13-movie", "kind": "pass", "frame": "N1740330477_1", "group": "hard", "watch": "182SA AURSTARE001 night side: drawn near white on 7d4edf16"},
+  {"name": "m-io00-pass", "kind": "pass", "frame": "N1356924114_2", "group": "hard", "watch": "spot 11-23 hold regression: small moons/Jupiter 11-20: IO movie IO_VIMS_C23IO_IOECL001_PRIME_N_0_r26.5 (88)"},
+  {"name": "adj-m-io00-pass-yr", "kind": "pass", "frame": "N1357078639_3", "group": "hard", "watch": "spot 11-23 hold regression: same target/kind other year as m-io00-pass: IO_ISS_C23IO_IOECLPSC_PRIME_N_0_r72_c1 2001-001T2"},
+  {"name": "adj-m-jupiter01-pass2-obs", "kind": "pass", "frame": "N1356899720_4", "group": "hard", "watch": "spot 11-23 hold regression: same observation as m-jupiter01-pass2: JUPITER_CIRS_C23JU_FEATURE004_PRIME_N_0_g3"},
+  {"name": "rz-saturn06-movie", "kind": "pass", "frame": "N1536743096_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 movie SATURN_ISS_028RI_HIPHASA001_PRIME_N_0_r57_g8 (14 fr)"},
+  {"name": "ry-saturn16-movie2", "kind": "pass", "frame": "N1835156927_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 ring-movie: SATURN_ISS_232RI_RINGCAL001_PRIME_N_0 (52 frames, 2016-057T0)"},
+  {"name": "ry-dione17-movie", "kind": "pass", "frame": "N1874248538_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 target-movie: DIONE_ISS_275DI_HIPHASE001_VIMS_N_0_r84_c1 (15 frames, 2017-143T1)"},
+  {"name": "adj-rz-enceladus06-movie-yr", "kind": "pass", "frame": "W1584043691_2", "group": "hard", "watch": "spot 11-23 hold regression: same target/kind other year as rz-enceladus06-movie: ENCELADUS_ISS_061EN_FP3HOTSPT001_CIRS_W_1_r75 2008-072T1"},
+  {"name": "adj-ry-saturn04-mosaic-obs", "kind": "pass", "frame": "N1472136099_1", "group": "hard", "watch": "spot 11-23 hold regression: same observation as ry-saturn04-mosaic: SATURN_ISS_000SA_AURORAA011_UVIS_N_0"},
+  {"name": "rz-saturn09-movie2", "kind": "pass", "frame": "W1611761388_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 movie SATURN_ISS_101SA_AURORA003_UVIS_W_0_g3 (42 fr)"},
+  {"name": "rz-saturn17-movie3", "kind": "pass", "frame": "N1877993177_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 movie SATURN_ISS_282RI_HRESCOLBC001_PRIME_N_0_g3 (14 fr)"},
+  {"name": "rx-saturn05-movie", "kind": "pass", "frame": "W1486551174_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 rand-movie: SATURN_ISS_003SA_3X3MOVIEA003_PRIME_W_0 (27 frames, 2005-039T1)"},
+  {"name": "rz-saturn08-movie", "kind": "pass", "frame": "W1600444766_1", "group": "hard", "watch": "spot 11-23 hold regression: spot 11-20 movie SATURN_IOSIC_085RI_VCASLSLP001_SI_W_0_g9 (22 fr)"}
  ]
 }
