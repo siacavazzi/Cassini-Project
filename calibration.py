@@ -1970,6 +1970,15 @@ def load_channels(labels, images=None, sky_fraction=0.1, sky_percentile=98, gamm
             if full is not None and full.any():
                 picture[full] = saturated_code(iof, full, lambda v: display(v, black, scale.get("sat_white") or scale["white"], gamma,
                                                                             scale.get("shoulder"), toe)[..., 0])
+                if scale.get("sat_white_all"):
+                    # (a movie's frame, shown alone: a body's clipped disc, a solid patch sat_white_all of the frame or
+                    # more with a lit edge, is white, as draw_saturated draws a one frame picture's; obs_mosaic.tile.
+                    # Only that patch: a hot pixel or star the frame also saturated keeps saturated_code, as do star
+                    # trails and junk round a dark frame. White as a whole it was a bright speck on the sky, 188EN
+                    # PLMMPMR001's frame 13, ENCSET 293's frame 30)
+                    disc = _white_patch(full, picture, scale["sat_white_all"])
+                    if disc is not None:
+                        picture[disc] = 255
         sink = _hdr_sink.get()
         if sink and len(iofs) == 1 and saturated and saturated[0] is not None and sink[-1].shape == saturated[0].shape:
             # ... and HDR_SATURATED times white in its recovery map (where it is drawn white)
@@ -2001,6 +2010,51 @@ SAT_SMOOTH = (0.3, 0.6) # ... through the camera's limit when this share of its 
                         # glow; under it the patch has an edge and is white (250EN ENCELSPOL001's crescent: its ring the
                         # night side and the sky; 269RI HIPHASEFB001's glow: its whole ring within 2% of the clip)
 SAT_RING_PCT = 90       # ... their percentile (not their top: a bled column or a spike beside a patch reads anything)
+
+
+SAT_SOLID = 0.7   # (_largest_share) a saturated patch whose area is this much of its convex hull or more is a body's disc
+
+
+SAT_EDGE_LIT = 24   # (_lit_round) display code: a saturated patch whose edge is this bright is part of a lit body (Enceladus 2006's clipped cap: 37-38; junk round a dark frame: 0)
+
+
+def _lit_round(picture, full):
+    """The display code that a quarter of the unsaturated pixels just round mask full (SAT_RING px) reach: a saturated
+    disc's edge is in part the lit body it clipped on (Enceladus 2006's terrain round its clipped cap, the sky over its
+    limb the rest); junk saturated round a dark frame has only sky round it (Io 2000's eclipse frames 1 and 12, a
+    blocky ring round Io in a frame lost in part)."""
+    side = 2 * SAT_RING + 1
+    edge = cv2.dilate(np.asarray(full, np.uint8), np.ones((side, side), np.uint8)).astype(bool) & ~np.asarray(full, bool)
+    v = np.asarray(picture)[edge]
+    return float(np.percentile(v, 75)) if v.size else 0.0
+
+
+def _white_patch(full, picture, share):
+    """(display with sat_white_all) The mask of mask full's largest 8-connected patch when it is a body's clipped disc:
+    share of the picture or more, solid (SAT_SOLID of its convex hull) and with a lit edge (_lit_round SAT_EDGE_LIT or
+    more); else None."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(np.asarray(full, np.uint8), connectivity=8)
+    if count < 2:
+        return None
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    patch = labels == k
+    if _largest_share(patch) < share or _lit_round(picture, patch) < SAT_EDGE_LIT:
+        return None
+    return patch
+
+
+def _largest_share(full):
+    """The share of the whole picture that mask full's largest 8-connected patch takes up, when that patch is solid
+    (its area SAT_SOLID of its convex hull or more: a body's disc); else 0. A ring of saturated junk round a small
+    body with a hole in it (Io 2000's eclipse frames 1 and 12, lines lost, a blocky gray-green ring) is no disc."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(np.asarray(full, np.uint8), connectivity=8)
+    if count < 2:
+        return 0.0
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    area = float(stats[k, cv2.CC_STAT_AREA])
+    contours, _ = cv2.findContours((labels == k).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    hull = cv2.contourArea(cv2.convexHull(np.vstack(contours)))
+    return area / full.size if hull > 0 and area >= SAT_SOLID * hull else 0.0
 
 
 def saturated_code(iof, full, draw):

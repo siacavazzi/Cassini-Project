@@ -131,6 +131,41 @@ def test_step_frame_keeps_time_order():
         assert all(a <= b for a, b in zip(got, got[1:])), got   # (never back in time)
 
 
+def test_veiled_speck_by_sky():
+    # a speck's frame has no lit share kept; its sky (median level) tells a gray veil: Mundilfari 2007's lone RED frame
+    # between BL1 and IR2 frames with black skies, Methone 2012's 1 s frame between 10 s and 100 s ones
+    tile = lambda sky, x=0.0: {"offset": [x, 0.0], "box": [-512.0, -512.0, 1024.0, 1024.0], "sky": sky}
+    frames = [("p", f"F{j}", f, 100.0 * j) for j, f in enumerate(["BL1", "BL1", "RED", "IR2", "IR2"])]
+    tiles = [tile(0), tile(1), tile(30), tile(0), tile(1)]
+    assert om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[3] = tile(12)                     # (a neighbour neither dark nor veiled: not a veil)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    tiles[3] = tile(0)
+    tiles[2] = tile(10)                     # (a sky under VEIL_SKY: what the camera saw)
+    assert not om.veiled_frame(frames, 2, lambda j: tiles[j])
+    # the movie's last two frames veiled after dark ones (Mundilfari 2007's clear frames); a movie all veil is not
+    tiles = [tile(0), tile(1), tile(0), tile(26), tile(25)]
+    assert om.veiled_frame(frames, 3, lambda j: tiles[j]) and om.veiled_frame(frames, 4, lambda j: tiles[j])
+    tiles = [tile(30)] * 3
+    assert not any(om.veiled_frame(frames[:3], n, lambda j: tiles[j]) for n in range(3))
+    # a neighbour lost in part (partial) is passed over: Methone 2012's veiled 17 beside its 85%-lost 18
+    tiles = [tile(0), tile(0), tile(35), {**tile(0), "lost": 0.85, "box": [-492.0, -492.0, 154.0, 984.0]}, tile(0)]
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j) for j in range(5)]
+    assert om.veiled_frame(frames, 2, lambda j: tiles[j])
+
+
+def test_veil_is_not_a_lit_frame():
+    # a ring close-up lit all over beside a dark UV3 frame (124RI) is no veil: UV frames are dark by nature, and its sky
+    # is over VEIL_SKY_MAX; a filter gray in most of its frames (the 2002 Sun series) is what the camera saw
+    tile = lambda sky: {"offset": [0.0, 0.0], "box": [-512.0, -512.0, 1024.0, 1024.0], "sky": sky}
+    frames = [("p", f"F{j}", f, 100.0 * j) for j, f in enumerate(["RED", "GRN", "BL1", "UV3", "IR4"])]
+    tiles = [tile(116), tile(111), tile(101), tile(0), tile(60)]
+    assert not any(om.veiled_frame(frames, n, lambda j: tiles[j]) for n in range(5))
+    frames = [("p", f"F{j}", "CL1/CL2", 100.0 * j) for j in range(5)]
+    tiles = [tile(50), tile(0), tile(50), tile(50), tile(50)]
+    assert not any(om.veiled_frame(frames, n, lambda j: tiles[j]) for n in range(5))
+
+
 if __name__ == "__main__":
     for name, f in list(globals().items()):
         if name.startswith("test_"):
