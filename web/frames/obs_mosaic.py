@@ -8678,7 +8678,10 @@ def _chain_links(made, pic, there, believed, guide=None, links=STEADY_LINKS, rin
         changed = any(abs(new[k] - robust[k]) > 1e-3 for k in keep)
         for k in keep:
             robust[k] = new[k]
-        out_ = sorted((k for k in keep if res[k] > STEADY_AGREE), key=lambda k: -res[k])
+        # (a link across filters weighed down (STEADY_ACROSS) is not left out for disagreeing: it barely pulls, and two
+        # layers disagree by design. Left out, Saturn 2016's UV2 ring movie kept 96 of its 223 links, not 190, and hopped)
+        out_ = sorted((k for k in keep if res[k] > STEADY_AGREE and not (str(got[k][2]).endswith(ACROSS)
+                       and got[k][0][0] in own_filter and got[k][0][1] in own_filter)), key=lambda k: -res[k])
         if out_:
             # (the worst left out, and with it up to a twentieth of the links that disagree by more than half as much)
             for k in [k for k in out_[:max(1, len(keep) // 20)] if res[k] >= res[out_[0]] / 2]:
