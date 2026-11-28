@@ -4063,8 +4063,11 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
         ref = _made_pictures.get(path)
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
-    turn = _turn_between(u, q, out) if derotates(u) and spin_px(u, abs(u["frames"][n][3] - u["frames"][j][3])) \
-        > REGISTER_SPIN else None
+    # (a movie's frames only, of the body itself: a mosaic's or a ring pass's C8 places panels and ringlets, drawn as
+    # they were before #625; with the turn taken off, 2004 RINGMOSAIC lost 3% of its rings off its edges and the
+    # PHOTLIT and 2004 Saturn mosaics moved)
+    turn = _turn_between(u, q, out) if derotates(u) and not u.get("mosaic") and not _ring(u) \
+        and spin_px(u, abs(u["frames"][n][3] - u["frames"][j][3])) > REGISTER_SPIN else None
     near = REGISTER_NEAR.get(u["key"][2])
     shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=near * FRAME if near else None)
     far = REGISTER_FAR.get(u["key"][2])
