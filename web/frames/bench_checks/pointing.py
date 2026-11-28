@@ -77,6 +77,45 @@ def pointing_jitter(p, limit=3.0):
                   values={frames[i]: round(float(d), 1) for i, d in zip(idx, dev) if d > limit})
 
 
+CREEP_MIN = 3.0   # px: (pointing_creep) a frame-to-frame move smaller than this is no part of a slide or a snap
+
+
+@check("pointing_creep", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.25,
+       about="the picture slides one way over a few frames and snaps back (a held frame redrawn as the body turns)")
+def pointing_creep(p, limit=5.0):
+    """The largest snap back: a move against the slide of the two or more moves before it, all the same way (each at
+    least CREEP_MIN), as the smaller of the slide and the snap. A held frame's picture turned to each frame's time slid
+    with the body's turn and the next picture of its own snapped it back (#625: Saturn 2017's held frames 35 px each
+    way, every 4th frame); a pan or a steady movie has none, and scatter (pointing_jitter) has no slide before it."""
+    import numpy as np
+    m = moves(p)
+    worst, where, count = 0.0, None, 0
+    frames = p.frames()
+    for i, v in enumerate(m):
+        if v is None or math.hypot(*v) < CREEP_MIN:
+            continue
+        run = []
+        j = i - 1
+        while j >= 0 and m[j] is not None and math.hypot(*m[j]) >= CREEP_MIN and len(run) < 8:
+            if run and np.dot(m[j], run[0]) <= 0:
+                break
+            run.append(m[j])
+            j -= 1
+        if len(run) < 2:
+            continue
+        slide = np.sum(run, axis=0)
+        back = -float(np.dot(v, slide)) / max(float(np.hypot(*slide)), 1e-6)
+        if back <= 0:
+            continue
+        snap = min(float(np.hypot(*slide)), back)
+        if snap > limit:
+            count += 1
+        if snap > worst:
+            worst, where = snap, frames[i]
+    return Result(round(worst, 2), limit, worst <= limit,
+                  f"largest snap back after a slide: {worst:.1f} px ({count} over {limit:.0f} px)", where=where)
+
+
 @check("pointing_sources", kinds=("movie",), default=True, owner="pointing thread", worse_by=0.0,
        about="frames of one movie placed by different sources of pointing (some at SPICE's raw place)")
 def pointing_sources(p, limit=0):

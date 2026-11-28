@@ -100,3 +100,13 @@ r = bc.CHECKS["pointing_sources"](p)
 assert r.ok and r.value is None, r.as_dict()
 print(r.detail)
 print("ok")
+
+# pointing_creep: a held frame's picture sliding with the body's turn and snapping back every 4th frame fails; a pan
+# and a still movie pass
+saw = [(100.0 + 10.0 * (i % 4), 128.0) for i in range(16)]
+r = bc.CHECKS["pointing_creep"](movie(saw))
+assert not r.ok and r.value >= 20, r.as_dict()
+for name, places in (("still", still), ("pan", pan)):
+    r = bc.CHECKS["pointing_creep"](movie(places))
+    assert r.ok, (name, r.as_dict())
+print("a slide and a snap back fail pointing_creep; a pan and a still movie pass: ok")
