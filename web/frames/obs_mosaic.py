@@ -5512,6 +5512,19 @@ def cloud_placed(u, cache, p, t):
     return got
 
 
+def shows_limb(u, cache, p, t):
+    """True when tile t's picture shows the body's lit limb where SPICE puts it (limb_place)."""
+    disk = _disk_geometry(u)
+    src = os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png")
+    if disk is None or not os.path.exists(src):
+        return False
+    with _lock:
+        image = _made_pictures.get(src)
+    if image is None:
+        image = np.asarray(Image.open(src).convert("RGBA"))
+    return limb_place(disk, t, image) is not None
+
+
 def derotated(u, cache, p, t, ref):
     """Colour channel t (a tile report, placed) redrawn as at the time of frame ref, the set's: a clouded body turns
     between the filters' exposures, a minute or two apart, and its clouds with it, while its limb stays put on the
@@ -11344,11 +11357,14 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return q
     spice, raw = t["offset"], t
     t = at(t)
-    if s != n and derotates(u) and t.get("id") and not cloud_placed(u, cache, p, t):
+    if s != n and derotates(u) and t.get("id") and not cloud_placed(u, cache, p, t) and not shows_limb(u, cache, p, t):
         # (a frame that shows another frame's picture (held, or a set's gray frame for its brightness, lum_of) on a
         # giant planet: that picture redrawn as at frame n's own time, as a colour set's channels are. Jupiter 2000's
         # C23JU FEATURE004 showed its CB3 frame 41 for frames 43-49 and frame 61, taken 578 s later, for 50-60: the
-        # clouds jumped a tenth of a frame where one gave way to the other)
+        # clouds jumped a tenth of a frame where one gave way to the other). Not a picture that shows the lit limb
+        # (shows_limb): on a whole disk its turn is redrawn only part way where the limb bends the field
+        # (SURFACE_STRETCH), and the frames that show it took turns redrawn and not, 2008's Saturn wind movie 170SA
+        # WIND5HR005 hopping 21 px each way)
         t = derotated(u, cache, p, t, frames[n][1])
     if track:
         rep["steady"] = "track"
