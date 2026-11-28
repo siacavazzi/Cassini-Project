@@ -11297,6 +11297,12 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return q
     spice, raw = t["offset"], t
     t = at(t)
+    if s != n and derotates(u) and t.get("id") and not cloud_placed(u, cache, p, t):
+        # (a frame that shows another frame's picture (held, or a set's gray frame for its brightness, lum_of) on a
+        # giant planet: that picture redrawn as at frame n's own time, as a colour set's channels are. Jupiter 2000's
+        # C23JU FEATURE004 showed its CB3 frame 41 for frames 43-49 and frame 61, taken 578 s later, for 50-60: the
+        # clouds jumped a tenth of a frame where one gave way to the other)
+        t = derotated(u, cache, p, t, frames[n][1])
     if track:
         rep["steady"] = "track"
     elif places:
