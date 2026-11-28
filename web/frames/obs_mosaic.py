@@ -5512,17 +5512,43 @@ def cloud_placed(u, cache, p, t):
     return got
 
 
-def shows_limb(u, cache, p, t):
-    """True when tile t's picture shows the body's lit limb where SPICE puts it (limb_place)."""
-    disk = _disk_geometry(u)
-    src = os.path.join(_tiles(u, cache, p["display_scale"]), f"{t['n']}.png")
-    if disk is None or not os.path.exists(src):
-        return False
+_follows_clouds = {}
+
+
+def follows_clouds(u, cache, p, places, tile_of):
+    """True when movie u's steadied places (places: {n: [x, y]}) follow its clouds, not the sky: between frames of its
+    gray filter a turn apart (REGISTER_SPIN), the places' move off SPICE's is nearer the turn SPICE's spin predicts
+    (_turn_between, either way round) than none, for most such pairs. False with no places or no such pairs. Kept per
+    pass."""
+    key = tuple(u["key"])
     with _lock:
-        image = _made_pictures.get(src)
-    if image is None:
-        image = np.asarray(Image.open(src).convert("RGBA"))
-    return limb_place(disk, t, image) is not None
+        if key in _follows_clouds:
+            return _follows_clouds[key]
+    votes = []
+    if places:
+        frames = u["frames"]
+        own = [j for j in range(len(frames)) if frames[j][2] == p.get("grey") and j in places
+               and "offset" in tile_of(j)]
+        for a, b in zip(own, own[1:]):
+            if spin_px(u, abs(frames[b][3] - frames[a][3])) <= REGISTER_SPIN:
+                continue
+            ta, tb = tile_of(a), tile_of(b)
+            turn = _turn_between(u, tb, ta)
+            if turn is None:
+                continue
+            e = (places[b][0] - places[a][0] - (tb["offset"][0] - ta["offset"][0]),
+                 places[b][1] - places[a][1] - (tb["offset"][1] - ta["offset"][1]))
+            near = min(math.hypot(e[0] - turn[0], e[1] - turn[1]), math.hypot(e[0] + turn[0], e[1] + turn[1]))
+            votes.append(near < math.hypot(*e))
+            if len(votes) >= FOLLOW_PAIRS:
+                break
+    got = bool(votes) and sum(votes) * 2 > len(votes)
+    with _lock:
+        _follows_clouds[key] = got
+    return got
+
+
+FOLLOW_PAIRS = 6   # (follows_clouds) gray-filter frame pairs it looks at, at most
 
 
 def derotated(u, cache, p, t, ref):
@@ -11357,14 +11383,15 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return q
     spice, raw = t["offset"], t
     t = at(t)
-    if s != n and derotates(u) and t.get("id") and not cloud_placed(u, cache, p, t) and not shows_limb(u, cache, p, t):
+    if s != n and derotates(u) and t.get("id") and not cloud_placed(u, cache, p, t) \
+            and not follows_clouds(u, cache, p, places, tile_of):
         # (a frame that shows another frame's picture (held, or a set's gray frame for its brightness, lum_of) on a
         # giant planet: that picture redrawn as at frame n's own time, as a colour set's channels are. Jupiter 2000's
         # C23JU FEATURE004 showed its CB3 frame 41 for frames 43-49 and frame 61, taken 578 s later, for 50-60: the
-        # clouds jumped a tenth of a frame where one gave way to the other). Not a picture that shows the lit limb
-        # (shows_limb): on a whole disk its turn is redrawn only part way where the limb bends the field
-        # (SURFACE_STRETCH), and the frames that show it took turns redrawn and not, 2008's Saturn wind movie 170SA
-        # WIND5HR005 hopping 21 px each way)
+        # clouds jumped a tenth of a frame where one gave way to the other). Not in a movie steadied on its clouds
+        # (follows_clouds): its own frames are drawn where their clouds meet, so a picture turned to its time put the
+        # turn back in, and the next frame of its own took it out again: 2008's Saturn wind movie 170SA WIND5HR005
+        # hopped 40 to 110 px each cycle)
         t = derotated(u, cache, p, t, frames[n][1])
     if track:
         rep["steady"] = "track"
