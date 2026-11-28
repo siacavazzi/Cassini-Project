@@ -96,7 +96,8 @@ import label_handler  # noqa: E402
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
 # obs-v161/v144/v130: lifted skies after #609: night-side passes on gamma 1.5, the net glow test never above the plain one, a colour movie's drawn filters raised together on Full's sky track
-VERSIONS = {"balanced": "obs-v169", "raw": "obs-v152", "eye": "obs-v169-eye", "false": "obs-v169-false", "classic": "obs-v138-classic"}   # v169/v152/v138: a frame the pictures do not place, in a sequence they place most of, goes between the pictures' places around it, not on SPICE's step (from_pictures, one pointing source end to end; past the speck-veils branch)
+VERSIONS = {"balanced": "obs-v172", "raw": "obs-v155", "eye": "obs-v172-eye", "false": "obs-v172-false", "classic": "obs-v141-classic"}   # v172/v155/v141: a giant planet's C8 match between frames whose clouds turn over REGISTER_SPIN px has the turn SPICE's spin predicts taken off (the rest is the pointing), and derotation draws the turn, and a movie frame showing another frame's picture shows it derotated to its own time (Jupiter 2000 C23JU FEATURE004's colour movie hop)
+# before: v169/v152/v138: a frame the pictures do not place, in a sequence they place most of, goes between the pictures' places around it, not on SPICE's step (from_pictures, one pointing source end to end; past the speck-veils branch)
 # before: v170/v153/v139: a frame of sky round a speck measured as sky (calibration._mostly_sky: distant-moon stills drew a gray banded panel); v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
 # before: v167/v150/v136: a speck movie's gray veil frames (a mid-gray sky between frames whose sky is dark: Methone 2012 and Pallene 2017's 1 s frames, Mundilfari 2007's RED) are held (veiled_frame; tile reports keep each frame's sky); no hold from beyond HOLD_AGE (Io 2000, Jupiter 2001); a movie frame's saturated pixels white (Enceladus 2006)
 # before: v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
@@ -4016,6 +4017,41 @@ def _register_match(u, n, out, crop, cache, scale):
     return got
 
 
+REGISTER_SPIN = 2.0   # px: (_register_match_to) a giant planet's clouds turning further than this between two frames: the
+#                       turn SPICE's spin predicts is taken off their match, the rest is the camera's pointing
+
+
+def spin_px(u, seconds):
+    """How far, in the pass's reference pixels, pass u's body's equator turns in seconds (SPIN: radius km, period h):
+    the most its clouds move between two frames that far apart; 0 for a body SPIN does not know."""
+    spin = SPIN.get(u["key"][0])
+    if not spin or not u.get("z"):
+        return 0.0
+    radius, hours = spin
+    return 2 * math.pi * radius / (hours * 3600) * seconds / (IFOV[u["key"][2]] * u["z"])
+
+
+def _turn_between(u, q, t):
+    """How far SPICE's spin moves tile t's clouds from t's time to tile q's (both placed): the median over t's lit
+    surface of surface_field's shifts, as derotated would redraw t as at q's time; None when SPICE cannot say."""
+    view = _sky_views(u)
+    if view is None or "offset" not in t or "box" not in t:
+        return None
+    epoch, v = view(q["id"]), view(t["id"])
+    if epoch is None or v is None:
+        return None
+    import reproject as rp
+    at = dict(t, offset=t.get("spice_offset", t["offset"]))
+    with _spice_lock:
+        dx, dy, weight = surface_field(rp, epoch, v, (int(t["box"][3]), int(t["box"][2])), at,
+                                       IFOV[u["key"][2]] * u["z"], view_turn(u),
+                                       rp.disk_field if u["key"][0] in RING_BODIES else rp.sky_field)
+    on = weight > 0
+    if not on.any():
+        return None
+    return float(np.median(dx[on])), float(np.median(dy[on]))
+
+
 def _register_match_to(u, n, j, out, crop, cache, scale):
     """_register_match onto tile j."""
     q = tile(u, j, cache, scale)
@@ -4026,6 +4062,8 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
         ref = _made_pictures.get(path)
     if ref is None:
         ref = np.asarray(Image.open(path).convert("RGBA"))
+    turn = _turn_between(u, q, out) if derotates(u) and spin_px(u, abs(u["frames"][n][3] - u["frames"][j][3])) \
+        > REGISTER_SPIN else None
     near = REGISTER_NEAR.get(u["key"][2])
     shift, how = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=near * FRAME if near else None)
     far = REGISTER_FAR.get(u["key"][2])
@@ -4039,6 +4077,14 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return q, ref
+    if shift is not None and turn is not None:
+        # (a giant planet whose clouds turn further than REGISTER_SPIN between the two frames: the match of the pictures
+        # is that turn and the camera's pointing together. The turn SPICE's spin predicts (_turn_between) taken off, the
+        # rest is the pointing; derotated draws the turn. Taken whole, Jupiter 2000's C23JU FEATURE004 put its CB1, CB2
+        # and CB3 frames 20 to 80 px from SPICE's place after frames a minute or two before them, and its colour movie
+        # hopped where one CB3 frame gave way to the next)
+        shift = (shift[0] - turn[0], shift[1] - turn[1])
+        how = f"{how} less the turn ({turn[0]:+.1f},{turn[1]:+.1f})"
     if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
         # SPICE's pointing of a moon can jump tens of px between frames seconds apart: Dione's 038DI ZEROPHASE001 20 to
         # 45 px (N1549196942_1 sits 42 px from the frames either side), Hyperion's 153HY 70 to 110 px, Helene's 149HE
@@ -4049,7 +4095,8 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
         # move): the whole overlap's phase correlation with REGISTER_SURE's bars (the WAC's wide search below), or the
         # lit area's centroid when the whole body is in both tiles
         agree = max(REGISTER_AGREE, REGISTER_SHARE * math.hypot(*shift))
-        same = lambda m: m is not None and math.hypot(m[0] - shift[0], m[1] - shift[1]) <= agree
+        tt = turn or (0.0, 0.0)   # (the other measures see the turn too)
+        same = lambda m: m is not None and math.hypot(m[0] - tt[0] - shift[0], m[1] - tt[1] - shift[1]) <= agree
         wide, _ = _shift_onto(q, ref, q["offset"], out, crop, out["offset"], within=REGISTER_BODY_MAX * FRAME, sure=REGISTER_SURE)
         if same(wide):
             how = f"{how}, wide search agrees ({wide[0]:+.1f},{wide[1]:+.1f})"
@@ -4069,6 +4116,8 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
     out["spice_offset"] = out["offset"]
     out["offset"] = [out["offset"][0] - dx, out["offset"][1] - dy]
     out["registered"] = {"to": q["id"], "how": how, "shift": [round(dx, 2), round(dy, 2)]}
+    if turn is not None:
+        out["registered"]["turn"] = [round(turn[0], 2), round(turn[1], 2)]
     return q, ref
 
 
@@ -5436,7 +5485,8 @@ def cloud_placed(u, cache, p, t):
     Such a match already took in the body's turn between the two frames (a close-up on Saturn's disk), so the set is
     not derotated as well: its clouds would move twice. Kept per tile."""
     reg = t.get("registered") or {}
-    if "shift" not in reg or str(reg.get("how", "")).startswith("limb"):
+    if "shift" not in reg or str(reg.get("how", "")).startswith("limb") or "turn" in reg:
+        # (a match with the turn taken off (_register_match_to) placed the camera, not the clouds: derotated still)
         return False
     key = (tuple(u["key"]), t.get("n"))
     with _lock:
@@ -11288,6 +11338,12 @@ def movie_frame(u, n, cache, trail=0, colour=True, out=OUT, centre=True, steady=
         return q
     spice, raw = t["offset"], t
     t = at(t)
+    if s != n and derotates(u) and t.get("id") and not cloud_placed(u, cache, p, t):
+        # (a frame that shows another frame's picture (held, or a set's gray frame for its brightness, lum_of) on a
+        # giant planet: that picture redrawn as at frame n's own time, as a colour set's channels are. Jupiter 2000's
+        # C23JU FEATURE004 showed its CB3 frame 41 for frames 43-49 and frame 61, taken 578 s later, for 50-60: the
+        # clouds jumped a tenth of a frame where one gave way to the other)
+        t = derotated(u, cache, p, t, frames[n][1])
     if track:
         rep["steady"] = "track"
     elif places:
