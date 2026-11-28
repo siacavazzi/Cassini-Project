@@ -35,3 +35,11 @@ out = {"id": "F1", "n": 1, "offset": [5.0, 5.0], "box": [-10, -10, 20, 20]}
 om._register_match_to(dict(jupiter, frames=frames(4.0)), 1, 0, out, None, None, {})
 assert out["offset"] == [-25.0, 3.0] and "turn" not in out["registered"], out
 print("frames seconds apart matched as they are: ok")
+
+# a match nearer none than the turn followed the limb or the rings, which do not turn: it stands as it is
+om._turn_between = lambda u, q, t: (40.0, -35.0)
+out = {"id": "F1", "n": 1, "offset": [5.0, 5.0], "box": [-10, -10, 20, 20]}
+om._shift_onto = lambda *a, **k: ((3.0, 2.0), "edges +3.0,+2.0")
+om._register_match_to(dict(jupiter, frames=frames(66.0)), 1, 0, out, None, None, {})
+assert out["offset"] == [2.0, 3.0] and "turn" not in out["registered"], out
+print("a match nearer none than the turn (the limb's) stands as it is: ok")

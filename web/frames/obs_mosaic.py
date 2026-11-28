@@ -96,7 +96,8 @@ import label_handler  # noqa: E402
 # obs-v147/v130/v116 (numbered past #604, #605): a colour set in a stabilized movie moves as one, by the median of its channels' moves (#602's Daphnis fringe)
 # obs-v148/v131/v117: gentler blacks: the balanced black over the sky's grain, not its slow glow (calibration.sky_grain); a low-contrast close-up spread as far as its grain allows (calibration._flat_black); a movie frame's black follows its pass's sky through time, down as well as up (sky_track)
 # obs-v161/v144/v130: lifted skies after #609: night-side passes on gamma 1.5, the net glow test never above the plain one, a colour movie's drawn filters raised together on Full's sky track
-VERSIONS = {"balanced": "obs-v172", "raw": "obs-v155", "eye": "obs-v172-eye", "false": "obs-v172-false", "classic": "obs-v141-classic"}   # v172/v155/v141: a giant planet's C8 match between frames whose clouds turn over REGISTER_SPIN px has the turn SPICE's spin predicts taken off (the rest is the pointing), and derotation draws the turn, and a movie frame showing another frame's picture shows it derotated to its own time (Jupiter 2000 C23JU FEATURE004's colour movie hop)
+VERSIONS = {"balanced": "obs-v173", "raw": "obs-v156", "eye": "obs-v173-eye", "false": "obs-v173-false", "classic": "obs-v142-classic"}   # a giant planet's C8 match has the turn taken off only when it followed the clouds (nearer the predicted turn than none); a match on the limb, the disk's edge or the rings stands (2008 Saturn wind movie 170SA WIND5HR005 hopped 105 px)
+# before: v172/v155/v141: a giant planet's C8 match between frames whose clouds turn over REGISTER_SPIN px has the turn SPICE's spin predicts taken off (the rest is the pointing), and derotation draws the turn, and a movie frame showing another frame's picture shows it derotated to its own time (Jupiter 2000 C23JU FEATURE004's colour movie hop)
 # before: v169/v152/v138: a frame the pictures do not place, in a sequence they place most of, goes between the pictures' places around it, not on SPICE's step (from_pictures, one pointing source end to end; past the speck-veils branch)
 # before: v170/v153/v139: a frame of sky round a speck measured as sky (calibration._mostly_sky: distant-moon stills drew a gray banded panel); v166/v149/v135: a sequence the pictures place under half of goes whole on SPICE's smoothed path (STEADY_MIXED, one pointing source per sequence); v163/v146/v132: clouded bodies' movies steadied on their pictures again, not their lit edges only (steady9 off: Titan and Saturn ring movies hopped 4 to 21 px, spot check 11-22); v158/v141/v127: a Titan colour mosaic mixes visits up to 4 h apart before the gray base is drawn (obs_mosaic.mix_span: 059TI GLOBMAP001's tinted gray patches) (numbered past PRs 608, 610 and 611)
 # before: v167/v150/v136: a speck movie's gray veil frames (a mid-gray sky between frames whose sky is dark: Methone 2012 and Pallene 2017's 1 s frames, Mundilfari 2007's RED) are held (veiled_frame; tile reports keep each frame's sky); no hold from beyond HOLD_AGE (Io 2000, Jupiter 2001); a movie frame's saturated pixels white (Enceladus 2006)
@@ -4077,14 +4078,19 @@ def _register_match_to(u, n, j, out, crop, cache, scale):
     if shift is None and how is not None and how.startswith("failed"):
         out["registered"] = {"to": q["id"], "why": how[7:]}
         return q, ref
-    if shift is not None and turn is not None:
-        # (a giant planet whose clouds turn further than REGISTER_SPIN between the two frames: the match of the pictures
-        # is that turn and the camera's pointing together. The turn SPICE's spin predicts (_turn_between) taken off, the
+    if shift is not None and turn is not None and math.hypot(shift[0] - turn[0], shift[1] - turn[1]) < math.hypot(*shift):
+        # (a giant planet whose clouds turn further than REGISTER_SPIN between the two frames, and a match nearer that
+        # turn than none: the match followed the clouds, and is their turn and the camera's pointing together. A match
+        # nearer none followed what does not turn, the limb, the disk's edge or the rings, and stands as it is: 2008's
+        # Saturn wind movie 170SA WIND5HR005, its filters matched 2 to 9 px on their edges, had 35 to 55 px of turn
+        # taken off and hopped 105 px. The turn SPICE's spin predicts (_turn_between) taken off, the
         # rest is the pointing; derotated draws the turn. Taken whole, Jupiter 2000's C23JU FEATURE004 put its CB1, CB2
         # and CB3 frames 20 to 80 px from SPICE's place after frames a minute or two before them, and its colour movie
         # hopped where one CB3 frame gave way to the next)
         shift = (shift[0] - turn[0], shift[1] - turn[1])
         how = f"{how} less the turn ({turn[0]:+.1f},{turn[1]:+.1f})"
+    else:
+        turn = None
     if shift is not None and REGISTER_MAX * FRAME < math.hypot(*shift) <= REGISTER_BODY_MAX * FRAME:
         # SPICE's pointing of a moon can jump tens of px between frames seconds apart: Dione's 038DI ZEROPHASE001 20 to
         # 45 px (N1549196942_1 sits 42 px from the frames either side), Hyperion's 153HY 70 to 110 px, Helene's 149HE
